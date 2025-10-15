@@ -233,3 +233,28 @@ INSERT INTO audit_logs (id, user_id, action, table_name, record_id, old_values, 
 ('AUD003', 'USR004', 'CREATE', 'freight_announcements', 'FA001', NULL, '{"id": "FA001", "status": "Draft"}', '192.168.1.102', 'Mozilla/5.0');
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

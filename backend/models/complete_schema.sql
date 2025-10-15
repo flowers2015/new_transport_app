@@ -519,3 +519,28 @@ CREATE INDEX idx_insurance_policies_end_date ON insurance_policies(end_date);
 CREATE INDEX idx_insurance_policies_policy_number ON insurance_policies(policy_number);
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

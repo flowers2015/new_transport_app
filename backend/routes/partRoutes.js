@@ -10,3 +10,28 @@ router.get('/:id', authenticateToken, getPartById);
 module.exports = router;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

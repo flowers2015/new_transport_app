@@ -1,7 +1,7 @@
 // This is a new file: components/FreightDashboard.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { FreightAnnouncement, FreightLineType, Destination, FreightAnnouncementStatus, UserRole, User, View } from '../types';
-import { formatJalaliDateTime, formatJalali } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, parseJalaliDateString } from '../utils/jalali';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
 import { PrinterIcon } from './icons/PrinterIcon';
@@ -53,13 +53,16 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
         { header: 'کد اعلام بار', accessor: 'announcementCode', width: '150px', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
         { header: 'تاریخ اعلام', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => ann.vehicleType },
         { header: 'ارزش بار', accessor: 'cargoValue', width: '150px', display: (vm: string) => vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue).toLocaleString('fa-IR') },
         
         // Ice Cream Specific
         { header: 'نام مقصد', accessor: (ann: FreightAnnouncement) => ann.destinations[0]?.city, width: '150px', display: (_:any, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city}</span> },
         { header: 'تعداد کارتن', accessor: 'cartonCount', width: '100px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
-        { header: 'محصولات', accessor: (ann: FreightAnnouncement) => ann.products?.join(', '), width: '150px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') },
+        { header: 'محصولات', accessor: (ann: FreightAnnouncement) => ann.products?.join(', '), width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
+        { header: 'توضیحات', accessor: 'notes', width: '200px', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'اولویت', accessor: 'priority', width: '100px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.priority },
         { header: 'نام نماینده', accessor: 'representativeName', width: '150px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.representativeName },
 
@@ -120,6 +123,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
 
 
     const handleOpenCreatePanel = () => {
+        // Create mode: no preset data object to avoid accidental edit-mode
         setPanelData(null);
         setIsPanelOpen(true);
     };
@@ -183,12 +187,16 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     ], [onReAnnounce, onDelete]);
 
     const allColumns = useMemo(() => {
-        return columnsConfig({ ...props, onApprove, onReject: handleOpenRejectDialog, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete });
+        const cols = columnsConfig({ ...props, onApprove, onReject: handleOpenRejectDialog, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete });
+        try { console.log('[DBG][FreightDashboard] allColumns headers:', cols.map((c:any)=>c.header)); } catch {}
+        return cols;
     }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete]);
 
     const visibleColumns = useMemo(() => {
         if (activeTab === 'leftover') return leftoverColumns;
-        return allColumns.filter(c => c.display(viewMode, activeTab));
+        const cols = allColumns.filter(c => c.display(viewMode, activeTab));
+        try { console.log('[DBG][FreightDashboard] visibleColumns:', { viewMode, activeTab, headers: cols.map((c:any)=>c.header) }); } catch {}
+        return cols;
     }, [viewMode, activeTab, allColumns, leftoverColumns]);
 
     const filteredAnnouncements = useMemo(() => {
@@ -228,8 +236,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     }
                     
                     // FIX: Explicitly convert cellValue to a string to prevent 'toLowerCase' on a non-string type.
-                    const valueAsString = String(cellValue ?? '');
-                    return valueAsString.toLowerCase().includes(filterValue.toLowerCase());
+                    const valueAsString: string = String(cellValue ?? '');
+                    const filterString: string = String(filterValue ?? '');
+                    return valueAsString.toLowerCase().includes(filterString.toLowerCase());
                 });
             });
         }
@@ -458,7 +467,7 @@ const RejectDialog: React.FC<{reason: string, onReasonChange: (r: string) => voi
 );
 
 const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | null, onClose: () => void, onSaveNew: Function, onSaveEdit: (data: FreightAnnouncement) => void}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit }) => {
-    const isEditMode = !!data;
+    const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', cargoValue: '', vehicleType: '', notes: '' };
     const initialIceCreamState = { originCity: '', destinationCity: '', brand: 'میهن', representativeType: 'agent', representativeName: '', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
@@ -483,7 +492,7 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
         if (isOpen) {
             if (data) { // Edit mode: populate form
                 setLineType(data.lineType);
-                setCommonState({ loadingDate: new Date(data.loadingDate).toISOString().split('T')[0], cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
+                setCommonState({ loadingDate: formatJalali(new Date(data.loadingDate)), cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
                 if (data.lineType === FreightLineType.IceCream) {
                     setIceCreamState({
                         originCity: data.originCity || '', destinationCity: data.destinations[0]?.city || '', brand: data.brand || 'میهن', representativeType: data.representativeType || 'agent', representativeName: data.representativeName || '', cartonCount: String(data.cartonCount || ''), priority: data.priority || 'normal', products: data.products || []
@@ -506,9 +515,8 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
             if (lineType === FreightLineType.IceCream) {
                 targetDate.setDate(today.getDate() + 1); // Tomorrow
             }
-            // Format to YYYY-MM-DD
-            const dateString = targetDate.toISOString().split('T')[0];
-            setCommonState(s => ({ ...s, loadingDate: dateString }));
+            // Set default as Jalali string
+            setCommonState(s => ({ ...s, loadingDate: formatJalali(targetDate) }));
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
 
@@ -523,11 +531,19 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
         if (isNaN(cargoValueInRials) || cargoValueInRials < 1_000_000_000 || cargoValueInRials > 110_000_000_000) { alert('ارزش بار باید بین ۱ تا ۱۱۰ میلیارد ریال باشد.'); return; }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
 
+        const jalaliDate = parseJalaliDateString(commonState.loadingDate);
+        if (!jalaliDate) { alert('تاریخ نامعتبر است. قالب صحیح: YYYY/MM/DD'); return; }
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
-            ? { loadingDate: new Date(commonState.loadingDate), lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: crypto.randomUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
-            : { loadingDate: new Date(commonState.loadingDate), lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, platformArrivalTime: multiDestState.platformArrivalTime, destinations: destinations as Destination[] };
+            ? { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: crypto.randomUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
+            : { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, platformArrivalTime: multiDestState.platformArrivalTime, destinations: destinations as Destination[] };
         
         if (isEditMode) {
+            // Extra guard: if somehow id is empty, treat as new to avoid empty PUT
+            if (!data?.id) {
+                onSaveNew(announcementData, isDraft);
+                resetForm();
+                return;
+            }
             let finalData = { ...data, ...announcementData };
             const originalStatus = data.status;
 
@@ -537,7 +553,13 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
                 finalData.status = FreightAnnouncementStatus.PendingManagerApproval;
             }
             
-            onSaveEdit(finalData);
+            // Only call onSaveEdit if we have a valid ID, otherwise treat as new
+            if (finalData.id && finalData.id.trim() !== '') {
+                onSaveEdit(finalData);
+            } else {
+                console.log('🔍 [FreightDashboard] No valid ID found, treating as new announcement');
+                onSaveNew(finalData, isDraft);
+            }
             onClose();
         } else {
             onSaveNew(announcementData, isDraft);
@@ -568,9 +590,8 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
                         <legend className="font-semibold px-1 text-sm">اطلاعات مشترک</legend>
                         <div className="grid grid-cols-3 gap-3">
                             <div>
-                                <label className="text-xs">تاریخ بارگیری*</label>
-                                <input type="date" value={commonState.loadingDate} onChange={e => setCommonState(s=>({...s, loadingDate: e.target.value}))} className="input-style mt-1" required/>
-                                {commonState.loadingDate && <span className="text-xs text-slate-500 ml-2">{formatJalali(new Date(commonState.loadingDate))}</span>}
+                                <label className="text-xs">تاریخ بارگیری (جلالی)*</label>
+                                <input type="text" placeholder="YYYY/MM/DD" value={commonState.loadingDate} onChange={e => setCommonState(s=>({...s, loadingDate: e.target.value}))} className="input-style mt-1" required/>
                             </div>
                             <div><label className="text-xs">نوع خودرو*</label><select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select></div>
                             <div><label className="text-xs">ارزش بار (میلیارد ریال)*</label><input type="number" step="0.1" value={commonState.cargoValue} onChange={e => setCommonState(s=>({...s, cargoValue: e.target.value}))} className="input-style mt-1" required/><small className="text-slate-500 text-xs">بین ۱ تا ۱۱۰</small></div>

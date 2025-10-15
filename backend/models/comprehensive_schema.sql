@@ -202,6 +202,7 @@ CREATE TABLE freight_announcements (
     assigned_driver_id VARCHAR(255) REFERENCES drivers(id),
     assigned_vehicle_id VARCHAR(255) REFERENCES vehicles(id),
     total_freight_cost DECIMAL(15, 2),
+    platform_arrival_time VARCHAR(10),
     carton_count INT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -215,6 +216,7 @@ CREATE TABLE freight_destinations (
     representative_name VARCHAR(255),
     tonnage DECIMAL(10, 2),
     freight_cost DECIMAL(15, 2),
+    unload_time VARCHAR(10),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -388,5 +390,12 @@ CREATE INDEX idx_invoices_issued_at ON invoices(issued_at);
 CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX idx_audit_logs_table_name ON audit_logs(table_name);
+
+
+
+
+
+
+
 
 

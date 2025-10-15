@@ -10,3 +10,28 @@ router.get('/:id', authenticateToken, getTrafficFineById);
 module.exports = router;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

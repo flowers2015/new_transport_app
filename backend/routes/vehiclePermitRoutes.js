@@ -10,3 +10,28 @@ router.get('/:id', authenticateToken, getVehiclePermitById);
 module.exports = router;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

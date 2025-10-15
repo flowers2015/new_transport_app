@@ -10,3 +10,28 @@ router.get('/:id', authenticateToken, getTechnicianById);
 module.exports = router;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

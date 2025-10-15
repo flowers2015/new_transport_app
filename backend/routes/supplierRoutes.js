@@ -10,3 +10,28 @@ router.get('/:id', authenticateToken, getSupplierById);
 module.exports = router;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

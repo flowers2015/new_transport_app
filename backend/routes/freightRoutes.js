@@ -7,6 +7,8 @@ const {
   approveAnnouncement,
   rejectAnnouncement,
   assignVehicleAndDriver,
+  createFreightAnnouncement,
+  updateFreightAnnouncement,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -17,12 +19,28 @@ const {
 router.get('/', authenticateToken, getFreightAnnouncements);
 router.get('/:id', authenticateToken, getFreightAnnouncementById);
 
+// Create a new freight announcement
+router.post(
+  '/',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  createFreightAnnouncement
+);
+
+// Update an announcement (editable by planner before assignment, manager for status changes)
+router.put(
+  '/:id',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  updateFreightAnnouncement
+);
+
 // Route to approve a freight announcement
 // Accessible only by users with the 'PlanningManager' role.
 router.post(
   '/:id/approve',
   authenticateToken,
-  authorizeRole(['Admin', 'LogisticsCoordinator']), // Assuming LogisticsCoordinator is the PlanningManager
+  authorizeRole(['planner_manager', 'admin']),
   approveAnnouncement
 );
 
@@ -31,7 +49,7 @@ router.post(
 router.post(
   '/:id/reject',
   authenticateToken,
-  authorizeRole(['Admin', 'LogisticsCoordinator']), // Assuming LogisticsCoordinator is the PlanningManager
+  authorizeRole(['planner_manager', 'admin']),
   rejectAnnouncement
 );
 
@@ -40,7 +58,7 @@ router.post(
 router.put(
   '/:id/assignment',
   authenticateToken,
-  authorizeRole(['Admin', 'LogisticsCoordinator']), // Replace with appropriate roles
+  authorizeRole(['transport_user', 'planner_manager', 'admin']),
   assignVehicleAndDriver
 );
 

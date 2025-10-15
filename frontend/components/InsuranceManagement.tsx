@@ -471,7 +471,7 @@ const ExpertView: React.FC<InsuranceManagementProps> = ({ accidentReports, vehic
                                     </td></tr>
                                 )}
                             </React.Fragment>
-                        })}
+                        )})}
                     </tbody>
                  </table>
             </div>
