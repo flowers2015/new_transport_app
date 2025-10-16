@@ -9,6 +9,7 @@ const {
   assignVehicleAndDriver,
   createFreightAnnouncement,
   updateFreightAnnouncement,
+  setAssignmentQueue,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -58,8 +59,16 @@ router.post(
 router.put(
   '/:id/assignment',
   authenticateToken,
-  authorizeRole(['transport_user', 'planner_manager', 'admin']),
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
   assignVehicleAndDriver
+);
+
+// Switch assignment queue between company/personal
+router.post(
+  '/:id/assignment-queue',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
+  setAssignmentQueue
 );
 
 module.exports = router;

@@ -26,6 +26,7 @@ interface FreightDashboardProps {
     onDelete: (announcementId: string) => void;
     onReAnnounce: (announcementId: string) => void;
     currentUser: User;
+    onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void;
 }
 
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
@@ -44,7 +45,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')}` : '-';
 
 
-const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => void, onReject: (id: string) => void, onEdit: (ann: FreightAnnouncement) => void, onSendForApproval: (ann: FreightAnnouncement) => void, onDelete: (id: string) => void }) => {
+const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => void, onReject: (id: string) => void, onEdit: (ann: FreightAnnouncement) => void, onSendForApproval: (ann: FreightAnnouncement) => void, onDelete: (id: string) => void, onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void }) => {
     const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete } = props;
     
     return [
@@ -52,6 +53,7 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
         { header: 'ردیف', width: '70px', display: (vm: string) => vm === 'full', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'کد اعلام بار', accessor: 'announcementCode', width: '150px', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: () => true, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
         { header: 'تاریخ اعلام', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -83,12 +85,23 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
         { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (vm: string, lt: any) => vm === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
         { header: 'کرایه کل', accessor: 'totalFreightCost', width: '150px', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono font-semibold">{formatCurrency(ann.totalFreightCost)}</span> },
         { header: 'عملیات', width: '220px', display: () => true, render: (ann: FreightAnnouncement) => {
-             if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
+            if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
                 return (
                     <div className="flex justify-center gap-1">
                         <button onClick={() => onApprove(ann.id)} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600">تایید</button>
                         {/* FIX: The onReject prop passed to columnsConfig is handleOpenRejectDialog, which expects only one argument. Changed call to pass only ann.id. */}
                         <button onClick={() => onReject(ann.id)} className="px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600">رد</button>
+                    </div>
+                );
+            }
+            // Queue routing controls (by role and status)
+            if (props.onSwitchQueue && currentUser.role === UserRole.PlanningManager) {
+                const canToCompany = [FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status);
+                const canToPersonal = [FreightAnnouncementStatus.PendingCompanyAssignment].includes(ann.status);
+                return (
+                    <div className="flex justify-center gap-1">
+                        {canToCompany && <button onClick={() => props.onSwitchQueue!(ann.id, 'company')} className="px-3 py-1 bg-slate-500 text-white rounded-md text-xs">ارجاع به شرکتی</button>}
+                        {canToPersonal && <button onClick={() => props.onSwitchQueue!(ann.id, 'personal')} className="px-3 py-1 bg-slate-500 text-white rounded-md text-xs">ارجاع به شخصی</button>}
                     </div>
                 );
             }
@@ -478,6 +491,13 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
     const [commonState, setCommonState] = useState(initialCommonState);
     const [iceCreamState, setIceCreamState] = useState(initialIceCreamState);
     const [multiDestState, setMultiDestState] = useState(initialMultiDestState);
+    const cargoPreview = useMemo(() => {
+        const rials = parseFloat(commonState.cargoValue || '');
+        if (!isFinite(rials)) return '';
+        const toman = rials / 10;
+        const millionToman = toman / 1_000_000;
+        return millionToman > 0 ? `${millionToman.toLocaleString('fa-IR')} میلیون تومان` : '';
+    }, [commonState.cargoValue]);
     const [destinations, setDestinations] = useState<Partial<Destination>[]>(initialDestinations);
     
     const resetForm = () => {
@@ -512,11 +532,15 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
         if (!data) { 
             const today = new Date();
             let targetDate = new Date(today);
-            if (lineType === FreightLineType.IceCream) {
-                targetDate.setDate(today.getDate() + 1); // Tomorrow
-            }
+            if (lineType === FreightLineType.IceCream) targetDate.setDate(today.getDate() + 1);
             // Set default as Jalali string
             setCommonState(s => ({ ...s, loadingDate: formatJalali(targetDate) }));
+            if (lineType === FreightLineType.IceCream) {
+                setMultiDestState(s => ({ ...s, platformArrivalTime: '07:00' }));
+            } else if (lineType === FreightLineType.Dairy || lineType === FreightLineType.Ambient) {
+                setMultiDestState(s => ({ ...s, platformArrivalTime: '07:00' }));
+                setIceCreamState(s => ({ ...s, originCity: 'شهر لبنیات' } as any));
+            }
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
 
@@ -588,13 +612,18 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
 
                     <fieldset className="p-3 border rounded-lg bg-white">
                         <legend className="font-semibold px-1 text-sm">اطلاعات مشترک</legend>
-                        <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-3 gap-3">
                             <div>
                                 <label className="text-xs">تاریخ بارگیری (جلالی)*</label>
                                 <input type="text" placeholder="YYYY/MM/DD" value={commonState.loadingDate} onChange={e => setCommonState(s=>({...s, loadingDate: e.target.value}))} className="input-style mt-1" required/>
                             </div>
                             <div><label className="text-xs">نوع خودرو*</label><select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select></div>
-                            <div><label className="text-xs">ارزش بار (میلیارد ریال)*</label><input type="number" step="0.1" value={commonState.cargoValue} onChange={e => setCommonState(s=>({...s, cargoValue: e.target.value}))} className="input-style mt-1" required/><small className="text-slate-500 text-xs">بین ۱ تا ۱۱۰</small></div>
+                                <div>
+                                   <label className="text-xs">ارزش بار (میلیارد ریال)*</label>
+                                   <input type="number" step="0.1" value={commonState.cargoValue} onChange={e => setCommonState(s=>({...s, cargoValue: e.target.value}))} className="input-style mt-1" required/>
+                                   <div className="text-[11px] text-slate-500 mt-1">≈ {cargoPreview || '-'} (حدوداً)</div>
+                                   <small className="text-slate-500 text-xs">بین ۱ تا ۱۱۰</small>
+                                </div>
                         </div>
                     </fieldset>
 
@@ -637,7 +666,7 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
                                         <div className="grid grid-cols-2 gap-2">
                                             <div><label className="text-xs">شهر مقصد*</label><input value={dest.city || ''} onChange={e => handleDestinationChange(dest.id!, 'city', e.target.value)} list="cities" className="input-style" required/></div>
                                             <div><label className="text-xs">نام نماینده</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style"/></div>
-                                            <div><label className="text-xs">تناژ</label><input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style"/></div>
+                                            <div><label className="text-xs">تناژ <span className="text-[10px] text-slate-500">(کیلوگرم)</span></label><input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style"/></div>
                                             <div><label className="text-xs">ساعت تخلیه</label><input type="time" value={dest.unloadTime || ''} onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)} className="input-style"/></div>
                                         </div>
                                     </div>

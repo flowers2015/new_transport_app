@@ -184,11 +184,75 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onForward = async (announcementId: string) => {
-        console.log('➡️ [TransportLive] Forward Request:', {
-            announcementId,
-            timestamp: new Date().toISOString()
-        });
-        alert(`ارجاع اعلام بار #${announcementId}`);
+        try {
+            const token = localStorage.getItem('token');
+            const current = announcements.find(a => a.id === announcementId);
+            if (!current) { alert('اعلام بار پیدا نشد'); return; }
+            const nextQueue = current.assignmentType === 'company' ? 'personal' : 'company';
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/assignment-queue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ nextQueue })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            alert('ارجاع با موفقیت انجام شد');
+            // Full refresh from backend to keep item visible in both views
+            const headers = { 'Authorization': `Bearer ${token}` } as any;
+            const faRes = await fetch('http://localhost:3000/api/v1/freight-announcements', { headers });
+            if (faRes.ok) {
+                const raw = await faRes.json();
+                const statusMap: Record<string, FreightAnnouncementStatus> = {
+                    Draft: FreightAnnouncementStatus.Draft,
+                    PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
+                    Rejected: FreightAnnouncementStatus.Rejected,
+                    PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
+                    PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
+                    Assigned: FreightAnnouncementStatus.Assigned,
+                    InTransit: FreightAnnouncementStatus.InTransit,
+                    Finalized: FreightAnnouncementStatus.Finalized,
+                    Cancelled: FreightAnnouncementStatus.Cancelled,
+                    ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+                };
+                const normalize = (a: any): FreightAnnouncement => ({
+                    id: a.id,
+                    announcementCode: a.announcement_code || a.announcementCode,
+                    createdAt: new Date(a.created_at || a.createdAt || a.loading_date || Date.now()),
+                    loadingDate: new Date(a.loading_date || a.loadingDate || Date.now()),
+                    lineType: a.line_type || a.lineType,
+                    status: statusMap[a.status] || a.status,
+                    cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
+                    vehicleType: a.vehicle_type || a.vehicleType || '',
+                    notes: a.notes,
+                    assignmentType: a.assignment_type || a.assignmentType,
+                    assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
+                    assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
+                    totalFreightCost: a.total_freight_cost ?? a.totalFreightCost,
+                    billOfLadingNumber: a.bill_of_lading_number ?? a.billOfLadingNumber,
+                    originCity: a.origin_city || a.originCity,
+                    brand: a.brand,
+                    representativeType: a.representative_type || a.representativeType,
+                    representativeName: a.representative_name || a.representativeName,
+                    cartonCount: a.carton_count ?? a.cartonCount,
+                    priority: a.priority,
+                    products: a.products || [],
+                    platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+                    destinations: Array.isArray(a.destinations) ? a.destinations.map((d: any) => ({
+                        id: d.id,
+                        city: d.city,
+                        representativeName: d.representative_name || d.representativeName,
+                        tonnage: d.tonnage,
+                        unloadTime: d.unload_time || d.unloadTime,
+                        freightCost: d.freight_cost ?? d.freightCost,
+                    })) : [],
+                    history: a.history || [],
+                });
+                const normalized: FreightAnnouncement[] = Array.isArray(raw) ? raw.map(normalize) : [];
+                setAnnouncements(normalized);
+            }
+        } catch (e) {
+            console.error('❌ [TransportLive] Forward failed', e);
+            alert('ارجاع ناموفق بود');
+        }
     };
 
     const onCancel = async (announcementId: string) => {

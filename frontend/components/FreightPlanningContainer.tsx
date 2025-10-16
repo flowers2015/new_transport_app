@@ -17,7 +17,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             const res = await fetch('http://localhost:3000/api/v1/freight-announcements', { headers });
             if (!res.ok) throw new Error('Failed to fetch freight announcements');
             const raw = await res.json();
-            console.log('📦 [FreightPlanning] Fetched raw announcements:', raw);
+            console.log('📦 [FreightPlanning] Fetched raw announcements count:', Array.isArray(raw)? raw.length : -1);
             const statusMap: Record<string, FreightAnnouncementStatus> = {
                 Draft: FreightAnnouncementStatus.Draft,
                 PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
@@ -40,6 +40,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
                 vehicleType: a.vehicle_type || a.vehicleType || '',
                 notes: a.notes,
+                rejectionReason: a.rejection_reason || a.rejectionReason,
                 assignmentType: a.assignment_type || a.assignmentType,
                 assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
                 assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
@@ -64,7 +65,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 history: a.history || [],
             });
             const normalized: FreightAnnouncement[] = Array.isArray(raw) ? raw.map(normalize) : [];
-            console.log('🧭 [FreightPlanning] Normalized announcements:', normalized);
+            console.log('🧭 [FreightPlanning] Normalized announcements sample:', normalized[0]);
             setAnnouncements(normalized);
         } catch (err) {
             console.error('[FreightPlanning] Failed to load announcements', err);
@@ -107,6 +108,35 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleUpdateAnnouncement = async (updated: FreightAnnouncement) => {
         try {
             console.log('✏️ [FreightPlanning] Update announcement:', updated);
+            // Fallback: if id is missing, treat as CREATE instead of PUT to avoid 404
+            if (!updated.id) {
+                console.warn('[FreightPlanning] Missing id → creating instead of updating');
+                const createBody = {
+                    loadingDate: updated.loadingDate,
+                    lineType: updated.lineType,
+                    cargoValue: updated.cargoValue,
+                    vehicleType: updated.vehicleType,
+                    notes: updated.notes,
+                    originCity: updated.originCity,
+                    brand: updated.brand,
+                    representativeType: updated.representativeType,
+                    representativeName: updated.representativeName,
+                    cartonCount: updated.cartonCount,
+                    priority: updated.priority,
+                    products: updated.products,
+                    platformArrivalTime: (updated as any).platformArrivalTime,
+                    destinations: updated.destinations,
+                    isDraft: updated.status === FreightAnnouncementStatus.Draft,
+                } as any;
+                const resCreate = await fetch('http://localhost:3000/api/v1/freight-announcements', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(createBody),
+                });
+                if (!resCreate.ok) throw new Error(await resCreate.text());
+                await fetchAnnouncements();
+                return;
+            }
             const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${updated.id}` ,{
                 method: 'PUT',
                 headers,
@@ -116,6 +146,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     cargoValue: updated.cargoValue,
                     vehicleType: updated.vehicleType,
                     notes: updated.notes,
+                    originCity: updated.originCity,
+                    brand: updated.brand,
                     status: updated.status,
                     destinations: updated.destinations,
                 }),
@@ -159,6 +191,22 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
+    // Switch assignment queue (manager or transport can re-route)
+    const handleSwitchQueue = async (id: string, nextQueue: 'company' | 'personal') => {
+        try {
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}/assignment-queue`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ nextQueue })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await fetchAnnouncements();
+        } catch (e) {
+            console.error('❌ [FreightPlanning] Switch queue failed:', e);
+            alert('تغییر صف تخصیص ناموفق بود');
+        }
+    };
+
     return (
         <div>
             {loading && <div className="mb-2 text-sm text-slate-500">در حال بارگذاری...</div>}
@@ -171,6 +219,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 onDelete={() => {}}
                 onReAnnounce={() => {}}
                 currentUser={currentUser}
+                onSwitchQueue={handleSwitchQueue as any}
             />
         </div>
     );

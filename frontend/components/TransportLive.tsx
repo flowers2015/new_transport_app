@@ -74,6 +74,8 @@ const columnsConfig = (props: TransportLiveProps, viewMode: 'compact' | 'full') 
         { header: 'کد اعلام بار', align: 'center', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
         { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
         { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
+        { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'نوع خودرو', display: () => true, render: (ann: FreightAnnouncement) => ann.vehicleType },
         
         // Destinations Summary (for all compact views)
@@ -88,7 +90,8 @@ const columnsConfig = (props: TransportLiveProps, viewMode: 'compact' | 'full') 
         
         // Full View Specific - Ice Cream
         { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
-        { header: 'محصولات', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') },
+        { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
+        { header: 'توضیحات', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         
         // Full View Specific - Dairy/Ambient
         { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
@@ -119,15 +122,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const liveAnnouncements = useMemo(() => 
         announcements.filter(a => {
+            try { console.log('[DBG][TransportLive] item sample:', announcements[0]); } catch {}
             if (dateView === 'today' && !isToday(a.loadingDate)) return false;
 
             if (currentUser.role === UserRole.TransportationUser) {
-                // Company transport sees Company assignments or assigned loads
-                return a.status === FreightAnnouncementStatus.PendingCompanyAssignment || a.status === FreightAnnouncementStatus.Assigned;
+                // ترابری شرکت: هر دو صف را می‌بیند (شرکتی فعال، شخصی فقط مشاهده)
+                return [
+                    FreightAnnouncementStatus.PendingCompanyAssignment,
+                    FreightAnnouncementStatus.PendingPersonalAssignment,
+                    FreightAnnouncementStatus.Assigned,
+                ].includes(a.status);
             }
             if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
-                // Personal transport sees Personal assignments or assigned loads
-                return a.status === FreightAnnouncementStatus.PendingPersonalAssignment || a.status === FreightAnnouncementStatus.Assigned;
+                // ترابری شخصی: هر دو صف را می‌بیند (شخصی فعال، شرکتی فقط مشاهده)
+                return [
+                    FreightAnnouncementStatus.PendingCompanyAssignment,
+                    FreightAnnouncementStatus.PendingPersonalAssignment,
+                    FreightAnnouncementStatus.Assigned,
+                ].includes(a.status);
             }
             if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
                  return a.destinations.some(d => d.city === currentUser.branchCity) && a.status === FreightAnnouncementStatus.Assigned;
@@ -173,7 +185,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }
 
     const visibleColumns = useMemo(() => {
-        return columnsConfig(props, viewMode).filter(c => c.display(activeLine));
+        const colsAll = columnsConfig(props, viewMode);
+        try { console.log('[DBG][TransportLive] all headers:', colsAll.map((c:any)=>c.header)); } catch {}
+        const cols = colsAll.filter(c => c.display(activeLine));
+        try { console.log('[DBG][TransportLive] visible headers:', cols.map((c:any)=>c.header), 'line:', activeLine, 'mode:', viewMode); } catch {}
+        return cols;
     }, [viewMode, activeLine, props]);
 
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
@@ -239,7 +255,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 today.setHours(0, 0, 0, 0);
                                 const isAnnLeftover = new Date(ann.loadingDate) < today && [FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status);
                                 const isTransportRole = hasAccess([UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]);
-                                const canTakeAction = !isAnnLeftover || !isTransportRole;
+                                // قواعد فعال/غیرفعال بودن عملیات:
+                                // - اگر نقش و assignmentType همخوان نباشند → فقط مشاهده (غیرفعال)
+                                // - اگر leftover است و نقش ترابری → فقط مشاهده (غیرفعال)
+                                let queueMismatchViewOnly = false;
+                                const isOwnerQueue = (currentUser.role === UserRole.TransportationUser && ann.assignmentType === 'company') || (currentUser.role === UserRole.Transportation_Personal_Vehicle_User && ann.assignmentType === 'personal');
+                                if (!isOwnerQueue && isTransportRole) queueMismatchViewOnly = true;
+                                const canTakeAction = !isAnnLeftover && !queueMismatchViewOnly;
 
                                 const isAssignedByOther = ann.status === FreightAnnouncementStatus.Assigned && (
                                     (ann.assignmentType === 'personal' && currentUser.role === UserRole.TransportationUser) ||
@@ -248,9 +270,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 
                                 const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-400";
 
-                                const showForwardButton = 
-                                    (currentUser.role === UserRole.TransportationUser && ann.lineType === FreightLineType.IceCream && ann.status === FreightAnnouncementStatus.PendingCompanyAssignment) ||
-                                    (currentUser.role === UserRole.Transportation_Personal_Vehicle_User && [FreightLineType.Dairy, FreightLineType.Ambient].includes(ann.lineType) && ann.status === FreightAnnouncementStatus.PendingPersonalAssignment);
+                                // دکمه ارجاع برای هر دو نقش ترابری در هر لاین فعال باشد تا بتوانند بی‌نهایت بین صف‌ها پاس دهند
+                                const canForward = isTransportRole && isOwnerQueue && [
+                                    FreightAnnouncementStatus.PendingCompanyAssignment,
+                                    FreightAnnouncementStatus.PendingPersonalAssignment,
+                                ].includes(ann.status) && !isAnnLeftover;
 
                                 return (
                                 <tr key={ann.id} className={`border-b ${selectedIds.has(ann.id) ? 'bg-sky-50' : 'hover:bg-slate-50'}`}>
@@ -280,7 +304,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         <div className="flex gap-1 flex-wrap">
                                             {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                                             {canPerformActions && ann.destinations.length > 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="انتقال مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
-                                            {canPerformActions && showForwardButton && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onForward(ann.id)} title="ارجاع به ترابری دیگر" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 ${disabledClasses}`}>ارجاع</button>}
+                                            {canPerformActions && <button disabled={!canForward} onClick={() => onForward(ann.id)} title="ارجاع به ترابری دیگر" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed`}>ارجاع</button>}
                                             {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو اعلام بار" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
                                         </div>
                                     </td>

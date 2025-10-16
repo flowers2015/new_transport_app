@@ -9,6 +9,7 @@ async function getFreightAnnouncements(req, res) {
     const { rows } = await pool.query(`
       SELECT 
         fa.*,
+        fa.rejection_reason,
         d.name as assigned_driver_name,
         d.employee_id as assigned_driver_employee_id,
         v.model as assigned_vehicle_model,
@@ -341,10 +342,43 @@ async function updateStatusWithHistory(announcementId, newStatus, userId, change
 async function approveAnnouncement(req, res) {
   const { id: announcementId } = req.params;
   const { userId } = req.user;
-  const newStatus = 'PendingCompanyAssignment';
-  const changeDescription = `Status changed to ${newStatus}`;
-  
-  await updateStatusWithHistory(announcementId, newStatus, userId, changeDescription, res);
+  try {
+    // Fetch line type to determine routing
+    const { rows } = await pool.query('SELECT line_type FROM freight_announcements WHERE id = $1', [announcementId]);
+    if (rows.length === 0) return res.status(404).json({ message: 'Announcement not found.' });
+    const lineType = rows[0].line_type;
+    let newStatus;
+    let assignmentType;
+    const iceCreamMatches = ['IceCream', 'بستنی'];
+    const dairyMatches = ['Dairy', 'پاستوریزه'];
+    const ambientMatches = ['Ambient', 'لبنیات-فروتلند'];
+    if (iceCreamMatches.includes(lineType)) {
+      newStatus = 'PendingCompanyAssignment';
+      assignmentType = 'company';
+    } else if (dairyMatches.includes(lineType) || ambientMatches.includes(lineType)) {
+      newStatus = 'PendingPersonalAssignment';
+      assignmentType = 'personal';
+    } else {
+      newStatus = 'PendingCompanyAssignment';
+      assignmentType = 'company';
+    }
+
+    const changeDescription = `Status changed to ${newStatus} with assignment_type=${assignmentType}`;
+
+    await updateStatusWithHistory(
+      announcementId,
+      newStatus,
+      userId,
+      changeDescription,
+      res,
+      async (client) => {
+        await client.query('UPDATE freight_announcements SET assignment_type = $1 WHERE id = $2', [assignmentType, announcementId]);
+      }
+    );
+  } catch (e) {
+    console.error('Failed to approve announcement:', e);
+    res.status(500).json({ message: 'Internal server error while approving announcement.' });
+  }
 }
 
 // POST /:id/reject
@@ -352,19 +386,53 @@ async function rejectAnnouncement(req, res) {
   const { id: announcementId } = req.params;
   const { userId } = req.user;
   const newStatus = 'Rejected'; // As per requirement
-  const changeDescription = `Status changed to ${newStatus}`;
+  const reason = (req.body && req.body.reason) || null;
+  const changeDescription = `Status changed to ${newStatus}${reason ? `, reason: ${reason}` : ''}`;
 
-  await updateStatusWithHistory(announcementId, newStatus, userId, changeDescription, res);
+  await updateStatusWithHistory(
+    announcementId,
+    newStatus,
+    userId,
+    changeDescription,
+    res,
+    async (client) => {
+      // Try to write rejection_reason if column exists, otherwise append to notes
+      const col = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'rejection_reason'`);
+      if (col.rowCount > 0) {
+        await client.query('UPDATE freight_announcements SET rejection_reason = $1 WHERE id = $2', [reason, announcementId]);
+      } else if (reason) {
+        await client.query("UPDATE freight_announcements SET notes = COALESCE(notes, '') || $1 WHERE id = $2", [" Rejected: " + reason, announcementId]);
+      }
+    }
+  );
 }
 
 // PUT /:id/assignment
 async function assignVehicleAndDriver(req, res) {
   const { id: announcementId } = req.params;
   const { vehicleId, driverId } = req.body;
-  const { userId } = req.user;
+  const { userId, role } = req.user;
 
   if (!vehicleId || !driverId) {
     return res.status(400).json({ message: 'Vehicle ID and Driver ID are required for assignment.' });
+  }
+
+  // Enforce queue by role
+  try {
+    const { rows } = await pool.query('SELECT assignment_type FROM freight_announcements WHERE id = $1', [announcementId]);
+    if (rows.length === 0) return res.status(404).json({ message: 'Announcement not found.' });
+    const assignmentType = rows[0].assignment_type;
+    // transport_user → only when assignment_type = company
+    // personal_transport_user → only when assignment_type = personal
+    if (role === 'transport_user' && assignmentType !== 'company') {
+      return res.status(403).json({ message: 'Assignment not allowed in current queue for Transport Company.' });
+    }
+    if (role === 'personal_transport_user' && assignmentType !== 'personal') {
+      return res.status(403).json({ message: 'Assignment not allowed in current queue for Personal Transport.' });
+    }
+  } catch (e) {
+    console.error('Queue check failed:', e);
+    return res.status(500).json({ message: 'Internal server error while checking assignment queue.' });
   }
 
   const newStatus = 'Assigned'; // As per requirement
@@ -378,6 +446,28 @@ async function assignVehicleAndDriver(req, res) {
   await updateStatusWithHistory(announcementId, newStatus, userId, changeDescription, res, assignmentUpdateFn);
 }
 
+// POST /:id/assignment-queue
+async function setAssignmentQueue(req, res) {
+  const { id: announcementId } = req.params;
+  const { nextQueue } = req.body || {};
+  const { userId } = req.user;
+  if (!['company', 'personal'].includes(nextQueue)) {
+    return res.status(400).json({ message: 'nextQueue must be "company" or "personal"' });
+  }
+  const newStatus = nextQueue === 'company' ? 'PendingCompanyAssignment' : 'PendingPersonalAssignment';
+  const changeDescription = `Assignment queue changed to ${nextQueue} → ${newStatus}`;
+  await updateStatusWithHistory(
+    announcementId,
+    newStatus,
+    userId,
+    changeDescription,
+    res,
+    async (client) => {
+      await client.query('UPDATE freight_announcements SET assignment_type = $1 WHERE id = $2', [nextQueue, announcementId]);
+    }
+  );
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -386,4 +476,5 @@ module.exports = {
   assignVehicleAndDriver,
   createFreightAnnouncement,
   updateFreightAnnouncement,
+  setAssignmentQueue,
 };
