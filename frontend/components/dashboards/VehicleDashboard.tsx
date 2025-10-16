@@ -620,6 +620,11 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         setSerialNumber('');
     };
 
+    const handleCancel = () => {
+        resetForm();
+        setEditingId(null);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const { branchId, model, holdingCompany, vehicleCategory, mihanCompany, year, wheelCount, axleCount, cylinderCount } = formState;
@@ -923,7 +928,8 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                 </div>
                             </fieldset>
                             
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-2">
+                                 <button type="button" onClick={handleCancel} className="px-5 py-2 rounded-md text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition">انصراف</button>
                                  <button type="submit" className="px-5 py-2 rounded-md text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 transition">افزودن</button>
                             </div>
                         </>
