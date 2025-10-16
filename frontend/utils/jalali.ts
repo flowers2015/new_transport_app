@@ -1,11 +1,13 @@
 import { PlateNumber } from '../types';
 
-export const formatJalali = (date: Date): string => {
+export const formatJalali = (date: Date | null | undefined): string => {
+    if (!date) return '-';
     const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     return `${jy}/${pad2(jm)}/${pad2(jd)}`;
 };
 
-export const formatJalaliDateTime = (date: Date): string => {
+export const formatJalaliDateTime = (date: Date | null | undefined): string => {
+    if (!date) return '-';
     const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const hh = pad2(date.getHours());
     const mm = pad2(date.getMinutes());

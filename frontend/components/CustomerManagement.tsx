@@ -2,10 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { Driver, LicenseType } from '../types';
 import { UserPlusIcon } from './icons/UserPlusIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
+import JalaliDateInput from './JalaliDateInput';
 
 interface DriverManagementProps {
     drivers: Driver[];
     onAddDriver: (driver: Omit<Driver, 'id'>) => void;
+    onUpdateDriver: (id: string, driver: Omit<Driver, 'id'>) => void;
+    onDeleteDriver: (id: string) => void;
 }
 
 const initialFormState = {
@@ -33,8 +36,9 @@ const initialFormState = {
     licenseExpiryDate: '',
 };
 
-const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDriver }) => {
+const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDriver, onUpdateDriver, onDeleteDriver }) => {
     const [formData, setFormData] = useState(initialFormState);
+    const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -48,7 +52,7 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
             return;
         }
 
-        const driverToAdd: Omit<Driver, 'id'> = {
+        const driverData: Omit<Driver, 'id'> = {
           ...formData,
           birthDate: formData.birthDate ? new Date(formData.birthDate) : undefined,
           hireDate: formData.hireDate ? new Date(formData.hireDate) : undefined,
@@ -58,8 +62,57 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
           licenseType: formData.licenseType as LicenseType,
         };
         
-        onAddDriver(driverToAdd);
+        if (editingDriver) {
+            onUpdateDriver(editingDriver.id, driverData);
+            setEditingDriver(null);
+        } else {
+            onAddDriver(driverData);
+        }
         setFormData(initialFormState);
+    };
+
+    const handleEdit = (driver: Driver) => {
+        console.log('🔍 [DriverEdit] Editing driver:', driver);
+        setEditingDriver(driver);
+        
+        const formData = {
+            employeeId: driver.employee_id || driver.employeeId || '',
+            name: driver.name || '',
+            fatherName: driver.father_name || driver.fatherName || '',
+            nationalId: driver.national_id || driver.nationalId || '',
+            birthDate: driver.birth_date ? new Date(driver.birth_date).toISOString().split('T')[0] : (driver.birthDate ? driver.birthDate.toISOString().split('T')[0] : ''),
+            idNumber: driver.id_number || driver.idNumber || '',
+            birthPlace: driver.birth_place || driver.birthPlace || '',
+            issuePlace: driver.issue_place || driver.issuePlace || '',
+            homePhone: driver.home_phone || driver.homePhone || '',
+            workPhone: driver.work_phone || driver.workPhone || '',
+            mobile: driver.mobile || '',
+            postalCode: driver.postal_code || driver.postalCode || '',
+            homeAddress: driver.home_address || driver.homeAddress || '',
+            workLocation: driver.work_location || driver.workLocation || '',
+            jobTitle: driver.job_title || driver.jobTitle || '',
+            hireDate: driver.hire_date ? new Date(driver.hire_date).toISOString().split('T')[0] : (driver.hireDate ? driver.hireDate.toISOString().split('T')[0] : ''),
+            terminationDate: driver.termination_date ? new Date(driver.termination_date).toISOString().split('T')[0] : (driver.terminationDate ? driver.terminationDate.toISOString().split('T')[0] : ''),
+            licenseNumber: driver.license_number || driver.licenseNumber || '',
+            licenseType: driver.license_type || driver.licenseType || LicenseType.Base1,
+            licenseIssueDate: driver.license_issue_date ? new Date(driver.license_issue_date).toISOString().split('T')[0] : (driver.licenseIssueDate ? driver.licenseIssueDate.toISOString().split('T')[0] : ''),
+            licenseIssuePlace: driver.license_issue_place || driver.licenseIssuePlace || '',
+            licenseExpiryDate: driver.license_expiry_date ? new Date(driver.license_expiry_date).toISOString().split('T')[0] : (driver.licenseExpiryDate ? driver.licenseExpiryDate.toISOString().split('T')[0] : ''),
+        };
+        
+        console.log('📝 [DriverEdit] Form data:', formData);
+        setFormData(formData);
+    };
+
+    const handleCancel = () => {
+        setEditingDriver(null);
+        setFormData(initialFormState);
+    };
+
+    const handleDelete = (id: string) => {
+        if (window.confirm('آیا از حذف این راننده اطمینان دارید؟')) {
+            onDeleteDriver(id);
+        }
     };
     
     const filteredDrivers = useMemo(() => {
@@ -77,7 +130,7 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
             <div className="bg-white p-6 rounded-xl shadow-lg">
                 <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center">
                     <UserPlusIcon className="w-6 h-6 mr-2 text-sky-600" />
-                    افزودن پرسنل / راننده جدید
+                    {editingDriver ? `ویرایش راننده: ${editingDriver.name}` : 'افزودن پرسنل / راننده جدید'}
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <fieldset className="p-4 border border-slate-200 rounded-lg">
@@ -87,7 +140,14 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
                             <InputField label="نام و نام خانوادگی" name="name" value={formData.name} onChange={handleChange} required />
                             <InputField label="نام پدر" name="fatherName" value={formData.fatherName} onChange={handleChange} />
                             <InputField label="کد ملی" name="nationalId" value={formData.nationalId} onChange={handleChange} />
-                            <InputField label="تاریخ تولد" name="birthDate" type="date" value={formData.birthDate} onChange={handleChange} />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">تاریخ تولد</label>
+                                <JalaliDateInput 
+                                    value={formData.birthDate}
+                                    onChange={(value) => setFormData({...formData, birthDate: value})}
+                                    placeholder="تاریخ تولد شمسی"
+                                />
+                            </div>
                             <InputField label="شماره شناسنامه" name="idNumber" value={formData.idNumber} onChange={handleChange} />
                             <InputField label="محل تولد" name="birthPlace" value={formData.birthPlace} onChange={handleChange} />
                             <InputField label="محل صدور" name="issuePlace" value={formData.issuePlace} onChange={handleChange} />
@@ -113,8 +173,22 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <InputField label="محل خدمت" name="workLocation" value={formData.workLocation} onChange={handleChange} />
                             <InputField label="شغل" name="jobTitle" value={formData.jobTitle} onChange={handleChange} />
-                            <InputField label="تاریخ استخدام" name="hireDate" type="date" value={formData.hireDate} onChange={handleChange} />
-                            <InputField label="تاریخ تسویه حساب" name="terminationDate" type="date" value={formData.terminationDate} onChange={handleChange} />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">تاریخ استخدام</label>
+                                <JalaliDateInput 
+                                    value={formData.hireDate}
+                                    onChange={(value) => setFormData({...formData, hireDate: value})}
+                                    placeholder="تاریخ استخدام شمسی"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">تاریخ تسویه حساب</label>
+                                <JalaliDateInput 
+                                    value={formData.terminationDate}
+                                    onChange={(value) => setFormData({...formData, terminationDate: value})}
+                                    placeholder="تاریخ تسویه حساب شمسی"
+                                />
+                            </div>
                          </div>
                     </fieldset>
 
@@ -128,14 +202,35 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
                                     {Object.values(LicenseType).map(type => <option key={type} value={type}>{type}</option>)}
                                 </select>
                             </div>
-                            <InputField label="تاریخ صدور" name="licenseIssueDate" type="date" value={formData.licenseIssueDate} onChange={handleChange} />
-                             <InputField label="محل صدور" name="licenseIssuePlace" value={formData.licenseIssuePlace} onChange={handleChange} />
-                            <InputField label="تاریخ اعتبار" name="licenseExpiryDate" type="date" value={formData.licenseExpiryDate} onChange={handleChange} />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">تاریخ صدور</label>
+                                <JalaliDateInput 
+                                    value={formData.licenseIssueDate}
+                                    onChange={(value) => setFormData({...formData, licenseIssueDate: value})}
+                                    placeholder="تاریخ صدور شمسی"
+                                />
+                            </div>
+                            <InputField label="محل صدور" name="licenseIssuePlace" value={formData.licenseIssuePlace} onChange={handleChange} />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">تاریخ اعتبار</label>
+                                <JalaliDateInput 
+                                    value={formData.licenseExpiryDate}
+                                    onChange={(value) => setFormData({...formData, licenseExpiryDate: value})}
+                                    placeholder="تاریخ اعتبار شمسی"
+                                />
+                            </div>
                          </div>
                     </fieldset>
                     
-                    <div className="flex justify-end">
-                        <button type="submit" className="px-6 py-2 rounded-md text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 transition">افزودن</button>
+                    <div className="flex justify-end gap-2">
+                        <button type="submit" className="px-6 py-2 rounded-md text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 transition">
+                            {editingDriver ? 'ذخیره تغییرات' : 'افزودن'}
+                        </button>
+                        {editingDriver && (
+                            <button type="button" onClick={handleCancel} className="px-6 py-2 rounded-md text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition">
+                                انصراف
+                            </button>
+                        )}
                     </div>
                 </form>
             </div>
@@ -164,6 +259,7 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
                                 <th className="px-6 py-3">محل خدمت</th>
                                 <th className="px-6 py-3">شغل</th>
                                 <th className="px-6 py-3">نوع گواهینامه</th>
+                                <th className="px-6 py-3">عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -175,6 +271,22 @@ const DriverManagement: React.FC<DriverManagementProps> = ({ drivers, onAddDrive
                                     <td className="px-6 py-4">{driver.workLocation || '-'}</td>
                                     <td className="px-6 py-4">{driver.jobTitle || '-'}</td>
                                     <td className="px-6 py-4">{driver.licenseType || '-'}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => handleEdit(driver)}
+                                                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition"
+                                            >
+                                                ویرایش
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(driver.id)}
+                                                className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition"
+                                            >
+                                                حذف
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, UserRole, User } from './types';
+import { View, UserRole, User, Branch, Driver } from './types';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -33,6 +33,8 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>(View.Login);
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [drivers, setDrivers] = useState<Driver[]>([]);
     // Remove other state variables that held mock data
 
     const mapBackendRoleToUserRole = (role: string): UserRole | null => {
@@ -116,10 +118,185 @@ const App: React.FC = () => {
         setCurrentView(View.Login);
     };
 
+    // Branch management functions
+    const fetchBranches = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:3000/api/v1/branches', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setBranches(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch branches:', error);
+        }
+    };
+
+    const handleAddBranch = async (branch: Omit<Branch, 'id'>) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:3000/api/v1/branches', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(branch),
+            });
+            if (response.ok) {
+                await fetchBranches();
+            } else {
+                alert('خطا در افزودن شعبه');
+            }
+        } catch (error) {
+            console.error('Failed to add branch:', error);
+            alert('خطا در افزودن شعبه');
+        }
+    };
+
+    const handleUpdateBranch = async (id: string, branch: Omit<Branch, 'id'>) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`http://localhost:3000/api/v1/branches/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(branch),
+            });
+            if (response.ok) {
+                await fetchBranches();
+            } else {
+                alert('خطا در ویرایش شعبه');
+            }
+        } catch (error) {
+            console.error('Failed to update branch:', error);
+            alert('خطا در ویرایش شعبه');
+        }
+    };
+
+    const handleDeleteBranch = async (id: string) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`http://localhost:3000/api/v1/branches/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            if (response.ok) {
+                await fetchBranches();
+            } else {
+                alert('خطا در حذف شعبه');
+            }
+        } catch (error) {
+            console.error('Failed to delete branch:', error);
+            alert('خطا در حذف شعبه');
+        }
+    };
+
+    // Driver management functions
+    const fetchDrivers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:3000/api/v1/drivers', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setDrivers(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch drivers:', error);
+        }
+    };
+
+    const handleAddDriver = async (driver: Omit<Driver, 'id'>) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:3000/api/v1/drivers', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(driver),
+            });
+            if (response.ok) {
+                await fetchDrivers();
+            } else {
+                alert('خطا در افزودن راننده');
+            }
+        } catch (error) {
+            console.error('Failed to add driver:', error);
+            alert('خطا در افزودن راننده');
+        }
+    };
+
+    const handleUpdateDriver = async (id: string, driver: Omit<Driver, 'id'>) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`http://localhost:3000/api/v1/drivers/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(driver),
+            });
+            if (response.ok) {
+                await fetchDrivers();
+            } else {
+                alert('خطا در ویرایش راننده');
+            }
+        } catch (error) {
+            console.error('Failed to update driver:', error);
+            alert('خطا در ویرایش راننده');
+        }
+    };
+
+    const handleDeleteDriver = async (id: string) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`http://localhost:3000/api/v1/drivers/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            if (response.ok) {
+                await fetchDrivers();
+            } else {
+                alert('خطا در حذف راننده');
+            }
+        } catch (error) {
+            console.error('Failed to delete driver:', error);
+            alert('خطا در حذف راننده');
+        }
+    };
+
     const handleNavigate = (view: View) => {
         setCurrentView(view);
         setSelectedOrderId(null); // Reset selections when navigating away
         setSelectedInvoiceId(null);
+        
+        // Fetch data when navigating to specific views
+        if (view === View.Branches) {
+            fetchBranches();
+        } else if (view === View.Drivers) {
+            fetchDrivers();
+        }
     };
 
     const handleSelectOrder = (orderId: string) => {
@@ -170,7 +347,12 @@ const App: React.FC = () => {
                 return <div>No repair order selected. Return to <button onClick={() => setCurrentView(View.Dashboard)}>Dashboard</button>.</div>;
             case View.Branches:
                 console.log('[App] Render view:', View.Branches);
-                return <ContractManagement branches={[]} onAddBranch={() => {}} />;
+                return <ContractManagement 
+                    branches={branches} 
+                    onAddBranch={handleAddBranch}
+                    onUpdateBranch={handleUpdateBranch}
+                    onDeleteBranch={handleDeleteBranch}
+                />;
             case View.Vehicles:
                 console.log('[App] Render view:', View.Vehicles);
                 return <VehiclesPage />;
@@ -204,7 +386,12 @@ const App: React.FC = () => {
                 );
             case View.Drivers:
                 console.log('[App] Render view:', View.Drivers);
-                return <CustomerManagement drivers={[]} onAddDriver={() => {}} />;
+                return <CustomerManagement 
+                    drivers={drivers} 
+                    onAddDriver={handleAddDriver}
+                    onUpdateDriver={handleUpdateDriver}
+                    onDeleteDriver={handleDeleteDriver}
+                />;
             case View.VehicleAllocation:
                 console.log('[App] Render view:', View.VehicleAllocation);
                 return (

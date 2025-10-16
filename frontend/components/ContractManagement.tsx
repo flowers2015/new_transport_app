@@ -1,14 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { Branch } from '../types';
 import { UserGroupIcon } from './icons/UserGroupIcon'; // Re-using icon
+import LocationAutocomplete from './LocationAutocomplete';
 
 interface BranchManagementProps {
     branches: Branch[];
     onAddBranch: (branch: Omit<Branch, 'id'>) => void;
+    onUpdateBranch: (id: string, branch: Omit<Branch, 'id'>) => void;
+    onDeleteBranch: (id: string) => void;
 }
 
-const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBranch }) => {
+const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBranch, onUpdateBranch, onDeleteBranch }) => {
     const [formData, setFormData] = useState({ name: '', location: '' });
+    const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,8 +21,29 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onAddBranch(formData);
+        if (editingBranch) {
+            onUpdateBranch(editingBranch.id, formData);
+            setEditingBranch(null);
+        } else {
+            onAddBranch(formData);
+        }
         setFormData({ name: '', location: '' });
+    };
+
+    const handleEdit = (branch: Branch) => {
+        setEditingBranch(branch);
+        setFormData({ name: branch.name, location: branch.location });
+    };
+
+    const handleCancel = () => {
+        setEditingBranch(null);
+        setFormData({ name: '', location: '' });
+    };
+
+    const handleDelete = (id: string) => {
+        if (window.confirm('آیا از حذف این شعبه اطمینان دارید؟')) {
+            onDeleteBranch(id);
+        }
     };
     
     const filteredBranches = useMemo(() => {
@@ -32,11 +57,28 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
     return (
         <div className="max-w-4xl mx-auto space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-lg">
-                <h2 className="text-xl font-bold text-slate-800 mb-4">افزودن شعبه جدید</h2>
-                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <input name="name" value={formData.name} onChange={handleChange} placeholder="نام شعبه" className="input-style md:col-span-1" required />
-                    <input name="location" value={formData.location} onChange={handleChange} placeholder="موقعیت مکانی" className="input-style" required />
-                    <button type="submit" className="px-5 py-2 rounded-md text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 transition">افزودن</button>
+                <h2 className="text-xl font-bold text-slate-800 mb-4">
+                    {editingBranch ? `ویرایش شعبه: ${editingBranch.name}` : 'افزودن شعبه جدید'}
+                </h2>
+                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <input name="name" value={formData.name} onChange={handleChange} placeholder="نام شعبه" className="input-style" required />
+                    <LocationAutocomplete 
+                        value={formData.location}
+                        onChange={(value) => setFormData({...formData, location: value})}
+                        placeholder="موقعیت مکانی"
+                        className="input-style"
+                        required
+                    />
+                    <div className="flex gap-2">
+                        <button type="submit" className="px-4 py-2 rounded-md text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 transition">
+                            {editingBranch ? 'ذخیره تغییرات' : 'افزودن'}
+                        </button>
+                        {editingBranch && (
+                            <button type="button" onClick={handleCancel} className="px-4 py-2 rounded-md text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition">
+                                انصراف
+                            </button>
+                        )}
+                    </div>
                 </form>
             </div>
 
@@ -60,6 +102,7 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
                             <tr>
                                 <th className="px-6 py-3">نام شعبه</th>
                                 <th className="px-6 py-3">موقعیت</th>
+                                <th className="px-6 py-3">عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -67,6 +110,22 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
                                 <tr key={branch.id} className="bg-white border-b hover:bg-gray-50">
                                     <th className="px-6 py-4 font-medium text-gray-900">{branch.name}</th>
                                     <td className="px-6 py-4">{branch.location}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => handleEdit(branch)}
+                                                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition"
+                                            >
+                                                ویرایش
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(branch.id)}
+                                                className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition"
+                                            >
+                                                حذف
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
