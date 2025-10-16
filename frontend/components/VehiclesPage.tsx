@@ -32,8 +32,42 @@ const VehiclesPage: React.FC = () => {
         fetchData();
     }, []);
 
-    const handleAddVehicle = async () => {
-        alert('ثبت خودروی جدید فعلاً غیرفعال است. لطفاً فقط مشاهده کنید.');
+    const handleAddVehicle = async (vehicle: Omit<Vehicle, 'id'>) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('http://localhost:3000/api/v1/vehicles', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(vehicle)
+            });
+            if (!res.ok) throw new Error('ثبت خودرو ناموفق بود');
+            const saved = await res.json();
+            setVehicles(prev => [saved, ...prev]);
+        } catch (e:any) {
+            alert(e.message || 'خطا در ثبت خودرو');
+        }
+    };
+
+    const handleUpdateVehicle = async (id: string, vehicle: Omit<Vehicle, 'id'>) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:3000/api/v1/vehicles/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(vehicle)
+            });
+            if (!res.ok) throw new Error('ویرایش خودرو ناموفق بود');
+            const updated = await res.json();
+            setVehicles(prev => prev.map(v => v.id === id ? updated : v));
+        } catch (e:any) {
+            alert(e.message || 'خطا در ویرایش خودرو');
+        }
     };
 
     if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
@@ -44,6 +78,7 @@ const VehiclesPage: React.FC = () => {
             vehicles={vehicles}
             branches={branches}
             onAddVehicle={handleAddVehicle as any}
+            onUpdateVehicle={handleUpdateVehicle as any}
         />
     );
 };

@@ -9,6 +9,7 @@ interface VehicleManagementProps {
     vehicles: Vehicle[];
     branches: Branch[];
     onAddVehicle: (vehicle: Omit<Vehicle, 'id'>) => void;
+    onUpdateVehicle?: (id: string, vehicle: Omit<Vehicle, 'id'>) => void;
 }
 
 const persianAlphabet = ['الف', 'ب', 'پ', 'ت', 'ث', 'ج', 'چ', 'ح', 'خ', 'د', 'ذ', 'ر', 'ز', 'ژ', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع', 'غ', 'ف', 'ق', 'ک', 'گ', 'ل', 'م', 'ن', 'و', 'ه', 'ی'];
@@ -515,12 +516,13 @@ const vehicleDatabase: any = {
 };
 
 
-const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle }) => {
+const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle, onUpdateVehicle }) => {
     const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: 'الف', part2: '', cityCode: '' });
     const [serialNumber, setSerialNumber] = useState('');
     const [isPlate, setIsPlate] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     
     const initialFormState = {
         holdingCompany: '' as 'mihan' | 'other' | '',
@@ -601,7 +603,11 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormState(prev => ({ ...prev, [name]: value }));
+        const updated: any = { ...formState, [name]: value };
+        if (name === 'mihanCompany') {
+            updated.ownerName = value || '';
+        }
+        setFormState(updated);
     };
 
     const handlePlateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -614,7 +620,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         setSerialNumber('');
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const { branchId, model, holdingCompany, vehicleCategory, mihanCompany, year, wheelCount, axleCount, cylinderCount } = formState;
 
@@ -638,12 +644,91 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             cylinderCount: cylinderCount ? parseInt(String(cylinderCount)) : undefined,
             plateNumber: isPlate ? plate : undefined,
             serialNumber: !isPlate ? serialNumber : undefined,
+            ownerName: holdingCompany === 'mihan' ? (formState.mihanCompany || '') : (formState.ownerName || '')
         };
-        onAddVehicle(vehicleData);
+        if (editingId) {
+            if (onUpdateVehicle) {
+                await onUpdateVehicle(editingId, vehicleData);
+            }
+        } else {
+            onAddVehicle(vehicleData);
+        }
         resetForm();
+        setEditingId(null);
     };
 
     const getBranchName = (branchId: string) => branches.find(b => b.id === branchId)?.name || 'نامشخص';
+    const handleEdit = (v: Vehicle) => {
+        setEditingId(v.id);
+        const baseModel = (v.model || '').trim();
+        const knownTips = ['TU5','TU3','EF7','EF7T','K4M'];
+        let modelName = baseModel;
+        let tip = '';
+        for (const t of knownTips) {
+            if (baseModel.toLowerCase().includes(t.toLowerCase())) {
+                modelName = baseModel.replace(new RegExp(t, 'i'), '').trim();
+                tip = t;
+                break;
+            }
+        }
+        setFormState({
+            holdingCompany: (v.holdingCompany as any) || '',
+            mihanCompany: (v.mihanCompany as any) || '',
+            vehicleCategory: (v.vehicleCategory as any) || '',
+            brand: v.brand || '',
+            model: modelName,
+            vehicleTip: tip,
+            type: v.type || '',
+            branchId: v.branchId || '',
+            color: (v as any).color || '',
+            ownerName: v.ownerName || '',
+            cardId: (v as any).cardId || '',
+            vin: v.vin || '',
+            usageType: (v as any).usageType || '',
+            engineNumber: (v as any).engineNumber || '',
+            chassisNumber: (v as any).chassisNumber || '',
+            capacity: (v as any).capacity || '',
+            year: v.year ? String(v.year) : '',
+            wheelCount: (v as any).wheelCount ? String((v as any).wheelCount) : '',
+            axleCount: (v as any).axleCount ? String((v as any).axleCount) : '',
+            cylinderCount: (v as any).cylinderCount ? String((v as any).cylinderCount) : '',
+            domainName: (v as any).domainName || '',
+            fuelType: (v as any).fuelType || '',
+            status: v.status || VehicleStatus.Active,
+        } as any);
+        if (v.plateNumber) {
+            setIsPlate(true);
+            setPlate(v.plateNumber);
+            setSerialNumber('');
+        } else {
+            setIsPlate(false);
+            setSerialNumber(v.serialNumber || '');
+            setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const exportCsv = (list: Vehicle[]) => {
+        const rows = list.map(v => ({
+            id: v.id,
+            identifier: v.plateNumber ? formatPlateNumber(v.plateNumber) : (v.serialNumber || ''),
+            brand: v.brand || '',
+            model: v.model || '',
+            ownerName: v.ownerName || '',
+            branch: getBranchName(v.branchId),
+            status: v.status || '',
+        }));
+        const header = Object.keys(rows[0] || { id:'', identifier:'', brand:'', model:'', ownerName:'', branch:'', status:'' });
+        const csv = [header.join(','), ...rows.map(r => header.map(h => String((r as any)[h]).replaceAll('"','""')).map(v => `"${v}"`).join(','))].join('\n');
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'vehicles.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     const filteredVehicles = useMemo(() => {
         if (!searchTerm) return vehicles;
@@ -849,13 +934,16 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             <div className="bg-white p-6 rounded-xl shadow-lg">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-slate-800">لیست خودروها</h2>
-                    <input
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => exportCsv(vehicles)} className="px-4 py-2 bg-emerald-600 text-white rounded text-sm">خروجی اکسل</button>
+                        <input
                         type="text"
                         placeholder="جستجو خودرو..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         className="w-64 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
+                        />
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-right text-gray-500">
@@ -887,9 +975,12 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                             )}
                                         </td>
                                         <td className="px-4 py-4">
-                                            <button onClick={() => handleToggleExpand(vehicle.id)} className="text-slate-500 hover:text-sky-600">
-                                                <ChevronDownIcon className={`w-5 h-5 transition-transform ${expandedVehicleId === vehicle.id ? 'rotate-180' : ''}`} />
-                                            </button>
+                                            <div className="flex items-center gap-3">
+                                                <button onClick={() => handleToggleExpand(vehicle.id)} className="text-slate-500 hover:text-sky-600" title="جزئیات">
+                                                    <ChevronDownIcon className={`w-5 h-5 transition-transform ${expandedVehicleId === vehicle.id ? 'rotate-180' : ''}`} />
+                                                </button>
+                                                <button onClick={() => handleEdit(vehicle)} className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600">ویرایش</button>
+                                            </div>
                                         </td>
                                     </tr>
                                     {expandedVehicleId === vehicle.id && (
