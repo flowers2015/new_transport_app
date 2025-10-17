@@ -10,6 +10,7 @@ const {
   createFreightAnnouncement,
   updateFreightAnnouncement,
   setAssignmentQueue,
+  deleteFreightAnnouncement,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -69,6 +70,14 @@ router.post(
   authenticateToken,
   authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
   setAssignmentQueue
+);
+
+// Delete an announcement (allowed for planner/manager/admin when not finalized)
+router.delete(
+  '/:id',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  deleteFreightAnnouncement
 );
 
 module.exports = router;

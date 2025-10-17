@@ -50,6 +50,7 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
     
     return [
         // --- Ice Cream (بستنی) desired order in both compact/full ---
+        { header: 'ردیف', width: '70px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
         { header: 'نماینده (پخش/نماینده)', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
         { header: 'مقصد', accessor: (ann: FreightAnnouncement) => ann.destinations[0]?.city, width: '150px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city || '-'}</span> },
@@ -113,12 +114,12 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
                     </div>
                 );
             }
-            if (currentUser.role === UserRole.PlanningEmployee && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
+            if ((currentUser.role === UserRole.PlanningEmployee || currentUser.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
                  return (
                     <div className="flex justify-center gap-1">
                         <button onClick={() => onEdit(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
                         <button onClick={() => onSendForApproval(ann)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">ارجاع</button>
-                        <button onClick={() => onDelete(ann.id)} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
+                        <button type="button" onClick={() => { try { console.log('🗑️ [FreightDashboard] Delete click:', ann.id); } catch {} try { onDelete && onDelete(ann.id); } catch (e) { console.error('❌ [FreightDashboard] Delete failed:', e); } }} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
                     </div>
                  );
             }

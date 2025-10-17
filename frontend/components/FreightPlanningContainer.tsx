@@ -207,6 +207,22 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
+    const handleDelete = async (id: string) => {
+        try {
+            console.log('🗑️ [FreightPlanning] Delete announcement:', id);
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}`, {
+                method: 'DELETE',
+                headers,
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await fetchAnnouncements();
+            try { alert('آیتم با موفقیت حذف شد.'); } catch {}
+        } catch (e) {
+            console.error('❌ [FreightPlanning] Delete failed:', e);
+            alert('حذف ناموفق بود');
+        }
+    };
+
     return (
         <div>
             {loading && <div className="mb-2 text-sm text-slate-500">در حال بارگذاری...</div>}
@@ -216,7 +232,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 onUpdateAnnouncement={handleUpdateAnnouncement}
                 onApprove={handleApprove}
                 onReject={handleReject as any}
-                onDelete={() => {}}
+                onDelete={handleDelete as any}
                 onReAnnounce={() => {}}
                 currentUser={currentUser}
                 onSwitchQueue={handleSwitchQueue as any}

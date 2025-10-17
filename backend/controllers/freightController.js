@@ -468,6 +468,28 @@ async function setAssignmentQueue(req, res) {
   );
 }
 
+async function deleteFreightAnnouncement(req, res) {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // First delete destinations to satisfy foreign key constraints
+    await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);
+    const del = await client.query('DELETE FROM freight_announcements WHERE id = $1', [id]);
+    await client.query('COMMIT');
+    if (del.rowCount === 0) {
+      return res.status(404).json({ message: 'Freight announcement not found.' });
+    }
+    return res.status(204).send();
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Failed to delete freight announcement:', error);
+    return res.status(500).json({ message: 'Internal server error while deleting freight announcement.' });
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -477,4 +499,5 @@ module.exports = {
   createFreightAnnouncement,
   updateFreightAnnouncement,
   setAssignmentQueue,
+  deleteFreightAnnouncement,
 };
