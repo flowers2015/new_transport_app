@@ -71,28 +71,48 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
         { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-        { header: 'برند', accessor: 'brand', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
+        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && !(vm === 'compact' && lt === FreightLineType.Dairy), render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && !(vm === 'compact' && lt === FreightLineType.Dairy), render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
         { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
 
-        // Dairy & Ambient Specific (Compact View)
-        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt),
+        // Ambient (Compact): destinations list, show kg
+        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Ambient,
             render: (ann: FreightAnnouncement) => (
                 <div className="flex flex-col text-xs space-y-1">
                     {ann.destinations.map((d, i) => (
                         <div key={d.id} className="flex items-center justify-center gap-2">
                             <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                             <span className="font-semibold text-slate-800">{d.city}</span>
-                            <span className="text-slate-500">({d.tonnage ? `${d.tonnage} تن` : ' N/A '})</span>
+                            <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
                         </div>
                     ))}
                 </div>
             )
         },
-        { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (vm: string, lt: any) => vm === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
-        // Hide total freight cost for IceCream per request; keep visible for Dairy/Ambient
-        { header: 'کرایه کل', accessor: 'totalFreightCost', width: '150px', display: (_vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="font-mono font-semibold">{formatCurrency(ann.totalFreightCost)}</span> },
+        // Dairy (Compact): exact requested order
+        { header: 'ردیف', width: '70px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
+        { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.vehicleType },
+        { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0), width: '150px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Dairy,
+            render: (ann: FreightAnnouncement) => (
+                <div className="flex flex-col text-xs space-y-1">
+                    {ann.destinations.map((d, i) => (
+                        <div key={d.id} className="flex items-center justify-center gap-2">
+                            <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                            <span className="font-semibold text-slate-800">{d.city}</span>
+                            <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                        </div>
+                    ))}
+                </div>
+            )
+        },
+        { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+        { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+        { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+        { header: 'توضیحات', accessor: 'notes', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.notes || '-' },
+        { header: 'وضعیت', accessor: 'status', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
         { header: 'عملیات', width: '220px', display: () => true, render: (ann: FreightAnnouncement) => {
             if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
                 return (
@@ -215,9 +235,47 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
 
     const visibleColumns = useMemo(() => {
         if (activeTab === 'leftover') return leftoverColumns;
+        // Enforce exact order for Dairy compact
+        if (viewMode === 'compact' && activeTab === FreightLineType.Dairy) {
+            const dairyCompactCols: any[] = [
+                { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
+                { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id} className="flex items-center justify-center gap-2">
+                                <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                                <span className="font-semibold text-slate-800">{d.city}</span>
+                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                            </div>
+                        ))}
+                    </div>
+                )},
+                { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+                // عملیات ستون از allColumns پیدا شود تا منطق نقش/دکمه‌ها حفظ گردد
+            ];
+            const action = allColumns.find((c: any) => c.header === 'عملیات');
+            if (action) dairyCompactCols.push(action);
+            try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-compact):', dairyCompactCols.map((c:any)=>c.header)); } catch {}
+            return dairyCompactCols;
+        }
+
         const cols = allColumns.filter(c => c.display(viewMode, activeTab));
-        try { console.log('[DBG][FreightDashboard] visibleColumns:', { viewMode, activeTab, headers: cols.map((c:any)=>c.header) }); } catch {}
-        return cols;
+        // Deduplicate by header to avoid duplicate React keys
+        const seen = new Set<string>();
+        const uniqueCols = cols.filter((c: any) => {
+            if (seen.has(c.header)) return false;
+            seen.add(c.header);
+            return true;
+        });
+        try { console.log('[DBG][FreightDashboard] visibleColumns:', { viewMode, activeTab, headers: uniqueCols.map((c:any)=>c.header) }); } catch {}
+        return uniqueCols;
     }, [viewMode, activeTab, allColumns, leftoverColumns]);
 
     const filteredAnnouncements = useMemo(() => {
