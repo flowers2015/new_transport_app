@@ -266,6 +266,25 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             return dairyCompactCols;
         }
 
+        // Enforce exact order for Dairy full (before grouped destinations)
+        if (viewMode === 'full' && activeTab === FreightLineType.Dairy) {
+            const dairyFullCommonCols: any[] = [
+                { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
+                { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            const action = allColumns.find((c: any) => c.header === 'عملیات');
+            if (action) dairyFullCommonCols.push(action);
+            try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-full):', dairyFullCommonCols.map((c:any)=>c.header)); } catch {}
+            return dairyFullCommonCols;
+        }
+ 
         const cols = allColumns.filter(c => c.display(viewMode, activeTab));
         // Deduplicate by header to avoid duplicate React keys
         const seen = new Set<string>();
