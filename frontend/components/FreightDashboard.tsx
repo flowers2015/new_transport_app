@@ -704,10 +704,11 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
             let finalData = { ...data, ...announcementData };
             const originalStatus = data.status;
 
+            // Preserve current status on edit save; do NOT auto-advance to approval
             if (isDraft) {
                 finalData.status = FreightAnnouncementStatus.Draft;
-            } else if ([FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(originalStatus)) {
-                finalData.status = FreightAnnouncementStatus.PendingManagerApproval;
+            } else {
+                finalData.status = originalStatus;
             }
             
             // Only call onSaveEdit if we have a valid ID, otherwise treat as new
