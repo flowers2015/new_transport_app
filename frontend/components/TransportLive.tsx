@@ -185,11 +185,126 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }
 
     const visibleColumns = useMemo(() => {
+        // Extra transport columns (for both modes, position differs)
+        const extraCols = [
+            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, props.drivers) },
+            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers)}</span> },
+            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles) : props.drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-'}</span> },
+            { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
+            { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+        ];
+
+        // Ice Cream: mirror planner order, then extras
+        if (activeLine === FreightLineType.IceCream) {
+            const base = [
+                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
+                { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city || '-'}</span> },
+                { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
+                { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
+                { header: 'کارتن', render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            return [...base, ...extraCols];
+        }
+
+        // Dairy compact: mirror planner (kg), then extras
+        if (activeLine === FreightLineType.Dairy && viewMode === 'compact') {
+            const base = [
+                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id} className="flex items-center justify-center gap-2">
+                                <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                                <span className="font-semibold text-slate-800">{d.city}</span>
+                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                            </div>
+                        ))}
+                    </div>
+                ) },
+                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            return [...base, ...extraCols];
+        }
+
+        // Ambient compact: mirror Dairy compact order, then extras
+        if (activeLine === FreightLineType.Ambient && viewMode === 'compact') {
+            const base = [
+                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id} className="flex items-center justify-center gap-2">
+                                <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                                <span className="font-semibold text-slate-800">{d.city}</span>
+                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                            </div>
+                        ))}
+                    </div>
+                ) },
+                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            return [...base, ...extraCols];
+        }
+
+        // Dairy full: common columns order then extras; destinations are rendered separately
+        if (activeLine === FreightLineType.Dairy && viewMode === 'full') {
+            const base = [
+                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            return [...base, ...extraCols];
+        }
+
+        // Ambient full: mirror Dairy full
+        if (activeLine === FreightLineType.Ambient && viewMode === 'full') {
+            const base = [
+                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            return [...base, ...extraCols];
+        }
+
+        // Default fallback
         const colsAll = columnsConfig(props, viewMode);
-        try { console.log('[DBG][TransportLive] all headers:', colsAll.map((c:any)=>c.header)); } catch {}
-        const cols = colsAll.filter(c => c.display(activeLine));
-        try { console.log('[DBG][TransportLive] visible headers:', cols.map((c:any)=>c.header), 'line:', activeLine, 'mode:', viewMode); } catch {}
-        return cols;
+        const cols = colsAll.filter(c => c.display(activeLine)).filter(c => c.header !== 'کد اعلام بار');
+        return [...cols, ...extraCols];
     }, [viewMode, activeLine, props]);
 
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
