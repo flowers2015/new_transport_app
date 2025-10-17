@@ -49,24 +49,31 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
     const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete } = props;
     
     return [
-        // Common Columns
-        { header: 'ردیف', width: '70px', display: (vm: string) => vm === 'full', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
-        { header: 'کد اعلام بار', accessor: 'announcementCode', width: '150px', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
-        { header: 'وضعیت', accessor: 'status', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: () => true, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-        { header: 'تاریخ اعلام', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-        { header: 'برند', accessor: 'brand', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
-        { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: () => true, render: (ann: FreightAnnouncement) => ann.vehicleType },
-        { header: 'ارزش بار', accessor: 'cargoValue', width: '150px', display: (vm: string) => vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue).toLocaleString('fa-IR') },
-        
-        // Ice Cream Specific
-        { header: 'نام مقصد', accessor: (ann: FreightAnnouncement) => ann.destinations[0]?.city, width: '150px', display: (_:any, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city}</span> },
-        { header: 'تعداد کارتن', accessor: 'cartonCount', width: '100px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
+        // --- Ice Cream (بستنی) desired order in both compact/full ---
+        { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
+        { header: 'نماینده (پخش/نماینده)', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
+        { header: 'مقصد', accessor: (ann: FreightAnnouncement) => ann.destinations[0]?.city, width: '150px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city || '-'}</span> },
+        { header: 'مبدا', accessor: 'originCity', width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'محصولات', accessor: (ann: FreightAnnouncement) => ann.products?.join(', '), width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
-        { header: 'توضیحات', accessor: 'notes', width: '200px', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
-        { header: 'اولویت', accessor: 'priority', width: '100px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.priority },
-        { header: 'نام نماینده', accessor: 'representativeName', width: '150px', display: (vm: string, lt:any) => vm === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.representativeName },
+        { header: 'کارتن', accessor: 'cartonCount', width: '90px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+        { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+        { header: 'اولویت', accessor: 'priority', width: '100px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => PRIORITIES[ann.priority || 'normal'] },
+        { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+        { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
+        { header: 'وضعیت', accessor: 'status', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+
+        // --- Common Columns (for Dairy & Ambient) ---
+        { header: 'ردیف', width: '70px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
+        // Announcement code removed across all tabs per request → not displayed anywhere
+        { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+        { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
+        { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
+        { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
 
         // Dairy & Ambient Specific (Compact View)
         { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt),
@@ -83,7 +90,8 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
             )
         },
         { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (vm: string, lt: any) => vm === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
-        { header: 'کرایه کل', accessor: 'totalFreightCost', width: '150px', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono font-semibold">{formatCurrency(ann.totalFreightCost)}</span> },
+        // Hide total freight cost for IceCream per request; keep visible for Dairy/Ambient
+        { header: 'کرایه کل', accessor: 'totalFreightCost', width: '150px', display: (_vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="font-mono font-semibold">{formatCurrency(ann.totalFreightCost)}</span> },
         { header: 'عملیات', width: '220px', display: () => true, render: (ann: FreightAnnouncement) => {
             if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
                 return (
@@ -186,7 +194,6 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     }, [announcements]);
 
     const leftoverColumns = useMemo(() => [
-        { header: 'کد', render: (ann: FreightAnnouncement) => ann.announcementCode },
         { header: 'لاین', render: (ann: FreightAnnouncement) => ann.lineType },
         { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => formatJalali(ann.loadingDate) },
         { header: 'مقاصد', render: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join(', ') },
