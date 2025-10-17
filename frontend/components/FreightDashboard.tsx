@@ -258,12 +258,41 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-                // عملیات ستون از allColumns پیدا شود تا منطق نقش/دکمه‌ها حفظ گردد
             ];
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) dairyCompactCols.push(action);
             try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-compact):', dairyCompactCols.map((c:any)=>c.header)); } catch {}
             return dairyCompactCols;
+        }
+
+        // Enforce exact order for Ambient compact (mirror Dairy compact)
+        if (viewMode === 'compact' && activeTab === FreightLineType.Ambient) {
+            const ambientCompactCols: any[] = [
+                { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
+                { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id} className="flex items-center justify-center gap-2">
+                                <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                                <span className="font-semibold text-slate-800">{d.city}</span>
+                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                            </div>
+                        ))}
+                    </div>
+                )},
+                { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            const action = allColumns.find((c: any) => c.header === 'عملیات');
+            if (action) ambientCompactCols.push(action);
+            try { console.log('[DBG][FreightDashboard] visibleColumns (ambient-compact):', ambientCompactCols.map((c:any)=>c.header)); } catch {}
+            return ambientCompactCols;
         }
 
         // Enforce exact order for Dairy full (before grouped destinations)
@@ -284,7 +313,26 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-full):', dairyFullCommonCols.map((c:any)=>c.header)); } catch {}
             return dairyFullCommonCols;
         }
- 
+
+        // Enforce exact order for Ambient full (mirror Dairy full)
+        if (viewMode === 'full' && activeTab === FreightLineType.Ambient) {
+            const ambientFullCommonCols: any[] = [
+                { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
+                { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+                { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+            ];
+            const action = allColumns.find((c: any) => c.header === 'عملیات');
+            if (action) ambientFullCommonCols.push(action);
+            try { console.log('[DBG][FreightDashboard] visibleColumns (ambient-full):', ambientFullCommonCols.map((c:any)=>c.header)); } catch {}
+            return ambientFullCommonCols;
+        }
+
         const cols = allColumns.filter(c => c.display(viewMode, activeTab));
         // Deduplicate by header to avoid duplicate React keys
         const seen = new Set<string>();
