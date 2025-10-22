@@ -155,6 +155,28 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             
             const responseData = await res.json();
             console.log('✅ [TransportLive] Assignment successful:', responseData);
+            
+            // Update the announcements state with the new assignment data
+            setAnnouncements(prev => {
+                const updated = prev.map(ann => 
+                    ann.id === announcementId 
+                        ? { 
+                            ...ann, 
+                            assignedDriverId: assignment.driverId,
+                            assignedVehicleId: assignment.vehicleId,
+                            billOfLadingNumber: assignment.billOfLadingNumber,
+                            status: 'Assigned' as any
+                        }
+                        : ann
+                );
+                console.log('🔄 [TransportLive] State updated:', {
+                    announcementId,
+                    updatedAnnouncement: updated.find(ann => ann.id === announcementId),
+                    timestamp: new Date().toISOString()
+                });
+                return updated;
+            });
+            
             alert('تخصیص با موفقیت ثبت شد');
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
@@ -276,6 +298,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
     if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
+
+    // Debug logging
+    console.log('🔍 [TransportLiveContainer] Render data:', {
+        announcementsCount: announcements.length,
+        driversCount: drivers.length,
+        vehiclesCount: vehicles.length,
+        sampleDriver: drivers[0],
+        sampleVehicle: vehicles[0]
+    });
 
     return (
         <>

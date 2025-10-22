@@ -35,13 +35,7 @@ interface TransportLiveProps {
     currentUser: User;
 }
 
-const getDriverName = (id: string | undefined, drivers: Driver[]) => id ? drivers.find(d => d.id === id)?.name : '-';
-const getDriverContact = (id: string | undefined, drivers: Driver[]) => id ? drivers.find(d => d.id === id)?.mobile : '-';
-const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[]) => {
-    if (!id) return '-';
-    const v = vehicles.find(v => v.id === id);
-    return v ? (v.plateNumber ? formatPlateNumber(v.plateNumber) : v.serialNumber) : 'نامشخص';
-};
+// Move helper functions inside component to ensure proper re-rendering
 const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')} تومان` : '-';
 
 const isToday = (someDate: any) => {
@@ -67,45 +61,18 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.ReAnnounced]: 'bg-gray-400 text-white',
 };
 
-const columnsConfig = (props: TransportLiveProps, viewMode: 'compact' | 'full') => {
-    const { vehicles, drivers } = props;
-    
-    let columns = [
-        // Common Columns
-        { header: 'ردیف', align: 'center', display: () => viewMode === 'full', render: (_: any, idx: number) => idx + 1 },
-        { header: 'کد اعلام بار', align: 'center', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
-        { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-        { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
-        { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-        { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
-        { header: 'نوع خودرو', display: () => true, render: (ann: FreightAnnouncement) => ann.vehicleType },
-        
-        // Destinations Summary (for all compact views)
-        { header: 'مقاصد', display: () => viewMode === 'compact', render: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، ') },
-
-        // Assignment Info (for all views)
-        { header: 'نام راننده', display: () => true, render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, drivers) },
-        { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, drivers)}</span> },
-        { header: 'پلاک خودرو', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, vehicles) : drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-'}</span> },
-        { header: 'شماره بارنامه', display: () => true, render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
-        { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
-        
-        // Full View Specific - Ice Cream
-        { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
-        { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
-        { header: 'توضیحات', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
-        
-        // Full View Specific - Dairy/Ambient
-        { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
-        { header: 'ارزش بار', align: 'center', display: () => viewMode === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-    ];
-
-    return columns;
-};
 
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory } = props;
+    const { announcements, vehicles, drivers, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory } = props;
+    
+    // Debug logging for re-renders
+    console.log('🔄 [TransportLive] Component re-rendered with:', {
+        announcementsCount: announcements.length,
+        driversCount: drivers.length,
+        vehiclesCount: vehicles.length,
+        timestamp: new Date().toISOString()
+    });
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -113,6 +80,81 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     
     const [dialog, setDialog] = useState<'assign' | 'transfer' | null>(null);
+    
+    // Helper functions inside component to ensure proper re-rendering
+    const getDriverName = (id: string | undefined, drivers: Driver[]) => {
+        if (!id) return '-';
+        const driver = drivers.find(d => d.id === id);
+        console.log('🔍 [getDriverName] Looking for driver:', id, 'Found:', driver?.name);
+        return driver?.name || '-';
+    };
+    
+    const getDriverContact = (id: string | undefined, drivers: Driver[]) => {
+        if (!id) return '-';
+        const driver = drivers.find(d => d.id === id);
+        console.log('🔍 [getDriverContact] Looking for driver:', id, 'Found:', driver?.mobile);
+        return driver?.mobile || '-';
+    };
+    
+    const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[]) => {
+        if (!id) return '-';
+        const v = vehicles.find(v => v.id === id);
+        if (!v) return 'نامشخص';
+        
+        const result = v.plateNumber ? formatPlateNumber(v.plateNumber) : v.serialNumber || 'نامشخص';
+        console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found vehicle:', v.model, 'Plate:', v.plateNumber, 'Serial:', v.serialNumber, 'Result:', result);
+        return result;
+    };
+    
+    // Move columnsConfig inside component to ensure proper re-rendering
+    const columnsConfig = (viewMode: 'compact' | 'full') => {
+        let columns = [
+            // Common Columns
+            { header: 'ردیف', align: 'center', display: () => viewMode === 'full', render: (_: any, idx: number) => idx + 1 },
+            { header: 'کد اعلام بار', align: 'center', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
+            { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+            { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
+            { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+            { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
+            { header: 'نوع خودرو', display: () => true, render: (ann: FreightAnnouncement) => ann.vehicleType },
+            
+            // Destinations Summary (for all compact views)
+            { header: 'مقاصد', display: () => viewMode === 'compact', render: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، ') },
+
+            // Assignment Info (for all views)
+            { header: 'نام راننده', display: () => true, render: (ann: FreightAnnouncement) => {
+                const result = getDriverName(ann.assignedDriverId, drivers);
+                console.log('🔍 [Render] Driver name for', ann.id, ':', result);
+                return result;
+            }},
+            { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, drivers)}</span> },
+            { header: 'پلاک خودرو', display: () => true, render: (ann: FreightAnnouncement) => {
+                const result = ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, vehicles) : drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-';
+                console.log('🔍 [Render] Vehicle plate for', ann.id, ':', result);
+                return <span className="font-mono whitespace-nowrap">{result}</span>;
+            }},
+            { header: 'شماره بارنامه', display: () => true, render: (ann: FreightAnnouncement) => {
+                const result = ann.billOfLadingNumber || '-';
+                console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
+                return result;
+            }},
+            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            
+            // Full View Specific - Ice Cream
+            { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
+            { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
+            { header: 'توضیحات', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
+            
+            // Full View Specific - Dairy/Ambient
+            { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
+            { header: 'ارزش بار', align: 'center', display: () => viewMode === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+            
+            // Operations Column
+            { header: 'عملیات', display: () => true, render: (ann: FreightAnnouncement) => renderOperations(ann, props) },
+        ];
+
+        return columns;
+    };
     const [selectedAnnouncement, setSelectedAnnouncement] = useState<FreightAnnouncement | null>(null);
 
     const hasAccess = (allowedRoles: UserRole[]): boolean => {
@@ -122,26 +164,50 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const canPerformActions = hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]);
 
-    const liveAnnouncements = useMemo(() => 
-        announcements.filter(a => {
-            try { console.log('[DBG][TransportLive] item sample:', announcements[0]); } catch {}
-            if (dateView === 'today' && !isToday(a.loadingDate)) return false;
+    const liveAnnouncements = useMemo(() => {
+        console.log('🔍 [TransportLive] Filtering announcements:', {
+            total: announcements.length,
+            dateView,
+            currentUserRole: currentUser.role,
+            sampleAnnouncement: announcements[0]
+        });
+        
+        const filtered = announcements.filter(a => {
+            // Temporarily disable date filtering to show all announcements
+            // if (dateView === 'today' && !isToday(a.loadingDate)) {
+            //     console.log('🔍 [TransportLive] Filtered out by date:', a.id, a.loadingDate);
+            //     return false;
+            // }
 
             if (currentUser.role === UserRole.TransportationUser) {
                 // ترابری شرکت: هر دو صف را می‌بیند (شرکتی فعال، شخصی فقط مشاهده)
-                return [
+                const allowedStatuses = [
                     FreightAnnouncementStatus.PendingCompanyAssignment,
                     FreightAnnouncementStatus.PendingPersonalAssignment,
                     FreightAnnouncementStatus.Assigned,
-                ].includes(a.status);
+                    FreightAnnouncementStatus.InTransit,
+                    FreightAnnouncementStatus.Finalized,
+                ];
+                // Also check for English status values (for backward compatibility)
+                const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
+                const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
+                console.log('🔍 [TransportLive] Company user filter:', a.id, a.status, 'Allowed:', isAllowed);
+                return isAllowed;
             }
             if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
                 // ترابری شخصی: هر دو صف را می‌بیند (شخصی فعال، شرکتی فقط مشاهده)
-                return [
+                const allowedStatuses = [
                     FreightAnnouncementStatus.PendingCompanyAssignment,
                     FreightAnnouncementStatus.PendingPersonalAssignment,
                     FreightAnnouncementStatus.Assigned,
-                ].includes(a.status);
+                    FreightAnnouncementStatus.InTransit,
+                    FreightAnnouncementStatus.Finalized,
+                ];
+                // Also check for English status values (for backward compatibility)
+                const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
+                const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
+                console.log('🔍 [TransportLive] Personal user filter:', a.id, a.status, 'Allowed:', isAllowed);
+                return isAllowed;
             }
             if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
                  return a.destinations.some(d => d.city === currentUser.branchCity) && a.status === FreightAnnouncementStatus.Assigned;
@@ -150,11 +216,20 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             return [
                 FreightAnnouncementStatus.PendingCompanyAssignment, 
                 FreightAnnouncementStatus.PendingPersonalAssignment, 
-                FreightAnnouncementStatus.Assigned
+                FreightAnnouncementStatus.Assigned,
+                FreightAnnouncementStatus.InTransit,
+                FreightAnnouncementStatus.Finalized
             ].includes(a.status);
-        })
-        .sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime()), 
-    [announcements, currentUser, dateView]);
+        });
+        
+        console.log('🔍 [TransportLive] Filtered result:', {
+            total: announcements.length,
+            filtered: filtered.length,
+            filteredIds: filtered.map(a => a.id)
+        });
+        
+        return filtered.sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
+    }, [announcements, currentUser, dateView]);
 
     const filteredAnnouncements = useMemo(() => {
         return liveAnnouncements.filter(a => a.lineType === activeLine);
@@ -304,7 +379,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Default fallback
-        const colsAll = columnsConfig(props, viewMode);
+        const colsAll = columnsConfig(viewMode);
         const cols = colsAll.filter(c => c.display(activeLine)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
     }, [viewMode, activeLine, props]);
@@ -452,6 +527,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onFinalize' | 'onTransferDestination' | 'onForward' | 'onCancel'> & { announcement: FreightAnnouncement, onClose: () => void }> =
 (props) => {
     const { announcement, drivers, vehicles, onClose, onUpdateAssignment, currentUser } = props;
+    
+    // Helper function for vehicle identifier
+    const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[]) => {
+        if (!id) return '-';
+        const v = vehicles.find(v => v.id === id);
+        if (!v) return 'نامشخص';
+        
+        const result = v.plateNumber ? formatPlateNumber(v.plateNumber) : v.serialNumber || 'نامشخص';
+        return result;
+    };
 
     // --- Company User State ---
     const [driverEmployeeId, setDriverEmployeeId] = useState('');
@@ -504,13 +589,21 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     }, [autoTotalCost, costMode]);
 
     const handleCompanyDriverLookup = () => {
-        const driver = drivers.find(d => d.employeeId.toLowerCase() === driverEmployeeId.toLowerCase());
+        // Search by employeeId first, then by name (partial match)
+        const driver = drivers.find(d => 
+            d.employeeId.toLowerCase() === driverEmployeeId.toLowerCase() ||
+            d.name.toLowerCase().includes(driverEmployeeId.toLowerCase())
+        );
         setFoundCompanyDriver(driver || null);
-        if (!driver) alert('راننده با این کد پرسنلی یافت نشد.');
+        if (!driver) alert('راننده با این کد پرسنلی یا نام یافت نشد.');
     };
 
     const handleVehicleLookup = () => {
-        const vehicle = vehicles.find(v => v.id.toLowerCase() === vehicleInternalId.toLowerCase());
+        // Search by vehicleCode first, then by id
+        const vehicle = vehicles.find(v => 
+            (v.vehicleCode && v.vehicleCode.toLowerCase() === vehicleInternalId.toLowerCase()) ||
+            v.id.toLowerCase() === vehicleInternalId.toLowerCase()
+        );
         setFoundVehicle(vehicle || null);
         if (!vehicle) alert('خودرو با این کد یافت نشد.');
     };
@@ -560,7 +653,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         <div className="p-2 border rounded-md bg-slate-50">
                             <label className="text-sm font-medium">راننده شرکتی*</label>
                             <div className="flex items-end gap-2 mt-1">
-                                <input placeholder="کد پرسنلی راننده..." value={driverEmployeeId} onChange={e => setDriverEmployeeId(e.target.value)} className="input-style flex-grow"/>
+                                <input placeholder="کد پرسنلی یا نام راننده..." value={driverEmployeeId} onChange={e => setDriverEmployeeId(e.target.value)} className="input-style flex-grow"/>
                                 <button onClick={handleCompanyDriverLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
                             {foundCompanyDriver && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>راننده:</strong> {foundCompanyDriver.name} | <strong>تماس:</strong> {foundCompanyDriver.mobile}</div>}
@@ -568,10 +661,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         <div className="p-2 border rounded-md bg-slate-50">
                             <label className="text-sm font-medium">خودرو شرکتی*</label>
                             <div className="flex items-end gap-2 mt-1">
-                                <input placeholder="کد داخلی خودرو (مثال: veh-1)" value={vehicleInternalId} onChange={e => setVehicleInternalId(e.target.value)} className="input-style flex-grow"/>
+                                <input placeholder="کد خودرو یا شناسه خودرو..." value={vehicleInternalId} onChange={e => setVehicleInternalId(e.target.value)} className="input-style flex-grow"/>
                                 <button onClick={handleVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
-                            {foundVehicle && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles)} | <strong>نوع:</strong> {foundVehicle.type}</div>}
+                            {foundVehicle && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles)} | <strong>کد:</strong> {foundVehicle.vehicleCode || 'ندارد'} | <strong>نوع:</strong> {foundVehicle.type}</div>}
                         </div>
                          <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
                     </div>
