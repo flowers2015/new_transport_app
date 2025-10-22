@@ -227,6 +227,7 @@ export interface Vehicle {
     cylinderCount?: number;
     domainName?: string; // "حوزه"
     fuelType?: string;
+    vehicleCode?: string; // کد خودرو برای سنگین/نیمه یدک
     status?: VehicleStatus;
     // Detailed specs from user request
     enginePower?: number;

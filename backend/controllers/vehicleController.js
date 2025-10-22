@@ -38,6 +38,7 @@ async function getVehicles(req, res) {
         v.domain_name AS "domainName",
         v.fuel_type AS "fuelType",
         v.status,
+        v.vehicle_code AS "vehicleCode",
         v.created_at AS "createdAt",
         v.updated_at AS "updatedAt",
         b.name as "branchName",
@@ -130,6 +131,7 @@ async function getVehicleById(req, res) {
         v.domain_name AS "domainName",
         v.fuel_type AS "fuelType",
         v.status,
+        v.vehicle_code AS "vehicleCode",
         v.created_at AS "createdAt",
         v.updated_at AS "updatedAt"
       FROM vehicles v 
@@ -189,6 +191,7 @@ async function createVehicle(req, res) {
     const v = req.body || {};
     const plate = v.plateNumber || {};
     const id = crypto.randomUUID();
+    
     const toSafeYear = (value) => {
       const n = typeof value === 'number' ? Math.trunc(value) : parseInt(value, 10);
       if (!Number.isFinite(n) || n < 1800 || n > 3000) return null;
@@ -225,6 +228,7 @@ async function createVehicle(req, res) {
       (v.cylinderCount ?? null),
       (v.domainName ?? null),
       (v.fuelType ?? null),
+      (v.vehicleCode ?? null),
     ];
     const extInsertSql = `
       INSERT INTO vehicles (
@@ -232,14 +236,14 @@ async function createVehicle(req, res) {
         plate_part1, plate_letter, plate_part2, plate_city_code, serial_number,
         owner_name, vin, year, status,
         color, usage_type, engine_number, vehicle_tip, chassis_number, capacity,
-        wheel_count, axle_count, cylinder_count, domain_name, fuel_type,
+        wheel_count, axle_count, cylinder_count, domain_name, fuel_type, vehicle_code,
         created_at, updated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,
         $14,$15,$16,$17,
         $18,$19,$20,$21,$22,$23,
-        $24,$25,$26,$27,$28,
+        $24,$25,$26,$27,$28,$29,
         NOW(), NOW()
       ) RETURNING id;
     `;
@@ -247,7 +251,12 @@ async function createVehicle(req, res) {
     try {
       result = await pool.query(extInsertSql, extParams);
     } catch (err) {
-      if (err && err.code === '42703') {
+      if (err && err.code === '23505' && err.constraint === 'vehicles_vin_key') {
+        // VIN already exists
+        return res.status(400).json({ 
+          message: 'شماره VIN تکراری است. لطفاً شماره VIN منحصر به فرد وارد کنید.' 
+        });
+      } else if (err && err.code === '42703') {
         const params = [
           id,
           v.branchId || null,
@@ -280,6 +289,11 @@ async function createVehicle(req, res) {
           RETURNING id;
         `;
         result = await pool.query(insertSql, params);
+      } else if (err && err.code === '23505' && err.constraint === 'vehicles_vin_key') {
+        // VIN already exists
+        return res.status(400).json({ 
+          message: 'شماره VIN تکراری است. لطفاً شماره VIN منحصر به فرد وارد کنید.' 
+        });
       } else {
         throw err;
       }
@@ -327,6 +341,31 @@ async function updateVehicle(req, res) {
     const { id } = req.params;
     const v = req.body || {};
     const plate = v.plateNumber || {};
+    
+    // Check if VIN is being changed and if it conflicts with existing VINs
+    if (v.vin) {
+      // First, get the current VIN of this vehicle
+      const currentVehicle = await pool.query(
+        'SELECT vin FROM vehicles WHERE id = $1',
+        [id]
+      );
+      
+      const currentVin = currentVehicle.rows[0]?.vin;
+      
+      // Only check for conflicts if VIN is actually being changed
+      if (currentVin !== v.vin) {
+        const existingVehicle = await pool.query(
+          'SELECT id, vin FROM vehicles WHERE vin = $1 AND id != $2',
+          [v.vin, id]
+        );
+        
+        if (existingVehicle.rows.length > 0) {
+          return res.status(400).json({ 
+            message: 'شماره VIN تکراری است. لطفاً شماره VIN منحصر به فرد وارد کنید.' 
+          });
+        }
+      }
+    }
     const toSafeYear = (value) => {
       const n = typeof value === 'number' ? Math.trunc(value) : parseInt(value, 10);
       if (!Number.isFinite(n) || n < 1800 || n > 3000) return null;
@@ -362,6 +401,7 @@ async function updateVehicle(req, res) {
       (v.cylinderCount ?? null),
       (v.domainName ?? null),
       (v.fuelType ?? null),
+      (v.vehicleCode ?? null),
       id,
     ];
     const extUpdateSql = `
@@ -393,15 +433,21 @@ async function updateVehicle(req, res) {
         cylinder_count = $25,
         domain_name = $26,
         fuel_type = $27,
+        vehicle_code = $28,
         updated_at = NOW()
-      WHERE id = $28
+      WHERE id = $29
       RETURNING id;
     `;
     let result;
     try {
       result = await pool.query(extUpdateSql, extParams);
     } catch (err) {
-      if (err && err.code === '42703') {
+      if (err && err.code === '23505' && err.constraint === 'vehicles_vin_key') {
+        // VIN already exists
+        return res.status(400).json({ 
+          message: 'شماره VIN تکراری است. لطفاً شماره VIN منحصر به فرد وارد کنید.' 
+        });
+      } else if (err && err.code === '42703') {
         const params = [
           v.branchId || null,
           v.holdingCompany || null,
@@ -444,6 +490,11 @@ async function updateVehicle(req, res) {
           RETURNING id;
         `;
         result = await pool.query(updateSql, params);
+      } else if (err && err.code === '23505' && err.constraint === 'vehicles_vin_key') {
+        // VIN already exists
+        return res.status(400).json({ 
+          message: 'شماره VIN تکراری است. لطفاً شماره VIN منحصر به فرد وارد کنید.' 
+        });
       } else {
         throw err;
       }

@@ -29,16 +29,39 @@ function div(a: number, b: number): number { return ~~(a / b); }
 function pad2(n: number): string { return n < 10 ? `0${n}` : String(n); }
 
 export function jalaliToGregorian(jy: number, jm: number, jd: number): [number, number, number] {
+    // Corrected algorithm for Jalali to Gregorian conversion
     const gy = jy + 621;
-    let days = (jm < 7) ? ((jm - 1) * 31) : ((jm - 7) * 30 + 186);
-    days += jd;
-    const kab = (((jy + 38) * 682) % 2816) < 682 ? 0 : 1;
-    const march = 20 + kab;
-    let gDayNo = (gy - 1600) * 365 + div((gy - 1600 + 3), 4) - div((gy - 1600 + 99), 100) + div((gy - 1600 + 399), 400) + march - 1 + days - 1;
-    const w = [31, (isLeapGregorian(gy) ? 29 : 28), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let gm = 0;
-    while (gm < 12 && gDayNo >= w[gm]) { gDayNo -= w[gm]; gm++; }
-    return [gy, gm + 1, gDayNo + 1];
+    const leap = (((jy + 38) * 682) % 2816) < 682;
+    const march = 20 + leap;
+    
+    // Calculate days from start of year
+    let days = 0;
+    if (jm <= 6) {
+        days = (jm - 1) * 31 + jd;
+    } else {
+        days = 186 + (jm - 7) * 30 + jd;
+    }
+    
+    // Convert to Gregorian
+    const gYear = gy;
+    const gMonth = 3; // March
+    let gDay = march + days - 1;
+    
+    // Adjust for Gregorian months
+    const monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (isLeapGregorian(gYear)) monthDays[1] = 29;
+    
+    let currentMonth = 2; // March (0-indexed)
+    while (gDay > monthDays[currentMonth]) {
+        gDay -= monthDays[currentMonth];
+        currentMonth++;
+        if (currentMonth > 11) {
+            currentMonth = 0;
+            break;
+        }
+    }
+    
+    return [gYear, currentMonth + 1, gDay];
 }
 
 export function gregorianToJalali(gy: number, gm: number, gd: number): [number, number, number] {
@@ -63,5 +86,6 @@ export function parseJalaliDateString(jalali: string): Date | null {
     if (!m) return null;
     const jy = parseInt(m[1], 10), jm = parseInt(m[2], 10), jd = parseInt(m[3], 10);
     const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
-    return new Date(Date.UTC(gy, gm - 1, gd));
+    // Use local time instead of UTC to avoid timezone issues
+    return new Date(gy, gm - 1, gd);
 }

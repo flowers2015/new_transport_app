@@ -43,9 +43,13 @@ const VehiclesPage: React.FC = () => {
                 },
                 body: JSON.stringify(vehicle)
             });
-            if (!res.ok) throw new Error('ثبت خودرو ناموفق بود');
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.message || 'ثبت خودرو ناموفق بود');
+            }
             const saved = await res.json();
             setVehicles(prev => [saved, ...prev]);
+            alert('خودرو با موفقیت اضافه شد!');
         } catch (e:any) {
             alert(e.message || 'خطا در ثبت خودرو');
         }
@@ -62,9 +66,13 @@ const VehiclesPage: React.FC = () => {
                 },
                 body: JSON.stringify(vehicle)
             });
-            if (!res.ok) throw new Error('ویرایش خودرو ناموفق بود');
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.message || 'ویرایش خودرو ناموفق بود');
+            }
             const updated = await res.json();
             setVehicles(prev => prev.map(v => v.id === id ? updated : v));
+            alert('خودرو با موفقیت ویرایش شد!');
         } catch (e:any) {
             alert(e.message || 'خطا در ویرایش خودرو');
         }

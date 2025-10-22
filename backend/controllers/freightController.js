@@ -28,13 +28,22 @@ async function getFreightAnnouncements(req, res) {
       ORDER BY fa.created_at DESC
     `);
     
-    // Fetch destinations for each announcement
+    // Fetch destinations for each announcement and convert dates
     for (let announcement of rows) {
       const destRows = await pool.query(
         'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1',
         [announcement.id]
       );
       announcement.destinations = destRows.rows;
+      
+      // Convert loading_date to string if it's a Date object
+      if (announcement.loading_date instanceof Date) {
+        const { formatJalali } = require('../utils/jalali');
+        announcement.loading_date = formatJalali(announcement.loading_date);
+      } else if (typeof announcement.loading_date === 'string') {
+        // If it's already a string, keep it as is
+        // No conversion needed
+      }
     }
     
     res.json(rows);
@@ -54,7 +63,19 @@ async function getFreightAnnouncementById(req, res) {
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Freight announcement not found.' });
     }
-    res.json(rows[0]);
+    
+    // Convert loading_date to string if it's a Date object
+    const announcement = rows[0];
+    if (announcement.loading_date instanceof Date) {
+      // If it's a Date object, convert to Jalali string
+      const { formatJalali } = require('../utils/jalali');
+      announcement.loading_date = formatJalali(announcement.loading_date);
+    } else if (typeof announcement.loading_date === 'string') {
+      // If it's already a string, keep it as is
+      // No conversion needed
+    }
+    
+    res.json(announcement);
   } catch (error) {
     console.error(`Failed to get freight announcement ${id}:`, error);
     res.status(500).json({ message: 'Internal server error while fetching the freight announcement.' });
@@ -111,7 +132,7 @@ async function updateFreightAnnouncement(req, res) {
       const values = [];
       let idx = 1;
       
-      if (loadingDate) { fields.push(`loading_date = $${idx++}`); values.push(new Date(loadingDate)); }
+      if (loadingDate) { fields.push(`loading_date = $${idx++}`); values.push(loadingDate); }
       if (lineType) { fields.push(`line_type = $${idx++}`); values.push(lineType); }
       if (cargoValue !== undefined) { fields.push(`cargo_value = $${idx++}`); values.push(cargoValue); }
       if (vehicleType) { fields.push(`vehicle_type = $${idx++}`); values.push(vehicleType); }
@@ -251,6 +272,16 @@ async function updateFreightAnnouncement(req, res) {
       // 7. برگرداندن رکورد آپدیت شده
       const { rows } = await pool.query('SELECT * FROM freight_announcements WHERE id = $1', [id]);
       const updated = rows[0];
+      
+      // Convert loading_date to string if it's a Date object
+      if (updated.loading_date instanceof Date) {
+        const { formatJalali } = require('../utils/jalali');
+        updated.loading_date = formatJalali(updated.loading_date);
+      } else if (typeof updated.loading_date === 'string') {
+        // If it's already a string, keep it as is
+        // No conversion needed
+      }
+      
       const destRows = await pool.query('SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC', [id]);
       updated.destinations = destRows.rows;
       
@@ -321,7 +352,7 @@ async function createFreightAnnouncement(req, res) {
     await pool.query(insertAnnouncementQuery, [
       id,
       announcementCode,
-      new Date(loadingDate),
+      loadingDate,
       lineType,
       status,
       cargoValue || 0,
@@ -390,6 +421,16 @@ async function createFreightAnnouncement(req, res) {
     );
 
     const created = rows[0];
+    
+    // Convert loading_date to string if it's a Date object
+    if (created.loading_date instanceof Date) {
+      const { formatJalali } = require('../utils/jalali');
+      created.loading_date = formatJalali(created.loading_date);
+    } else if (typeof created.loading_date === 'string') {
+      // If it's already a string, keep it as is
+      // No conversion needed
+    }
+    
     const destRows = await pool.query(
       'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
       [id]
@@ -440,7 +481,7 @@ async function approveAnnouncement(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     // Fetch announcement info با مقاصد
     const { rows } = await client.query(
       'SELECT line_type, status, announcement_code FROM freight_announcements WHERE id = $1',
@@ -546,8 +587,8 @@ async function rejectAnnouncement(req, res) {
     const description = `بار به مقصد ${destinationLabel} توسط ${userName} رد شد. علت: ${reason}`;
 
     // ثبت علت رد
-    const col = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'rejection_reason'`);
-    if (col.rowCount > 0) {
+      const col = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'rejection_reason'`);
+      if (col.rowCount > 0) {
       await client.query(
         'UPDATE freight_announcements SET status = $1, rejection_reason = $2, updated_at = NOW() WHERE id = $3',
         [newStatus, reason, announcementId]
@@ -721,7 +762,7 @@ async function setAssignmentQueue(req, res) {
     const destinations = destRows.rows.map(d => d.city).join('، ');
     const destinationLabel = destinations || 'بدون مقصد';
     
-    const newStatus = nextQueue === 'company' ? 'PendingCompanyAssignment' : 'PendingPersonalAssignment';
+  const newStatus = nextQueue === 'company' ? 'PendingCompanyAssignment' : 'PendingPersonalAssignment';
     const queueLabel = nextQueue === 'company' ? 'شرکتی' : 'شخصی';
     const description = `بار به مقصد ${destinationLabel} توسط ${userName} به صف ${queueLabel} ارجاع شد`;
     
@@ -733,12 +774,12 @@ async function setAssignmentQueue(req, res) {
     
     // ثبت تاریخچه
     await logFreightHistory({
-      announcementId,
+    announcementId,
       userId,
       userName,
       action: 'QUEUE_CHANGED',
       oldStatus,
-      newStatus,
+    newStatus,
       fieldChanges: { assignmentType: { old: oldQueue, new: nextQueue } },
       description,
       ipAddress: req.ip,

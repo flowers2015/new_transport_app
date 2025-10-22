@@ -733,7 +733,23 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
         if (isOpen) {
             if (data) { // Edit mode: populate form
                 setLineType(data.lineType);
-                setCommonState({ loadingDate: formatJalali(new Date(data.loadingDate)), cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
+                // Check if loadingDate is already in Jalali format or needs conversion
+                let loadingDateStr;
+                
+                if (typeof data.loadingDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(data.loadingDate)) {
+                    // Already in Jalali format (YYYY/MM/DD)
+                    loadingDateStr = data.loadingDate;
+                } else if (data.loadingDate instanceof Date) {
+                    // If it's a Date object, check if it's valid
+                    if (isNaN(data.loadingDate.getTime())) {
+                        loadingDateStr = '';
+                    } else {
+                        loadingDateStr = formatJalali(data.loadingDate);
+                    }
+                } else {
+                    loadingDateStr = '';
+                }
+                setCommonState({ loadingDate: loadingDateStr, cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
                 if (data.lineType === FreightLineType.IceCream) {
                     setIceCreamState({
                         originCity: data.originCity || '', destinationCity: data.destinations[0]?.city || '', brand: data.brand || 'میهن', representativeType: data.representativeType || 'agent', representativeName: data.representativeName || '', cartonCount: String(data.cartonCount || ''), priority: data.priority || 'normal', products: data.products || []
@@ -776,8 +792,13 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
         if (isNaN(cargoValueInRials) || cargoValueInRials < 1_000_000_000 || cargoValueInRials > 110_000_000_000) { alert('ارزش بار باید بین ۱ تا ۱۱۰ میلیارد ریال باشد.'); return; }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
 
-        const jalaliDate = parseJalaliDateString(commonState.loadingDate);
-        if (!jalaliDate) { alert('تاریخ نامعتبر است. قالب صحیح: YYYY/MM/DD'); return; }
+        // Use the string directly instead of converting to Date
+        // This will avoid the conversion issues
+        const jalaliDate = commonState.loadingDate;
+        if (!jalaliDate || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliDate)) { 
+            alert('تاریخ نامعتبر است. قالب صحیح: YYYY/MM/DD'); 
+            return; 
+        }
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
             ? { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: crypto.randomUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
             : { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, platformArrivalTime: multiDestState.platformArrivalTime, destinations: destinations as Destination[] };
@@ -837,7 +858,17 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
                             <div className="grid grid-cols-3 gap-3">
                             <div>
                                 <label className="text-xs">تاریخ بارگیری (جلالی)*</label>
-                                <input type="text" placeholder="YYYY/MM/DD" value={commonState.loadingDate} onChange={e => setCommonState(s=>({...s, loadingDate: e.target.value}))} className="input-style mt-1" required/>
+                                <input 
+                                    type="text" 
+                                    placeholder="1403/01/01" 
+                                    value={commonState.loadingDate} 
+                                    onChange={e => setCommonState(s=>({...s, loadingDate: e.target.value}))} 
+                                    className="input-style mt-1" 
+                                    pattern="\d{4}/\d{1,2}/\d{1,2}"
+                                    title="فرمت صحیح: 1403/01/01"
+                                    required
+                                />
+                                <div className="text-xs text-slate-500 mt-1">فرمت: 1403/01/01</div>
                             </div>
                             <div><label className="text-xs">نوع خودرو*</label><select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select></div>
                                 <div>

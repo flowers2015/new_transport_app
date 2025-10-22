@@ -519,6 +519,7 @@ const vehicleDatabase: any = {
 const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle, onUpdateVehicle }) => {
     const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: 'الف', part2: '', cityCode: '' });
     const [serialNumber, setSerialNumber] = useState('');
+    const [vehicleCode, setVehicleCode] = useState('');
     const [isPlate, setIsPlate] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
@@ -618,6 +619,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         setFormState(initialFormState);
         setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
         setSerialNumber('');
+        setVehicleCode('');
     };
 
     const handleCancel = () => {
@@ -649,17 +651,20 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             cylinderCount: cylinderCount ? parseInt(String(cylinderCount)) : undefined,
             plateNumber: isPlate ? plate : undefined,
             serialNumber: !isPlate ? serialNumber : undefined,
+            vehicleCode: vehicleCode || undefined,
             ownerName: holdingCompany === 'mihan' ? (formState.mihanCompany || '') : (formState.ownerName || '')
         };
         if (editingId) {
             if (onUpdateVehicle) {
                 await onUpdateVehicle(editingId, vehicleData);
             }
+            // Don't reset form when editing, just close the form
+            setEditingId(null);
         } else {
-            onAddVehicle(vehicleData);
+            await onAddVehicle(vehicleData);
+            // Only reset form for new vehicles
+            resetForm();
         }
-        resetForm();
-        setEditingId(null);
     };
 
     const getBranchName = (branchId: string) => branches.find(b => b.id === branchId)?.name || 'نامشخص';
@@ -710,6 +715,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             setSerialNumber(v.serialNumber || '');
             setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
         }
+        setVehicleCode(v.vehicleCode || '');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -833,20 +839,35 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                          <label><input type="radio" name="idType" checked={!isPlate} onChange={() => setIsPlate(false)} /> شماره بدنه/سریال</label>
                                     </div>
                                     {isPlate ? (
-                                         <div className="flex items-center gap-2 p-2 border rounded-lg bg-slate-50 mt-2">
-                                            <span className="font-mono text-slate-500 pl-2">ایران</span>
-                                            <input name="cityCode" value={plate.cityCode} onChange={handlePlateChange} placeholder="78" className="input-style w-12 text-center" maxLength={2} required={isPlate} />
-                                            <span className="font-bold">-</span>
-                                            <input name="part2" value={plate.part2} onChange={handlePlateChange} placeholder="956" className="input-style w-16 text-center" maxLength={3} required={isPlate} />
-                                            <select name="letter" value={plate.letter} onChange={handlePlateChange} className="input-style w-16 text-center">
+                                         <div className="flex items-center gap-1 p-2 border rounded-lg bg-slate-50 mt-2">
+                                            <span className="font-mono text-slate-500 text-xs">ایران</span>
+                                            <input name="cityCode" value={plate.cityCode} onChange={handlePlateChange} placeholder="78" className="input-style w-10 text-center text-xs" maxLength={2} required={isPlate} />
+                                            <span className="font-bold text-xs">-</span>
+                                            <input name="part2" value={plate.part2} onChange={handlePlateChange} placeholder="956" className="input-style w-12 text-center text-xs" maxLength={3} required={isPlate} />
+                                            <select name="letter" value={plate.letter} onChange={handlePlateChange} className="input-style w-12 text-center text-xs">
                                                 {persianAlphabet.map(l => <option key={l} value={l}>{l}</option>)}
                                             </select>
-                                            <input name="part1" value={plate.part1} onChange={handlePlateChange} placeholder="24" className="input-style w-12 text-center" maxLength={2} required={isPlate} />
+                                            <input name="part1" value={plate.part1} onChange={handlePlateChange} placeholder="24" className="input-style w-10 text-center text-xs" maxLength={2} required={isPlate} />
                                         </div>
                                     ) : (
                                          <input name="serialNumber" value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="شماره بدنه یا سریال دستگاه" className="input-style w-full mt-2" required={!isPlate} />
                                     )}
                                 </div>
+                                
+                                {/* کد خودرو برای سنگین/نیمه یدک */}
+                                {(formState.vehicleCategory === VehicleCategory.Heavy || formState.vehicleCategory === VehicleCategory.SemiTrailer) && (
+                                    <div className="mt-4">
+                                        <label className="block text-sm font-medium text-slate-700">کد خودرو (سنگین/نیمه یدک)</label>
+                                        <input 
+                                            name="vehicleCode" 
+                                            value={vehicleCode} 
+                                            onChange={e => setVehicleCode(e.target.value)} 
+                                            placeholder="مثال: TRK-001, SEMI-002" 
+                                            className="input-style w-full mt-1" 
+                                        />
+                                        <div className="text-xs text-slate-500 mt-1">کد منحصر به فرد برای جستجو و تخصیص خودرو</div>
+                                    </div>
+                                )}
                             </fieldset>
                             
                             <fieldset className="p-4 border border-slate-200 rounded-lg">
