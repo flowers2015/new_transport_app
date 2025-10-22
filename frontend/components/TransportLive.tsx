@@ -6,6 +6,7 @@ import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { PencilIcon } from './icons/PencilIcon';
+import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 
@@ -30,6 +31,7 @@ interface TransportLiveProps {
     onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => void;
     onForward: (announcementId: string) => void;
     onCancel: (announcementId: string) => void;
+    onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     currentUser: User;
 }
 
@@ -103,7 +105,7 @@ const columnsConfig = (props: TransportLiveProps, viewMode: 'compact' | 'full') 
 
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, onFinalize, currentUser, onCancel, onForward, onTransferDestination } = props;
+    const { announcements, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory } = props;
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -421,6 +423,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                             {canPerformActions && ann.destinations.length > 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="انتقال مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
                                             {canPerformActions && <button disabled={!canForward} onClick={() => onForward(ann.id)} title="ارجاع به ترابری دیگر" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed`}>ارجاع</button>}
                                             {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو اعلام بار" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
+                                            {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
                                         </div>
                                     </td>
                                 </tr>

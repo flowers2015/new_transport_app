@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import TransportLive from './TransportLive';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle } from '../types';
+import FreightHistoryDialog from './FreightHistoryDialog';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -263,21 +264,42 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         alert(`لغو اعلام بار #${announcementId}`);
     };
 
+    const [historyDialog, setHistoryDialog] = React.useState<{ isOpen: boolean; announcementId: string; announcementCode: string } | null>(null);
+
+    const onOpenHistory = (announcementId: string, announcementCode: string) => {
+        setHistoryDialog({ isOpen: true, announcementId, announcementCode });
+    };
+
+    const onCloseHistory = () => {
+        setHistoryDialog(null);
+    };
+
     if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
     if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
 
     return (
-        <TransportLive
-            announcements={announcements}
-            vehicles={vehicles}
-            drivers={drivers}
-            onUpdateAssignment={onUpdateAssignment}
-            onFinalize={onFinalize}
-            onTransferDestination={onTransferDestination}
-            onForward={onForward}
-            onCancel={onCancel}
-            currentUser={currentUser}
-        />
+        <>
+            <TransportLive
+                announcements={announcements}
+                vehicles={vehicles}
+                drivers={drivers}
+                onUpdateAssignment={onUpdateAssignment}
+                onFinalize={onFinalize}
+                onTransferDestination={onTransferDestination}
+                onForward={onForward}
+                onCancel={onCancel}
+                onOpenHistory={onOpenHistory}
+                currentUser={currentUser}
+            />
+            {historyDialog && (
+                <FreightHistoryDialog
+                    isOpen={historyDialog.isOpen}
+                    onClose={onCloseHistory}
+                    announcementId={historyDialog.announcementId}
+                    announcementCode={historyDialog.announcementCode}
+                />
+            )}
+        </>
     );
 };
 

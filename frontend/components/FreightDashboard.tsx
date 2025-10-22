@@ -8,6 +8,8 @@ import { PrinterIcon } from './icons/PrinterIcon';
 import { DocumentArrowDownIcon } from './icons/DocumentArrowDownIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { HistoryIcon } from './icons/HistoryIcon';
+import FreightHistoryDialog from './FreightHistoryDialog';
 
 // --- Constants from user request ---
 const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پانلا', 'آلینوس'];
@@ -27,6 +29,7 @@ interface FreightDashboardProps {
     onReAnnounce: (announcementId: string) => void;
     currentUser: User;
     onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void;
+    onOpenHistory?: (announcementId: string, announcementCode: string) => void;
 }
 
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
@@ -45,7 +48,16 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')}` : '-';
 
 
-const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => void, onReject: (id: string) => void, onEdit: (ann: FreightAnnouncement) => void, onSendForApproval: (ann: FreightAnnouncement) => void, onDelete: (id: string) => void, onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void }) => {
+const columnsConfig = (props: { 
+    currentUser: User, 
+    onApprove: (id: string) => void, 
+    onReject: (id: string) => void, 
+    onEdit: (ann: FreightAnnouncement) => void, 
+    onSendForApproval: (ann: FreightAnnouncement) => void, 
+    onDelete: (id: string) => void, 
+    onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void,
+    onOpenHistory?: (announcementId: string, announcementCode: string) => void
+}) => {
     const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete } = props;
     
     return [
@@ -113,27 +125,46 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
         { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-        { header: 'عملیات', width: '220px', display: () => true, render: (ann: FreightAnnouncement) => {
+        { header: 'عملیات', width: '270px', display: () => true, render: (ann: FreightAnnouncement) => {
+            // تشخیص اینکه آیا دکمه تاریخچه نمایش داده بشه - همه پرسنل می‌تونن ببینن
+            const showHistory = [
+                FreightAnnouncementStatus.Draft,
+                FreightAnnouncementStatus.PendingManagerApproval,
+                FreightAnnouncementStatus.PendingPersonalAssignment,
+                FreightAnnouncementStatus.PendingCompanyAssignment,
+                FreightAnnouncementStatus.Assigned,
+                FreightAnnouncementStatus.InTransit,
+                FreightAnnouncementStatus.Finalized,
+                FreightAnnouncementStatus.Rejected
+            ].includes(ann.status);
+            
+            // تایید/رد مدیر
             if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
                 return (
                     <div className="flex justify-center gap-1">
                         <button onClick={() => onApprove(ann.id)} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600">تایید</button>
-                        {/* FIX: The onReject prop passed to columnsConfig is handleOpenRejectDialog, which expects only one argument. Changed call to pass only ann.id. */}
                         <button onClick={() => onReject(ann.id)} className="px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600">رد</button>
                     </div>
                 );
             }
-            // Queue routing controls (by role and status)
-            if (props.onSwitchQueue && currentUser.role === UserRole.PlanningManager) {
-                const canToCompany = [FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status);
-                const canToPersonal = [FreightAnnouncementStatus.PendingCompanyAssignment].includes(ann.status);
+            
+            // دکمه تاریخچه برای مدیر برنامه‌ریزی (بدون دکمه‌های ارجاع)
+            if (currentUser.role === UserRole.PlanningManager && showHistory) {
                 return (
                     <div className="flex justify-center gap-1">
-                        {canToCompany && <button onClick={() => props.onSwitchQueue!(ann.id, 'company')} className="px-3 py-1 bg-slate-500 text-white rounded-md text-xs">ارجاع به شرکتی</button>}
-                        {canToPersonal && <button onClick={() => props.onSwitchQueue!(ann.id, 'personal')} className="px-3 py-1 bg-slate-500 text-white rounded-md text-xs">ارجاع به شخصی</button>}
+                        <button 
+                            onClick={() => props.onOpenHistory && props.onOpenHistory(ann.id, ann.announcementCode)} 
+                            className="flex items-center gap-1 px-3 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                            title="مشاهده تاریخچه تغییرات"
+                        >
+                            <HistoryIcon className="w-4 h-4" />
+                            <span>تاریخچه</span>
+                        </button>
                     </div>
                 );
             }
+            
+            // ویرایش/حذف (کارمند و مدیر برنامه‌ریزی)
             if ((currentUser.role === UserRole.PlanningEmployee || currentUser.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
                  return (
                     <div className="flex justify-center gap-1">
@@ -143,6 +174,23 @@ const columnsConfig = (props: { currentUser: User, onApprove: (id: string) => vo
                     </div>
                  );
             }
+            
+            // دکمه تاریخچه برای همه پرسنل (شامل ترابری شرکتی و شخصی)
+            if (props.onOpenHistory) {
+                return (
+                    <div className="flex justify-center gap-1">
+                        <button 
+                            onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
+                            className="flex items-center gap-1 px-3 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                            title="مشاهده تاریخچه تغییرات"
+                        >
+                            <HistoryIcon className="w-4 h-4" />
+                            <span>تاریخچه</span>
+                        </button>
+                    </div>
+                );
+            }
+            
             return <span className="text-xs text-slate-400">-</span>;
         }}
     ];
@@ -162,6 +210,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const [columnFilters, setColumnFilters] = useState<{ [key: string]: string }>({});
     const [managerView, setManagerView] = useState<'approval' | 'all'>('approval');
     const [isRulesOpen, setIsRulesOpen] = useState(false);
+    const [historyDialog, setHistoryDialog] = useState<{ isOpen: boolean; announcementId: string; announcementCode: string } | null>(null);
 
 
     const handleOpenCreatePanel = () => {
@@ -177,6 +226,14 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     
     const handleClosePanel = () => {
         setIsPanelOpen(false);
+    };
+
+    const handleOpenHistory = (announcementId: string, announcementCode: string) => {
+        setHistoryDialog({ isOpen: true, announcementId, announcementCode });
+    };
+
+    const handleCloseHistory = () => {
+        setHistoryDialog(null);
     };
 
     const handleOpenRejectDialog = (id: string) => setRejectInfo({ id, reason: '' });
@@ -223,12 +280,30 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             <div className="flex justify-center gap-1">
                 <button onClick={() => onReAnnounce(ann.id)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">اعلام مجدد</button>
                 <button onClick={() => onDelete(ann.id)} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
+                {props.onOpenHistory && (
+                    <button 
+                        onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
+                        className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                        title="مشاهده تاریخچه تغییرات"
+                    >
+                        <HistoryIcon className="w-4 h-4" />
+                        <span>تاریخچه</span>
+                    </button>
+                )}
             </div>
         )}
-    ], [onReAnnounce, onDelete]);
+    ], [onReAnnounce, onDelete, props.onOpenHistory]);
 
     const allColumns = useMemo(() => {
-        const cols = columnsConfig({ ...props, onApprove, onReject: handleOpenRejectDialog, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete });
+        const cols = columnsConfig({ 
+            ...props, 
+            onApprove, 
+            onReject: handleOpenRejectDialog, 
+            onEdit: handleOpenEditPanel, 
+            onSendForApproval: handleSendForApproval, 
+            onDelete: onDelete,
+            onOpenHistory: handleOpenHistory 
+        });
         try { console.log('[DBG][FreightDashboard] allColumns headers:', cols.map((c:any)=>c.header)); } catch {}
         return cols;
     }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete]);
@@ -577,6 +652,17 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             />
 
             {rejectInfo && <RejectDialog reason={rejectInfo.reason} onReasonChange={(r) => setRejectInfo({...rejectInfo, reason: r})} onClose={handleCloseRejectDialog} onSubmit={handleRejectSubmit} />}
+            
+            {/* دیالوگ تاریخچه */}
+            {historyDialog && (
+                <FreightHistoryDialog
+                    isOpen={historyDialog.isOpen}
+                    onClose={handleCloseHistory}
+                    announcementId={historyDialog.announcementId}
+                    announcementCode={historyDialog.announcementCode}
+                />
+            )}
+            
             {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
@@ -635,9 +721,11 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
     
     const resetForm = () => {
         // Don't reset lineType to allow multiple entries of the same type
-        setCommonState(initialCommonState);
+        // Don't reset loadingDate to preserve the selected date
+        // Don't reset platformArrivalTime to preserve the selected time
+        setCommonState(prev => ({ ...initialCommonState, loadingDate: prev.loadingDate }));
         setIceCreamState(initialIceCreamState);
-        setMultiDestState(initialMultiDestState);
+        setMultiDestState(prev => ({ ...initialMultiDestState, platformArrivalTime: prev.platformArrivalTime }));
         setDestinations(initialDestinations);
     };
 

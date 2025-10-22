@@ -11,6 +11,7 @@ const {
   updateFreightAnnouncement,
   setAssignmentQueue,
   deleteFreightAnnouncement,
+  getFreightAnnouncementHistory,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -19,6 +20,15 @@ const {
 
 // GET routes for fetching freight announcements
 router.get('/', authenticateToken, getFreightAnnouncements);
+
+// Get history for a specific announcement (must be before /:id route)
+router.get(
+  '/:id/history',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'admin']),
+  getFreightAnnouncementHistory
+);
+
 router.get('/:id', authenticateToken, getFreightAnnouncementById);
 
 // Create a new freight announcement
