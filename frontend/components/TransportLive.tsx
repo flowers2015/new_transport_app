@@ -162,7 +162,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             // Common Columns
             { header: 'ردیف', align: 'center', display: () => viewMode === 'full', render: (_: any, idx: number) => idx + 1 },
             { header: 'کد اعلام بار', align: 'center', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
-            { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+            // { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
             { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
             { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -197,10 +197,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
                 return result;
             }},
-            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => {
-                console.log('🔍 [TotalFreightCost] Rendering for announcement:', ann.id, 'totalFreightCost:', ann.totalFreightCost);
-                return <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span>;
-            }},
+            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
             
             // Full View Specific - Ice Cream
             { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
@@ -363,7 +360,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
@@ -390,7 +387,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
@@ -417,7 +414,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
@@ -433,7 +430,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
@@ -449,7 +446,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
+                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
@@ -545,8 +542,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     FreightAnnouncementStatus.PendingPersonalAssignment,
                                 ].includes(ann.status) && !isAnnLeftover;
 
+                                // Determine row color based on assignment status
+                                const isAssigned = ann.status === FreightAnnouncementStatus.Assigned || ann.status === 'Assigned';
+                                const rowColorClass = isAssigned ? 'bg-green-50 hover:bg-green-100' : 'bg-yellow-50 hover:bg-yellow-100';
+
                                 return (
-                                <tr key={ann.id} className={`border-b ${selectedIds.has(ann.id) ? 'bg-sky-50' : 'hover:bg-slate-50'}`}>
+                                <tr key={ann.id} className={`border-b ${selectedIds.has(ann.id) ? 'bg-sky-50' : rowColorClass}`}>
                                     {canPerformActions && <td className="p-2 sticky left-0 z-10" style={{backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}><input type="checkbox" checked={selectedIds.has(ann.id)} onChange={() => handleSelectRow(ann.id)}/></td>}
                                     
                                      {isFullDairyAmbient ? (
@@ -723,11 +724,11 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 
                 if (drivers.length === 0) {
                     // console.log('🔍 [handlePersonalDriverLookup] No drivers found');
-                    setFoundPersonalDriver('not_found');
+            setFoundPersonalDriver('not_found');
                     setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
                     setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
                     setShowDriverDropdown(false);
-                    alert('راننده با این کدملی یافت نشد. لطفاً اطلاعات راننده جدید را وارد نمایید.');
+            alert('راننده با این کدملی یافت نشد. لطفاً اطلاعات راننده جدید را وارد نمایید.');
                 } else {
                     // همیشه dropdown نمایش بده تا کاربر انتخاب کند
                     // console.log('🔍 [handlePersonalDriverLookup] Drivers found, showing dropdown');
@@ -842,10 +843,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // Format plate number for backend (ensure Iranian format)
             const formattedPlate = personalVehicleDetails.plate.replace(/\s/g, '').toLowerCase();
             
-            console.log('🔍 [handleSave] totalPersonalCost:', totalPersonalCost);
-            console.log('🔍 [handleSave] destinations:', destinations);
-            console.log('🔍 [handleSave] foundPersonalDriver:', foundPersonalDriver);
-            console.log('🔍 [handleSave] foundPersonalVehicle:', foundPersonalVehicle);
+            // Debug logs removed - total freight cost issue resolved
             
             onUpdateAssignment(announcement.id, {
                 driverId: foundPersonalDriver?.id,

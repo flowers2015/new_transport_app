@@ -177,7 +177,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // console.log('✅ [TransportLive] Assignment successful:', responseData);
             
             // Update the announcements state with the new assignment data
-            console.log('🔍 [TransportLiveContainer] Received assignment data:', assignment);
+            // Debug logs removed - total freight cost issue resolved
             setAnnouncements(prev => {
                 const updated = prev.map(ann => 
                     ann.id === announcementId 

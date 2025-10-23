@@ -637,6 +637,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     vehiclePlate,
     truckSmartId,
     destinations,
+    totalFreightCost,
     billOfLadingNumber
   } = req.body;
   const { userId, role, name, username } = req.user;
@@ -793,8 +794,8 @@ async function assignPersonalDriverAndVehicle(req, res) {
     
     // Update freight announcement
     await client.query(
-      'UPDATE freight_announcements SET status = $1, assigned_driver_id = $2, assigned_vehicle_id = $3, bill_of_lading_number = $4, updated_at = NOW() WHERE id = $5',
-      ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, announcementId]
+      'UPDATE freight_announcements SET status = $1, assigned_driver_id = $2, assigned_vehicle_id = $3, bill_of_lading_number = $4, total_freight_cost = $5, updated_at = NOW() WHERE id = $6',
+      ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, totalFreightCost || null, announcementId]
     );
     
     // Log history
