@@ -12,8 +12,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchAll = async () => {
+    const fetchData = async () => {
             setLoading(true);
             setError(null);
             console.log('🚀 [TransportLive] Starting data fetch...');
@@ -142,7 +141,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 setLoading(false);
             }
         };
-        fetchAll();
+
+    useEffect(() => {
+        fetchData();
     }, []);
 
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
@@ -196,6 +197,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             });
             
             alert('تخصیص با موفقیت ثبت شد');
+            
+            // Refresh all data after successful assignment
+            console.log('🔄 [TransportLive] Refreshing all data after assignment...');
+            await fetchData();
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             alert((e as any).message); 

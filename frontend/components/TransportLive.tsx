@@ -339,7 +339,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         const extraCols = [
             { header: 'نام راننده', render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, props.drivers, props.personalDrivers) },
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)}</span> },
-            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : props.drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-'}</span> },
+            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
         ];
@@ -599,7 +599,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 // --- Dialog Components ---
 const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onFinalize' | 'onTransferDestination' | 'onForward' | 'onCancel'> & { announcement: FreightAnnouncement, onClose: () => void }> =
 (props) => {
-    const { announcement, drivers, vehicles, onClose, onUpdateAssignment, currentUser } = props;
+    const { announcement, drivers, vehicles, personalDrivers, personalVehicles, onClose, onUpdateAssignment, currentUser } = props;
     
     // Helper function for vehicle identifier
     const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[]) => {
@@ -643,12 +643,24 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             if (driver) { setDriverEmployeeId(driver.employeeId); setFoundCompanyDriver(driver); }
             if (vehicle) { setVehicleInternalId(vehicle.id); setFoundVehicle(vehicle); }
         } else if (announcement.assignmentType === 'personal') {
-            const driver = drivers.find(d => d.id === announcement.assignedDriverId);
+            const driver = personalDrivers.find(d => d.id === announcement.assignedDriverId);
             if(driver) {
                 setNationalId(driver.nationalId);
                 setFoundPersonalDriver(driver);
-                setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile });
-                setPersonalVehicleDetails({ type: driver.currentVehicleType || '', plate: driver.currentVehiclePlate || '' });
+                setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile, driverSmartId: driver.driverSmartId || '' });
+            }
+            
+            // Set vehicle details if assigned
+            if (announcement.assignedVehicleId) {
+                const vehicle = personalVehicles.find(v => v.id === announcement.assignedVehicleId);
+                if(vehicle) {
+                    setPersonalVehicleDetails({ 
+                        truckSmartId: vehicle.truckSmartId,
+                        type: vehicle.vehicleType, 
+                        plate: `${vehicle.platePart1}${vehicle.plateLetter}${vehicle.platePart2}-${vehicle.plateCityCode}`
+                    });
+                    setFoundPersonalVehicle(vehicle);
+                }
             }
         }
         setDestinations(JSON.parse(JSON.stringify(announcement.destinations))); // Deep copy
