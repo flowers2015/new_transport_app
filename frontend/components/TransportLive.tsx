@@ -1,6 +1,6 @@
 // This is a new file: components/TransportLive.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View } from '../types';
+import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
@@ -14,6 +14,8 @@ interface TransportLiveProps {
     announcements: FreightAnnouncement[];
     vehicles: Vehicle[];
     drivers: Driver[];
+    personalDrivers: PersonalDriver[];
+    personalVehicles: PersonalVehicle[];
     onUpdateAssignment: (announcementId: string, assignment: { 
         assignmentType: 'company' | 'personal';
         driverId?: string; 
@@ -64,7 +66,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory } = props;
     
     // Debug logging for re-renders
     console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -82,27 +84,74 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [dialog, setDialog] = useState<'assign' | 'transfer' | null>(null);
     
     // Helper functions inside component to ensure proper re-rendering
-    const getDriverName = (id: string | undefined, drivers: Driver[]) => {
+    const getDriverName = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
         if (!id) return '-';
-        const driver = drivers.find(d => d.id === id);
+        // First search in company drivers
+        let driver = drivers.find(d => d.id === id);
+        // If not found, search in personal drivers
+        if (!driver) {
+            driver = personalDrivers.find(d => d.id === id);
+        }
         console.log('🔍 [getDriverName] Looking for driver:', id, 'Found:', driver?.name);
         return driver?.name || '-';
     };
     
-    const getDriverContact = (id: string | undefined, drivers: Driver[]) => {
+    const getDriverContact = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
         if (!id) return '-';
-        const driver = drivers.find(d => d.id === id);
+        // First search in company drivers
+        let driver = drivers.find(d => d.id === id);
+        // If not found, search in personal drivers
+        if (!driver) {
+            driver = personalDrivers.find(d => d.id === id);
+        }
         console.log('🔍 [getDriverContact] Looking for driver:', id, 'Found:', driver?.mobile);
         return driver?.mobile || '-';
     };
     
-    const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[]) => {
+    const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[], personalVehicles: any[] = []) => {
         if (!id) return '-';
-        const v = vehicles.find(v => v.id === id);
+        // First search in company vehicles
+        let v = vehicles.find(v => v.id === id);
+        // If not found, search in personal vehicles
+        if (!v) {
+            const personalV = personalVehicles.find(v => v.id === id);
+            if (personalV) {
+                // Format personal vehicle plate
+                const plate = `${personalV.platePart1}${personalV.plateLetter}${personalV.platePart2}-${personalV.plateCityCode}`;
+                console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found personal vehicle:', personalV.vehicleType, 'Plate:', plate);
+                return plate;
+            }
+        }
+        
         if (!v) return 'نامشخص';
         
         const result = v.plateNumber ? formatPlateNumber(v.plateNumber) : v.serialNumber || 'نامشخص';
         console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found vehicle:', v.model, 'Plate:', v.plateNumber, 'Serial:', v.serialNumber, 'Result:', result);
+        return result;
+    };
+
+    // Helper functions for personal drivers and vehicles
+    const getPersonalDriverName = (driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
+        if (!driverId) return '-';
+        const driver = personalDrivers.find(d => d.id === driverId);
+        console.log('🔍 [getPersonalDriverName] Looking for driver:', driverId, 'Found:', driver?.name);
+        return driver?.name || '-';
+    };
+    
+    const getPersonalDriverContact = (driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
+        if (!driverId) return '-';
+        const driver = personalDrivers.find(d => d.id === driverId);
+        console.log('🔍 [getPersonalDriverContact] Looking for driver:', driverId, 'Found:', driver?.mobile);
+        return driver?.mobile || '-';
+    };
+    
+    const getPersonalVehicleIdentifier = (vehicleId: string | undefined, personalVehicles: PersonalVehicle[]) => {
+        if (!vehicleId) return '-';
+        const v = personalVehicles.find(v => v.id === vehicleId);
+        if (!v) return 'نامشخص';
+        
+        const result = v.formattedPlate || 'نامشخص';
+        console.log('🔍 [getPersonalVehicleIdentifier] Looking for vehicle:', vehicleId, 'Found vehicle:', v.vehicleType, 'Plate:', v.formattedPlate, 'Result:', result);
         return result;
     };
     
@@ -123,13 +172,22 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
             // Assignment Info (for all views)
             { header: 'نام راننده', display: () => true, render: (ann: FreightAnnouncement) => {
-                const result = getDriverName(ann.assignedDriverId, drivers);
+                const result = ann.assignmentType === 'company' 
+                    ? getDriverName(ann.assignedDriverId, drivers, props.personalDrivers)
+                    : getPersonalDriverName(ann.assignedDriverId, props.personalDrivers);
                 console.log('🔍 [Render] Driver name for', ann.id, ':', result);
                 return result;
             }},
-            { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, drivers)}</span> },
+            { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => {
+                const result = ann.assignmentType === 'company' 
+                    ? getDriverContact(ann.assignedDriverId, drivers, props.personalDrivers)
+                    : getPersonalDriverContact(ann.assignedDriverId, props.personalDrivers);
+                return <span className="font-mono">{result}</span>;
+            }},
             { header: 'پلاک خودرو', display: () => true, render: (ann: FreightAnnouncement) => {
-                const result = ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, vehicles) : drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-';
+                const result = ann.assignmentType === 'company' 
+                    ? getVehicleIdentifier(ann.assignedVehicleId, vehicles, props.personalVehicles)
+                    : getPersonalVehicleIdentifier(ann.assignedVehicleId, props.personalVehicles);
                 console.log('🔍 [Render] Vehicle plate for', ann.id, ':', result);
                 return <span className="font-mono whitespace-nowrap">{result}</span>;
             }},
@@ -150,7 +208,22 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'ارزش بار', align: 'center', display: () => viewMode === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
             
             // Operations Column
-            { header: 'عملیات', display: () => true, render: (ann: FreightAnnouncement) => renderOperations(ann, props) },
+            { header: 'عملیات', display: () => true, render: (ann: FreightAnnouncement) => (
+                <div className="flex gap-1">
+                    <button 
+                        onClick={() => {setSelectedAnnouncement(ann); setDialog('assign');}} 
+                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                    >
+                        تخصیص
+                    </button>
+                    <button 
+                        onClick={() => {setSelectedAnnouncement(ann); setDialog('transfer');}} 
+                        className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                    >
+                        انتقال
+                    </button>
+                </div>
+            ) },
         ];
 
         return columns;
@@ -264,9 +337,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const visibleColumns = useMemo(() => {
         // Extra transport columns (for both modes, position differs)
         const extraCols = [
-            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, props.drivers) },
-            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers)}</span> },
-            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles) : props.drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-'}</span> },
+            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, props.drivers, props.personalDrivers) },
+            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)}</span> },
+            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : props.drivers.find(d => d.id === ann.assignedDriverId)?.currentVehiclePlate || '-'}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
         ];
@@ -546,9 +619,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     
     // --- Personal User State ---
     const [nationalId, setNationalId] = useState('');
-    const [foundPersonalDriver, setFoundPersonalDriver] = useState<Driver | null | 'not_found'>(null);
-    const [personalDriverDetails, setPersonalDriverDetails] = useState({ name: '', mobile: '' });
-    const [personalVehicleDetails, setPersonalVehicleDetails] = useState({ type: '', plate: '' });
+    const [foundPersonalDriver, setFoundPersonalDriver] = useState<any | null | 'not_found'>(null);
+    const [personalDriverDetails, setPersonalDriverDetails] = useState({ name: '', mobile: '', driverSmartId: '' });
+    const [personalVehicleDetails, setPersonalVehicleDetails] = useState({ type: '', plate: '', truckSmartId: '' });
+    const [foundPersonalVehicle, setFoundPersonalVehicle] = useState<any | null | 'not_found'>(null);
     const [destinations, setDestinations] = useState<Destination[]>([]);
     const [costMode, setCostMode] = useState<'manual' | 'auto'>('manual');
     const [autoTotalCost, setAutoTotalCost] = useState('');
@@ -608,19 +682,90 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         if (!vehicle) alert('خودرو با این کد یافت نشد.');
     };
     
-    const handlePersonalDriverLookup = () => {
-        const driver = drivers.find(d => d.nationalId === nationalId);
-        if (driver) {
-            setFoundPersonalDriver(driver);
-            setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile });
-            setPersonalVehicleDetails({ type: driver.currentVehicleType || '', plate: driver.currentVehiclePlate || '' });
-        } else {
+    const handlePersonalDriverLookup = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            console.log('🔍 [handlePersonalDriverLookup] Token:', token ? 'exists' : 'missing');
+            console.log('🔍 [handlePersonalDriverLookup] Searching for nationalId:', nationalId);
+            
+            const response = await fetch(`http://localhost:3000/api/v1/personal-drivers/search?query=${nationalId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            
+            console.log('🔍 [handlePersonalDriverLookup] Response status:', response.status);
+            
+            if (response.ok) {
+                const drivers = await response.json();
+                console.log('🔍 [handlePersonalDriverLookup] Found drivers:', drivers);
+                if (drivers.length > 0) {
+                    const driver = drivers[0];
+                    console.log('🔍 [handlePersonalDriverLookup] Using driver:', driver);
+                    setFoundPersonalDriver(driver);
+                    setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile, driverSmartId: driver.driverSmartId || '' });
+                    // Don't clear vehicle details when driver is found
+                } else {
+                    console.log('🔍 [handlePersonalDriverLookup] No drivers found');
+                    setFoundPersonalDriver('not_found');
+                    setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
+                    // Only clear vehicle details when driver is not found
+                    setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
+                    alert('راننده با این کدملی یافت نشد. لطفاً اطلاعات راننده جدید را وارد نمایید.');
+                }
+            } else {
+                setFoundPersonalDriver('not_found');
+                setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
+                setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
+                alert('خطا در جستجوی راننده.');
+            }
+        } catch (error) {
+            console.error('Error searching personal driver:', error);
             setFoundPersonalDriver('not_found');
-            setPersonalDriverDetails({ name: '', mobile: '' });
-            setPersonalVehicleDetails({ type: '', plate: '' });
-            alert('راننده با این کدملی یافت نشد. لطفاً اطلاعات راننده جدید را وارد نمایید.');
+            setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
+            setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
+            alert('خطا در جستجوی راننده.');
         }
-    }
+    };
+
+    const handlePersonalVehicleLookup = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            console.log('🔍 [handlePersonalVehicleLookup] Token:', token ? 'exists' : 'missing');
+            console.log('🔍 [handlePersonalVehicleLookup] Searching for truckSmartId:', personalVehicleDetails.truckSmartId);
+            
+            const response = await fetch(`http://localhost:3000/api/v1/personal-vehicles/search?query=${personalVehicleDetails.truckSmartId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            
+            console.log('🔍 [handlePersonalVehicleLookup] Response status:', response.status);
+            
+            if (response.ok) {
+                const vehicles = await response.json();
+                console.log('🔍 [handlePersonalVehicleLookup] Found vehicles:', vehicles);
+                if (vehicles.length > 0) {
+                    const vehicle = vehicles[0];
+                    console.log('🔍 [handlePersonalVehicleLookup] Using vehicle:', vehicle);
+                    setFoundPersonalVehicle(vehicle);
+                    setPersonalVehicleDetails(prev => ({
+                        ...prev,
+                        type: vehicle.vehicleType,
+                        plate: `${vehicle.platePart1}${vehicle.plateLetter}${vehicle.platePart2}-${vehicle.plateCityCode}`
+                    }));
+                } else {
+                    console.log('🔍 [handlePersonalVehicleLookup] No vehicles found');
+                    setFoundPersonalVehicle('not_found');
+                    setPersonalVehicleDetails(prev => ({ ...prev, type: '', plate: '' }));
+                    alert('خودرو با این هوشمند کامیون یافت نشد. لطفاً اطلاعات خودرو جدید را وارد نمایید.');
+                }
+            } else {
+                setFoundPersonalVehicle('not_found');
+                setPersonalVehicleDetails(prev => ({ ...prev, type: '', plate: '' }));
+                alert('خطا در جستجوی خودرو.');
+            }
+        } catch (error) {
+            console.error('Error searching personal vehicle:', error);
+            alert('خطا در جستجوی خودرو.');
+        }
+    };
     
     const totalPersonalCost = useMemo(() => destinations.reduce((sum, d) => sum + (d.freightCost || 0), 0), [destinations]);
 
@@ -631,10 +776,24 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 driverId: foundCompanyDriver.id, vehicleId: foundVehicle.id, billOfLadingNumber: blNumber, assignmentType: 'company',
             });
         } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
-            if (!nationalId || !personalDriverDetails.name || !personalVehicleDetails.plate) { alert('کدملی، نام راننده و پلاک خودرو الزامی است.'); return; }
+            if (!nationalId || !personalDriverDetails.name || !personalDriverDetails.mobile || !personalDriverDetails.driverSmartId || !personalVehicleDetails.type || !personalVehicleDetails.plate || !personalVehicleDetails.truckSmartId) {
+                alert('کد ملی، نام راننده، شماره تماس، هوشمند راننده، نوع خودرو، پلاک خودرو و هوشمند کامیون الزامی است.');
+                return;
+            }
+            // Format plate number for backend (ensure Iranian format)
+            const formattedPlate = personalVehicleDetails.plate.replace(/\s/g, '').toLowerCase();
+            
             onUpdateAssignment(announcement.id, {
-                nationalId, ...personalDriverDetails, ...personalVehicleDetails,
-                destinations, billOfLadingNumber: blNumber, assignmentType: 'personal',
+                nationalId,
+                driverName: personalDriverDetails.name,
+                driverContact: personalDriverDetails.mobile,
+                driverSmartId: personalDriverDetails.driverSmartId,
+                vehicleType: personalVehicleDetails.type,
+                vehiclePlate: formattedPlate,
+                truckSmartId: personalVehicleDetails.truckSmartId,
+                destinations,
+                billOfLadingNumber: blNumber,
+                assignmentType: 'personal',
             });
         }
         onClose();
@@ -664,7 +823,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 <input placeholder="کد خودرو یا شناسه خودرو..." value={vehicleInternalId} onChange={e => setVehicleInternalId(e.target.value)} className="input-style flex-grow"/>
                                 <button onClick={handleVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
-                            {foundVehicle && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles)} | <strong>کد:</strong> {foundVehicle.vehicleCode || 'ندارد'} | <strong>نوع:</strong> {foundVehicle.type}</div>}
+                            {foundVehicle && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles, props.personalVehicles)} | <strong>کد:</strong> {foundVehicle.vehicleCode || 'ندارد'} | <strong>نوع:</strong> {foundVehicle.type}</div>}
                         </div>
                          <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
                     </div>
@@ -675,15 +834,23 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
                              <legend className="font-semibold px-1 text-sm">۱. اطلاعات راننده و خودرو</legend>
                              <div className="flex items-end gap-2">
-                                <div className="flex-grow"><label className="text-xs">کد ملی راننده*</label><input placeholder="کدملی..." value={nationalId} onChange={e => {setNationalId(e.target.value); setFoundPersonalDriver(null);}} className="input-style"/></div>
+                                <div className="flex-grow"><label className="text-xs">کد ملی راننده*</label><input placeholder="کدملی..." value={nationalId} onChange={e => {setNationalId(e.target.value); if(e.target.value !== nationalId) setFoundPersonalDriver(null);}} className="input-style"/></div>
                                 <button onClick={handlePersonalDriverLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
                             {foundPersonalDriver && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalDriver === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalDriver === 'not_found' ? 'راننده جدید. اطلاعات را وارد کنید.' : 'راننده یافت شد.'}</div>}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                                <div><label className="text-xs">نام و نام خانوادگی*</label><input value={personalDriverDetails.name || ''} onChange={e => setPersonalDriverDetails(s=>({...s, name: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
+                                <div><label className="text-xs">شماره تماس*</label><input value={personalDriverDetails.mobile || ''} onChange={e => setPersonalDriverDetails(s=>({...s, mobile: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
+                                <div><label className="text-xs">هوشمند راننده*</label><input placeholder="DRV001" value={personalDriverDetails.driverSmartId || ''} onChange={e => setPersonalDriverDetails(s=>({...s, driverSmartId: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
+                            </div>
+                            <div className="flex items-end gap-2 mt-3">
+                                <div className="flex-grow"><label className="text-xs">هوشمند کامیون*</label><input placeholder="TRK001" value={personalVehicleDetails.truckSmartId} onChange={e => {setPersonalVehicleDetails(s=>({...s, truckSmartId: e.target.value})); if(e.target.value !== personalVehicleDetails.truckSmartId) setFoundPersonalVehicle(null);}} className="input-style"/></div>
+                                <button onClick={handlePersonalVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
+                            </div>
+                            {foundPersonalVehicle && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalVehicle === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalVehicle === 'not_found' ? 'خودرو جدید. اطلاعات را وارد کنید.' : 'خودرو یافت شد.'}</div>}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                                <div><label className="text-xs">نام و نام خانوادگی*</label><input value={personalDriverDetails.name} onChange={e => setPersonalDriverDetails(s=>({...s, name: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
-                                <div><label className="text-xs">شماره تماس*</label><input value={personalDriverDetails.mobile} onChange={e => setPersonalDriverDetails(s=>({...s, mobile: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
                                 <div><label className="text-xs">نوع خودرو*</label><input value={personalVehicleDetails.type} onChange={e => setPersonalVehicleDetails(s=>({...s, type: e.target.value}))} className="input-style"/></div>
-                                <div><label className="text-xs">شماره پلاک*</label><input value={personalVehicleDetails.plate} onChange={e => setPersonalVehicleDetails(s=>({...s, plate: e.target.value}))} className="input-style"/></div>
+                                <div><label className="text-xs">شماره پلاک*</label><input placeholder="12ع345-67" value={personalVehicleDetails.plate} onChange={e => setPersonalVehicleDetails(s=>({...s, plate: e.target.value}))} className="input-style"/></div>
                             </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">

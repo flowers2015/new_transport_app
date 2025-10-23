@@ -278,6 +278,30 @@ export interface Driver {
     currentVehiclePlate?: string;
 }
 
+export interface PersonalDriver {
+    id: string;
+    nationalId: string;
+    name: string;
+    mobile: string;
+    driverSmartId: string;
+    createdAt: string;
+    updatedAt?: string;
+}
+
+export interface PersonalVehicle {
+    id: string;
+    truckSmartId: string;
+    platePart1: string;
+    plateLetter: string;
+    platePart2: string;
+    plateCityCode: string;
+    vehicleType: string;
+    vehicleUsage?: string;
+    formattedPlate: string;
+    createdAt: string;
+    updatedAt?: string;
+}
+
 export interface Technician {
     id: string;
     name: string;

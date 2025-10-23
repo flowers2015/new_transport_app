@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import TransportLive from './TransportLive';
-import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle } from '../types';
+import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [personalDrivers, setPersonalDrivers] = useState<PersonalDriver[]>([]);
+    const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -21,41 +23,55 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 console.log('📡 [TransportLive] Fetching from APIs:', {
                     freight: 'http://localhost:3000/api/v1/freight-announcements',
                     vehicles: 'http://localhost:3000/api/v1/vehicles',
-                    drivers: 'http://localhost:3000/api/v1/drivers'
+                    drivers: 'http://localhost:3000/api/v1/drivers',
+                    personalDrivers: 'http://localhost:3000/api/v1/personal-drivers',
+                    personalVehicles: 'http://localhost:3000/api/v1/personal-vehicles'
                 });
                 
-                const [faRes, vRes, dRes] = await Promise.all([
+                const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
                     fetch('http://localhost:3000/api/v1/freight-announcements', { headers }),
                     fetch('http://localhost:3000/api/v1/vehicles', { headers }),
                     fetch('http://localhost:3000/api/v1/drivers', { headers }),
+                    fetch('http://localhost:3000/api/v1/personal-drivers', { headers }),
+                    fetch('http://localhost:3000/api/v1/personal-vehicles', { headers }),
                 ]);
                 
                 console.log('📊 [TransportLive] API Response Status:', {
                     freight: faRes.status,
                     vehicles: vRes.status,
-                    drivers: dRes.status
+                    drivers: dRes.status,
+                    personalDrivers: pdRes.status,
+                    personalVehicles: pvRes.status
                 });
                 
                 if (!faRes.ok) throw new Error('خطا در دریافت اعلام بارها');
                 if (!vRes.ok) throw new Error('خطا در دریافت خودروها');
                 if (!dRes.ok) throw new Error('خطا در دریافت رانندگان');
+                if (!pdRes.ok) throw new Error('خطا در دریافت رانندگان شخصی');
+                if (!pvRes.ok) throw new Error('خطا در دریافت خودروهای شخصی');
                 
-                const [announcementsRaw, vehiclesData, driversData] = await Promise.all([
+                const [announcementsRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
                     faRes.json(),
                     vRes.json(),
-                    dRes.json()
+                    dRes.json(),
+                    pdRes.json(),
+                    pvRes.json()
                 ]);
                 
                 console.log('📋 [TransportLive] Raw Data Received:', {
                     announcements: announcementsRaw,
                     vehicles: vehiclesData,
-                    drivers: driversData
+                    drivers: driversData,
+                    personalDrivers: personalDriversData,
+                    personalVehicles: personalVehiclesData
                 });
                 
                 console.log('📈 [TransportLive] Data Summary:', {
                     announcementsCount: announcementsRaw?.length || 0,
                     vehiclesCount: vehiclesData?.length || 0,
                     driversCount: driversData?.length || 0,
+                    personalDriversCount: personalDriversData?.length || 0,
+                    personalVehiclesCount: personalVehiclesData?.length || 0,
                     announcementStatuses: announcementsRaw?.map((a: any) => a.status) || [],
                     vehicleTypes: vehiclesData?.map((v: any) => v.vehicleCategory) || []
                 });
@@ -115,6 +131,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 setAnnouncements(announcementsData);
                 setVehicles(vehiclesData);
                 setDrivers(driversData);
+                setPersonalDrivers(personalDriversData);
+                setPersonalVehicles(personalVehiclesData);
                 
                 console.log('✅ [TransportLive] Data successfully loaded and set in state');
             } catch (e: any) {
@@ -314,6 +332,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 announcements={announcements}
                 vehicles={vehicles}
                 drivers={drivers}
+                personalDrivers={personalDrivers}
+                personalVehicles={personalVehicles}
                 onUpdateAssignment={onUpdateAssignment}
                 onFinalize={onFinalize}
                 onTransferDestination={onTransferDestination}

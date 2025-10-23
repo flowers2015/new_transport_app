@@ -625,12 +625,213 @@ async function rejectAnnouncement(req, res) {
   }
 }
 
+// Helper function for personal driver and vehicle assignment
+async function assignPersonalDriverAndVehicle(req, res) {
+  const { id: announcementId } = req.params;
+  const { 
+    nationalId,
+    driverName,
+    driverContact,
+    driverSmartId,
+    vehicleType,
+    vehiclePlate,
+    truckSmartId,
+    destinations,
+    billOfLadingNumber
+  } = req.body;
+  const { userId, role, name, username } = req.user;
+  const userName = name || username || 'کاربر ترابری';
+
+  if (!nationalId || !driverName || !driverContact || !driverSmartId || !vehicleType || !vehiclePlate || !truckSmartId) {
+    return res.status(400).json({ 
+      message: 'کد ملی، نام راننده، شماره تماس، هوشمند راننده، نوع خودرو، پلاک خودرو و هوشمند کامیون الزامی است.' 
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Check if announcement exists
+    const { rows } = await client.query(
+      'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code FROM freight_announcements WHERE id = $1',
+      [announcementId]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    
+    const { 
+      assignment_type: assignmentType, 
+      assigned_driver_id: oldDriverId,
+      assigned_vehicle_id: oldVehicleId,
+      status: oldStatus,
+      announcement_code: code 
+    } = rows[0];
+    
+    // Check if this is personal assignment
+    if (assignmentType !== 'personal') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'این اعلام بار برای تخصیص شخصی نیست.' });
+    }
+    
+    // Parse plate number - more flexible regex for Persian letters
+    const plateMatch = vehiclePlate.match(/^(\d{2})([آ-یا-ی])(\d{3})-(\d{2})$/);
+    if (!plateMatch) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'فرمت پلاک خودرو صحیح نیست. فرمت صحیح: 12ع345-67' });
+    }
+    
+    const [, platePart1, plateLetter, platePart2, plateCityCode] = plateMatch;
+    
+    // Check if personal driver exists, if not create
+    let personalDriverId;
+    const existingDriver = await client.query(
+      'SELECT id FROM personal_drivers WHERE national_id = $1',
+      [nationalId]
+    );
+    
+    if (existingDriver.rows.length > 0) {
+      personalDriverId = existingDriver.rows[0].id;
+      // Update driver info
+      await client.query(
+        'UPDATE personal_drivers SET name = $1, mobile = $2, driver_smart_id = $3, updated_at = NOW() WHERE id = $4',
+        [driverName, driverContact, driverSmartId, personalDriverId]
+      );
+    } else {
+      // Create new personal driver
+      const crypto = require('crypto');
+      personalDriverId = crypto.randomUUID();
+      await client.query(
+        'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
+        [personalDriverId, nationalId, driverName, driverContact, driverSmartId]
+      );
+    }
+    
+    // Check if personal vehicle exists, if not create
+    let personalVehicleId;
+    const existingVehicle = await client.query(
+      'SELECT id FROM personal_vehicles WHERE truck_smart_id = $1',
+      [truckSmartId]
+    );
+    
+    if (existingVehicle.rows.length > 0) {
+      personalVehicleId = existingVehicle.rows[0].id;
+      // Update vehicle info
+      await client.query(
+        'UPDATE personal_vehicles SET vehicle_type = $1, plate_part1 = $2, plate_letter = $3, plate_part2 = $4, plate_city_code = $5, updated_at = NOW() WHERE id = $6',
+        [vehicleType, platePart1, plateLetter, platePart2, plateCityCode, personalVehicleId]
+      );
+    } else {
+      // Create new personal vehicle
+      const crypto = require('crypto');
+      personalVehicleId = crypto.randomUUID();
+      await client.query(
+        'INSERT INTO personal_vehicles (id, truck_smart_id, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_type) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [personalVehicleId, truckSmartId, platePart1, plateLetter, platePart2, plateCityCode, vehicleType]
+      );
+    }
+    
+    // Update destinations if provided
+    if (Array.isArray(destinations) && destinations.length > 0) {
+      await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [announcementId]);
+      
+      for (const dest of destinations) {
+        const destId = crypto.randomUUID();
+        await client.query(
+          'INSERT INTO freight_destinations (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+          [destId, announcementId, dest.city, dest.representativeName, dest.tonnage, dest.freightCost]
+        );
+      }
+    }
+    
+    // Update freight announcement
+    await client.query(
+      'UPDATE freight_announcements SET status = $1, assigned_driver_id = $2, assigned_vehicle_id = $3, bill_of_lading_number = $4, updated_at = NOW() WHERE id = $5',
+      ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, announcementId]
+    );
+    
+    // Log history
+    const destRows = await client.query(
+      'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 3',
+      [announcementId]
+    );
+    const destinationList = destRows.rows.map(d => d.city).join('، ');
+    const destinationLabel = destinationList || 'بدون مقصد';
+    
+    const isReassignment = oldDriverId || oldVehicleId;
+    const action = isReassignment ? 'REASSIGNED' : 'ASSIGNED';
+    const description = isReassignment 
+      ? `بار به مقصد ${destinationLabel} مجدداً تخصیص داده شد (راننده شخصی)`
+      : `بار به مقصد ${destinationLabel} به راننده و خودرو شخصی تخصیص یافت`;
+    
+    const fieldChanges = {};
+    if (oldDriverId !== personalDriverId) {
+      fieldChanges.assignedDriverId = { old: oldDriverId, new: personalDriverId };
+    }
+    if (oldVehicleId !== personalVehicleId) {
+      fieldChanges.assignedVehicleId = { old: oldVehicleId, new: personalVehicleId };
+    }
+    
+    await logFreightHistory({
+      announcementId,
+      userId,
+      userName,
+      action,
+      oldStatus,
+      newStatus: 'Assigned',
+      fieldChanges,
+      description,
+      ipAddress: req.ip,
+      client
+    });
+
+    await client.query('COMMIT');
+    res.json({ message: 'Assignment successful.' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error in personal assignment:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      announcementId,
+      nationalId,
+      driverName,
+      driverContact,
+      vehicleType,
+      vehiclePlate,
+      truckSmartId
+    });
+    res.status(500).json({ message: 'خطا در تخصیص راننده و خودرو شخصی', error: error.message });
+  } finally {
+    client.release();
+  }
+}
+
 // PUT /:id/assignment
 async function assignVehicleAndDriver(req, res) {
   const { id: announcementId } = req.params;
-  const { vehicleId, driverId } = req.body;
+  const { 
+    vehicleId, 
+    driverId, 
+    assignmentType,
+    // Personal driver/vehicle info
+    nationalId,
+    driverName,
+    driverContact,
+    vehicleType,
+    vehiclePlate,
+    truckSmartId,
+    destinations
+  } = req.body;
   const { userId, role, name, username } = req.user;
   const userName = name || username || 'کاربر ترابری';
+
+  // Check if this is personal assignment
+  if (assignmentType === 'personal') {
+    return await assignPersonalDriverAndVehicle(req, res);
+  }
 
   if (!vehicleId || !driverId) {
     return res.status(400).json({ message: 'Vehicle ID and Driver ID are required for assignment.' });

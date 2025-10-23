@@ -19,6 +19,8 @@ const fuelCardRoutes = require('./routes/fuelCardRoutes');
 const trafficFineRoutes = require('./routes/trafficFineRoutes');
 const vehiclePermitRoutes = require('./routes/vehiclePermitRoutes');
 const roleRoutes = require('./routes/roleRoutes');
+const personalDriverRoutes = require('./routes/personalDriverRoutes');
+const personalVehicleRoutes = require('./routes/personalVehicleRoutes');
 
 const app = express();
 
@@ -42,6 +44,8 @@ app.use('/api/v1/fuel-cards', fuelCardRoutes);
 app.use('/api/v1/traffic-fines', trafficFineRoutes);
 app.use('/api/v1/vehicle-permits', vehiclePermitRoutes);
 app.use('/api/v1/roles', roleRoutes);
+app.use('/api/v1/personal-drivers', personalDriverRoutes);
+app.use('/api/v1/personal-vehicles', personalVehicleRoutes);
 
 // Health check endpoint
 app.get('/', (req, res) => {
