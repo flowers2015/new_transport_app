@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import TransportLive from './TransportLive';
-import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle } from '../types';
+import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
@@ -11,21 +11,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
 
     const fetchData = async () => {
             setLoading(true);
             setError(null);
-            console.log('🚀 [TransportLive] Starting data fetch...');
+            // console.log('🚀 [TransportLive] Starting data fetch...');
             try {
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` } as any;
-                console.log('📡 [TransportLive] Fetching from APIs:', {
-                    freight: 'http://localhost:3000/api/v1/freight-announcements',
-                    vehicles: 'http://localhost:3000/api/v1/vehicles',
-                    drivers: 'http://localhost:3000/api/v1/drivers',
-                    personalDrivers: 'http://localhost:3000/api/v1/personal-drivers',
-                    personalVehicles: 'http://localhost:3000/api/v1/personal-vehicles'
-                });
+                // console.log('📡 [TransportLive] Fetching from APIs:', {
+                //     freight: 'http://localhost:3000/api/v1/freight-announcements',
+                //     vehicles: 'http://localhost:3000/api/v1/vehicles',
+                //     drivers: 'http://localhost:3000/api/v1/drivers',
+                //     personalDrivers: 'http://localhost:3000/api/v1/personal-drivers',
+                //     personalVehicles: 'http://localhost:3000/api/v1/personal-vehicles'
+                // });
                 
                 const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
                     fetch('http://localhost:3000/api/v1/freight-announcements', { headers }),
@@ -35,13 +36,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     fetch('http://localhost:3000/api/v1/personal-vehicles', { headers }),
                 ]);
                 
-                console.log('📊 [TransportLive] API Response Status:', {
-                    freight: faRes.status,
-                    vehicles: vRes.status,
-                    drivers: dRes.status,
-                    personalDrivers: pdRes.status,
-                    personalVehicles: pvRes.status
-                });
+                // console.log('📊 [TransportLive] API Response Status:', {
+                //     freight: faRes.status,
+                //     vehicles: vRes.status,
+                //     drivers: dRes.status,
+                //     personalDrivers: pdRes.status,
+                //     personalVehicles: pvRes.status
+                // });
                 
                 if (!faRes.ok) throw new Error('خطا در دریافت اعلام بارها');
                 if (!vRes.ok) throw new Error('خطا در دریافت خودروها');
@@ -57,23 +58,23 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     pvRes.json()
                 ]);
                 
-                console.log('📋 [TransportLive] Raw Data Received:', {
-                    announcements: announcementsRaw,
-                    vehicles: vehiclesData,
-                    drivers: driversData,
-                    personalDrivers: personalDriversData,
-                    personalVehicles: personalVehiclesData
-                });
+                // console.log('📋 [TransportLive] Raw Data Received:', {
+                //     announcements: announcementsRaw,
+                //     vehicles: vehiclesData,
+                //     drivers: driversData,
+                //     personalDrivers: personalDriversData,
+                //     personalVehicles: personalVehiclesData
+                // });
                 
-                console.log('📈 [TransportLive] Data Summary:', {
-                    announcementsCount: announcementsRaw?.length || 0,
-                    vehiclesCount: vehiclesData?.length || 0,
-                    driversCount: driversData?.length || 0,
-                    personalDriversCount: personalDriversData?.length || 0,
-                    personalVehiclesCount: personalVehiclesData?.length || 0,
-                    announcementStatuses: announcementsRaw?.map((a: any) => a.status) || [],
-                    vehicleTypes: vehiclesData?.map((v: any) => v.vehicleCategory) || []
-                });
+                // console.log('📈 [TransportLive] Data Summary:', {
+                //     announcementsCount: announcementsRaw?.length || 0,
+                //     vehiclesCount: vehiclesData?.length || 0,
+                //     driversCount: driversData?.length || 0,
+                //     personalDriversCount: personalDriversData?.length || 0,
+                //     personalVehiclesCount: personalVehiclesData?.length || 0,
+                //     announcementStatuses: announcementsRaw?.map((a: any) => a.status) || [],
+                //     vehicleTypes: vehiclesData?.map((v: any) => v.vehicleCategory) || []
+                // });
 
                 const statusMap: Record<string, FreightAnnouncementStatus> = {
                     Draft: FreightAnnouncementStatus.Draft,
@@ -125,7 +126,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 };
 
                 const announcementsData: FreightAnnouncement[] = Array.isArray(announcementsRaw) ? announcementsRaw.map(normalize) : [];
-                console.log('🧭 [TransportLive] Normalized Announcements:', announcementsData);
+                // console.log('🧭 [TransportLive] Normalized Announcements:', announcementsData);
 
                 setAnnouncements(announcementsData);
                 setVehicles(vehiclesData);
@@ -133,7 +134,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 setPersonalDrivers(personalDriversData);
                 setPersonalVehicles(personalVehiclesData);
                 
-                console.log('✅ [TransportLive] Data successfully loaded and set in state');
+                // console.log('✅ [TransportLive] Data successfully loaded and set in state');
             } catch (e: any) {
                 console.error('❌ [TransportLive] Error fetching data:', e);
                 setError(e.message);
@@ -147,11 +148,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     }, []);
 
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
-        console.log('🔄 [TransportLive] Assignment Update Request:', {
-            announcementId,
-            assignment,
-            timestamp: new Date().toISOString()
-        });
+        // console.log('🔄 [TransportLive] Assignment Update Request:', {
+        //     announcementId,
+        //     assignment,
+        //     timestamp: new Date().toISOString()
+        // });
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/assignment`, {
@@ -160,11 +161,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 body: JSON.stringify(assignment),
             });
             
-            console.log('📡 [TransportLive] Assignment API Response:', {
-                status: res.status,
-                statusText: res.statusText,
-                url: res.url
-            });
+            // console.log('📡 [TransportLive] Assignment API Response:', {
+            //     status: res.status,
+            //     statusText: res.statusText,
+            //     url: res.url
+            // });
             
             if (!res.ok) {
                 const errorData = await res.text();
@@ -173,9 +174,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
             
             const responseData = await res.json();
-            console.log('✅ [TransportLive] Assignment successful:', responseData);
+            // console.log('✅ [TransportLive] Assignment successful:', responseData);
             
             // Update the announcements state with the new assignment data
+            console.log('🔍 [TransportLiveContainer] Received assignment data:', assignment);
             setAnnouncements(prev => {
                 const updated = prev.map(ann => 
                     ann.id === announcementId 
@@ -184,23 +186,25 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             assignedDriverId: assignment.driverId,
                             assignedVehicleId: assignment.vehicleId,
                             billOfLadingNumber: assignment.billOfLadingNumber,
+                            totalFreightCost: assignment.totalFreightCost,
+                            destinations: assignment.destinations || ann.destinations,
                             status: 'Assigned' as any
                         }
                         : ann
                 );
-                console.log('🔄 [TransportLive] State updated:', {
-                    announcementId,
-                    updatedAnnouncement: updated.find(ann => ann.id === announcementId),
-                    timestamp: new Date().toISOString()
-                });
+                // console.log('🔄 [TransportLive] State updated:', {
+                //     announcementId,
+                //     updatedAnnouncement: updated.find(ann => ann.id === announcementId),
+                //     timestamp: new Date().toISOString()
+                // });
                 return updated;
             });
             
             alert('تخصیص با موفقیت ثبت شد');
             
-            // Refresh all data after successful assignment
-            console.log('🔄 [TransportLive] Refreshing all data after assignment...');
-            await fetchData();
+            // Refresh all data after successful assignment - REMOVED to prevent double refresh
+            // console.log('🔄 [TransportLive] Refreshing all data after assignment...');
+            // await fetchData(); // Removed to prevent double refresh
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             alert((e as any).message); 
@@ -218,13 +222,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onTransferDestination = async (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => {
-        console.log('🔄 [TransportLive] Destination Transfer Request:', {
-            sourceAnnouncementId,
-            destinationId,
-            targetAnnouncementId,
-            newPosition,
-            timestamp: new Date().toISOString()
-        });
+        // console.log('🔄 [TransportLive] Destination Transfer Request:', {
+        //     sourceAnnouncementId,
+        //     destinationId,
+        //     targetAnnouncementId,
+        //     newPosition,
+        //     timestamp: new Date().toISOString()
+        // });
         // Placeholder: no direct backend route; rely on future endpoint
         alert('انتقال مقصد ثبت شد.');
     };
@@ -323,13 +327,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
 
     // Debug logging
-    console.log('🔍 [TransportLiveContainer] Render data:', {
-        announcementsCount: announcements.length,
-        driversCount: drivers.length,
-        vehiclesCount: vehicles.length,
-        sampleDriver: drivers[0],
-        sampleVehicle: vehicles[0]
-    });
+    // console.log('🔍 [TransportLiveContainer] Render data:', {
+    //     announcementsCount: announcements.length,
+    //     driversCount: drivers.length,
+    //     vehiclesCount: vehicles.length,
+    //     sampleDriver: drivers[0],
+    //     sampleVehicle: vehicles[0]
+    // });
 
     return (
         <>
@@ -346,6 +350,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onCancel={onCancel}
                 onOpenHistory={onOpenHistory}
                 currentUser={currentUser}
+                activeLine={activeLine}
+                setActiveLine={setActiveLine}
             />
             {historyDialog && (
                 <FreightHistoryDialog

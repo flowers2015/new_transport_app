@@ -35,6 +35,8 @@ interface TransportLiveProps {
     onCancel: (announcementId: string) => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     currentUser: User;
+    activeLine: FreightLineType;
+    setActiveLine: (line: FreightLineType) => void;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
@@ -66,16 +68,15 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onOpenHistory, activeLine, setActiveLine } = props;
     
     // Debug logging for re-renders
-    console.log('🔄 [TransportLive] Component re-rendered with:', {
-        announcementsCount: announcements.length,
-        driversCount: drivers.length,
-        vehiclesCount: vehicles.length,
-        timestamp: new Date().toISOString()
-    });
-    const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
+    // console.log('🔄 [TransportLive] Component re-rendered with:', {
+    //     announcementsCount: announcements.length,
+    //     driversCount: drivers.length,
+    //     vehiclesCount: vehicles.length,
+    //     timestamp: new Date().toISOString()
+    // });
     const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [dateView, setDateView] = useState<'today' | 'all'>('today');
@@ -92,7 +93,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!driver) {
             driver = personalDrivers.find(d => d.id === id);
         }
-        console.log('🔍 [getDriverName] Looking for driver:', id, 'Found:', driver?.name);
+        // console.log('🔍 [getDriverName] Looking for driver:', id, 'Found:', driver?.name);
         return driver?.name || '-';
     };
     
@@ -104,7 +105,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!driver) {
             driver = personalDrivers.find(d => d.id === id);
         }
-        console.log('🔍 [getDriverContact] Looking for driver:', id, 'Found:', driver?.mobile);
+        // console.log('🔍 [getDriverContact] Looking for driver:', id, 'Found:', driver?.mobile);
         return driver?.mobile || '-';
     };
     
@@ -118,7 +119,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             if (personalV) {
                 // Format personal vehicle plate
                 const plate = `${personalV.platePart1}${personalV.plateLetter}${personalV.platePart2}-${personalV.plateCityCode}`;
-                console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found personal vehicle:', personalV.vehicleType, 'Plate:', plate);
+                // console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found personal vehicle:', personalV.vehicleType, 'Plate:', plate);
                 return plate;
             }
         }
@@ -126,7 +127,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!v) return 'نامشخص';
         
         const result = v.plateNumber ? formatPlateNumber(v.plateNumber) : v.serialNumber || 'نامشخص';
-        console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found vehicle:', v.model, 'Plate:', v.plateNumber, 'Serial:', v.serialNumber, 'Result:', result);
+        // console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found vehicle:', v.model, 'Plate:', v.plateNumber, 'Serial:', v.serialNumber, 'Result:', result);
         return result;
     };
 
@@ -134,14 +135,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const getPersonalDriverName = (driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
         if (!driverId) return '-';
         const driver = personalDrivers.find(d => d.id === driverId);
-        console.log('🔍 [getPersonalDriverName] Looking for driver:', driverId, 'Found:', driver?.name);
+        // console.log('🔍 [getPersonalDriverName] Looking for driver:', driverId, 'Found:', driver?.name);
         return driver?.name || '-';
     };
     
     const getPersonalDriverContact = (driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
         if (!driverId) return '-';
         const driver = personalDrivers.find(d => d.id === driverId);
-        console.log('🔍 [getPersonalDriverContact] Looking for driver:', driverId, 'Found:', driver?.mobile);
+        // console.log('🔍 [getPersonalDriverContact] Looking for driver:', driverId, 'Found:', driver?.mobile);
         return driver?.mobile || '-';
     };
     
@@ -151,7 +152,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!v) return 'نامشخص';
         
         const result = v.formattedPlate || 'نامشخص';
-        console.log('🔍 [getPersonalVehicleIdentifier] Looking for vehicle:', vehicleId, 'Found vehicle:', v.vehicleType, 'Plate:', v.formattedPlate, 'Result:', result);
+        // console.log('🔍 [getPersonalVehicleIdentifier] Looking for vehicle:', vehicleId, 'Found vehicle:', v.vehicleType, 'Plate:', v.formattedPlate, 'Result:', result);
         return result;
     };
     
@@ -175,7 +176,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 const result = ann.assignmentType === 'company' 
                     ? getDriverName(ann.assignedDriverId, drivers, props.personalDrivers)
                     : getPersonalDriverName(ann.assignedDriverId, props.personalDrivers);
-                console.log('🔍 [Render] Driver name for', ann.id, ':', result);
+                // console.log('🔍 [Render] Driver name for', ann.id, ':', result);
                 return result;
             }},
             { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => {
@@ -188,15 +189,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 const result = ann.assignmentType === 'company' 
                     ? getVehicleIdentifier(ann.assignedVehicleId, vehicles, props.personalVehicles)
                     : getPersonalVehicleIdentifier(ann.assignedVehicleId, props.personalVehicles);
-                console.log('🔍 [Render] Vehicle plate for', ann.id, ':', result);
+                // console.log('🔍 [Render] Vehicle plate for', ann.id, ':', result);
                 return <span className="font-mono whitespace-nowrap">{result}</span>;
             }},
             { header: 'شماره بارنامه', display: () => true, render: (ann: FreightAnnouncement) => {
                 const result = ann.billOfLadingNumber || '-';
-                console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
+                // console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
                 return result;
             }},
-            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => {
+                console.log('🔍 [TotalFreightCost] Rendering for announcement:', ann.id, 'totalFreightCost:', ann.totalFreightCost);
+                return <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span>;
+            }},
             
             // Full View Specific - Ice Cream
             { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
@@ -238,12 +242,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const canPerformActions = hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]);
 
     const liveAnnouncements = useMemo(() => {
-        console.log('🔍 [TransportLive] Filtering announcements:', {
-            total: announcements.length,
-            dateView,
-            currentUserRole: currentUser.role,
-            sampleAnnouncement: announcements[0]
-        });
+        // console.log('🔍 [TransportLive] Filtering announcements:', {
+        //     total: announcements.length,
+        //     dateView,
+        //     currentUserRole: currentUser.role,
+        //     sampleAnnouncement: announcements[0]
+        // });
         
         const filtered = announcements.filter(a => {
             // Temporarily disable date filtering to show all announcements
@@ -264,7 +268,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // Also check for English status values (for backward compatibility)
                 const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
                 const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
-                console.log('🔍 [TransportLive] Company user filter:', a.id, a.status, 'Allowed:', isAllowed);
+                // console.log('🔍 [TransportLive] Company user filter:', a.id, a.status, 'Allowed:', isAllowed);
                 return isAllowed;
             }
             if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
@@ -279,7 +283,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // Also check for English status values (for backward compatibility)
                 const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
                 const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
-                console.log('🔍 [TransportLive] Personal user filter:', a.id, a.status, 'Allowed:', isAllowed);
+                // console.log('🔍 [TransportLive] Personal user filter:', a.id, a.status, 'Allowed:', isAllowed);
                 return isAllowed;
             }
             if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
@@ -295,11 +299,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             ].includes(a.status);
         });
         
-        console.log('🔍 [TransportLive] Filtered result:', {
-            total: announcements.length,
-            filtered: filtered.length,
-            filteredIds: filtered.map(a => a.id)
-        });
+        // console.log('🔍 [TransportLive] Filtered result:', {
+        //     total: announcements.length,
+        //     filtered: filtered.length,
+        //     filteredIds: filtered.map(a => a.id)
+        // });
         
         return filtered.sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
     }, [announcements, currentUser, dateView]);
@@ -703,37 +707,30 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const handlePersonalDriverLookup = async () => {
         try {
             const token = localStorage.getItem('token');
-            console.log('🔍 [handlePersonalDriverLookup] Token:', token ? 'exists' : 'missing');
-            console.log('🔍 [handlePersonalDriverLookup] Searching for nationalId:', nationalId);
+            // console.log('🔍 [handlePersonalDriverLookup] Token:', token ? 'exists' : 'missing');
+            // console.log('🔍 [handlePersonalDriverLookup] Searching for nationalId:', nationalId);
             
             const response = await fetch(`http://localhost:3000/api/v1/personal-drivers/search?query=${nationalId}`, {
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             
-            console.log('🔍 [handlePersonalDriverLookup] Response status:', response.status);
+            // console.log('🔍 [handlePersonalDriverLookup] Response status:', response.status);
             
             if (response.ok) {
                 const drivers = await response.json();
-                console.log('🔍 [handlePersonalDriverLookup] Found drivers:', drivers);
+                // console.log('🔍 [handlePersonalDriverLookup] Found drivers:', drivers);
                 setSearchDriverResults(drivers);
                 
                 if (drivers.length === 0) {
-                    console.log('🔍 [handlePersonalDriverLookup] No drivers found');
+                    // console.log('🔍 [handlePersonalDriverLookup] No drivers found');
                     setFoundPersonalDriver('not_found');
                     setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
                     setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
                     setShowDriverDropdown(false);
                     alert('راننده با این کدملی یافت نشد. لطفاً اطلاعات راننده جدید را وارد نمایید.');
-                } else if (drivers.length === 1) {
-                    // اگر فقط یک نتیجه باشد، مستقیماً انتخاب کن
-                    const driver = drivers[0];
-                    console.log('🔍 [handlePersonalDriverLookup] Auto-selecting single driver:', driver);
-                    setFoundPersonalDriver(driver);
-                    setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile, driverSmartId: driver.driverSmartId || '' });
-                    setShowDriverDropdown(false);
                 } else {
-                    // اگر چندین نتیجه باشد، dropdown نمایش بده
-                    console.log('🔍 [handlePersonalDriverLookup] Multiple drivers found, showing dropdown');
+                    // همیشه dropdown نمایش بده تا کاربر انتخاب کند
+                    // console.log('🔍 [handlePersonalDriverLookup] Drivers found, showing dropdown');
                     setShowDriverDropdown(true);
                     setFoundPersonalDriver(null);
                 }
@@ -755,7 +752,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     };
 
     const handleDriverSelection = (driver: any) => {
-        console.log('🔍 [handleDriverSelection] Selected driver:', driver);
+        // console.log('🔍 [handleDriverSelection] Selected driver:', driver);
         setNationalId(driver.nationalId); // Update nationalId with the selected driver's actual national ID
         setFoundPersonalDriver(driver);
         setPersonalDriverDetails({ 
@@ -767,7 +764,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     };
 
     const handleVehicleSelection = (vehicle: any) => {
-        console.log('🔍 [handleVehicleSelection] Selected vehicle:', vehicle);
+        // console.log('🔍 [handleVehicleSelection] Selected vehicle:', vehicle);
         setPersonalVehicleDetails(prev => ({
             ...prev,
             truckSmartId: vehicle.truckSmartId,
@@ -781,22 +778,22 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const handlePersonalVehicleLookup = async () => {
         try {
             const token = localStorage.getItem('token');
-            console.log('🔍 [handlePersonalVehicleLookup] Token:', token ? 'exists' : 'missing');
-            console.log('🔍 [handlePersonalVehicleLookup] Searching for truckSmartId:', personalVehicleDetails.truckSmartId);
+            // console.log('🔍 [handlePersonalVehicleLookup] Token:', token ? 'exists' : 'missing');
+            // console.log('🔍 [handlePersonalVehicleLookup] Searching for truckSmartId:', personalVehicleDetails.truckSmartId);
             
             const response = await fetch(`http://localhost:3000/api/v1/personal-vehicles/search?query=${personalVehicleDetails.truckSmartId}`, {
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             
-            console.log('🔍 [handlePersonalVehicleLookup] Response status:', response.status);
+            // console.log('🔍 [handlePersonalVehicleLookup] Response status:', response.status);
             
             if (response.ok) {
                 const vehicles = await response.json();
-                console.log('🔍 [handlePersonalVehicleLookup] Found vehicles:', vehicles);
+                // console.log('🔍 [handlePersonalVehicleLookup] Found vehicles:', vehicles);
                 setSearchVehicleResults(vehicles);
                 
                 if (vehicles.length === 0) {
-                    console.log('🔍 [handlePersonalVehicleLookup] No vehicles found');
+                    // console.log('🔍 [handlePersonalVehicleLookup] No vehicles found');
                     setFoundPersonalVehicle('not_found');
                     setPersonalVehicleDetails(prev => ({ ...prev, type: '', plate: '' }));
                     setShowVehicleDropdown(false);
@@ -804,7 +801,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 } else if (vehicles.length === 1) {
                     // اگر فقط یک نتیجه باشد، مستقیماً انتخاب کن
                     const vehicle = vehicles[0];
-                    console.log('🔍 [handlePersonalVehicleLookup] Auto-selecting single vehicle:', vehicle);
+                    // console.log('🔍 [handlePersonalVehicleLookup] Auto-selecting single vehicle:', vehicle);
                     setFoundPersonalVehicle(vehicle);
                     setPersonalVehicleDetails(prev => ({
                         ...prev,
@@ -814,7 +811,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                     setShowVehicleDropdown(false);
                 } else {
                     // اگر چندین نتیجه باشد، dropdown نمایش بده
-                    console.log('🔍 [handlePersonalVehicleLookup] Multiple vehicles found, showing dropdown');
+                    // console.log('🔍 [handlePersonalVehicleLookup] Multiple vehicles found, showing dropdown');
                     setShowVehicleDropdown(true);
                     setFoundPersonalVehicle(null);
                 }
@@ -845,7 +842,14 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // Format plate number for backend (ensure Iranian format)
             const formattedPlate = personalVehicleDetails.plate.replace(/\s/g, '').toLowerCase();
             
+            console.log('🔍 [handleSave] totalPersonalCost:', totalPersonalCost);
+            console.log('🔍 [handleSave] destinations:', destinations);
+            console.log('🔍 [handleSave] foundPersonalDriver:', foundPersonalDriver);
+            console.log('🔍 [handleSave] foundPersonalVehicle:', foundPersonalVehicle);
+            
             onUpdateAssignment(announcement.id, {
+                driverId: foundPersonalDriver?.id,
+                vehicleId: foundPersonalVehicle?.id,
                 nationalId,
                 driverName: personalDriverDetails.name,
                 driverContact: personalDriverDetails.mobile,
@@ -854,6 +858,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 vehiclePlate: formattedPlate,
                 truckSmartId: personalVehicleDetails.truckSmartId,
                 destinations,
+                totalFreightCost: totalPersonalCost,
                 billOfLadingNumber: blNumber,
                 assignmentType: 'personal',
             });
@@ -928,7 +933,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 <div><label className="text-xs">هوشمند راننده*</label><input placeholder="DRV001" value={personalDriverDetails.driverSmartId || ''} onChange={e => setPersonalDriverDetails(s=>({...s, driverSmartId: e.target.value}))} className="input-style"/></div>
                             </div>
                             <div className="flex items-end gap-2 mt-3">
-                                <div className="flex-grow"><label className="text-xs">هوشمند کامیون*</label><input placeholder="TRK001" value={personalVehicleDetails.truckSmartId} onChange={e => {setPersonalVehicleDetails(s=>({...s, truckSmartId: e.target.value})); if(e.target.value !== personalVehicleDetails.truckSmartId) {setFoundPersonalVehicle(null); setShowVehicleDropdown(false);}}} className="input-style"/></div>
+                                <div className="flex-grow"><label className="text-xs">هوشمند کامیون*</label><input placeholder="TRK001" value={personalVehicleDetails.truckSmartId} onChange={e => setPersonalVehicleDetails(s=>({...s, truckSmartId: e.target.value}))} className="input-style"/></div>
                                 <button onClick={handlePersonalVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
                             
