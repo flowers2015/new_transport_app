@@ -627,6 +627,12 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [costMode, setCostMode] = useState<'manual' | 'auto'>('manual');
     const [autoTotalCost, setAutoTotalCost] = useState('');
     
+    // States for search results
+    const [searchDriverResults, setSearchDriverResults] = useState<any[]>([]);
+    const [searchVehicleResults, setSearchVehicleResults] = useState<any[]>([]);
+    const [showDriverDropdown, setShowDriverDropdown] = useState(false);
+    const [showVehicleDropdown, setShowVehicleDropdown] = useState(false);
+    
     // --- Common State ---
     const [blNumber, setBlNumber] = useState(announcement.billOfLadingNumber || '');
 
@@ -697,24 +703,33 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             if (response.ok) {
                 const drivers = await response.json();
                 console.log('🔍 [handlePersonalDriverLookup] Found drivers:', drivers);
-                if (drivers.length > 0) {
-                    const driver = drivers[0];
-                    console.log('🔍 [handlePersonalDriverLookup] Using driver:', driver);
-                    setFoundPersonalDriver(driver);
-                    setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile, driverSmartId: driver.driverSmartId || '' });
-                    // Don't clear vehicle details when driver is found
-                } else {
+                setSearchDriverResults(drivers);
+                
+                if (drivers.length === 0) {
                     console.log('🔍 [handlePersonalDriverLookup] No drivers found');
                     setFoundPersonalDriver('not_found');
                     setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
-                    // Only clear vehicle details when driver is not found
                     setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
+                    setShowDriverDropdown(false);
                     alert('راننده با این کدملی یافت نشد. لطفاً اطلاعات راننده جدید را وارد نمایید.');
+                } else if (drivers.length === 1) {
+                    // اگر فقط یک نتیجه باشد، مستقیماً انتخاب کن
+                    const driver = drivers[0];
+                    console.log('🔍 [handlePersonalDriverLookup] Auto-selecting single driver:', driver);
+                    setFoundPersonalDriver(driver);
+                    setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile, driverSmartId: driver.driverSmartId || '' });
+                    setShowDriverDropdown(false);
+                } else {
+                    // اگر چندین نتیجه باشد، dropdown نمایش بده
+                    console.log('🔍 [handlePersonalDriverLookup] Multiple drivers found, showing dropdown');
+                    setShowDriverDropdown(true);
+                    setFoundPersonalDriver(null);
                 }
             } else {
                 setFoundPersonalDriver('not_found');
                 setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
                 setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
+                setShowDriverDropdown(false);
                 alert('خطا در جستجوی راننده.');
             }
         } catch (error) {
@@ -722,8 +737,33 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             setFoundPersonalDriver('not_found');
             setPersonalDriverDetails({ name: '', mobile: '', driverSmartId: '' });
             setPersonalVehicleDetails({ type: '', plate: '', truckSmartId: '' });
+            setShowDriverDropdown(false);
             alert('خطا در جستجوی راننده.');
         }
+    };
+
+    const handleDriverSelection = (driver: any) => {
+        console.log('🔍 [handleDriverSelection] Selected driver:', driver);
+        setNationalId(driver.nationalId); // Update nationalId with the selected driver's actual national ID
+        setFoundPersonalDriver(driver);
+        setPersonalDriverDetails({ 
+            name: driver.name, 
+            mobile: driver.mobile, 
+            driverSmartId: driver.driverSmartId || '' 
+        });
+        setShowDriverDropdown(false);
+    };
+
+    const handleVehicleSelection = (vehicle: any) => {
+        console.log('🔍 [handleVehicleSelection] Selected vehicle:', vehicle);
+        setPersonalVehicleDetails(prev => ({
+            ...prev,
+            truckSmartId: vehicle.truckSmartId,
+            type: vehicle.vehicleType,
+            plate: `${vehicle.platePart1}${vehicle.plateLetter}${vehicle.platePart2}-${vehicle.plateCityCode}`
+        }));
+        setFoundPersonalVehicle(vehicle);
+        setShowVehicleDropdown(false);
     };
 
     const handlePersonalVehicleLookup = async () => {
@@ -741,20 +781,30 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             if (response.ok) {
                 const vehicles = await response.json();
                 console.log('🔍 [handlePersonalVehicleLookup] Found vehicles:', vehicles);
-                if (vehicles.length > 0) {
+                setSearchVehicleResults(vehicles);
+                
+                if (vehicles.length === 0) {
+                    console.log('🔍 [handlePersonalVehicleLookup] No vehicles found');
+                    setFoundPersonalVehicle('not_found');
+                    setPersonalVehicleDetails(prev => ({ ...prev, type: '', plate: '' }));
+                    setShowVehicleDropdown(false);
+                    alert('خودرو با این هوشمند کامیون یافت نشد. لطفاً اطلاعات خودرو جدید را وارد نمایید.');
+                } else if (vehicles.length === 1) {
+                    // اگر فقط یک نتیجه باشد، مستقیماً انتخاب کن
                     const vehicle = vehicles[0];
-                    console.log('🔍 [handlePersonalVehicleLookup] Using vehicle:', vehicle);
+                    console.log('🔍 [handlePersonalVehicleLookup] Auto-selecting single vehicle:', vehicle);
                     setFoundPersonalVehicle(vehicle);
                     setPersonalVehicleDetails(prev => ({
                         ...prev,
                         type: vehicle.vehicleType,
                         plate: `${vehicle.platePart1}${vehicle.plateLetter}${vehicle.platePart2}-${vehicle.plateCityCode}`
                     }));
+                    setShowVehicleDropdown(false);
                 } else {
-                    console.log('🔍 [handlePersonalVehicleLookup] No vehicles found');
-                    setFoundPersonalVehicle('not_found');
-                    setPersonalVehicleDetails(prev => ({ ...prev, type: '', plate: '' }));
-                    alert('خودرو با این هوشمند کامیون یافت نشد. لطفاً اطلاعات خودرو جدید را وارد نمایید.');
+                    // اگر چندین نتیجه باشد، dropdown نمایش بده
+                    console.log('🔍 [handlePersonalVehicleLookup] Multiple vehicles found, showing dropdown');
+                    setShowVehicleDropdown(true);
+                    setFoundPersonalVehicle(null);
                 }
             } else {
                 setFoundPersonalVehicle('not_found');
@@ -834,20 +884,64 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
                              <legend className="font-semibold px-1 text-sm">۱. اطلاعات راننده و خودرو</legend>
                              <div className="flex items-end gap-2">
-                                <div className="flex-grow"><label className="text-xs">کد ملی راننده*</label><input placeholder="کدملی..." value={nationalId} onChange={e => {setNationalId(e.target.value); if(e.target.value !== nationalId) setFoundPersonalDriver(null);}} className="input-style"/></div>
+                                <div className="flex-grow"><label className="text-xs">کد ملی راننده*</label><input placeholder="کدملی..." value={nationalId} onChange={e => {setNationalId(e.target.value); if(e.target.value !== nationalId) {setFoundPersonalDriver(null); setShowDriverDropdown(false);}}} className="input-style"/></div>
                                 <button onClick={handlePersonalDriverLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
-                            {foundPersonalDriver && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalDriver === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalDriver === 'not_found' ? 'راننده جدید. اطلاعات را وارد کنید.' : 'راننده یافت شد.'}</div>}
+                            
+                            {/* Dropdown for multiple driver results */}
+                            {showDriverDropdown && searchDriverResults.length > 0 && (
+                                <div className="mt-2 p-3 border rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto">
+                                    <div className="text-sm font-medium text-gray-700 mb-2">
+                                        {searchDriverResults.length} راننده یافت شد. یکی را انتخاب کنید:
+                                    </div>
+                                    {searchDriverResults.map((driver, index) => (
+                                        <div 
+                                            key={driver.id}
+                                            onClick={() => handleDriverSelection(driver)}
+                                            className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                        >
+                                            <div className="font-medium text-gray-900">{driver.name}</div>
+                                            <div className="text-sm text-gray-600">
+                                                کد ملی: {driver.nationalId} | تماس: {driver.mobile} | هوشمند: {driver.driverSmartId}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {foundPersonalDriver && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalDriver === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalDriver === 'not_found' ? 'راننده جدید. اطلاعات را وارد کنید.' : 'راننده یافت شد. می‌توانید اطلاعات را ویرایش کنید.'}</div>}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                                <div><label className="text-xs">نام و نام خانوادگی*</label><input value={personalDriverDetails.name || ''} onChange={e => setPersonalDriverDetails(s=>({...s, name: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
-                                <div><label className="text-xs">شماره تماس*</label><input value={personalDriverDetails.mobile || ''} onChange={e => setPersonalDriverDetails(s=>({...s, mobile: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
-                                <div><label className="text-xs">هوشمند راننده*</label><input placeholder="DRV001" value={personalDriverDetails.driverSmartId || ''} onChange={e => setPersonalDriverDetails(s=>({...s, driverSmartId: e.target.value}))} className="input-style" disabled={foundPersonalDriver !== 'not_found' && !!foundPersonalDriver}/></div>
+                                <div><label className="text-xs">نام و نام خانوادگی*</label><input value={personalDriverDetails.name || ''} onChange={e => setPersonalDriverDetails(s=>({...s, name: e.target.value}))} className="input-style"/></div>
+                                <div><label className="text-xs">شماره تماس*</label><input value={personalDriverDetails.mobile || ''} onChange={e => setPersonalDriverDetails(s=>({...s, mobile: e.target.value}))} className="input-style"/></div>
+                                <div><label className="text-xs">هوشمند راننده*</label><input placeholder="DRV001" value={personalDriverDetails.driverSmartId || ''} onChange={e => setPersonalDriverDetails(s=>({...s, driverSmartId: e.target.value}))} className="input-style"/></div>
                             </div>
                             <div className="flex items-end gap-2 mt-3">
-                                <div className="flex-grow"><label className="text-xs">هوشمند کامیون*</label><input placeholder="TRK001" value={personalVehicleDetails.truckSmartId} onChange={e => {setPersonalVehicleDetails(s=>({...s, truckSmartId: e.target.value})); if(e.target.value !== personalVehicleDetails.truckSmartId) setFoundPersonalVehicle(null);}} className="input-style"/></div>
+                                <div className="flex-grow"><label className="text-xs">هوشمند کامیون*</label><input placeholder="TRK001" value={personalVehicleDetails.truckSmartId} onChange={e => {setPersonalVehicleDetails(s=>({...s, truckSmartId: e.target.value})); if(e.target.value !== personalVehicleDetails.truckSmartId) {setFoundPersonalVehicle(null); setShowVehicleDropdown(false);}}} className="input-style"/></div>
                                 <button onClick={handlePersonalVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
-                            {foundPersonalVehicle && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalVehicle === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalVehicle === 'not_found' ? 'خودرو جدید. اطلاعات را وارد کنید.' : 'خودرو یافت شد.'}</div>}
+                            
+                            {/* Dropdown for multiple vehicle results */}
+                            {showVehicleDropdown && searchVehicleResults.length > 0 && (
+                                <div className="mt-2 p-3 border rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto">
+                                    <div className="text-sm font-medium text-gray-700 mb-2">
+                                        {searchVehicleResults.length} خودرو یافت شد. یکی را انتخاب کنید:
+                                    </div>
+                                    {searchVehicleResults.map((vehicle, index) => (
+                                        <div 
+                                            key={vehicle.id}
+                                            onClick={() => handleVehicleSelection(vehicle)}
+                                            className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                        >
+                                            <div className="font-medium text-gray-900">{vehicle.vehicleType}</div>
+                                            <div className="text-sm text-gray-600">
+                                                هوشمند: {vehicle.truckSmartId} | پلاک: {vehicle.platePart1} {vehicle.plateLetter} {vehicle.platePart2} - {vehicle.plateCityCode}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {foundPersonalVehicle && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalVehicle === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalVehicle === 'not_found' ? 'خودرو جدید. اطلاعات را وارد کنید.' : 'خودرو یافت شد. می‌توانید اطلاعات را ویرایش کنید.'}</div>}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                                 <div><label className="text-xs">نوع خودرو*</label><input value={personalVehicleDetails.type} onChange={e => setPersonalVehicleDetails(s=>({...s, type: e.target.value}))} className="input-style"/></div>
                                 <div><label className="text-xs">شماره پلاک*</label><input placeholder="12ع345-67" value={personalVehicleDetails.plate} onChange={e => setPersonalVehicleDetails(s=>({...s, plate: e.target.value}))} className="input-style"/></div>

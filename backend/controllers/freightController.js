@@ -694,19 +694,64 @@ async function assignPersonalDriverAndVehicle(req, res) {
     
     if (existingDriver.rows.length > 0) {
       personalDriverId = existingDriver.rows[0].id;
-      // Update driver info
-      await client.query(
-        'UPDATE personal_drivers SET name = $1, mobile = $2, driver_smart_id = $3, updated_at = NOW() WHERE id = $4',
-        [driverName, driverContact, driverSmartId, personalDriverId]
-      );
+      // Update driver info (only if driver_smart_id is different and not already used by another driver)
+      if (driverSmartId) {
+        const existingSmartId = await client.query(
+          'SELECT id FROM personal_drivers WHERE driver_smart_id = $1 AND id != $2',
+          [driverSmartId, personalDriverId]
+        );
+        
+        if (existingSmartId.rows.length === 0) {
+          await client.query(
+            'UPDATE personal_drivers SET name = $1, mobile = $2, driver_smart_id = $3, updated_at = NOW() WHERE id = $4',
+            [driverName, driverContact, driverSmartId, personalDriverId]
+          );
+        } else {
+          // Keep existing driver_smart_id if new one is already used
+          await client.query(
+            'UPDATE personal_drivers SET name = $1, mobile = $2, updated_at = NOW() WHERE id = $3',
+            [driverName, driverContact, personalDriverId]
+          );
+        }
+      } else {
+        await client.query(
+          'UPDATE personal_drivers SET name = $1, mobile = $2, updated_at = NOW() WHERE id = $3',
+          [driverName, driverContact, personalDriverId]
+        );
+      }
     } else {
       // Create new personal driver
       const crypto = require('crypto');
       personalDriverId = crypto.randomUUID();
-      await client.query(
-        'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
-        [personalDriverId, nationalId, driverName, driverContact, driverSmartId]
-      );
+      
+      // Check if driver_smart_id is already used
+      if (driverSmartId) {
+        const existingSmartId = await client.query(
+          'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
+          [driverSmartId]
+        );
+        
+        if (existingSmartId.rows.length > 0) {
+          // Generate a new unique driver_smart_id
+          const newSmartId = `DRV-${Date.now()}`;
+          await client.query(
+            'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
+            [personalDriverId, nationalId, driverName, driverContact, newSmartId]
+          );
+        } else {
+          await client.query(
+            'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
+            [personalDriverId, nationalId, driverName, driverContact, driverSmartId]
+          );
+        }
+      } else {
+        // Generate a new unique driver_smart_id if none provided
+        const newSmartId = `DRV-${Date.now()}`;
+        await client.query(
+          'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
+          [personalDriverId, nationalId, driverName, driverContact, newSmartId]
+        );
+      }
     }
     
     // Check if personal vehicle exists, if not create
