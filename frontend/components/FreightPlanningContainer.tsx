@@ -67,7 +67,15 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 history: a.history || [],
             });
             const normalized: FreightAnnouncement[] = Array.isArray(raw) ? raw.map(normalize) : [];
-            console.log('🧭 [FreightPlanning] Normalized announcements sample:', normalized[0]);
+            console.log('🧭 [FreightPlanning] Normalized announcements:', {
+                total: normalized.length,
+                byStatus: normalized.reduce((acc, ann) => {
+                    const status = ann.status || 'unknown';
+                    acc[status] = (acc[status] || 0) + 1;
+                    return acc;
+                }, {} as Record<string, number>),
+                leftoverCount: normalized.filter(a => a.status === FreightAnnouncementStatus.Leftover || a.status === 'Leftover' || a.status === 'بار مانده').length
+            });
             setAnnouncements(normalized);
         } catch (err) {
             console.error('[FreightPlanning] Failed to load announcements', err);
@@ -225,6 +233,89 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
+    const handleReAnnounce = async (id: string) => {
+        try {
+            console.log('🔄 [FreightPlanning] Re-announce request:', id);
+            // پیدا کردن اعلام بار
+            const announcement = announcements.find(a => a.id === id);
+            if (!announcement) {
+                alert('اعلام بار یافت نشد');
+                return;
+            }
+
+            // اعلام مجدد: باید اول به مدیر برنامه‌ریزی برود برای تایید مجدد
+            // سپس مدیر می‌تواند تایید کند و بعد بر اساس lineType به ترابری مناسب ارسال شود
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({
+                    status: 'PendingManagerApproval',
+                    // ارسال فیلدهای موجود برای جلوگیری از تغییرات ناخواسته
+                    loadingDate: announcement.loadingDate,
+                    lineType: announcement.lineType,
+                    cargoValue: announcement.cargoValue,
+                    vehicleType: announcement.vehicleType,
+                    notes: announcement.notes,
+                    originCity: announcement.originCity,
+                    brand: announcement.brand,
+                    representativeType: announcement.representativeType,
+                    representativeName: announcement.representativeName,
+                    cartonCount: announcement.cartonCount,
+                    priority: announcement.priority,
+                    products: announcement.products,
+                    platformArrivalTime: (announcement as any).platformArrivalTime,
+                    destinations: announcement.destinations,
+                }),
+            });
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(errorText || 'خطا در اعلام مجدد');
+            }
+            await fetchAnnouncements();
+            alert('اعلام بار با موفقیت برای تایید مجدد مدیر ارسال شد');
+        } catch (e: any) {
+            console.error('❌ [FreightPlanning] Re-announce failed:', e);
+            alert(e.message || 'اعلام مجدد ناموفق بود');
+        }
+    };
+
+    const handleSendForApproval = async (announcement: FreightAnnouncement) => {
+        try {
+            console.log('📤 [FreightPlanning] Send for approval:', announcement.id);
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcement.id}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({
+                    status: 'PendingManagerApproval',
+                    // ارسال فیلدهای موجود برای جلوگیری از تغییرات ناخواسته
+                    loadingDate: announcement.loadingDate,
+                    lineType: announcement.lineType,
+                    cargoValue: announcement.cargoValue,
+                    vehicleType: announcement.vehicleType,
+                    notes: announcement.notes,
+                    originCity: announcement.originCity,
+                    brand: announcement.brand,
+                    representativeType: announcement.representativeType,
+                    representativeName: announcement.representativeName,
+                    cartonCount: announcement.cartonCount,
+                    priority: announcement.priority,
+                    products: announcement.products,
+                    platformArrivalTime: (announcement as any).platformArrivalTime,
+                    destinations: announcement.destinations,
+                }),
+            });
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(errorText || 'خطا در ارجاع');
+            }
+            await fetchAnnouncements();
+            alert('اعلام بار با موفقیت برای تایید ارسال شد');
+        } catch (e: any) {
+            console.error('❌ [FreightPlanning] Send for approval failed:', e);
+            alert(e.message || 'ارجاع ناموفق بود');
+        }
+    };
+
     return (
         <div>
             {loading && <div className="mb-2 text-sm text-slate-500">در حال بارگذاری...</div>}
@@ -235,7 +326,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 onApprove={handleApprove}
                 onReject={handleReject as any}
                 onDelete={handleDelete as any}
-                onReAnnounce={() => {}}
+                onReAnnounce={handleReAnnounce}
+                onSendForApproval={handleSendForApproval}
                 currentUser={currentUser}
                 onSwitchQueue={handleSwitchQueue as any}
             />

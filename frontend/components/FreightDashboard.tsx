@@ -30,6 +30,7 @@ interface FreightDashboardProps {
     currentUser: User;
     onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
+    onSendForApproval?: (announcement: FreightAnnouncement) => void;
 }
 
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
@@ -55,11 +56,12 @@ const columnsConfig = (props: {
     onReject: (id: string) => void, 
     onEdit: (ann: FreightAnnouncement) => void, 
     onSendForApproval: (ann: FreightAnnouncement) => void, 
-    onDelete: (id: string) => void, 
+    onDelete: (id: string) => void,
+    onReAnnounce: (announcementId: string) => void,
     onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void,
     onOpenHistory?: (announcementId: string, announcementCode: string) => void
 }) => {
-    const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete } = props;
+    const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete, onReAnnounce } = props;
     
     return [
         // --- Ice Cream (بستنی) desired order in both compact/full ---
@@ -136,8 +138,12 @@ const columnsConfig = (props: {
                 FreightAnnouncementStatus.Assigned,
                 FreightAnnouncementStatus.InTransit,
                 FreightAnnouncementStatus.Finalized,
-                FreightAnnouncementStatus.Rejected
+                FreightAnnouncementStatus.Rejected,
+                FreightAnnouncementStatus.Leftover
             ].includes(ann.status);
+            
+            // بررسی اینکه آیا Leftover است
+            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || ann.status === 'Leftover';
             
             // تایید/رد مدیر
             if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
@@ -165,7 +171,28 @@ const columnsConfig = (props: {
                 );
             }
             
-            // ویرایش/حذف (کارمند و مدیر برنامه‌ریزی)
+            // برای Leftover: اعلام مجدد، ویرایش، حذف، تاریخچه
+            if (isLeftover && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === UserRole.PlanningManager)) {
+                return (
+                    <div className="flex justify-center gap-1">
+                        <button onClick={() => onReAnnounce && onReAnnounce(ann.id)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">اعلام مجدد</button>
+                        <button onClick={() => onEdit(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
+                        <button type="button" onClick={() => { try { console.log('🗑️ [FreightDashboard] Delete click:', ann.id); } catch {} try { onDelete && onDelete(ann.id); } catch (e) { console.error('❌ [FreightDashboard] Delete failed:', e); } }} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
+                        {props.onOpenHistory && (
+                            <button 
+                                onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
+                                className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                                title="مشاهده تاریخچه تغییرات"
+                            >
+                                <HistoryIcon className="w-4 h-4" />
+                                <span>تاریخچه</span>
+                            </button>
+                        )}
+                    </div>
+                );
+            }
+            
+            // ویرایش/حذف (کارمند و مدیر برنامه‌ریزی) - فقط برای Draft و Rejected
             if ((currentUser.role === UserRole.PlanningEmployee || currentUser.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
                  return (
                     <div className="flex justify-center gap-1">
@@ -198,14 +225,14 @@ const columnsConfig = (props: {
 };
 
 const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
-    const { announcements, onAddAnnouncement, onUpdateAnnouncement, onApprove, onReject, onDelete, onReAnnounce, currentUser } = props;
+    const { announcements, onAddAnnouncement, onUpdateAnnouncement, onApprove, onReject, onDelete, onReAnnounce, currentUser, onSendForApproval } = props;
     
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelData, setPanelData] = useState<FreightAnnouncement | null>(null); // null for new, object for edit
 
     const [rejectInfo, setRejectInfo] = useState<{ id: string; reason: string } | null>(null);
     
-    const [activeTab, setActiveTab] = useState<FreightLineType | 'leftover'>(FreightLineType.IceCream);
+    const [activeTab, setActiveTab] = useState<FreightLineType>(FreightLineType.IceCream);
     const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
     const [filter, setFilter] = useState('');
     const [columnFilters, setColumnFilters] = useState<{ [key: string]: string }>({});
@@ -248,7 +275,13 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     };
     
     const handleSendForApproval = (ann: FreightAnnouncement) => {
-        onUpdateAnnouncement({ ...ann, status: FreightAnnouncementStatus.PendingManagerApproval });
+        // اگر onSendForApproval از props ارسال شده، از آن استفاده می‌کنیم
+        if (onSendForApproval) {
+            onSendForApproval(ann);
+        } else {
+            // fallback به onUpdateAnnouncement
+            onUpdateAnnouncement({ ...ann, status: FreightAnnouncementStatus.PendingManagerApproval });
+        }
     };
 
     const hasAccess = (allowedRoles: UserRole[]): boolean => {
@@ -263,46 +296,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         setColumnFilters(prev => ({ ...prev, [header]: value }));
     };
 
-    const leftoverAnnouncements = useMemo(() => {
-        // بارهای مانده: اعلام بارهایی که وضعیت Leftover دارند (از اتمام تخصیص برگشت داده شده)
-        const leftover = announcements.filter(ann => {
-            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || ann.status === 'Leftover';
-            if (isLeftover) {
-                console.log('🔍 [FreightDashboard] Found leftover:', {
-                    id: ann.id,
-                    status: ann.status,
-                    lineType: ann.lineType,
-                    announcementCode: ann.announcementCode
-                });
-            }
-            return isLeftover;
-        });
-        console.log(`📊 [FreightDashboard] Total leftover announcements: ${leftover.length} out of ${announcements.length}`);
-        return leftover;
-    }, [announcements]);
-
-    const leftoverColumns = useMemo(() => [
-        { header: 'لاین', render: (ann: FreightAnnouncement) => ann.lineType },
-        { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => formatJalali(ann.loadingDate) },
-        { header: 'مقاصد', render: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join(', ') },
-        { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-        { header: 'عملیات', render: (ann: FreightAnnouncement) => (
-            <div className="flex justify-center gap-1">
-                <button onClick={() => onReAnnounce(ann.id)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">اعلام مجدد</button>
-                <button onClick={() => onDelete(ann.id)} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
-                {props.onOpenHistory && (
-                    <button 
-                        onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
-                        className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
-                        title="مشاهده تاریخچه تغییرات"
-                    >
-                        <HistoryIcon className="w-4 h-4" />
-                        <span>تاریخچه</span>
-                    </button>
-                )}
-            </div>
-        )}
-    ], [onReAnnounce, onDelete, props.onOpenHistory]);
+    // حذف leftoverColumns - دیگر نیازی نیست چون در هر تب لاین نمایش داده می‌شوند
 
     const allColumns = useMemo(() => {
         const cols = columnsConfig({ 
@@ -312,14 +306,14 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             onEdit: handleOpenEditPanel, 
             onSendForApproval: handleSendForApproval, 
             onDelete: onDelete,
+            onReAnnounce: onReAnnounce,
             onOpenHistory: handleOpenHistory 
         });
         try { console.log('[DBG][FreightDashboard] allColumns headers:', cols.map((c:any)=>c.header)); } catch {}
         return cols;
-    }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete]);
+    }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete, onReAnnounce]);
 
     const visibleColumns = useMemo(() => {
-        if (activeTab === 'leftover') return leftoverColumns;
         // Enforce exact order for Dairy compact
         if (viewMode === 'compact' && activeTab === FreightLineType.Dairy) {
             const dairyCompactCols: any[] = [
@@ -428,19 +422,27 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         });
         try { console.log('[DBG][FreightDashboard] visibleColumns:', { viewMode, activeTab, headers: uniqueCols.map((c:any)=>c.header) }); } catch {}
         return uniqueCols;
-    }, [viewMode, activeTab, allColumns, leftoverColumns]);
+    }, [viewMode, activeTab, allColumns]);
 
     const filteredAnnouncements = useMemo(() => {
         let data = announcements;
 
-        if (isManager && managerView === 'approval') {
-            data = data.filter(a => a.status === FreightAnnouncementStatus.PendingManagerApproval);
-        }
+        // فیلتر بر اساس لاین فعلی
+        data = data.filter(a => a.lineType === activeTab);
         
-        if (activeTab === 'leftover') {
-            data = leftoverAnnouncements;
+        if (isManager && managerView === 'approval') {
+            // مدیر در حالت "در انتظار تایید": فقط PendingManagerApproval
+            data = data.filter(a => a.status === FreightAnnouncementStatus.PendingManagerApproval);
+        } else if (isManager && managerView === 'all') {
+            // مدیر در حالت "همه": همه وضعیت‌ها جز Finalized (Finalized در تاریخچه است)
+            data = data.filter(a => a.status !== FreightAnnouncementStatus.Finalized && a.status !== 'Finalized');
         } else {
-            data = data.filter(a => a.lineType === activeTab);
+            // برای planner: همه وضعیت‌ها نمایش داده می‌شوند جز Finalized
+            // planner باید بتواند روند اعلام بار را رصد کند تا زمانی که Finalized شود
+            data = data.filter(a => {
+                const isFinalized = a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized' || a.status === 'تکمیل شده';
+                return !isFinalized;
+            });
         }
 
         if (filter) {
@@ -451,40 +453,35 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             );
         }
 
-        if (activeTab !== 'leftover') {
-            data = data.filter(ann => {
-                return Object.entries(columnFilters).every(([header, filterValue]) => {
-                    if (!filterValue) return true;
-                    
-                    const column = allColumns.find(c => c.header === header);
-                    if (!column || !('accessor' in column) || !column.accessor) return true;
+        data = data.filter(ann => {
+            return Object.entries(columnFilters).every(([header, filterValue]) => {
+                if (!filterValue) return true;
+                
+                const column = allColumns.find(c => c.header === header);
+                if (!column || !('accessor' in column) || !column.accessor) return true;
 
-                    let cellValue: any;
-                    if (typeof column.accessor === 'function') {
-                        cellValue = column.accessor(ann);
-                    } else if (typeof column.accessor === 'string') {
-                        cellValue = ann[column.accessor as keyof FreightAnnouncement];
-                    }
-                    
-                    // FIX: Explicitly convert cellValue to a string to prevent 'toLowerCase' on a non-string type.
-                    const valueAsString: string = String(cellValue ?? '');
-                    const filterString: string = String(filterValue ?? '');
-                    return valueAsString.toLowerCase().includes(filterString.toLowerCase());
-                });
+                let cellValue: any;
+                if (typeof column.accessor === 'function') {
+                    cellValue = column.accessor(ann);
+                } else if (typeof column.accessor === 'string') {
+                    cellValue = ann[column.accessor as keyof FreightAnnouncement];
+                }
+                
+                // FIX: Explicitly convert cellValue to a string to prevent 'toLowerCase' on a non-string type.
+                const valueAsString: string = String(cellValue ?? '');
+                const filterString: string = String(filterValue ?? '');
+                return valueAsString.toLowerCase().includes(filterString.toLowerCase());
             });
-        }
+        });
 
         return data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, leftoverAnnouncements]);
+    }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns]);
 
     const handlePrint = () => {
         window.print();
     };
 
     const getExportValue = (ann: FreightAnnouncement, col: any, idx: number) => {
-        if (activeTab === 'leftover') {
-            return col.render(ann, idx);
-        }
         if (!col.accessor) return '';
 
         let value;
@@ -558,18 +555,6 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                             {Object.values(FreightLineType).map(lt => (
                                 <button key={lt} onClick={() => setActiveTab(lt as any)} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === lt ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>{lt}</button>
                             ))}
-                            {(hasAccess([UserRole.PlanningEmployee, UserRole.PlanningManager])) && (
-                                <button onClick={() => setActiveTab('leftover')} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === 'leftover' ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>
-                                    <span className="relative px-2">
-                                        بارهای مانده
-                                        {leftoverAnnouncements.length > 0 && (
-                                            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
-                                                {leftoverAnnouncements.length}
-                                            </span>
-                                        )}
-                                    </span>
-                                </button>
-                            )}
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -601,7 +586,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                             {visibleColumns.map(col => <th key={col.header} className="p-2 text-center" style={{ width: col.width }}>{col.header}</th>)}
                                         </tr>
                                     )}
-                                    {activeTab !== 'leftover' && <tr className="print:hidden">
+                                    <tr className="print:hidden">
                                         {visibleColumns.map((col) => (
                                             <th key={`${col.header}-filter`} className="p-1 font-normal">
                                                 {'accessor' in col && col.accessor ? (
@@ -615,8 +600,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                 ) : null}
                                             </th>
                                         ))}
-                                        {isFullDairyAmbient && [...Array(21)].map((_, i) => <th key={`ph-${i}`}></th>) /* Placeholders for filter row */}
-                                    </tr>}
+                                        {isFullDairyAmbient && [...Array(21)].map((_, i) => <th key={`ph-${i}`}></th>)}
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     {filteredAnnouncements.map((ann, idx) => (
