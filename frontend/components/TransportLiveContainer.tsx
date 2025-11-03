@@ -215,10 +215,58 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         console.log('🏁 [TransportLive] Finalize Request:', {
             announcementIds,
             count: announcementIds.length,
+            activeLine,
             timestamp: new Date().toISOString()
         });
-        // Placeholder: backend finalize route not defined in repo; keep UI responsive
-        alert(`نهایی‌سازی ${announcementIds.length} مورد`);
+        
+        if (announcementIds.length === 0) {
+            alert('هیچ اعلام باری انتخاب نشده است');
+            return;
+        }
+        
+        // تبدیل activeLine به فرمت backend (مثلاً 'IceCream' یا 'بستنی')
+        let lineTypeForBackend = '';
+        if (activeLine === FreightLineType.IceCream || activeLine === 'بستنی') {
+            lineTypeForBackend = 'IceCream';
+        } else if (activeLine === FreightLineType.Dairy || activeLine === 'پاستوریزه') {
+            lineTypeForBackend = 'Dairy';
+        } else if (activeLine === FreightLineType.Ambient || activeLine === 'لبنیات-فروتلند') {
+            lineTypeForBackend = 'Ambient';
+        } else {
+            lineTypeForBackend = activeLine;
+        }
+        
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('http://localhost:3000/api/v1/freight-announcements/finalize-assignments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    announcementIds,
+                    lineType: lineTypeForBackend
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'خطا در اتمام تخصیص');
+            }
+            
+            const result = await response.json();
+            console.log('✅ [TransportLive] Finalize result:', result);
+            
+            // نمایش پیام موفقیت
+            alert(`اتمام تخصیص انجام شد:\n${result.finalized} مورد نهایی شد\n${result.leftover} مورد به بارهای مانده برگشت`);
+            
+            // Refresh data
+            await fetchData();
+        } catch (error: any) {
+            console.error('❌ [TransportLive] Finalize error:', error);
+            alert(error.message || 'خطا در اتمام تخصیص');
+        }
     };
 
     const onTransferDestination = async (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => {

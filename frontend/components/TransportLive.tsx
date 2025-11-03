@@ -63,6 +63,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.Finalized]: 'bg-teal-100 text-teal-800',
     [FreightAnnouncementStatus.Cancelled]: 'bg-slate-100 text-slate-800',
     [FreightAnnouncementStatus.ReAnnounced]: 'bg-gray-400 text-white',
+    [FreightAnnouncementStatus.Leftover]: 'bg-red-200 text-red-900',
 };
 
 
@@ -348,14 +349,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
                  return a.destinations.some(d => d.city === currentUser.branchCity) && a.status === FreightAnnouncementStatus.Assigned;
             }
-            // Other roles like planners see everything that's live
-            return [
+            // Other roles like planners see everything that's live (but not Finalized or Leftover)
+            const liveStatuses = [
                 FreightAnnouncementStatus.PendingCompanyAssignment, 
                 FreightAnnouncementStatus.PendingPersonalAssignment, 
                 FreightAnnouncementStatus.Assigned,
-                FreightAnnouncementStatus.InTransit,
-                FreightAnnouncementStatus.Finalized
-            ].includes(a.status);
+                FreightAnnouncementStatus.InTransit
+            ];
+            return liveStatuses.includes(a.status) && 
+                   a.status !== FreightAnnouncementStatus.Finalized && 
+                   a.status !== FreightAnnouncementStatus.Leftover;
         });
         
         console.log('🔍 [TransportLive] Filtered result:', {
@@ -548,6 +551,20 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />پیگیری اعلام بار-زنده و تخصیص</h2>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
                         {canPerformActions && selectedIds.size > 0 && <button onClick={handleFinalizeSelected} className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"><CheckCircleIcon className="w-4 h-4" />نهایی‌سازی ({selectedIds.size})</button>}
+                        {canPerformActions && filteredAnnouncements.length > 0 && (
+                            <button 
+                                onClick={() => {
+                                    // اتمام تخصیص برای همه اعلام بارهای لاین فعلی
+                                    const allIds = filteredAnnouncements.map(a => a.id);
+                                    onFinalize(allIds);
+                                }} 
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
+                                title={`اتمام تخصیص برای تمام ${filteredAnnouncements.length} اعلام بار ${activeLine}`}
+                            >
+                                <CheckCircleIcon className="w-4 h-4" />
+                                اتمام تخصیص ({filteredAnnouncements.length})
+                            </button>
+                        )}
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg">
                             <button onClick={() => setDateView('today')} className={`px-3 py-1 text-xs rounded-md ${dateView === 'today' ? 'bg-white shadow' : ''}`}>بارگیری امروز</button>
                             <button onClick={() => setDateView('all')} className={`px-3 py-1 text-xs rounded-md ${dateView === 'all' ? 'bg-white shadow' : ''}`}>مشاهده همه</button>

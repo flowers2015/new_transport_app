@@ -21,6 +21,7 @@ import SupportTickets from './components/SupportTickets';
 import VehicleAllocationManagement from './components/VehicleAllocationManagement';
 import TransportLive from './components/TransportLive';
 import TransportLiveContainer from './components/TransportLiveContainer';
+import FreightHistoryContainer from './components/FreightHistoryContainer';
 import FreightDashboard from './components/FreightDashboard';
 import FreightFinanceDashboard from './components/FreightFinanceDashboard';
 import FreightPlanningContainer from './components/FreightPlanningContainer';
@@ -457,6 +458,9 @@ const App: React.FC = () => {
                         currentUser={currentUser}
                     />
                 );
+            case View.FreightHistory:
+                console.log('[App] Render view:', View.FreightHistory);
+                return <FreightHistoryContainer currentUser={currentUser} />;
             case View.AuditTrail:
                 console.log('[App] Render view:', View.AuditTrail);
                 return <AuditTrailView />;

@@ -14,7 +14,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const fetchAnnouncements = async () => {
         try {
             setLoading(true);
-            const res = await fetch('http://localhost:3000/api/v1/freight-announcements', { headers });
+            // includeLeftover=true برای نمایش بارهای مانده در برنامه ریزی
+            const res = await fetch('http://localhost:3000/api/v1/freight-announcements?includeLeftover=true', { headers });
             if (!res.ok) throw new Error('Failed to fetch freight announcements');
             const raw = await res.json();
             console.log('📦 [FreightPlanning] Fetched raw announcements count:', Array.isArray(raw)? raw.length : -1);
@@ -29,6 +30,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 Finalized: FreightAnnouncementStatus.Finalized,
                 Cancelled: FreightAnnouncementStatus.Cancelled,
                 ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+                Leftover: FreightAnnouncementStatus.Leftover,
             };
             const normalize = (a: any): FreightAnnouncement => ({
                 id: a.id,

@@ -13,6 +13,17 @@ const {
  */
 async function getFreightAnnouncements(req, res) {
   try {
+    // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
+    const { includeLeftover } = req.query;
+    
+    let whereClause = "WHERE fa.status NOT IN ('Finalized'";
+    if (includeLeftover !== 'true') {
+      whereClause += ", 'Leftover'";
+    }
+    whereClause += ")";
+    
+    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, whereClause=${whereClause}`);
+    
     const { rows } = await pool.query(`
       SELECT 
         fa.*,
@@ -25,8 +36,11 @@ async function getFreightAnnouncements(req, res) {
       FROM freight_announcements fa
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      ${whereClause}
       ORDER BY fa.created_at DESC
     `);
+    
+    console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Leftover count: ${rows.filter(r => r.status === 'Leftover').length}`);
     
     // Fetch destinations for each announcement and convert dates
     for (let announcement of rows) {
@@ -1160,6 +1174,258 @@ async function getFreightAnnouncementHistory(req, res) {
   }
 }
 
+/**
+ * دریافت اعلام بارهای تاریخچه شده (Finalized) با قابلیت فیلتر بر اساس تاریخ و مقصد
+ * GET /api/freight-announcements/history?date=1403/10/15&destination=تهران
+ */
+async function getFreightHistory(req, res) {
+  try {
+    const { date, destination } = req.query;
+    
+    let query = `
+      SELECT 
+        fa.*,
+        fa.rejection_reason,
+        d.name as assigned_driver_name,
+        d.employee_id as assigned_driver_employee_id,
+        v.model as assigned_vehicle_model,
+        v.brand as assigned_vehicle_brand,
+        v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
+      FROM freight_announcements fa
+      LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+      LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      WHERE fa.status = 'Finalized'
+    `;
+    const params = [];
+    let paramIndex = 1;
+    
+    // فیلتر بر اساس تاریخ شمسی
+    if (date && date.trim() !== '') {
+      // انتظار فرمت 1403/10/15
+      const dateMatch = date.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+      if (dateMatch) {
+        const [, jy, jm, jd] = dateMatch.map(Number);
+        const { jalaliToGregorian } = require('../utils/jalali');
+        const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
+        
+        // تبدیل به تاریخ شروع و پایان روز
+        const startDate = new Date(gy, gm - 1, gd, 0, 0, 0, 0);
+        const endDate = new Date(gy, gm - 1, gd, 23, 59, 59, 999);
+        
+        console.log(`📅 [getFreightHistory] Filtering by date: ${date} -> ${startDate} to ${endDate}`);
+        
+        query += ` AND fa.loading_date >= $${paramIndex} AND fa.loading_date <= $${paramIndex + 1}`;
+        params.push(startDate, endDate);
+        paramIndex += 2;
+      } else {
+        console.log(`⚠️ [getFreightHistory] Invalid date format: ${date}`);
+      }
+    } else {
+      console.log(`📅 [getFreightHistory] No date filter - showing all Finalized announcements`);
+    }
+    
+    query += ' ORDER BY fa.loading_date DESC, fa.created_at DESC';
+    
+    console.log(`🔍 [getFreightHistory] Query:`, query);
+    console.log(`🔍 [getFreightHistory] Params:`, params);
+    
+    const { rows } = await pool.query(query, params);
+    
+    console.log(`📊 [getFreightHistory] Found ${rows.length} Finalized announcements`);
+    
+    // Fetch destinations for each announcement and convert dates
+    for (let announcement of rows) {
+      let destQuery = 'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1';
+      const destParams = [announcement.id];
+      
+      // فیلتر بر اساس مقصد
+      if (destination) {
+        destQuery += ' AND city ILIKE $2';
+        destParams.push(`%${destination}%`);
+      }
+      
+      const destRows = await pool.query(destQuery, destParams);
+      
+      // اگر فیلتر مقصد داشتیم و نتیجه‌ای پیدا نشد، این ردیف را حذف می‌کنیم
+      if (destination && destRows.rows.length === 0) {
+        const index = rows.indexOf(announcement);
+        if (index > -1) {
+          rows.splice(index, 1);
+        }
+        continue;
+      }
+      
+      announcement.destinations = destRows.rows;
+      
+      // Convert loading_date to string if it's a Date object
+      if (announcement.loading_date instanceof Date) {
+        const { formatJalali } = require('../utils/jalali');
+        announcement.loading_date = formatJalali(announcement.loading_date);
+      } else if (typeof announcement.loading_date === 'string') {
+        // If it's already a string, keep it as is
+      }
+    }
+    
+    res.json(rows);
+  } catch (error) {
+    console.error('Failed to get freight history:', error);
+    res.status(500).json({ message: 'Internal server error while fetching freight history.' });
+  }
+}
+
+/**
+ * اتمام تخصیص - تقسیم اعلام بارها بر اساس تخصیص
+ * POST /api/freight-announcements/finalize-assignments
+ * Body: { announcementIds: string[], lineType: string }
+ * 
+ * منطق:
+ * - اعلام بارهایی که تخصیص دارند (assigned_vehicle_id و assigned_driver_id) → Finalized
+ * - اعلام بارهایی که تخصیص ندارند → Leftover (بار مانده) و ارجاع به کارمند سازنده
+ */
+async function finalizeAssignments(req, res) {
+  const { announcementIds, lineType } = req.body;
+  const { userId, name, username } = req.user;
+  
+  if (!Array.isArray(announcementIds) || announcementIds.length === 0) {
+    return res.status(400).json({ message: 'announcementIds array is required.' });
+  }
+  
+  if (!lineType) {
+    return res.status(400).json({ message: 'lineType is required.' });
+  }
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const finalizedIds = [];
+    const leftoverIds = [];
+    const creatorMap = {}; // Map announcementId to creatorUserId
+    
+    // بررسی هر اعلام بار
+    for (const annId of announcementIds) {
+      const annResult = await client.query(
+        'SELECT id, assigned_vehicle_id, assigned_driver_id, line_type, status FROM freight_announcements WHERE id = $1',
+        [annId]
+      );
+      
+      if (annResult.rows.length === 0) {
+        console.log(`⚠️ [finalizeAssignments] Announcement ${annId} not found`);
+        continue;
+      }
+      
+      const ann = annResult.rows[0];
+      
+      // تبدیل lineType انگلیسی به فارسی برای مقایسه
+      const lineTypeMap = {
+        'IceCream': 'بستنی',
+        'Dairy': 'پاستوریزه',
+        'Ambient': 'لبنیات-فروتلند'
+      };
+      const persianLineType = lineTypeMap[lineType] || lineType;
+      
+      // بررسی اینکه آیا اعلام بار مربوط به lineType مورد نظر است
+      // بررسی هم به صورت فارسی و هم انگلیسی برای سازگاری
+      if (ann.line_type !== persianLineType && ann.line_type !== lineType) {
+        console.log(`⚠️ [finalizeAssignments] Line type mismatch: ${ann.line_type} !== ${lineType} (persian: ${persianLineType}) for ${annId}`);
+        continue;
+      }
+      
+      console.log(`✅ [finalizeAssignments] Line type match: ${ann.line_type} === ${lineType} (persian: ${persianLineType})`);
+      
+      // بررسی تخصیص
+      const hasAssignment = ann.assigned_vehicle_id && ann.assigned_driver_id;
+      
+      console.log(`🔍 [finalizeAssignments] Processing ${annId}: hasAssignment=${hasAssignment}, status=${ann.status}, line_type=${ann.line_type}`);
+      
+      if (hasAssignment) {
+        // تخصیص دارد → Finalized
+        const updateResult = await client.query(
+          'UPDATE freight_announcements SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status',
+          ['Finalized', annId]
+        );
+        
+        console.log(`✅ [finalizeAssignments] Finalized ${annId}:`, updateResult.rows[0]);
+        finalizedIds.push(annId);
+        
+        // ثبت تاریخچه
+        await logFreightHistory({
+          announcementId: annId,
+          userId: userId,
+          userName: name || username || 'کاربر',
+          action: 'FINALIZED',
+          oldStatus: ann.status || 'Assigned',
+          newStatus: 'Finalized',
+          description: `اعلام بار نهایی شد (تخصیص تکمیل شده)`,
+          ipAddress: req.ip,
+          client: client
+        });
+      } else {
+        // تخصیص ندارد → باید کارمند سازنده را پیدا کنیم
+        const historyRows = await client.query(
+          `SELECT user_id, user_name 
+           FROM freight_announcement_history 
+           WHERE freight_announcement_id = $1 AND action = 'CREATED' 
+           ORDER BY created_at ASC 
+           LIMIT 1`,
+          [annId]
+        );
+        
+        let creatorUserId = null;
+        let creatorUserName = 'کاربر نامشخص';
+        
+        if (historyRows.rows.length > 0) {
+          creatorUserId = historyRows.rows[0].user_id;
+          creatorUserName = historyRows.rows[0].user_name || creatorUserName;
+        }
+        
+        // تغییر وضعیت به Leftover
+        const updateResult = await client.query(
+          'UPDATE freight_announcements SET status = $1, assignment_type = NULL, assigned_driver_id = NULL, assigned_vehicle_id = NULL, updated_at = NOW() WHERE id = $2 RETURNING id, status',
+          ['Leftover', annId]
+        );
+        
+        console.log(`✅ [finalizeAssignments] Set as Leftover ${annId}:`, updateResult.rows[0]);
+        leftoverIds.push(annId);
+        creatorMap[annId] = { userId: creatorUserId, userName: creatorUserName };
+        
+        // ثبت تاریخچه
+        await logFreightHistory({
+          announcementId: annId,
+          userId: userId,
+          userName: name || username || 'کاربر',
+          action: 'RETURNED_TO_PLANNER',
+          oldStatus: ann.status || 'PendingCompanyAssignment',
+          newStatus: 'Leftover',
+          description: `اعلام بار به عنوان بار مانده به کارمند برنامه‌ریزی (${creatorUserName}) برگردانده شد (تخصیص انجام نشده)`,
+          ipAddress: req.ip,
+          client: client
+        });
+      }
+    }
+    
+    console.log(`📊 [finalizeAssignments] Summary: finalized=${finalizedIds.length}, leftover=${leftoverIds.length}`);
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      message: 'اتمام تخصیص با موفقیت انجام شد',
+      finalized: finalizedIds.length,
+      leftover: leftoverIds.length,
+      finalizedIds,
+      leftoverIds,
+      creators: creatorMap
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Failed to finalize assignments:', error);
+    res.status(500).json({ message: 'Internal server error while finalizing assignments.' });
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -1171,4 +1437,6 @@ module.exports = {
   setAssignmentQueue,
   deleteFreightAnnouncement,
   getFreightAnnouncementHistory,
+  getFreightHistory,
+  finalizeAssignments,
 };

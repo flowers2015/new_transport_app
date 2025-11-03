@@ -12,6 +12,8 @@ const {
   setAssignmentQueue,
   deleteFreightAnnouncement,
   getFreightAnnouncementHistory,
+  getFreightHistory,
+  finalizeAssignments,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -20,6 +22,17 @@ const {
 
 // GET routes for fetching freight announcements
 router.get('/', authenticateToken, getFreightAnnouncements);
+
+// Get freight history (Finalized announcements) with filters
+router.get('/history', authenticateToken, getFreightHistory);
+
+// Finalize assignments - اتمام تخصیص
+router.post(
+  '/finalize-assignments',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
+  finalizeAssignments
+);
 
 // Get history for a specific announcement (must be before /:id route)
 router.get(

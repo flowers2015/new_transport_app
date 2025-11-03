@@ -43,6 +43,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.Finalized]: 'bg-green-100 text-green-800',
     [FreightAnnouncementStatus.Cancelled]: 'bg-slate-100 text-slate-800',
     [FreightAnnouncementStatus.ReAnnounced]: 'bg-gray-400 text-white',
+    [FreightAnnouncementStatus.Leftover]: 'bg-red-200 text-red-900',
 };
 
 const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')}` : '-';
@@ -263,12 +264,21 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     };
 
     const leftoverAnnouncements = useMemo(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Start of today
-        return announcements.filter(ann => 
-            new Date(ann.loadingDate) < today &&
-            [FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status)
-        );
+        // بارهای مانده: اعلام بارهایی که وضعیت Leftover دارند (از اتمام تخصیص برگشت داده شده)
+        const leftover = announcements.filter(ann => {
+            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || ann.status === 'Leftover';
+            if (isLeftover) {
+                console.log('🔍 [FreightDashboard] Found leftover:', {
+                    id: ann.id,
+                    status: ann.status,
+                    lineType: ann.lineType,
+                    announcementCode: ann.announcementCode
+                });
+            }
+            return isLeftover;
+        });
+        console.log(`📊 [FreightDashboard] Total leftover announcements: ${leftover.length} out of ${announcements.length}`);
+        return leftover;
     }, [announcements]);
 
     const leftoverColumns = useMemo(() => [

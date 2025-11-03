@@ -26,6 +26,7 @@ export enum View {
     FreightPlanning = 'freight-planning',
     TransportLive = 'transport-live',
     FreightFinance = 'freight-finance',
+    FreightHistory = 'freight-history',
 }
 
 export enum UserRole {
@@ -162,6 +163,7 @@ export enum FreightAnnouncementStatus {
     Finalized = 'نهایی شده',
     Cancelled = 'لغو شده',
     ReAnnounced = 'اعلام مجدد شده',
+    Leftover = 'بار مانده',
 }
 
 
