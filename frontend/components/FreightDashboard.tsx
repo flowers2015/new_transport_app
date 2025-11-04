@@ -727,23 +727,40 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
     useEffect(() => {
         if (isOpen) {
             if (data) { // Edit mode: populate form
+                console.log(`📅 [FreightDashboard] Edit Dialog Opened - Received data:`, {
+                    id: data.id,
+                    loadingDate: data.loadingDate,
+                    loadingDateType: typeof data.loadingDate,
+                    isDate: data.loadingDate instanceof Date,
+                    rawData: data
+                });
                 setLineType(data.lineType);
                 // Check if loadingDate is already in Jalali format or needs conversion
                 let loadingDateStr;
                 
-                if (typeof data.loadingDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(data.loadingDate)) {
-                    // Already in Jalali format (YYYY/MM/DD)
-                    loadingDateStr = data.loadingDate;
+                if (typeof data.loadingDate === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(data.loadingDate)) {
+                    // Already in Jalali format (YYYY/MM/DD or YYYY-MM-DD) - convert `-` to `/`
+                    const before = data.loadingDate;
+                    loadingDateStr = data.loadingDate.replace(/-/g, '/');
+                    console.log(`📅 [FreightDashboard] String date detected: "${before}" → "${loadingDateStr}"`);
                 } else if (data.loadingDate instanceof Date) {
                     // If it's a Date object, check if it's valid
+                    console.log(`📅 [FreightDashboard] Date object detected:`, data.loadingDate);
                     if (isNaN(data.loadingDate.getTime())) {
                         loadingDateStr = '';
+                        console.log(`📅 [FreightDashboard] Invalid Date, setting empty string`);
                     } else {
                         loadingDateStr = formatJalali(data.loadingDate);
+                        console.log(`📅 [FreightDashboard] Date converted: "${data.loadingDate.toISOString()}" → "${loadingDateStr}"`);
                     }
                 } else {
                     loadingDateStr = '';
+                    console.log(`📅 [FreightDashboard] Unknown type, setting empty string:`, {
+                        loadingDate: data.loadingDate,
+                        type: typeof data.loadingDate
+                    });
                 }
+                console.log(`📅 [FreightDashboard] Final loadingDateStr for form:`, loadingDateStr);
                 setCommonState({ loadingDate: loadingDateStr, cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
                 if (data.lineType === FreightLineType.IceCream) {
                     setIceCreamState({
@@ -790,10 +807,18 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
         // Use the string directly instead of converting to Date
         // This will avoid the conversion issues
         const jalaliDate = commonState.loadingDate;
+        console.log(`📅 [FreightDashboard] handleSubmit - Form state loadingDate:`, {
+            jalaliDate,
+            type: typeof jalaliDate,
+            isValid: jalaliDate && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliDate),
+            isEditMode
+        });
         if (!jalaliDate || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliDate)) { 
+            console.error(`📅 [FreightDashboard] Invalid date format:`, jalaliDate);
             alert('تاریخ نامعتبر است. قالب صحیح: YYYY/MM/DD'); 
             return; 
         }
+        console.log(`📅 [FreightDashboard] Submitting with loadingDate:`, jalaliDate);
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
             ? { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: crypto.randomUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
             : { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, platformArrivalTime: multiDestState.platformArrivalTime, destinations: destinations as Destination[] };

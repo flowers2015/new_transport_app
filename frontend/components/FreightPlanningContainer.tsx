@@ -36,7 +36,23 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 id: a.id,
                 announcementCode: a.announcement_code || a.announcementCode,
                 createdAt: new Date(a.created_at || a.createdAt || Date.now()),
-                loadingDate: new Date(a.loading_date || a.loadingDate || Date.now()),
+                                    // اگر loading_date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، همان را نگه دار و `-` را به `/` تبدیل کن
+                    loadingDate: (() => {
+                        if (typeof a.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(a.loading_date)) {
+                            const result = a.loading_date.replace(/-/g, '/');
+                            if (a.loading_date !== result) {
+                                console.log(`📅 [FreightPlanningContainer] normalize - Converted date: "${a.loading_date}" → "${result}"`);
+                            }
+                            return result as any;
+                        } else {
+                            const dateResult = new Date(a.loading_date || a.loadingDate || Date.now());
+                            console.log(`📅 [FreightPlanningContainer] normalize - Created Date object:`, {
+                                input: a.loading_date || a.loadingDate,
+                                result: dateResult.toISOString()
+                            });
+                            return dateResult;
+                        }
+                    })(),
                 lineType: a.line_type || a.lineType,
                 status: statusMap[a.status] || a.status,
                 cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
@@ -91,7 +107,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         isDraft: boolean,
     ) => {
         try {
-            console.log('📝 [FreightPlanning] Submitting announcement:', { announcement, isDraft });
+            console.log('📝 [FreightPlanning] Submitting announcement:', { 
+                announcement, 
+                isDraft,
+                loadingDate: announcement.loadingDate,
+                loadingDateType: typeof announcement.loadingDate
+            });
             if (!announcement.loadingDate || !announcement.vehicleType || !announcement.lineType) {
                 console.warn('⚠️ [FreightPlanning] Missing required fields', announcement);
                 alert('تاریخ بارگیری، نوع خودرو و نوع لاین الزامی است.');
@@ -117,7 +138,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
     const handleUpdateAnnouncement = async (updated: FreightAnnouncement) => {
         try {
-            console.log('✏️ [FreightPlanning] Update announcement:', updated);
+            console.log('✏️ [FreightPlanning] Update announcement:', { 
+                updated,
+                loadingDate: updated.loadingDate,
+                loadingDateType: typeof updated.loadingDate,
+                id: updated.id
+            });
             // Fallback: if id is missing, treat as CREATE instead of PUT to avoid 404
             if (!updated.id) {
                 console.warn('[FreightPlanning] Missing id → creating instead of updating');

@@ -54,15 +54,39 @@ function jalaliToGregorian(jy, jm, jd) {
 
 function formatJalali(date) {
     if (!date) return '-';
-    const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    
+    // اگر سال بین 1400-1500 است، احتمالاً تاریخ شمسی است که به اشتباه به عنوان میلادی تفسیر شده
+    // در این صورت، مستقیماً از سال/ماه/روز استفاده می‌کنیم
+    if (year >= 1400 && year <= 1500) {
+        // تاریخ شمسی که به اشتباه به عنوان میلادی تفسیر شده
+        return `${year}/${pad2(month)}/${pad2(day)}`;
+    }
+    
+    // در غیر این صورت، تبدیل از میلادی به شمسی
+    const [jy, jm, jd] = gregorianToJalali(year, month, day);
     return `${jy}/${pad2(jm)}/${pad2(jd)}`;
 }
 
 function formatJalaliDateTime(date) {
     if (!date) return '-';
-    const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
     const hh = pad2(date.getHours());
     const mm = pad2(date.getMinutes());
+    
+    // اگر سال بین 1400-1500 است، احتمالاً تاریخ شمسی است که به اشتباه به عنوان میلادی تفسیر شده
+    if (year >= 1400 && year <= 1500) {
+        return `${year}/${pad2(month)}/${pad2(day)} ${hh}:${mm}`;
+    }
+    
+    // در غیر این صورت، تبدیل از میلادی به شمسی
+    const [jy, jm, jd] = gregorianToJalali(year, month, day);
     return `${jy}/${pad2(jm)}/${pad2(jd)} ${hh}:${mm}`;
 }
 

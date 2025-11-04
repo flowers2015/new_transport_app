@@ -1,9 +1,17 @@
 import { PlateNumber } from '../types';
 
-export const formatJalali = (date: Date | null | undefined): string => {
+export const formatJalali = (date: Date | string | null | undefined): string => {
     if (!date) return '-';
-    const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
-    return `${jy}/${pad2(jm)}/${pad2(jd)}`;
+    // اگر date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، `-` را به `/` تبدیل کن و برگردان
+    if (typeof date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(date)) {
+        return date.replace(/-/g, '/');
+    }
+    // در غیر این صورت، آن را به عنوان Date در نظر بگیر و به شمسی تبدیل کن
+    if (date instanceof Date) {
+        const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+        return `${jy}/${pad2(jm)}/${pad2(jd)}`;
+    }
+    return '-';
 };
 
 export const formatJalaliDateTime = (date: Date | null | undefined): string => {

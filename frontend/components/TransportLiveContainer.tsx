@@ -94,7 +94,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         id: a.id,
                         announcementCode: a.announcement_code || a.announcementCode,
                         createdAt: new Date(a.created_at || a.createdAt || a.loading_date || Date.now()),
-                        loadingDate: new Date(a.loading_date || a.loadingDate || Date.now()),
+                        // اگر loading_date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، همان را نگه دار و `-` را به `/` تبدیل کن
+                        loadingDate: (typeof a.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(a.loading_date)) 
+                            ? (a.loading_date.replace(/-/g, '/') as any)  // تاریخ شمسی به صورت رشته - تبدیل `-` به `/`
+                            : new Date(a.loading_date || a.loadingDate || Date.now()),
                         lineType: a.line_type || a.lineType,
                         status: statusMap[a.status] || a.status,
                         cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),

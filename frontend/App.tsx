@@ -22,6 +22,7 @@ import VehicleAllocationManagement from './components/VehicleAllocationManagemen
 import TransportLive from './components/TransportLive';
 import TransportLiveContainer from './components/TransportLiveContainer';
 import FreightHistoryContainer from './components/FreightHistoryContainer';
+import TransportDashboardContainer from './components/TransportDashboardContainer';
 import FreightDashboard from './components/FreightDashboard';
 import FreightFinanceDashboard from './components/FreightFinanceDashboard';
 import FreightPlanningContainer from './components/FreightPlanningContainer';
@@ -461,6 +462,9 @@ const App: React.FC = () => {
             case View.FreightHistory:
                 console.log('[App] Render view:', View.FreightHistory);
                 return <FreightHistoryContainer currentUser={currentUser} />;
+            case View.TransportDashboard:
+                console.log('[App] Render view:', View.TransportDashboard);
+                return <TransportDashboardContainer currentUser={currentUser} />;
             case View.AuditTrail:
                 console.log('[App] Render view:', View.AuditTrail);
                 return <AuditTrailView />;

@@ -7,6 +7,56 @@ const {
   calculateTotalFreightCost,
   generateChangeDescription
 } = require('../services/freightHistoryService');
+const { formatJalali } = require('../utils/jalali');
+
+/**
+ * تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14
+ * اگر Date object است، آن را به Jalali string تبدیل می‌کند
+ * چون PostgreSQL ممکن است `/` را به `-` تبدیل کند یا Date object برگرداند
+ */
+function normalizeJalaliDate(dateInput) {
+  if (!dateInput) {
+    return dateInput;
+  }
+  
+  // اگر Date object است (از PostgreSQL برگشته)، آن را به Jalali string تبدیل کن
+  if (dateInput instanceof Date) {
+    const jalaliStr = formatJalali(dateInput);
+    console.log(`📅 [normalizeJalaliDate] Date object converted: "${dateInput.toISOString()}" → "${jalaliStr}"`);
+    return jalaliStr;
+  }
+  
+  // اگر string است
+  if (typeof dateInput === 'string') {
+    const original = dateInput;
+    // اگر فرمت YYYY-MM-DD دارد، به YYYY/MM/DD تبدیل کن
+    const result = dateInput.replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/, '$1/$2/$3');
+    if (original !== result) {
+      console.log(`📅 [normalizeJalaliDate] String converted: "${original}" → "${result}"`);
+    }
+    return result;
+  }
+  
+  console.log(`📅 [normalizeJalaliDate] Unknown type:`, { dateInput, type: typeof dateInput });
+  return dateInput;
+}
+
+/**
+ * اطمینان از اینکه تاریخ با `/` ذخیره شود (نه `-`)
+ */
+function ensureJalaliDateFormat(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') {
+    console.log(`📅 [ensureJalaliDateFormat] Input is not string:`, { dateStr, type: typeof dateStr });
+    return dateStr;
+  }
+  const original = dateStr;
+  // تبدیل `-` به `/` برای اطمینان از فرمت یکسان
+  const result = dateStr.replace(/-/g, '/');
+  if (original !== result) {
+    console.log(`📅 [ensureJalaliDateFormat] Converted: "${original}" → "${result}"`);
+  }
+  return result;
+}
 
 /**
  * Fetches all freight announcements with related information.
@@ -50,14 +100,23 @@ async function getFreightAnnouncements(req, res) {
       );
       announcement.destinations = destRows.rows;
       
-      // Convert loading_date to string if it's a Date object
-      if (announcement.loading_date instanceof Date) {
-        const { formatJalali } = require('../utils/jalali');
-        announcement.loading_date = formatJalali(announcement.loading_date);
-      } else if (typeof announcement.loading_date === 'string') {
-        // If it's already a string, keep it as is
-        // No conversion needed
+      // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
+      if (announcement.loading_date) {
+        const before = announcement.loading_date;
+        announcement.loading_date = normalizeJalaliDate(announcement.loading_date);
+        if (before !== announcement.loading_date) {
+          console.log(`📅 [getFreightAnnouncements] ID ${announcement.id}: "${before}" → "${announcement.loading_date}"`);
+        }
       }
+    }
+    
+    // لاگ نمونه برای بررسی
+    if (rows.length > 0) {
+      console.log(`📅 [getFreightAnnouncements] Sample first item:`, {
+        id: rows[0].id,
+        loading_date: rows[0].loading_date,
+        type: typeof rows[0].loading_date
+      });
     }
     
     res.json(rows);
@@ -78,15 +137,20 @@ async function getFreightAnnouncementById(req, res) {
       return res.status(404).json({ message: 'Freight announcement not found.' });
     }
     
-    // Convert loading_date to string if it's a Date object
+    // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
     const announcement = rows[0];
-    if (announcement.loading_date instanceof Date) {
-      // If it's a Date object, convert to Jalali string
-      const { formatJalali } = require('../utils/jalali');
-      announcement.loading_date = formatJalali(announcement.loading_date);
-    } else if (typeof announcement.loading_date === 'string') {
-      // If it's already a string, keep it as is
-      // No conversion needed
+    console.log(`📅 [getFreightAnnouncementById] ID ${id}: Loading from DB:`, {
+      loading_date: announcement.loading_date,
+      type: typeof announcement.loading_date
+    });
+    
+    if (announcement.loading_date) {
+      const before = announcement.loading_date;
+      announcement.loading_date = normalizeJalaliDate(announcement.loading_date);
+      console.log(`📅 [getFreightAnnouncementById] ID ${id}: After normalization:`, {
+        before,
+        after: announcement.loading_date
+      });
     }
     
     res.json(announcement);
@@ -146,7 +210,20 @@ async function updateFreightAnnouncement(req, res) {
       const values = [];
       let idx = 1;
       
-      if (loadingDate) { fields.push(`loading_date = $${idx++}`); values.push(loadingDate); }
+      // اطمینان از فرمت `/` برای ذخیره در دیتابیس
+      if (loadingDate) { 
+        console.log(`📅 [updateFreightAnnouncement] ID ${id}: Received from frontend:`, {
+          loadingDate,
+          type: typeof loadingDate
+        });
+        const normalizedDate = ensureJalaliDateFormat(loadingDate);
+        console.log(`📅 [updateFreightAnnouncement] ID ${id}: Normalized for DB:`, {
+          normalizedDate,
+          willSave: normalizedDate
+        });
+        fields.push(`loading_date = $${idx++}`); 
+        values.push(normalizedDate); 
+      }
       if (lineType) { fields.push(`line_type = $${idx++}`); values.push(lineType); }
       if (cargoValue !== undefined) { fields.push(`cargo_value = $${idx++}`); values.push(cargoValue); }
       if (vehicleType) { fields.push(`vehicle_type = $${idx++}`); values.push(vehicleType); }
@@ -287,13 +364,19 @@ async function updateFreightAnnouncement(req, res) {
       const { rows } = await pool.query('SELECT * FROM freight_announcements WHERE id = $1', [id]);
       const updated = rows[0];
       
-      // Convert loading_date to string if it's a Date object
-      if (updated.loading_date instanceof Date) {
-        const { formatJalali } = require('../utils/jalali');
-        updated.loading_date = formatJalali(updated.loading_date);
-      } else if (typeof updated.loading_date === 'string') {
-        // If it's already a string, keep it as is
-        // No conversion needed
+      console.log(`📅 [updateFreightAnnouncement] ID ${id}: After UPDATE, reading from DB:`, {
+        loading_date: updated.loading_date,
+        type: typeof updated.loading_date
+      });
+      
+      // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
+      if (updated.loading_date) {
+        const before = updated.loading_date;
+        updated.loading_date = normalizeJalaliDate(updated.loading_date);
+        console.log(`📅 [updateFreightAnnouncement] ID ${id}: Sending to frontend:`, {
+          before,
+          after: updated.loading_date
+        });
       }
       
       const destRows = await pool.query('SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC', [id]);
@@ -363,10 +446,21 @@ async function createFreightAnnouncement(req, res) {
       )
     `;
 
+    // اطمینان از فرمت `/` برای ذخیره در دیتابیس
+    console.log(`📅 [createFreightAnnouncement] Received from frontend:`, {
+      loadingDate,
+      type: typeof loadingDate
+    });
+    const normalizedLoadingDate = ensureJalaliDateFormat(loadingDate);
+    console.log(`📅 [createFreightAnnouncement] Normalized for DB:`, {
+      normalizedLoadingDate,
+      willSave: normalizedLoadingDate
+    });
+
     await pool.query(insertAnnouncementQuery, [
       id,
       announcementCode,
-      loadingDate,
+      normalizedLoadingDate,
       lineType,
       status,
       cargoValue || 0,
@@ -436,13 +530,19 @@ async function createFreightAnnouncement(req, res) {
 
     const created = rows[0];
     
-    // Convert loading_date to string if it's a Date object
-    if (created.loading_date instanceof Date) {
-      const { formatJalali } = require('../utils/jalali');
-      created.loading_date = formatJalali(created.loading_date);
-    } else if (typeof created.loading_date === 'string') {
-      // If it's already a string, keep it as is
-      // No conversion needed
+    console.log(`📅 [createFreightAnnouncement] ID ${id}: After INSERT, reading from DB:`, {
+      loading_date: created.loading_date,
+      type: typeof created.loading_date
+    });
+    
+    // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
+    if (created.loading_date) {
+      const before = created.loading_date;
+      created.loading_date = normalizeJalaliDate(created.loading_date);
+      console.log(`📅 [createFreightAnnouncement] ID ${id}: Sending to frontend:`, {
+        before,
+        after: created.loading_date
+      });
     }
     
     const destRows = await pool.query(
@@ -1257,12 +1357,13 @@ async function getFreightHistory(req, res) {
       
       announcement.destinations = destRows.rows;
       
-      // Convert loading_date to string if it's a Date object
-      if (announcement.loading_date instanceof Date) {
-        const { formatJalali } = require('../utils/jalali');
-        announcement.loading_date = formatJalali(announcement.loading_date);
-      } else if (typeof announcement.loading_date === 'string') {
-        // If it's already a string, keep it as is
+      // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
+      if (announcement.loading_date) {
+        const before = announcement.loading_date;
+        announcement.loading_date = normalizeJalaliDate(announcement.loading_date);
+        if (before !== announcement.loading_date) {
+          console.log(`📅 [getFreightHistory] ID ${announcement.id}: "${before}" → "${announcement.loading_date}"`);
+        }
       }
     }
     
@@ -1426,6 +1527,111 @@ async function finalizeAssignments(req, res) {
   }
 }
 
+/**
+ * GET /statistics - Get transport performance statistics
+ * Query params: year, month, day, lineType, timeRange (day/month/year)
+ */
+async function getTransportStatistics(req, res) {
+  try {
+    const { year, month, day, lineType, timeRange = 'day' } = req.query;
+    const { jalaliToGregorian } = require('../utils/jalali');
+    
+    console.log('📊 [TransportStatistics] Request:', { year, month, day, lineType, timeRange });
+    
+    // Build date filter
+    let dateFilter = '';
+    let dateParams = [];
+    
+    if (year && month && day) {
+      // Specific day
+      const [gy, gm, gd] = jalaliToGregorian(parseInt(year), parseInt(month), parseInt(day));
+      const startDate = new Date(gy, gm - 1, gd);
+      const endDate = new Date(gy, gm - 1, gd + 1);
+      dateFilter = 'WHERE fa.loading_date >= $1 AND fa.loading_date < $2';
+      dateParams = [startDate, endDate];
+    } else if (year && month) {
+      // Specific month
+      const [gy, gm] = jalaliToGregorian(parseInt(year), parseInt(month), 1);
+      const startDate = new Date(gy, gm - 1, 1);
+      const endDate = new Date(gy, gm, 1);
+      dateFilter = 'WHERE fa.loading_date >= $1 AND fa.loading_date < $2';
+      dateParams = [startDate, endDate];
+    } else if (year) {
+      // Specific year
+      const [gy] = jalaliToGregorian(parseInt(year), 1, 1);
+      const startDate = new Date(gy, 0, 1);
+      const endDate = new Date(gy + 1, 0, 1);
+      dateFilter = 'WHERE fa.loading_date >= $1 AND fa.loading_date < $2';
+      dateParams = [startDate, endDate];
+    }
+    
+    // Build line type filter
+    let lineTypeFilter = '';
+    if (lineType && lineType !== 'all') {
+      const lineTypeParam = dateParams.length + 1;
+      lineTypeFilter = dateFilter ? ` AND fa.line_type = $${lineTypeParam}` : `WHERE fa.line_type = $${lineTypeParam}`;
+      dateParams.push(lineType);
+    }
+    
+    let whereClause = dateFilter + lineTypeFilter;
+    if (!whereClause) {
+      whereClause = '';
+    }
+    
+    // Determine grouping based on timeRange
+    let groupBy = '';
+    let dateFormat = '';
+    if (timeRange === 'day') {
+      groupBy = 'DATE(fa.loading_date)';
+      dateFormat = "TO_CHAR(fa.loading_date, 'YYYY-MM-DD')";
+    } else if (timeRange === 'month') {
+      groupBy = "DATE_TRUNC('month', fa.loading_date)";
+      dateFormat = "TO_CHAR(DATE_TRUNC('month', fa.loading_date), 'YYYY-MM')";
+    } else if (timeRange === 'year') {
+      groupBy = "DATE_TRUNC('year', fa.loading_date)";
+      dateFormat = "TO_CHAR(DATE_TRUNC('year', fa.loading_date), 'YYYY')";
+    }
+    
+    // Query for statistics
+    const query = `
+      SELECT 
+        ${dateFormat} as time_period,
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+        COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+        COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+      FROM freight_announcements fa
+      ${whereClause}
+      GROUP BY ${groupBy}
+      ORDER BY time_period ASC
+    `;
+    
+    console.log('📊 [TransportStatistics] Query:', query);
+    console.log('📊 [TransportStatistics] Params:', dateParams);
+    
+    const { rows } = await pool.query(query, dateParams);
+    
+    // Calculate success rate for each period
+    const statistics = rows.map(row => ({
+      timePeriod: row.time_period,
+      totalRequests: parseInt(row.total_requests) || 0,
+      companyAssignments: parseInt(row.company_assignments) || 0,
+      personalAssignments: parseInt(row.personal_assignments) || 0,
+      totalAssignments: parseInt(row.total_assignments) || 0,
+      successRate: row.total_requests > 0 
+        ? Math.round((parseInt(row.total_assignments) / parseInt(row.total_requests)) * 100)
+        : 0
+    }));
+    
+    console.log('✅ [TransportStatistics] Found', statistics.length, 'periods');
+    
+    res.json(statistics);
+  } catch (error) {
+    console.error('❌ [TransportStatistics] Error:', error);
+    res.status(500).json({ message: 'Internal server error while fetching statistics.', error: error.message });
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -1439,4 +1645,5 @@ module.exports = {
   getFreightAnnouncementHistory,
   getFreightHistory,
   finalizeAssignments,
+  getTransportStatistics,
 };

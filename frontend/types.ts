@@ -27,6 +27,7 @@ export enum View {
     TransportLive = 'transport-live',
     FreightFinance = 'freight-finance',
     FreightHistory = 'freight-history',
+    TransportDashboard = 'transport-dashboard',
 }
 
 export enum UserRole {

@@ -16,7 +16,7 @@ interface FreightHistoryProps {
     drivers: Driver[];
     personalDrivers: PersonalDriver[];
     personalVehicles: PersonalVehicle[];
-    currentUser: User;
+  currentUser: User;
     activeLine: FreightLineType;
     setActiveLine: (line: FreightLineType) => void;
     filterDate: string;
@@ -356,34 +356,34 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
-    return (
-        <div className="max-w-screen-2xl mx-auto space-y-4">
-            <div className="bg-white p-4 rounded-xl shadow-md">
-                <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+  return (
+    <div className="max-w-screen-2xl mx-auto space-y-4">
+      <div className="bg-white p-4 rounded-xl shadow-md">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />تاریخچه اعلام بار</h2>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
                         {/* فیلتر تاریخ شمسی */}
                         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
                             <label className="text-xs whitespace-nowrap">تاریخ شمسی:</label>
-                            <input 
-                                type="text" 
+          <input
+            type="text"
                                 placeholder="1403/10/15" 
                                 value={filterDate}
                                 onChange={e => setFilterDate(e.target.value)}
                                 className="px-2 py-1 text-xs rounded border w-28"
-                            />
-                        </div>
+          />
+        </div>
                         {/* فیلتر مقصد */}
                         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
                             <label className="text-xs whitespace-nowrap">مقصد:</label>
-                            <input 
+          <input
                                 type="text" 
                                 placeholder="جستجوی مقصد..." 
                                 value={filterDestination}
                                 onChange={e => setFilterDestination(e.target.value)}
                                 className="px-2 py-1 text-xs rounded border w-32"
-                            />
-                        </div>
+          />
+        </div>
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
@@ -394,10 +394,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             ))}
                         </div>
                     </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-right">
-                         <thead className="text-xs uppercase bg-gray-50">
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead className="text-xs uppercase bg-gray-50">
                              {isFullDairyAmbient ? (
                                 <>
                                     <tr>
@@ -483,10 +483,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                         </th>;
                                     })}
                                     <th className="p-2 sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
-                                </tr>
+              </tr>
                              )}
-                        </thead>
-                        <tbody>
+            </thead>
+            <tbody>
                             {filteredAnnouncements.map((ann, idx) => {
                                 // برای تاریخچه، همه ردیف‌ها Finalized هستند - رنگ سبز
                                 const rowColorClass = 'bg-teal-50 hover:bg-teal-100';
@@ -523,13 +523,13 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                         <div className="flex gap-1 flex-wrap">
                                             {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
                                         </div>
-                                    </td>
-                                </tr>
+                  </td>
+                </tr>
                                 );
                             })}
-                        </tbody>
-                    </table>
-                </div>
+            </tbody>
+          </table>
+        </div>
             </div>
              {/* دیالوگ‌های تخصیص و انتقال در تاریخچه نیازی نیست */}
              {isRulesOpen && (
@@ -538,11 +538,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <WorkflowRules view={View.TransportLive} userRole={currentUser.role} />
                          <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     </div>
-                </div>
-             )}
+          </div>
+        )}
              <style>{`.input-style { display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; } `}</style>
-        </div>
-    );
+    </div>
+  );
 };
 
 // --- Dialog Components حذف شده - برای تاریخچه نیاز نیست ---

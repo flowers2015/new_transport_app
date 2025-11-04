@@ -14,6 +14,7 @@ const {
   getFreightAnnouncementHistory,
   getFreightHistory,
   finalizeAssignments,
+  getTransportStatistics,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -25,6 +26,9 @@ router.get('/', authenticateToken, getFreightAnnouncements);
 
 // Get freight history (Finalized announcements) with filters
 router.get('/history', authenticateToken, getFreightHistory);
+
+// Get transport statistics for dashboard
+router.get('/statistics', authenticateToken, getTransportStatistics);
 
 // Finalize assignments - اتمام تخصیص
 router.post(
