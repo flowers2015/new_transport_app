@@ -1,7 +1,7 @@
 // This is a new file: components/FreightFinanceDashboard.tsx
 import React, { useState, useMemo } from 'react';
 import { FreightAnnouncement, Branch, FreightPaymentStatus, FreightTransaction, User, View } from '../types';
-import { formatJalaliDateTime, formatJalali } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, gregorianToJalali } from '../utils/jalali';
 import { CreditCardIcon } from './icons/CreditCardIcon'; // Reusing icon
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
@@ -14,11 +14,26 @@ interface FreightFinanceDashboardProps {
     currentUser: User;
 }
 
-const isToday = (someDate: Date) => {
-    const today = new Date();
-    return someDate.getDate() === today.getDate() &&
-        someDate.getMonth() === today.getMonth() &&
-        someDate.getFullYear() === today.getFullYear();
+const isToday = (someDate: Date | string) => {
+    if (!someDate) return false;
+    
+    // اگر رشته شمسی است (YYYY/MM/DD)
+    if (typeof someDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(someDate)) {
+        const today = new Date();
+        const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        const todayStr = `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+        return someDate === todayStr;
+    }
+    
+    // اگر Date object است
+    if (someDate instanceof Date) {
+        const today = new Date();
+        return someDate.getDate() === today.getDate() &&
+            someDate.getMonth() === today.getMonth() &&
+            someDate.getFullYear() === today.getFullYear();
+    }
+    
+    return false;
 }
 
 const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) => {
@@ -39,9 +54,27 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
             if (filters.city && !ann.destinations.some(d => d.city.includes(filters.city))) return false;
             if (filters.paymentStatus && ann.paymentStatus !== filters.paymentStatus) return false;
             
-            const loadingDateTime = ann.loadingDate.getTime();
-            if (filters.startDate && loadingDateTime < new Date(filters.startDate).getTime()) return false;
-            if (filters.endDate && loadingDateTime > new Date(filters.endDate).getTime()) return false;
+            // مقایسه تاریخ‌ها - اگر loadingDate رشته شمسی است
+            if (typeof ann.loadingDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(ann.loadingDate)) {
+                // تبدیل فیلترهای تاریخ به شمسی و مقایسه
+                if (filters.startDate) {
+                    const filterDate = new Date(filters.startDate);
+                    const [jy, jm, jd] = gregorianToJalali(filterDate.getFullYear(), filterDate.getMonth() + 1, filterDate.getDate());
+                    const filterStr = `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+                    if (ann.loadingDate < filterStr) return false;
+                }
+                if (filters.endDate) {
+                    const filterDate = new Date(filters.endDate);
+                    const [jy, jm, jd] = gregorianToJalali(filterDate.getFullYear(), filterDate.getMonth() + 1, filterDate.getDate());
+                    const filterStr = `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+                    if (ann.loadingDate > filterStr) return false;
+                }
+            } else if (ann.loadingDate instanceof Date) {
+                // اگر Date object است (برای سازگاری)
+                const loadingDateTime = ann.loadingDate.getTime();
+                if (filters.startDate && loadingDateTime < new Date(filters.startDate).getTime()) return false;
+                if (filters.endDate && loadingDateTime > new Date(filters.endDate).getTime()) return false;
+            }
             
             return true;
         });

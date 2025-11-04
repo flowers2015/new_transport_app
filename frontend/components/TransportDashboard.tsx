@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, LabelList } from 'recharts';
 import { FreightLineType } from '../types';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
 
@@ -39,15 +39,27 @@ const COLORS = {
 // timePeriod comes from backend as Jalali string (e.g., "1403/11/24" or "1403/11" or "1403")
 const formatJalaliDate = (jalaliStr: string, timeRange: 'day' | 'month' | 'year'): string => {
     try {
-        // Backend already returns Jalali format, just ensure proper display
+        // استخراج بخش مورد نیاز بر اساس timeRange
         if (timeRange === 'day') {
-            // Format: 1403/11/24
+            // برای روزانه: فقط روز را برمی‌گردانیم (مثلاً از "1404/08/05" فقط "05")
+            const parts = jalaliStr.split('/');
+            if (parts.length >= 3) {
+                return parts[2]; // روز
+            }
             return jalaliStr;
         } else if (timeRange === 'month') {
-            // Format: 1403/11
+            // برای ماهانه: فقط ماه را برمی‌گردانیم (مثلاً از "1404/08" فقط "08")
+            const parts = jalaliStr.split('/');
+            if (parts.length >= 2) {
+                return parts[1]; // ماه
+            }
             return jalaliStr;
         } else if (timeRange === 'year') {
-            // Format: 1403
+            // برای سالانه: فقط سال را برمی‌گردانیم (مثلاً "1404")
+            const parts = jalaliStr.split('/');
+            if (parts.length >= 1) {
+                return parts[0]; // سال
+            }
             return jalaliStr;
         }
         return jalaliStr;
@@ -56,12 +68,159 @@ const formatJalaliDate = (jalaliStr: string, timeRange: 'day' | 'month' | 'year'
     }
 };
 
+// Chart Zoom Dialog Component
+const ChartZoomDialog: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    title: string;
+    chartType: 'line' | 'bar' | 'pie';
+    chartData: any;
+    chartData2?: any;
+    timeRange: 'day' | 'month' | 'year';
+    colors?: any;
+}> = ({ isOpen, onClose, title, chartType, chartData, chartData2, timeRange, colors }) => {
+    if (!isOpen) return null;
+
+    const renderChart = () => {
+        if (chartType === 'line' && chartData) {
+            return (
+                <div className="w-full h-full overflow-auto">
+                    <ResponsiveContainer width="100%" height={600} minHeight={600}>
+                        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                                dataKey="formattedLabel" 
+                                angle={0}
+                                textAnchor="middle"
+                                height={80}
+                                fontSize={14}
+                                interval={0}
+                                tick={{ fill: '#475569', fontSize: 14 }}
+                            />
+                            <YAxis allowDecimals={false} tick={{ fill: '#475569', fontSize: 14 }} />
+                            <Tooltip />
+                            <Legend />
+                            <Line 
+                                type="monotone" 
+                                dataKey="totalRequests" 
+                                stroke={colors?.requests || '#3b82f6'} 
+                                strokeWidth={3}
+                                name="درخواست خودرو"
+                            >
+                                <LabelList dataKey="totalRequests" position="top" fontSize={10} fill="#3b82f6" />
+                            </Line>
+                            <Line 
+                                type="monotone" 
+                                dataKey="companyAssignments" 
+                                stroke={colors?.company || '#10b981'} 
+                                strokeWidth={3}
+                                name="تخصیص شرکتی"
+                            >
+                                <LabelList dataKey="companyAssignments" position="top" fontSize={10} fill="#10b981" />
+                            </Line>
+                            <Line 
+                                type="monotone" 
+                                dataKey="personalAssignments" 
+                                stroke={colors?.personal || '#f59e0b'} 
+                                strokeWidth={3}
+                                name="تخصیص شخصی"
+                            >
+                                <LabelList dataKey="personalAssignments" position="top" fontSize={10} fill="#f59e0b" />
+                            </Line>
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            );
+        } else if (chartType === 'bar' && chartData2) {
+            return (
+                <div className="w-full h-full overflow-auto">
+                    <ResponsiveContainer width="100%" height={600} minHeight={600}>
+                        <BarChart 
+                            data={chartData2} 
+                            barCategoryGap="15%" 
+                            barGap={10}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                                dataKey="period" 
+                                type="category"
+                                angle={0}
+                                tick={{ fill: '#475569', fontSize: 14 }}
+                                height={80}
+                                interval={0}
+                                tickMargin={10}
+                                axisLine={true}
+                                tickLine={false}
+                            />
+                            <YAxis allowDecimals={false} tick={{ fill: '#475569', fontSize: 14 }} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="company" fill={colors?.company || '#10b981'} name="تخصیص شرکتی">
+                                <LabelList dataKey="company" position="top" fontSize={10} fill="#10b981" />
+                            </Bar>
+                            <Bar dataKey="personal" fill={colors?.personal || '#f59e0b'} name="تخصیص شخصی">
+                                <LabelList dataKey="personal" position="top" fontSize={10} fill="#f59e0b" />
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            );
+        } else if (chartType === 'pie' && chartData) {
+            return (
+                <div className="w-full h-full overflow-auto flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height={600} minHeight={600}>
+                        <PieChart>
+                            <Pie
+                                data={chartData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percentage }) => `${name}: ${percentage}%`}
+                                outerRadius={200}
+                                fill="#8884d8"
+                                dataKey="value"
+                            >
+                                {chartData.map((entry: any, index: number) => (
+                                    <Cell key={`cell-${index}`} fill={index === 0 ? (colors?.company || '#10b981') : (colors?.personal || '#f59e0b')} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-4 border-b">
+                    <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+                    <button 
+                        onClick={onClose}
+                        className="text-slate-500 hover:text-slate-700 text-2xl font-bold"
+                    >
+                        ×
+                    </button>
+                </div>
+                <div className="flex-1 overflow-auto p-6">
+                    {renderChart()}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // Line Row Component
 const LineRow: React.FC<{
     title: string;
     stats: StatisticsData[];
     timeRange: 'day' | 'month' | 'year';
 }> = ({ title, stats, timeRange }) => {
+    const [zoomChart, setZoomChart] = useState<{ type: 'line' | 'bar' | 'pie' | null; data: any; data2?: any }>({ type: null, data: null });
     // Debug: Log stats received
     React.useEffect(() => {
         console.log(`📈 [LineRow:${title}] Stats:`, stats, 'Length:', stats?.length);
@@ -133,8 +292,9 @@ const LineRow: React.FC<{
 
     // Bar chart data (counts by period)
     const barData = useMemo(() => {
-        return chartData.map(d => ({
+        return chartData.map((d, idx) => ({
             period: d.formattedLabel,
+            periodIndex: idx,
             company: d.companyAssignments,
             personal: d.personalAssignments,
             total: d.totalAssignments,
@@ -206,20 +366,33 @@ const LineRow: React.FC<{
             {/* Charts Grid - 3 columns */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Line Chart */}
-                <div className="bg-slate-50 rounded-lg p-4">
-                    <h3 className="text-base font-semibold text-slate-700 mb-3">نمودار خطی - روند زمانی</h3>
+                <div className="bg-slate-50 rounded-lg p-4 relative">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold text-slate-700">نمودار خطی - روند زمانی</h3>
+                        <button 
+                            onClick={() => setZoomChart({ type: 'line', data: chartData })}
+                            className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1"
+                            title="بزرگنمایی"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                            </svg>
+                        </button>
+                    </div>
                     {chartData && chartData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis 
                                 dataKey="formattedLabel" 
-                                angle={-45}
-                                textAnchor="end"
-                                height={80}
-                                fontSize={11}
+                                angle={0}
+                                textAnchor="middle"
+                                height={60}
+                                fontSize={12}
+                                interval={0}
+                                tick={{ fill: '#475569', fontSize: 12 }}
                             />
-                            <YAxis />
+                            <YAxis allowDecimals={false} tick={{ fill: '#475569', fontSize: 12 }} />
                             <Tooltip />
                             <Legend />
                             <Line 
@@ -228,21 +401,27 @@ const LineRow: React.FC<{
                                 stroke={COLORS.requests} 
                                 strokeWidth={2}
                                 name="درخواست خودرو"
-                            />
+                            >
+                                <LabelList dataKey="totalRequests" position="top" fontSize={9} fill="#3b82f6" />
+                            </Line>
                             <Line 
                                 type="monotone" 
                                 dataKey="companyAssignments" 
                                 stroke={COLORS.company} 
                                 strokeWidth={2}
                                 name="تخصیص شرکتی"
-                            />
+                            >
+                                <LabelList dataKey="companyAssignments" position="top" fontSize={9} fill="#10b981" />
+                            </Line>
                             <Line 
                                 type="monotone" 
                                 dataKey="personalAssignments" 
                                 stroke={COLORS.personal} 
                                 strokeWidth={2}
                                 name="تخصیص شخصی"
-                            />
+                            >
+                                <LabelList dataKey="personalAssignments" position="top" fontSize={9} fill="#f59e0b" />
+                            </Line>
                         </LineChart>
                         </ResponsiveContainer>
                     ) : (
@@ -253,8 +432,19 @@ const LineRow: React.FC<{
                 </div>
 
                 {/* Pie Chart */}
-                <div className="bg-slate-50 rounded-lg p-4">
-                    <h3 className="text-base font-semibold text-slate-700 mb-3">نمودار دایره‌ای - درصد تخصیص</h3>
+                <div className="bg-slate-50 rounded-lg p-4 relative">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold text-slate-700">نمودار دایره‌ای - درصد تخصیص</h3>
+                        <button 
+                            onClick={() => setZoomChart({ type: 'pie', data: pieData })}
+                            className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1"
+                            title="بزرگنمایی"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                            </svg>
+                        </button>
+                    </div>
                     {pieData && pieData.length > 0 && totalAssignments > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
@@ -291,26 +481,67 @@ const LineRow: React.FC<{
                 </div>
 
                 {/* Bar Chart */}
-                <div className="bg-slate-50 rounded-lg p-4">
-                    <h3 className="text-base font-semibold text-slate-700 mb-3">نمودار میله‌ای - تعداد تخصیص</h3>
+                <div className="bg-slate-50 rounded-lg p-4 relative">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold text-slate-700">نمودار میله‌ای - تعداد تخصیص</h3>
+                        <button 
+                            onClick={() => setZoomChart({ type: 'bar', data: chartData, data2: barData })}
+                            className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1"
+                            title="بزرگنمایی"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                            </svg>
+                        </button>
+                    </div>
                     {barData && barData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={barData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis 
-                                dataKey="period" 
-                                angle={-45}
-                                textAnchor="end"
-                                height={80}
-                                fontSize={11}
-                            />
-                            <YAxis />
-                            <Tooltip />
-                            <Legend />
-                            <Bar dataKey="company" fill={COLORS.company} name="تخصیص شرکتی" />
-                            <Bar dataKey="personal" fill={COLORS.personal} name="تخصیص شخصی" />
-                        </BarChart>
-                        </ResponsiveContainer>
+                        <div style={{ position: 'relative' }}>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart 
+                                    data={barData} 
+                                    barCategoryGap="15%" 
+                                    barGap={10}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+                                >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis 
+                                    dataKey="period" 
+                                    type="category"
+                                    angle={0}
+                                    tick={({ x, y, payload, index }) => {
+                                        // x موقعیت tick mark است که در مرکز category قرار دارد
+                                        // برای تراز کردن label زیر مرکز گروه میله‌ها، از همان x استفاده می‌کنیم
+                                        // چون Recharts خودکار labelها را در مرکز هر category قرار می‌دهد
+                                        return (
+                                            <text 
+                                                x={x} 
+                                                y={y + 15} 
+                                                fill="#475569" 
+                                                fontSize={12} 
+                                                textAnchor="middle"
+                                            >
+                                                {payload.value}
+                                            </text>
+                                        );
+                                    }}
+                                    height={60}
+                                    interval={0}
+                                    tickMargin={8}
+                                    axisLine={true}
+                                    tickLine={false}
+                                />
+                                <YAxis allowDecimals={false} tick={{ fill: '#475569', fontSize: 12 }} />
+                                <Tooltip />
+                                <Legend />
+                                                            <Bar dataKey="company" fill={COLORS.company} name="تخصیص شرکتی">
+                                <LabelList dataKey="company" position="top" fontSize={9} fill="#10b981" />
+                            </Bar>
+                            <Bar dataKey="personal" fill={COLORS.personal} name="تخصیص شخصی">
+                                <LabelList dataKey="personal" position="top" fontSize={9} fill="#f59e0b" />
+                            </Bar>
+                            </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     ) : (
                         <div className="flex items-center justify-center h-[300px] text-slate-500">
                             داده‌ای برای نمایش وجود ندارد
@@ -338,7 +569,8 @@ const LineRow: React.FC<{
                             <tbody>
                                 {chartData.map((stat, idx) => (
                                     <tr key={idx} className="border-b border-slate-200 hover:bg-slate-100">
-                                        <td className="px-3 py-2 text-right">{stat.formattedLabel}</td>
+                                        {/* در جدول کل تاریخ را نمایش می‌دهیم، نه فقط بخشی از آن */}
+                                        <td className="px-3 py-2 text-right">{stat.timePeriod}</td>
                                         <td className="px-3 py-2 text-center">{stat.totalRequests}</td>
                                         <td className="px-3 py-2 text-center">{stat.companyAssignments}</td>
                                         <td className="px-3 py-2 text-center">{stat.personalAssignments}</td>
@@ -359,6 +591,18 @@ const LineRow: React.FC<{
                     </div>
                 </div>
             )}
+
+            {/* Chart Zoom Dialog */}
+            <ChartZoomDialog
+                isOpen={zoomChart.type !== null}
+                onClose={() => setZoomChart({ type: null, data: null })}
+                title={`${title} - ${zoomChart.type === 'line' ? 'نمودار خطی' : zoomChart.type === 'bar' ? 'نمودار میله‌ای' : 'نمودار دایره‌ای'}`}
+                chartType={zoomChart.type || 'line'}
+                chartData={zoomChart.data}
+                chartData2={zoomChart.data2}
+                timeRange={timeRange}
+                colors={COLORS}
+            />
         </div>
     );
 };

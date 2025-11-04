@@ -1534,35 +1534,28 @@ async function finalizeAssignments(req, res) {
 async function getTransportStatistics(req, res) {
   try {
     const { year, month, day, lineType, timeRange = 'day' } = req.query;
-    const { jalaliToGregorian } = require('../utils/jalali');
     
     console.log('📊 [TransportStatistics] Request:', { year, month, day, lineType, timeRange });
     
-    // Build date filter
+    // Build date filter - چون loading_date به صورت DATE ذخیره شده و شامل تاریخ شمسی است
+    // باید ابتدا به TEXT تبدیل کنیم (فرمت YYYY-MM-DD)
     let dateFilter = '';
     let dateParams = [];
     
     if (year && month && day) {
-      // Specific day
-      const [gy, gm, gd] = jalaliToGregorian(parseInt(year), parseInt(month), parseInt(day));
-      const startDate = new Date(gy, gm - 1, gd);
-      const endDate = new Date(gy, gm - 1, gd + 1);
-      dateFilter = 'WHERE fa.loading_date >= $1 AND fa.loading_date < $2';
-      dateParams = [startDate, endDate];
+      // روز خاص: فیلتر بر اساس YYYY-MM-DD (فرمت PostgreSQL)
+      const jalaliDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      dateFilter = "WHERE CAST(fa.loading_date AS TEXT) = $1";
+      dateParams = [jalaliDate];
     } else if (year && month) {
-      // Specific month
-      const [gy, gm] = jalaliToGregorian(parseInt(year), parseInt(month), 1);
-      const startDate = new Date(gy, gm - 1, 1);
-      const endDate = new Date(gy, gm, 1);
-      dateFilter = 'WHERE fa.loading_date >= $1 AND fa.loading_date < $2';
-      dateParams = [startDate, endDate];
+      // ماه خاص: فیلتر بر اساس YYYY-MM
+      const jalaliMonth = `${year}-${String(month).padStart(2, '0')}`;
+      dateFilter = "WHERE CAST(fa.loading_date AS TEXT) LIKE $1";
+      dateParams = [`${jalaliMonth}-%`];
     } else if (year) {
-      // Specific year
-      const [gy] = jalaliToGregorian(parseInt(year), 1, 1);
-      const startDate = new Date(gy, 0, 1);
-      const endDate = new Date(gy + 1, 0, 1);
-      dateFilter = 'WHERE fa.loading_date >= $1 AND fa.loading_date < $2';
-      dateParams = [startDate, endDate];
+      // سال خاص: فیلتر بر اساس YYYY
+      dateFilter = "WHERE CAST(fa.loading_date AS TEXT) LIKE $1";
+      dateParams = [`${year}-%`];
     }
     
     // Build line type filter
@@ -1573,23 +1566,41 @@ async function getTransportStatistics(req, res) {
       dateParams.push(lineType);
     }
     
-    let whereClause = dateFilter + lineTypeFilter;
+    // فیلتر status: فقط بارهایی که Draft نیستند (یعنی تایید شده و به ترابری رفته‌اند)
+    // باید Draft و PendingManagerApproval و Rejected را از آمار حذف کنیم
+    // چون این بارها هنوز به مرحله ترابری نرسیده‌اند
+    // نکته: status ها در دیتابیس به انگلیسی ذخیره می‌شوند
+    let statusFilter = '';
+    if (dateFilter || lineTypeFilter) {
+      statusFilter = ` AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected')`;
+    } else {
+      statusFilter = `WHERE fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected')`;
+    }
+    
+    // ترکیب تمام فیلترها
+    let whereClause = dateFilter + lineTypeFilter + statusFilter;
     if (!whereClause) {
       whereClause = '';
     }
     
+    console.log('📊 [TransportStatistics] Status filter:', statusFilter);
+    
     // Determine grouping based on timeRange
+    // ابتدا loading_date را به TEXT تبدیل می‌کنیم (فرمت YYYY-MM-DD)، سپس از SUBSTRING استفاده می‌کنیم
     let groupBy = '';
     let dateFormat = '';
     if (timeRange === 'day') {
-      groupBy = 'DATE(fa.loading_date)';
-      dateFormat = "TO_CHAR(fa.loading_date, 'YYYY-MM-DD')";
+      // برای روز: کل رشته را برگردان (YYYY-MM-DD)
+      groupBy = 'CAST(fa.loading_date AS TEXT)';
+      dateFormat = 'CAST(fa.loading_date AS TEXT)';
     } else if (timeRange === 'month') {
-      groupBy = "DATE_TRUNC('month', fa.loading_date)";
-      dateFormat = "TO_CHAR(DATE_TRUNC('month', fa.loading_date), 'YYYY-MM')";
+      // برای ماه: 7 کاراکتر اول را برگردان (YYYY-MM)
+      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 7)";
+      dateFormat = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 7)";
     } else if (timeRange === 'year') {
-      groupBy = "DATE_TRUNC('year', fa.loading_date)";
-      dateFormat = "TO_CHAR(DATE_TRUNC('year', fa.loading_date), 'YYYY')";
+      // برای سال: 4 کاراکتر اول را برگردان (YYYY)
+      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 4)";
+      dateFormat = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 4)";
     }
     
     // Query for statistics
@@ -1612,18 +1623,29 @@ async function getTransportStatistics(req, res) {
     const { rows } = await pool.query(query, dateParams);
     
     // Calculate success rate for each period
-    const statistics = rows.map(row => ({
-      timePeriod: row.time_period,
-      totalRequests: parseInt(row.total_requests) || 0,
-      companyAssignments: parseInt(row.company_assignments) || 0,
-      personalAssignments: parseInt(row.personal_assignments) || 0,
-      totalAssignments: parseInt(row.total_assignments) || 0,
-      successRate: row.total_requests > 0 
-        ? Math.round((parseInt(row.total_assignments) / parseInt(row.total_requests)) * 100)
-        : 0
-    }));
+    // همچنین باید time_period را normalize کنیم (تبدیل `-` به `/`)
+    const statistics = rows.map(row => {
+      let timePeriod = row.time_period;
+      // اگر فرمت `YYYY-MM-DD` یا `YYYY-MM` دارد، به `YYYY/MM/DD` یا `YYYY/MM` تبدیل کن
+      if (typeof timePeriod === 'string') {
+        timePeriod = timePeriod.replace(/-/g, '/');
+      }
+      return {
+        timePeriod,
+        totalRequests: parseInt(row.total_requests) || 0,
+        companyAssignments: parseInt(row.company_assignments) || 0,
+        personalAssignments: parseInt(row.personal_assignments) || 0,
+        totalAssignments: parseInt(row.total_assignments) || 0,
+        successRate: row.total_requests > 0 
+          ? Math.round((parseInt(row.total_assignments) / parseInt(row.total_requests)) * 100)
+          : 0
+      };
+    });
     
     console.log('✅ [TransportStatistics] Found', statistics.length, 'periods');
+    if (statistics.length > 0) {
+      console.log('📊 [TransportStatistics] Sample period:', statistics[0]);
+    }
     
     res.json(statistics);
   } catch (error) {

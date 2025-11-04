@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { RepairOrder, Vehicle, RepairStatus, UserRole, View, Alert, User, FreightAnnouncement, FreightAnnouncementStatus, Invoice, InvoiceStatus } from '../types';
-import { formatJalali, formatPlateNumber, formatJalaliDateTime } from '../utils/jalali';
+import { formatJalali, formatPlateNumber, formatJalaliDateTime, gregorianToJalali } from '../utils/jalali';
 import { ChartBarIcon } from './icons/ChartBarIcon';
 import { CogIcon } from './icons/CogIcon';
 import { ClockIcon } from './icons/ClockIcon';
@@ -27,6 +27,16 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
 
 const isToday = (someDate: any) => {
     if (!someDate) return false;
+    
+    // اگر رشته شمسی است (YYYY/MM/DD)
+    if (typeof someDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(someDate)) {
+        const today = new Date();
+        const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        const todayStr = `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+        return someDate === todayStr;
+    }
+    
+    // اگر Date object است
     const d = typeof someDate === 'string' ? new Date(someDate) : someDate;
     if (!(d instanceof Date) || isNaN(d.getTime())) return false;
     const today = new Date();
