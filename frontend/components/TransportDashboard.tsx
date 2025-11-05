@@ -255,6 +255,7 @@ const LineRow: React.FC<{
     timeRange: 'day' | 'month' | 'year';
 }> = ({ title, stats, timeRange }) => {
     const [zoomChart, setZoomChart] = useState<{ type: 'line' | 'bar' | 'pie' | null; data: any; data2?: any }>({ type: null, data: null });
+    const [isSummaryTableOpen, setIsSummaryTableOpen] = useState(false); // State for summary table collapse/expand
     // Debug: Log stats received
     React.useEffect(() => {
         console.log(`📈 [LineRow:${title}] Stats:`, stats, 'Length:', stats?.length);
@@ -410,8 +411,8 @@ const LineRow: React.FC<{
             });
         }
 
-        console.log('📊 [AssignmentTimingPie] Aggregated:', aggregated);
-        console.log('📊 [AssignmentTimingPie] Result:', result);
+        console.log('📊 [AssignmentTimingPie] Aggregated:', JSON.stringify(aggregated, null, 2));
+        console.log('📊 [AssignmentTimingPie] Result:', JSON.stringify(result, null, 2));
         console.log('📊 [AssignmentTimingPie] Total assigned from days:', totalAssignedFromDays);
 
         return result;
@@ -745,7 +746,31 @@ const LineRow: React.FC<{
             {/* Statistics Summary Table */}
             {chartData.length > 0 && (
                 <div className="bg-slate-50 rounded-lg p-4">
-                    <h3 className="text-base font-semibold text-slate-700 mb-3">خلاصه آمار</h3>
+                    <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-base font-semibold text-slate-700">خلاصه آمار</h3>
+                        <button
+                            onClick={() => setIsSummaryTableOpen(!isSummaryTableOpen)}
+                            className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1 flex-row-reverse"
+                            title={isSummaryTableOpen ? "بستن جدول" : "باز کردن جدول"}
+                        >
+                            {isSummaryTableOpen ? (
+                                <>
+                                    بستن
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </>
+                            ) : (
+                                <>
+                                    باز کردن
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                    {isSummaryTableOpen && (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
@@ -851,6 +876,7 @@ const LineRow: React.FC<{
                             </tbody>
                         </table>
                     </div>
+                    )}
                 </div>
             )}
 
