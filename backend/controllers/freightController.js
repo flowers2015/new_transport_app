@@ -1537,25 +1537,56 @@ async function getTransportStatistics(req, res) {
     
     console.log('📊 [TransportStatistics] Request:', { year, month, day, lineType, timeRange });
     
-    // Build date filter - چون loading_date به صورت DATE ذخیره شده و شامل تاریخ شمسی است
-    // باید ابتدا به TEXT تبدیل کنیم (فرمت YYYY-MM-DD)
+    // منطق فیلتر تاریخ:
+    // - اگر timeRange = 'day' و year و month داده شده: آمار روزانه یک ماه خاص (تاریخچه)
+    // - اگر timeRange = 'day' و هیچ فیلتر تاریخی داده نشده: آمار روزانه زنده (امروز)
+    // - اگر timeRange = 'month' یا 'year': آمار ماهانه/سالانه (تاریخچه)
+    
     let dateFilter = '';
     let dateParams = [];
+    let isDailyHistorical = false; // آیا آمار روزانه برای تاریخچه است (نه زنده)
     
-    if (year && month && day) {
-      // روز خاص: فیلتر بر اساس YYYY-MM-DD (فرمت PostgreSQL)
-      const jalaliDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      dateFilter = "WHERE CAST(fa.loading_date AS TEXT) = $1";
-      dateParams = [jalaliDate];
-    } else if (year && month) {
-      // ماه خاص: فیلتر بر اساس YYYY-MM
-      const jalaliMonth = `${year}-${String(month).padStart(2, '0')}`;
-      dateFilter = "WHERE CAST(fa.loading_date AS TEXT) LIKE $1";
-      dateParams = [`${jalaliMonth}-%`];
-    } else if (year) {
-      // سال خاص: فیلتر بر اساس YYYY
-      dateFilter = "WHERE CAST(fa.loading_date AS TEXT) LIKE $1";
-      dateParams = [`${year}-%`];
+    // برای آمار روزانه (timeRange = 'day'):
+    if (timeRange === 'day' && year && month) {
+      // آمار روزانه برای یک ماه خاص (تاریخچه)
+      isDailyHistorical = true;
+      if (day) {
+        // روز خاص: فیلتر بر اساس YYYY-MM-DD یا YYYY/MM/DD
+        const jalaliDate1 = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const jalaliDate2 = `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) = $1 OR CAST(fa.loading_date AS TEXT) = $2)";
+        dateParams = [jalaliDate1, jalaliDate2];
+        console.log(`📊 [TransportStatistics] Date filter: Daily historical - Specific day (${jalaliDate1} or ${jalaliDate2})`);
+      } else {
+        // ماه خاص: فیلتر بر اساس YYYY-MM یا YYYY/MM (برای آمار روزانه یک ماه)
+        const jalaliMonth1 = `${year}-${String(month).padStart(2, '0')}`;
+        const jalaliMonth2 = `${year}/${String(month).padStart(2, '0')}`;
+        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+        dateParams = [`${jalaliMonth1}-%`, `${jalaliMonth2}/%`];
+        console.log(`📊 [TransportStatistics] Date filter: Daily historical - Specific month (${jalaliMonth1} or ${jalaliMonth2})`);
+      }
+    } else if (timeRange !== 'day') {
+      // برای آمار ماهانه/سالانه
+      if (year && month && day) {
+        // روز خاص: فیلتر بر اساس YYYY-MM-DD یا YYYY/MM/DD (فرمت شمسی)
+        const jalaliDate1 = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const jalaliDate2 = `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) = $1 OR CAST(fa.loading_date AS TEXT) = $2)";
+        dateParams = [jalaliDate1, jalaliDate2];
+        console.log(`📊 [TransportStatistics] Date filter: Specific day (${jalaliDate1} or ${jalaliDate2})`);
+      } else if (year && month) {
+        // ماه خاص: فیلتر بر اساس YYYY-MM یا YYYY/MM
+        const jalaliMonth1 = `${year}-${String(month).padStart(2, '0')}`;
+        const jalaliMonth2 = `${year}/${String(month).padStart(2, '0')}`;
+        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+        dateParams = [`${jalaliMonth1}-%`, `${jalaliMonth2}/%`];
+        console.log(`📊 [TransportStatistics] Date filter: Specific month (${jalaliMonth1} or ${jalaliMonth2})`);
+      } else if (year) {
+        // سال خاص: فیلتر بر اساس YYYY
+        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+        dateParams = [`${year}-%`, `${year}/%`];
+        console.log(`📊 [TransportStatistics] Date filter: All months of year ${year}`);
+      }
     }
     
     // Build line type filter
@@ -1566,15 +1597,30 @@ async function getTransportStatistics(req, res) {
       dateParams.push(lineType);
     }
     
-    // فیلتر status: فقط بارهایی که Draft نیستند (یعنی تایید شده و به ترابری رفته‌اند)
-    // باید Draft و PendingManagerApproval و Rejected را از آمار حذف کنیم
-    // چون این بارها هنوز به مرحله ترابری نرسیده‌اند
-    // نکته: status ها در دیتابیس به انگلیسی ذخیره می‌شوند
+    // فیلتر status:
+    // برای آمار روزانه زنده (timeRange = 'day' و بدون فیلتر تاریخ): فقط بارهایی که الان در کارتابل هستند
+    //   یعنی: PendingCompanyAssignment, PendingPersonalAssignment, Assigned, InTransit
+    // برای آمار روزانه تاریخچه (timeRange = 'day' و با فیلتر تاریخ): همه بارهایی که به دست ترابری رسیده‌اند
+    //   حذف فقط: Draft, PendingManagerApproval, Rejected
+    // برای آمار ماهانه/سالانه (timeRange = 'month' or 'year'): 
+    //   همه بارهایی که در آن بازه زمانی به دست ترابری رسیده‌اند (حتی اگر الان Finalized یا Leftover باشند)
+    //   حذف فقط: Draft, PendingManagerApproval, Rejected
+    // نکته: status ها در دیتابیس به انگلیسی ذخیره می‌شوند (مگر برخی که فارسی هستند)
     let statusFilter = '';
-    if (dateFilter || lineTypeFilter) {
-      statusFilter = ` AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected')`;
+    if (timeRange === 'day' && !isDailyHistorical) {
+      // برای آمار روزانه زنده: فقط statusهای فعال در کارتابل (زنده)
+      if (dateFilter || lineTypeFilter) {
+        statusFilter = ` AND fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
+      } else {
+        statusFilter = `WHERE fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
+      }
     } else {
-      statusFilter = `WHERE fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected')`;
+      // برای آمار روزانه تاریخچه یا آمار ماهانه/سالانه: حذف فقط Draft, PendingManagerApproval, Rejected
+      if (dateFilter || lineTypeFilter) {
+        statusFilter = ` AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+      } else {
+        statusFilter = `WHERE fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+      }
     }
     
     // ترکیب تمام فیلترها
@@ -1586,48 +1632,201 @@ async function getTransportStatistics(req, res) {
     console.log('📊 [TransportStatistics] Status filter:', statusFilter);
     
     // Determine grouping based on timeRange
-    // ابتدا loading_date را به TEXT تبدیل می‌کنیم (فرمت YYYY-MM-DD)، سپس از SUBSTRING استفاده می‌کنیم
+    // برای آمار روزانه زنده (timeRange = 'day' و بدون فیلتر تاریخ): بدون گروه‌بندی (یک ردیف برای امروز)
+    // برای آمار روزانه تاریخچه (timeRange = 'day' و با فیلتر تاریخ): گروه‌بندی بر اساس روز
+    // برای آمار ماهانه/سالانه: گروه‌بندی بر اساس تاریخ بارگیری
     let groupBy = '';
     let dateFormat = '';
-    if (timeRange === 'day') {
-      // برای روز: کل رشته را برگردان (YYYY-MM-DD)
-      groupBy = 'CAST(fa.loading_date AS TEXT)';
-      dateFormat = 'CAST(fa.loading_date AS TEXT)';
+    if (timeRange === 'day' && isDailyHistorical) {
+      // برای آمار روزانه تاریخچه: گروه‌بندی بر اساس روز (YYYY-MM-DD)
+      groupBy = "CAST(fa.loading_date AS TEXT)";
+      dateFormat = "CAST(fa.loading_date AS TEXT)";
+      console.log(`📊 [TransportStatistics] Daily historical stats - grouping by day`);
+    } else if (timeRange === 'day') {
+      // برای آمار روزانه زنده: چون تاریخ فیلتر نمی‌شود، فقط یک ردیف برای همه بارهای کارتابل برمی‌گردانیم
+      // از یک مقدار ثابت برای time_period استفاده می‌کنیم (تاریخ امروز شمسی برای نمایش)
+      const today = new Date();
+      const jalaliUtils = require('../utils/jalali');
+      const [jy, jm, jd] = jalaliUtils.gregorianToJalali(
+        today.getFullYear(), 
+        today.getMonth() + 1, 
+        today.getDate()
+      );
+      const todayJalali = `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+      console.log(`📊 [TransportStatistics] Daily live stats - today gregorian: ${today.toISOString().split('T')[0]}, jalali: ${todayJalali}`);
+      // فقط یک مقدار ثابت برمی‌گردانیم (بدون GROUP BY)
+      groupBy = `NULL`; // برای جلوگیری از GROUP BY
+      // Escape single quotes in todayJalali for SQL
+      const escapedJalali = todayJalali.replace(/'/g, "''");
+      dateFormat = `'${escapedJalali}'::text`;
     } else if (timeRange === 'month') {
-      // برای ماه: 7 کاراکتر اول را برگردان (YYYY-MM)
-      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 7)";
-      dateFormat = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 7)";
+      // برای ماه: استخراج YYYY-MM از تاریخ (7 کاراکتر اول)
+      // تاریخ‌ها در دیتابیس به صورت VARCHAR ذخیره شده‌اند (1404-08-12)
+      // استفاده از SUBSTRING برای استخراج 7 کاراکتر اول
+      // اگر loading_date به صورت DATE ذخیره شده باشد، باید به TEXT تبدیل شود
+      // اما چون ممکن است به صورت VARCHAR باشد، باید مستقیماً SUBSTRING کنیم
+      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7)";
+      dateFormat = "SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7)";
     } else if (timeRange === 'year') {
       // برای سال: 4 کاراکتر اول را برگردان (YYYY)
-      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 4)";
-      dateFormat = "SUBSTRING(CAST(fa.loading_date AS TEXT), 1, 4)";
+      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 4)";
+      dateFormat = "SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 4)";
     }
     
     // Query for statistics
-    const query = `
+    let query = '';
+    if (timeRange === 'day' && isDailyHistorical) {
+      // برای آمار روزانه تاریخچه: با GROUP BY روز
+      query = `
+        SELECT 
+          ${dateFormat} as time_period,
+          COUNT(*) as total_requests,
+          COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+          COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+          COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+        FROM freight_announcements fa
+        ${whereClause}
+        GROUP BY ${groupBy}
+        ORDER BY time_period ASC
+      `;
+    } else if (timeRange === 'day') {
+      // برای آمار روزانه زنده: بدون GROUP BY، فقط یک ردیف برمی‌گردد
+      query = `
       SELECT 
-        ${dateFormat} as time_period,
+          ${dateFormat} as time_period,
         COUNT(*) as total_requests,
         COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
         COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
         COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
       FROM freight_announcements fa
       ${whereClause}
-      GROUP BY ${groupBy}
-      ORDER BY time_period ASC
-    `;
+      `;
+    } else {
+      // برای آمار ماهانه/سالانه: با GROUP BY
+      query = `
+        SELECT 
+          ${dateFormat} as time_period,
+          COUNT(*) as total_requests,
+          COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+          COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+          COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+        FROM freight_announcements fa
+        ${whereClause}
+        GROUP BY ${groupBy}
+        ORDER BY time_period ASC
+      `;
+    }
     
     console.log('📊 [TransportStatistics] Query:', query);
     console.log('📊 [TransportStatistics] Params:', dateParams);
     
+    // Debug: بررسی تعداد کل بارها با status مناسب برای این lineType
+    if (lineType && lineType !== 'all') {
+      let debugQuery = '';
+      if (timeRange === 'day') {
+        // برای آمار روزانه: فقط statusهای فعال در کارتابل
+        debugQuery = `
+          SELECT COUNT(*) as total_count, 
+                 COUNT(CASE WHEN fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit') THEN 1 END) as status_match_count
+          FROM freight_announcements fa
+          WHERE fa.line_type = $1
+        `;
+      } else {
+        // برای آمار ماهانه/سالانه: همه به جز Draft, PendingManagerApproval, Rejected
+        debugQuery = `
+          SELECT COUNT(*) as total_count, 
+                 COUNT(CASE WHEN fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر') THEN 1 END) as status_match_count
+          FROM freight_announcements fa
+          WHERE fa.line_type = $1
+        `;
+      }
+      const debugResult = await pool.query(debugQuery, [lineType]);
+      console.log(`📊 [TransportStatistics] Debug for ${lineType} (timeRange: ${timeRange}):`, {
+        totalCount: debugResult.rows[0].total_count,
+        statusMatchCount: debugResult.rows[0].status_match_count
+      });
+      
+      // بررسی چند نمونه از تاریخ‌ها با status مناسب
+      let sampleQuery = '';
+      if (timeRange === 'day') {
+        // برای آمار روزانه: فقط statusهای فعال در کارتابل
+        sampleQuery = `
+          SELECT loading_date, status, line_type
+          FROM freight_announcements fa
+          WHERE fa.line_type = $1 AND fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')
+          LIMIT 5
+        `;
+      } else {
+        // برای آمار ماهانه/سالانه: همه به جز Draft, PendingManagerApproval, Rejected
+        sampleQuery = `
+          SELECT loading_date, status, line_type
+          FROM freight_announcements fa
+          WHERE fa.line_type = $1 AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')
+          LIMIT 5
+        `;
+      }
+      const sampleResult = await pool.query(sampleQuery, [lineType]);
+      console.log(`📊 [TransportStatistics] Sample records for ${lineType} (timeRange: ${timeRange}):`, sampleResult.rows);
+      
+      // بررسی تمام statusهای موجود برای این lineType
+      const statusQuery = `
+        SELECT status, COUNT(*) as count
+        FROM freight_announcements fa
+        WHERE fa.line_type = $1
+        GROUP BY status
+        ORDER BY count DESC
+      `;
+      const statusResult = await pool.query(statusQuery, [lineType]);
+      console.log(`📊 [TransportStatistics] All statuses for ${lineType}:`, statusResult.rows);
+      
+      // بررسی تمام ماه‌های موجود در دیتابیس برای این lineType و year (اگر year داده شده باشد)
+      if (timeRange === 'month' && year) {
+        const monthQuery = `
+          SELECT DISTINCT SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7) as month_period
+          FROM freight_announcements fa
+          WHERE fa.line_type = $1 
+            AND (CAST(fa.loading_date AS TEXT) LIKE $2 OR CAST(fa.loading_date AS TEXT) LIKE $3)
+            AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')
+          ORDER BY month_period ASC
+        `;
+        const monthResult = await pool.query(monthQuery, [lineType, `${year}-%`, `${year}/%`]);
+        console.log(`📊 [TransportStatistics] All months in DB for ${lineType} and year ${year}:`, monthResult.rows.map(r => r.month_period));
+      }
+    }
+    
     const { rows } = await pool.query(query, dateParams);
+    
+    console.log('📊 [TransportStatistics] Raw rows from DB:', rows.length);
+    if (rows.length > 0) {
+      console.log('📊 [TransportStatistics] First raw row:', rows[0]);
+      console.log('📊 [TransportStatistics] All raw time_periods:', rows.map(r => r.time_period));
+    } else {
+      console.log('⚠️ [TransportStatistics] No rows returned from query!');
+    }
     
     // Calculate success rate for each period
     // همچنین باید time_period را normalize کنیم (تبدیل `-` به `/`)
+    // و برای آمار ماهانه، اطمینان حاصل کنیم که فقط YYYY/MM برگردانده می‌شود (نه YYYY/MM/DD)
     const statistics = rows.map(row => {
       let timePeriod = row.time_period;
-      // اگر فرمت `YYYY-MM-DD` یا `YYYY-MM` دارد، به `YYYY/MM/DD` یا `YYYY/MM` تبدیل کن
       if (typeof timePeriod === 'string') {
+        // برای آمار ماهانه: اطمینان حاصل کنیم که فقط 7 کاراکتر اول را می‌گیریم (YYYY-MM یا YYYY/MM)
+        if (timeRange === 'month') {
+          // همیشه فقط 7 کاراکتر اول را بگیر (حتی اگر از دیتابیس بیشتر برگردانده شود)
+          timePeriod = timePeriod.substring(0, 7);
+          // اگر timePeriod به صورت YYYY/MM/DD است (10 کاراکتر)، فقط 7 کاراکتر اول را بگیر
+          if (timePeriod.match(/^\d{4}\/\d{2}\/\d{2}$/)) {
+            timePeriod = timePeriod.substring(0, 7);
+          }
+        }
+        
+        // برای آمار سالانه: اطمینان حاصل کنیم که فقط 4 کاراکتر اول را می‌گیریم (YYYY)
+        if (timeRange === 'year') {
+          // همیشه فقط 4 کاراکتر اول را بگیر
+          timePeriod = timePeriod.substring(0, 4);
+        }
+        
+        // تبدیل `-` به `/` (بعد از اینکه طول را محدود کردیم)
         timePeriod = timePeriod.replace(/-/g, '/');
       }
       return {

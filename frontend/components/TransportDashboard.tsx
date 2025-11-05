@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, LabelList } from 'recharts';
 import { FreightLineType } from '../types';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface StatisticsData {
     timePeriod: string;
@@ -623,6 +625,16 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     onTimeRangeChange,
     onRefresh,
 }) => {
+    const [showDailyStats, setShowDailyStats] = useState(false);
+    const [dailyStatsIndex, setDailyStatsIndex] = useState(0);
+    const [dailyStats, setDailyStats] = useState<{
+        iceCream: StatisticsData[];
+        dairy: StatisticsData[];
+        ambient: StatisticsData[];
+    }>({ iceCream: [], dairy: [], ambient: [] });
+    const [dailyStatsLoading, setDailyStatsLoading] = useState(false);
+    const pdfExportRef = useRef<HTMLDivElement>(null);
+
     // Generate year options
     const currentJalaliYear = new Date().getFullYear() - 621;
     const yearOptions = Array.from({ length: 4 }, (_, i) => currentJalaliYear - i);
@@ -632,6 +644,160 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
 
     // Generate day options
     const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
+
+    // Get today's Jalali date
+    const getTodayJalali = () => {
+        const today = new Date();
+        const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        return {
+            year: jy,
+            month: jm,
+            day: jd,
+            dateStr: `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`
+        };
+    };
+
+    // Fetch daily statistics - memoized to prevent re-creation
+    const fetchDailyStats = React.useCallback(async () => {
+        setDailyStatsLoading(true);
+        try {
+            const today = getTodayJalali();
+            const token = localStorage.getItem('token');
+            const headers: HeadersInit = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const params = (lineType: string) => {
+                const p = new URLSearchParams();
+                // برای آمار روزانه، پارامترهای تاریخ را ارسال نمی‌کنیم
+                // فقط lineType و timeRange ارسال می‌شود
+                p.append('lineType', lineType);
+                p.append('timeRange', 'day');
+                return p.toString();
+            };
+
+            // Fetch each line separately with individual error handling
+            const fetchLineStats = async (lineType: string, lineName: string) => {
+                try {
+                    const response = await fetch(`http://localhost:3000/api/v1/freight-announcements/statistics?${params(lineType)}`, { headers });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    // Only log once per fetch, not on every render
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log(`✅ [DailyStats] ${lineName} stats loaded:`, data.length, 'items');
+                    }
+                    return Array.isArray(data) ? data : [];
+                } catch (err) {
+                    console.error(`❌ [DailyStats] Failed to fetch ${lineName} stats:`, err);
+                    return []; // Return empty array on error
+                }
+            };
+
+            // Fetch all lines in parallel, but handle errors individually
+            const [iceCream, dairy, ambient] = await Promise.allSettled([
+                fetchLineStats(FreightLineType.IceCream, 'بستنی'),
+                fetchLineStats(FreightLineType.Dairy, 'پاستوریزه'),
+                fetchLineStats(FreightLineType.Ambient, 'لبنیات-فروتلند')
+            ]);
+
+            setDailyStats({
+                iceCream: iceCream.status === 'fulfilled' ? iceCream.value : [],
+                dairy: dairy.status === 'fulfilled' ? dairy.value : [],
+                ambient: ambient.status === 'fulfilled' ? ambient.value : []
+            });
+        } catch (err) {
+            console.error('❌ [DailyStats] Failed to fetch daily stats:', err);
+            setDailyStats({
+                iceCream: [],
+                dairy: [],
+                ambient: []
+            });
+        } finally {
+            setDailyStatsLoading(false);
+        }
+    }, []); // Empty deps - getTodayJalali is pure function, token is from localStorage
+
+    // Fetch daily stats on mount (only once for teaser)
+    // و نه هر بار که فیلترها تغییر می‌کنند
+    React.useEffect(() => {
+        fetchDailyStats();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // فقط یک بار در mount
+
+    // Auto-rotate daily stats teaser - use ref to access latest dailyStats without causing re-renders
+    const dailyStatsRef = React.useRef(dailyStats);
+    React.useEffect(() => {
+        dailyStatsRef.current = dailyStats;
+    }, [dailyStats]);
+
+    React.useEffect(() => {
+        const interval = setInterval(() => {
+            setDailyStatsIndex(prev => {
+                const lines = [
+                    { name: 'بستنی', data: dailyStatsRef.current.iceCream },
+                    { name: 'پاستوریزه', data: dailyStatsRef.current.dairy },
+                    { name: 'لبنیات-فروتلند', data: dailyStatsRef.current.ambient }
+                ];
+                
+                // Rotate through all 3 lines regardless of data
+                return (prev + 1) % 3;
+            });
+        }, 5000); // Change every 5 seconds
+        
+        return () => clearInterval(interval);
+    }, []); // Empty dependency array - only run once on mount
+
+    // Export to PDF function
+    const handleExportPDF = async () => {
+        if (!pdfExportRef.current) return;
+        
+        try {
+            // Create canvas from the dashboard content
+            const canvas = await html2canvas(pdfExportRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+            });
+
+            // Calculate PDF dimensions
+            const imgWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            let heightLeft = imgHeight;
+
+            // Create PDF
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            let position = 0;
+
+            // Add image to PDF
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+
+            // Add new pages if content is longer than one page
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+            }
+
+            // Generate filename with date
+            const today = getTodayJalali();
+            const filename = `آمار_ترابری_${today.dateStr}.pdf`;
+
+            // Save PDF
+            pdf.save(filename);
+        } catch (error) {
+            console.error('Error exporting PDF:', error);
+            alert('خطا در ایجاد فایل PDF. لطفاً دوباره تلاش کنید.');
+        }
+    };
+
+
 
     if (loading) {
         return (
@@ -660,11 +826,235 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     }
 
     return (
-        <div className="p-6 space-y-8">
+        <div className="p-6 space-y-8" ref={pdfExportRef}>
             {/* Header */}
-            <div className="bg-white rounded-lg shadow p-4">
+            <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-slate-800">داشبورد ترابری</h1>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                            setShowDailyStats(!showDailyStats);
+                            if (!showDailyStats) {
+                                fetchDailyStats();
+                            }
+                        }}
+                        className="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 text-sm font-medium flex items-center gap-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        {showDailyStats ? 'مخفی کردن آمار روزانه' : 'نمایش آمار روزانه'}
+                    </button>
+                    <button
+                        onClick={handleExportPDF}
+                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium flex items-center gap-2"
+                        title="خروجی PDF"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        خروجی PDF
+                    </button>
+                </div>
             </div>
+
+            {/* Daily Stats Teaser - Carousel */}
+            {!dailyStatsLoading && (
+                <div className="bg-gradient-to-r from-sky-500 to-blue-600 rounded-lg shadow-lg p-3 text-white relative overflow-hidden">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 relative" style={{ height: '60px' }}>
+                            {/* Carousel items with fade transition - render all items for smooth transition */}
+                            {[
+                                { name: 'بستنی', data: dailyStats.iceCream },
+                                { name: 'پاستوریزه', data: dailyStats.dairy },
+                                { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                            ].map((line, idx) => {
+                                const stat = line.data && line.data.length > 0 ? line.data[0] : null;
+                                const isActive = idx === dailyStatsIndex;
+                                const displayStat = stat || {
+                                    totalRequests: 0,
+                                    companyAssignments: 0,
+                                    personalAssignments: 0,
+                                    totalAssignments: 0,
+                                    successRate: 0
+                                };
+                                
+                                // Get colors for statistics
+                                const getRequestColor = (val: number) => {
+                                    if (val === 0) return 'text-yellow-100';
+                                    if (val >= 5) return 'text-green-200';
+                                    return 'text-white';
+                                };
+                                
+                                const getAssignmentColor = (val: number, total: number) => {
+                                    if (val === 0) return 'text-red-200';
+                                    if (val / total >= 0.7) return 'text-green-200';
+                                    return 'text-yellow-100';
+                                };
+                                
+                                const getSuccessColor = (rate: number) => {
+                                    if (rate >= 70) return 'text-green-200';
+                                    if (rate >= 50) return 'text-yellow-100';
+                                    return 'text-red-200';
+                                };
+                                
+                                // Render all items but control visibility with opacity for smooth transition
+                                return (
+                                    <div
+                                        key={`${line.name}-${idx}`}
+                                        className={`absolute inset-0 flex items-center transition-opacity duration-700 ease-in-out ${
+                                            isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-4 w-full">
+                                            <div className="text-xs opacity-90 whitespace-nowrap flex-shrink-0">
+                                                آمار عملکرد امروز - {getTodayJalali().dateStr}
+                                            </div>
+                                            <div className="flex-1 grid grid-cols-6 gap-3 text-center items-center">
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] opacity-75 mb-0.5">لاین فروش</div>
+                                                    <div className="font-semibold text-sm">{line.name}</div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] opacity-75 mb-0.5">درخواست</div>
+                                                    <div className={`font-bold text-base ${getRequestColor(displayStat.totalRequests)}`}>
+                                                        {displayStat.totalRequests}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] opacity-75 mb-0.5">شرکتی</div>
+                                                    <div className={`font-bold text-base ${getAssignmentColor(displayStat.companyAssignments, displayStat.totalRequests)}`}>
+                                                        {displayStat.companyAssignments}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] opacity-75 mb-0.5">شخصی</div>
+                                                    <div className={`font-bold text-base ${getAssignmentColor(displayStat.personalAssignments, displayStat.totalRequests)}`}>
+                                                        {displayStat.personalAssignments}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] opacity-75 mb-0.5">کل</div>
+                                                    <div className="font-bold text-base text-white">{displayStat.totalAssignments}</div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] opacity-75 mb-0.5">موفقیت</div>
+                                                    <div className={`font-bold text-base ${getSuccessColor(displayStat.successRate)}`}>
+                                                        {displayStat.successRate}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="flex flex-col gap-1.5 flex-shrink-0">
+                            {[0, 1, 2].map(i => {
+                                const line = [
+                                    { name: 'بستنی', data: dailyStats.iceCream },
+                                    { name: 'پاستوریزه', data: dailyStats.dairy },
+                                    { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                                ][i];
+                                const hasData = line.data && line.data.length > 0;
+                                const isActive = dailyStatsIndex === i;
+                                return (
+                                    <button
+                                        key={i}
+                                        onClick={() => setDailyStatsIndex(i)}
+                                        className={`relative w-2 h-2 rounded-full transition-all duration-300 flex items-center justify-center ${
+                                            isActive 
+                                                ? 'bg-white w-8' 
+                                                : 'bg-white/50 hover:bg-white/75 cursor-pointer'
+                                        }`}
+                                        title={line.name}
+                                    />
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Daily Stats Full Table - Collapsible */}
+            {showDailyStats && (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-bold text-slate-800 mb-4">آمار عملکرد روزانه - {getTodayJalali().dateStr}</h2>
+                    {dailyStatsLoading ? (
+                        <div className="text-center py-8 text-slate-600">در حال بارگذاری...</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-300">
+                                        <th className="px-4 py-3 text-right text-slate-700">لاین فروش</th>
+                                        <th className="px-4 py-3 text-center text-slate-700">درخواست</th>
+                                        <th className="px-4 py-3 text-center text-slate-700">شرکتی</th>
+                                        <th className="px-4 py-3 text-center text-slate-700">شخصی</th>
+                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت جذب</th>
+                                        <th className="px-4 py-3 text-center text-slate-700">کل</th>
+                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {[
+                                        { name: 'بستنی', data: dailyStats.iceCream },
+                                        { name: 'پاستوریزه', data: dailyStats.dairy },
+                                        { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                                    ].map((line, idx) => {
+                                        const stat = line.data && line.data.length > 0 ? line.data[0] : null;
+                                        // Always show row, even if no data (show zeros)
+                                        const displayStat = stat || {
+                                            totalRequests: 0,
+                                            companyAssignments: 0,
+                                            personalAssignments: 0,
+                                            totalAssignments: 0,
+                                            successRate: 0
+                                        };
+                                        // For now, success rate for personal is the same as overall
+                                        // TODO: Calculate actual referral success rate from backend
+                                        const personalSuccessRate = displayStat.totalRequests > 0 
+                                            ? Math.round((displayStat.personalAssignments / displayStat.totalRequests) * 100)
+                                            : 0;
+                                        return (
+                                            <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                                                <td className="px-4 py-3 text-right font-semibold">{line.name}</td>
+                                                <td className="px-4 py-3 text-center">{displayStat.totalRequests}</td>
+                                                <td className="px-4 py-3 text-center">{displayStat.companyAssignments}</td>
+                                                <td className="px-4 py-3 text-center">{displayStat.personalAssignments}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <span className="text-xs text-slate-600">
+                                                            {displayStat.personalAssignments} از {displayStat.totalRequests}
+                                                        </span>
+                                                        <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                                                            personalSuccessRate >= 50 ? 'bg-green-100 text-green-800' :
+                                                            personalSuccessRate >= 30 ? 'bg-yellow-100 text-yellow-800' :
+                                                            'bg-red-100 text-red-800'
+                                                        }`}>
+                                                            {personalSuccessRate}%
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">{displayStat.totalAssignments}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                        displayStat.successRate >= 70 ? 'bg-green-100 text-green-800' :
+                                                        displayStat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-red-100 text-red-800'
+                                                    }`}>
+                                                        {displayStat.successRate}%
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Filters */}
             <div className="bg-white rounded-lg shadow p-4">
