@@ -68,10 +68,60 @@ function parseJalaliDateString(jalali) {
     return new Date(gy, gm - 1, gd);
 }
 
+/**
+ * محاسبه تفاوت روز بین دو تاریخ شمسی (به صورت عدد صحیح)
+ * @param {string} jalaliDate1 - تاریخ شمسی اول (فرمت YYYY/MM/DD یا YYYY-MM-DD)
+ * @param {string} jalaliDate2 - تاریخ شمسی دوم (فرمت YYYY/MM/DD یا YYYY-MM-DD)
+ * @returns {number} - تفاوت روز (اگر date2 > date1 مثبت، وگرنه منفی)
+ */
+function daysDifferenceJalali(jalaliDate1, jalaliDate2) {
+    // Parse both dates
+    const m1 = /^\s*(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*$/.exec(jalaliDate1);
+    const m2 = /^\s*(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*$/.exec(jalaliDate2);
+    
+    if (!m1 || !m2) return null;
+    
+    const jy1 = parseInt(m1[1], 10), jm1 = parseInt(m1[2], 10), jd1 = parseInt(m1[3], 10);
+    const jy2 = parseInt(m2[1], 10), jm2 = parseInt(m2[2], 10), jd2 = parseInt(m2[3], 10);
+    
+    // Convert to Gregorian
+    const [gy1, gm1, gd1] = jalaliToGregorian(jy1, jm1, jd1);
+    const [gy2, gm2, gd2] = jalaliToGregorian(jy2, jm2, jd2);
+    
+    // Create Date objects
+    const date1 = new Date(gy1, gm1 - 1, gd1);
+    const date2 = new Date(gy2, gm2 - 1, gd2);
+    
+    // Calculate difference in milliseconds, then convert to days
+    const diffMs = date2.getTime() - date1.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    return diffDays;
+}
+
+/**
+ * تبدیل TIMESTAMPTZ به تاریخ شمسی (فقط تاریخ، بدون زمان)
+ * @param {Date|string} timestamp - تاریخ میلادی
+ * @returns {string} - تاریخ شمسی به فرمت YYYY/MM/DD
+ */
+function timestampToJalaliDate(timestamp) {
+    if (!timestamp) return null;
+    
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    const [jy, jm, jd] = gregorianToJalali(
+        date.getFullYear(),
+        date.getMonth() + 1,
+        date.getDate()
+    );
+    return `${jy}/${pad2(jm)}/${pad2(jd)}`;
+}
+
 module.exports = {
     formatJalali,
     formatJalaliDateTime,
     parseJalaliDateString,
     gregorianToJalali,
-    jalaliToGregorian
+    jalaliToGregorian,
+    daysDifferenceJalali,
+    timestampToJalaliDate
 };

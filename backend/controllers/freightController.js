@@ -1804,6 +1804,142 @@ async function getTransportStatistics(req, res) {
       console.log('⚠️ [TransportStatistics] No rows returned from query!');
     }
     
+    // برای محاسبه اطلاعات اضافی (بارهای مانده، درصد تخصیص در هر روز)
+    // باید تمام بارهای مربوط به این بازه زمانی را با تاریخ تخصیص بگیریم
+    const jalaliUtils = require('../utils/jalali');
+    
+    // کوئری برای گرفتن تمام بارها با تاریخ تخصیص (از تاریخچه)
+    // فقط برای آمار تاریخچه (نه برای daily live stats)
+    let detailedResult = { rows: [] };
+    if (isDailyHistorical || timeRange !== 'day') {
+      let detailedQuery = `
+        SELECT 
+          fa.id,
+          CAST(fa.loading_date AS TEXT) as loading_date,
+          fa.line_type,
+          fa.assigned_driver_id,
+          fa.status,
+          (
+            SELECT MIN(fah.created_at) 
+            FROM freight_announcement_history fah 
+            WHERE fah.freight_announcement_id = fa.id 
+              AND fah.action = 'ASSIGNED'
+            LIMIT 1
+          ) as assigned_at
+        FROM freight_announcements fa
+        ${whereClause}
+      `;
+      
+      console.log(`📊 [TransportStatistics] Detailed query:`, detailedQuery);
+      console.log(`📊 [TransportStatistics] Detailed query params:`, dateParams);
+      detailedResult = await pool.query(detailedQuery, dateParams);
+      console.log(`📊 [TransportStatistics] Detailed records: ${detailedResult.rows.length} total`);
+      if (detailedResult.rows.length > 0) {
+        console.log(`📊 [TransportStatistics] First detailed record:`, detailedResult.rows[0]);
+      }
+    } else {
+      console.log(`📊 [TransportStatistics] Skipping detailed query for daily live stats`);
+    }
+    
+    // محاسبه اطلاعات برای هر time_period
+    const periodDetailsMap = new Map(); // key: time_period, value: details
+    
+    // برای هر بار، محاسبه کنیم که در کدام time_period قرار دارد
+    for (const record of detailedResult.rows) {
+      let recordTimePeriod = null;
+      
+      // تعیین time_period بر اساس timeRange
+      if (timeRange === 'day' && isDailyHistorical) {
+        // برای آمار روزانه: time_period = loading_date
+        recordTimePeriod = record.loading_date?.replace(/-/g, '/');
+      } else if (timeRange === 'month') {
+        // برای آمار ماهانه: time_period = YYYY/MM
+        const loadingDate = record.loading_date?.replace(/-/g, '/');
+        if (loadingDate) {
+          recordTimePeriod = loadingDate.substring(0, 7);
+        }
+      } else if (timeRange === 'year') {
+        // برای آمار سالانه: time_period = YYYY
+        const loadingDate = record.loading_date?.replace(/-/g, '/');
+        if (loadingDate) {
+          recordTimePeriod = loadingDate.substring(0, 4);
+        }
+      }
+      
+      if (!recordTimePeriod) continue;
+      
+      // اگر این period در map نیست، ایجاد کن
+      if (!periodDetailsMap.has(recordTimePeriod)) {
+        periodDetailsMap.set(recordTimePeriod, {
+          period: recordTimePeriod,
+          totalRequests: 0,
+          assignedRecords: [], // بارهایی که تخصیص دارند
+          leftoverFromPrevious: 0, // بارهای مانده از قبل
+          assignmentByDay: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, '11+': 0 } // تخصیص در روز 0، 1، 2، ...
+        });
+      }
+      
+      const periodDetails = periodDetailsMap.get(recordTimePeriod);
+      periodDetails.totalRequests++;
+      
+      // اگر تخصیص دارد، اطلاعات را محاسبه کن
+      if (record.assigned_driver_id && record.assigned_at) {
+        const assignedAtDate = new Date(record.assigned_at);
+        const assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
+        const loadingDateNormalized = record.loading_date?.replace(/-/g, '/');
+        
+        if (assignedAtJalali && loadingDateNormalized) {
+          const daysDiff = jalaliUtils.daysDifferenceJalali(loadingDateNormalized, assignedAtJalali);
+          
+          if (daysDiff !== null && daysDiff >= 0) {
+            periodDetails.assignedRecords.push({
+              daysDiff,
+              loadingDate: loadingDateNormalized,
+              assignedAt: assignedAtJalali
+            });
+            
+            // دسته‌بندی بر اساس روز تخصیص
+            if (daysDiff === 0) {
+              periodDetails.assignmentByDay[0]++;
+            } else if (daysDiff === 1) {
+              periodDetails.assignmentByDay[1]++;
+            } else if (daysDiff === 2) {
+              periodDetails.assignmentByDay[2]++;
+            } else if (daysDiff >= 3 && daysDiff <= 10) {
+              periodDetails.assignmentByDay[daysDiff]++;
+            } else if (daysDiff > 10) {
+              periodDetails.assignmentByDay['11+']++;
+            }
+          } else {
+            console.log(`⚠️ [TransportStatistics] Invalid daysDiff for record ${record.id}:`, {
+              loadingDate: loadingDateNormalized,
+              assignedAt: assignedAtJalali,
+              daysDiff
+            });
+          }
+        } else {
+          console.log(`⚠️ [TransportStatistics] Missing dates for record ${record.id}:`, {
+            loadingDate: loadingDateNormalized,
+            assignedAt: assignedAtJalali,
+            assignedAtRaw: record.assigned_at
+          });
+        }
+      } else if (record.assigned_driver_id && !record.assigned_at) {
+        // بار تخصیص دارد اما تاریخ تخصیص در تاریخچه نیست
+        console.log(`⚠️ [TransportStatistics] Record ${record.id} has assigned_driver_id but no assigned_at in history`);
+      }
+      
+      // بررسی بارهای مانده از روز قبل (برای آمار روزانه)
+      // یک بار مانده است اگر loading_date آن قبل از time_period باشد
+      if (timeRange === 'day' && isDailyHistorical && record.loading_date) {
+        const loadingDateNormalized = record.loading_date.replace(/-/g, '/');
+        // مقایسه تاریخ شمسی (فرمت YYYY/MM/DD)
+        if (loadingDateNormalized && loadingDateNormalized < recordTimePeriod) {
+          periodDetails.leftoverFromPrevious++;
+        }
+      }
+    }
+    
     // Calculate success rate for each period
     // همچنین باید time_period را normalize کنیم (تبدیل `-` به `/`)
     // و برای آمار ماهانه، اطمینان حاصل کنیم که فقط YYYY/MM برگردانده می‌شود (نه YYYY/MM/DD)
@@ -1829,16 +1965,74 @@ async function getTransportStatistics(req, res) {
         // تبدیل `-` به `/` (بعد از اینکه طول را محدود کردیم)
         timePeriod = timePeriod.replace(/-/g, '/');
       }
-      return {
+      
+      // پیدا کردن اطلاعات اضافی از periodDetailsMap
+      // باید قبل از normalize کردن timePeriod، با key اصلی هم چک کنیم
+      let periodDetails = periodDetailsMap.get(timePeriod);
+      if (!periodDetails) {
+        // اگر پیدا نشد، با key قبل از normalize (با -) هم چک کن
+        const timePeriodWithDash = timePeriod.replace(/\//g, '-');
+        periodDetails = periodDetailsMap.get(timePeriodWithDash);
+      }
+      if (!periodDetails) {
+        // اگر باز هم پیدا نشد، با key بعد از normalize (با /) هم چک کن
+        const timePeriodWithSlash = timePeriod.replace(/-/g, '/');
+        periodDetails = periodDetailsMap.get(timePeriodWithSlash);
+      }
+      
+      if (periodDetails) {
+        console.log(`✅ [TransportStatistics] Found periodDetails for ${timePeriod}:`, {
+          totalRequests: periodDetails.totalRequests,
+          assignedRecords: periodDetails.assignedRecords.length,
+          assignmentByDay: periodDetails.assignmentByDay
+        });
+      } else {
+        console.log(`⚠️ [TransportStatistics] No periodDetails found for ${timePeriod}. Map keys:`, Array.from(periodDetailsMap.keys()));
+      }
+      
+      const totalRequests = parseInt(row.total_requests) || 0;
+      const totalAssignments = parseInt(row.total_assignments) || 0;
+      const successRate = totalRequests > 0 
+        ? Math.round((totalAssignments / totalRequests) * 100)
+        : 0;
+      
+      // محاسبه درصد تخصیص در هر روز
+      const assignmentPercentagesByDay = {};
+      if (periodDetails && periodDetails.assignedRecords.length > 0) {
+        const totalAssigned = periodDetails.assignedRecords.length;
+        for (const [day, count] of Object.entries(periodDetails.assignmentByDay)) {
+          if (count > 0) {
+            assignmentPercentagesByDay[day] = Math.round((count / totalAssigned) * 100);
+          }
+        }
+        console.log(`📊 [TransportStatistics] Calculated assignmentPercentagesByDay for ${timePeriod}:`, assignmentPercentagesByDay);
+      } else if (totalAssignments > 0 && periodDetails) {
+        console.log(`⚠️ [TransportStatistics] totalAssignments=${totalAssignments} but assignedRecords.length=${periodDetails?.assignedRecords?.length || 0} for ${timePeriod}`);
+      }
+      
+      const result = {
         timePeriod,
-        totalRequests: parseInt(row.total_requests) || 0,
+        totalRequests,
         companyAssignments: parseInt(row.company_assignments) || 0,
         personalAssignments: parseInt(row.personal_assignments) || 0,
-        totalAssignments: parseInt(row.total_assignments) || 0,
-        successRate: row.total_requests > 0 
-          ? Math.round((parseInt(row.total_assignments) / parseInt(row.total_requests)) * 100)
-          : 0
+        totalAssignments,
+        successRate
       };
+      
+      // اضافه کردن اطلاعات اضافی اگر موجود باشد
+      if (periodDetails) {
+        result.leftoverFromPrevious = periodDetails.leftoverFromPrevious;
+        result.assignmentByDay = periodDetails.assignmentByDay; // تعداد مطلق
+        result.assignmentPercentagesByDay = assignmentPercentagesByDay; // درصد
+        result.totalAssigned = periodDetails.assignedRecords.length;
+      } else {
+        result.leftoverFromPrevious = 0;
+        result.assignmentByDay = {};
+        result.assignmentPercentagesByDay = {};
+        result.totalAssigned = 0;
+      }
+      
+      return result;
     });
     
     console.log('✅ [TransportStatistics] Found', statistics.length, 'periods');

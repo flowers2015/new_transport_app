@@ -178,16 +178,48 @@ const ChartZoomDialog: React.FC<{
                                 cx="50%"
                                 cy="50%"
                                 labelLine={false}
-                                label={({ name, percentage }) => `${name}: ${percentage}%`}
+                                label={({ name, value, percentage }) => {
+                                    // Show label only if segment is large enough
+                                    return percentage >= 3 ? `${name}: ${value} بار (${percentage}%)` : '';
+                                }}
                                 outerRadius={200}
                                 fill="#8884d8"
                                 dataKey="value"
                             >
-                                {chartData.map((entry: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={index === 0 ? (colors?.company || '#10b981') : (colors?.personal || '#f59e0b')} />
-                                ))}
+                                {chartData.map((entry: any, index: number) => {
+                                    // If it's assignment timing chart, use specific colors
+                                    if (entry.name === 'یک روز' || entry.name === 'دو روز' || entry.name === 'سه روز' || entry.name === 'چهار روز' || entry.name === 'پنج روز به بالا') {
+                                        let color = '#8884d8';
+                                        if (entry.name === 'یک روز') color = '#10b981';
+                                        else if (entry.name === 'دو روز') color = '#f59e0b';
+                                        else if (entry.name === 'سه روز') color = '#f97316';
+                                        else if (entry.name === 'چهار روز') color = '#ef4444';
+                                        else if (entry.name === 'پنج روز به بالا') color = '#dc2626';
+                                        return <Cell key={`cell-${index}`} fill={color} />;
+                                    }
+                                    // Otherwise use default colors (for company/personal chart)
+                                    return <Cell key={`cell-${index}`} fill={index === 0 ? (colors?.company || '#10b981') : (colors?.personal || '#f59e0b')} />;
+                                })}
                             </Pie>
-                            <Tooltip />
+                            <Tooltip 
+                                formatter={(value: number, name: string, props: any) => {
+                                    if (props.payload && props.payload.name) {
+                                        return [`${value} بار (${props.payload.percentage}%)`, props.payload.name];
+                                    }
+                                    return [`${value}`, name];
+                                }}
+                            />
+                            <Legend 
+                                verticalAlign="bottom"
+                                height={36}
+                                formatter={(value, entry: any) => {
+                                    if (entry.payload && entry.payload.name) {
+                                        return `${entry.payload.name}: ${entry.payload.value} بار (${entry.payload.percentage}%)`;
+                                    }
+                                    return value;
+                                }}
+                                wrapperStyle={{ paddingTop: '20px' }}
+                            />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
@@ -244,6 +276,11 @@ const LineRow: React.FC<{
                 personalAssignments: typeof stat.personalAssignments === 'number' ? stat.personalAssignments : parseInt(stat.personalAssignments || '0', 10),
                 totalAssignments: typeof stat.totalAssignments === 'number' ? stat.totalAssignments : parseInt(stat.totalAssignments || '0', 10),
                 successRate: typeof stat.successRate === 'number' ? stat.successRate : parseInt(stat.successRate || '0', 10),
+                // New fields for assignment timing analysis
+                leftoverFromPrevious: typeof stat.leftoverFromPrevious === 'number' ? stat.leftoverFromPrevious : parseInt(stat.leftoverFromPrevious || '0', 10),
+                assignmentByDay: stat.assignmentByDay || {},
+                assignmentPercentagesByDay: stat.assignmentPercentagesByDay || {},
+                totalAssigned: typeof stat.totalAssigned === 'number' ? stat.totalAssigned : parseInt(stat.totalAssigned || '0', 10),
             };
             return item;
         });
@@ -291,6 +328,94 @@ const LineRow: React.FC<{
             { name: 'شخصی', value: totalPersonal, percentage: personalPercent },
         ];
     }, [totalCompany, totalPersonal, totalAssignments]);
+
+    // Pie chart data for assignment timing (by day)
+    const assignmentTimingPieData = useMemo(() => {
+        // Aggregate assignmentByDay from all periods
+        const aggregated: { [key: string]: number } = {};
+        chartData.forEach(stat => {
+            if (stat.assignmentByDay) {
+                Object.entries(stat.assignmentByDay).forEach(([day, count]) => {
+                    if (count > 0) {
+                        aggregated[day] = (aggregated[day] || 0) + count;
+                    }
+                });
+            }
+        });
+
+        const totalAssignedFromDays = Object.values(aggregated).reduce((sum, count) => sum + count, 0);
+        if (totalAssignedFromDays === 0) {
+            return [];
+        }
+
+        // Convert to array format for PieChart
+        // دسته‌بندی جدید: یک روز، دو روز، سه روز، چهار روز، پنج روز به بالا
+        const result: Array<{ name: string; value: number; percentage: number }> = [];
+        
+        // یک روز (همان روز = day 0)
+        const day1 = aggregated['0'] || 0;
+        if (day1 > 0) {
+            result.push({
+                name: 'یک روز',
+                value: day1,
+                percentage: Math.round((day1 / totalAssignedFromDays) * 100)
+            });
+        }
+        
+        // دو روز (یک روز بعد = day 1)
+        const day2 = aggregated['1'] || 0;
+        if (day2 > 0) {
+            result.push({
+                name: 'دو روز',
+                value: day2,
+                percentage: Math.round((day2 / totalAssignedFromDays) * 100)
+            });
+        }
+        
+        // سه روز (دو روز بعد = day 2)
+        const day3 = aggregated['2'] || 0;
+        if (day3 > 0) {
+            result.push({
+                name: 'سه روز',
+                value: day3,
+                percentage: Math.round((day3 / totalAssignedFromDays) * 100)
+            });
+        }
+        
+        // چهار روز (سه روز بعد = day 3)
+        const day4 = aggregated['3'] || 0;
+        if (day4 > 0) {
+            result.push({
+                name: 'چهار روز',
+                value: day4,
+                percentage: Math.round((day4 / totalAssignedFromDays) * 100)
+            });
+        }
+        
+        // پنج روز به بالا (day 4 به بالا + 11+)
+        let days5Plus = 0;
+        for (let day = 4; day <= 10; day++) {
+            if (aggregated[String(day)]) {
+                days5Plus += aggregated[String(day)];
+            }
+        }
+        if (aggregated['11+']) {
+            days5Plus += aggregated['11+'];
+        }
+        if (days5Plus > 0) {
+            result.push({
+                name: 'پنج روز به بالا',
+                value: days5Plus,
+                percentage: Math.round((days5Plus / totalAssignedFromDays) * 100)
+            });
+        }
+
+        console.log('📊 [AssignmentTimingPie] Aggregated:', aggregated);
+        console.log('📊 [AssignmentTimingPie] Result:', result);
+        console.log('📊 [AssignmentTimingPie] Total assigned from days:', totalAssignedFromDays);
+
+        return result;
+    }, [chartData]);
 
     // Bar chart data (counts by period)
     const barData = useMemo(() => {
@@ -482,6 +607,71 @@ const LineRow: React.FC<{
                     </div>
                 </div>
 
+                {/* Assignment Timing Pie Chart */}
+                {(timeRange === 'month' || timeRange === 'year') && assignmentTimingPieData.length > 0 && (
+                    <div className="bg-slate-50 rounded-lg p-4 relative">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-base font-semibold text-slate-700">نمودار دایره‌ای - زمان تخصیص</h3>
+                            <button 
+                                onClick={() => setZoomChart({ type: 'pie', data: assignmentTimingPieData })}
+                                className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1"
+                                title="بزرگنمایی"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                </svg>
+                            </button>
+                        </div>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                                <Pie
+                                    data={assignmentTimingPieData}
+                                    cx="50%"
+                                    cy="50%"
+                                    labelLine={false}
+                                    label={false} // Disable labels on pie segments to avoid overlap
+                                    outerRadius={100}
+                                    fill="#8884d8"
+                                    dataKey="value"
+                                >
+                                    {assignmentTimingPieData.map((entry, index) => {
+                                        // Color scheme: green for 1 day, yellow for 2 days, orange for 3 days, light red for 4 days, dark red for 5+
+                                        let color = '#8884d8';
+                                        if (entry.name === 'یک روز') color = '#10b981'; // green
+                                        else if (entry.name === 'دو روز') color = '#f59e0b'; // yellow/amber
+                                        else if (entry.name === 'سه روز') color = '#f97316'; // orange
+                                        else if (entry.name === 'چهار روز') color = '#ef4444'; // red
+                                        else if (entry.name === 'پنج روز به بالا') color = '#dc2626'; // dark red
+                                        return <Cell key={`cell-${index}`} fill={color} />;
+                                    })}
+                                </Pie>
+                                <Tooltip 
+                                    formatter={(value: number, name: string, props: any) => {
+                                        return [`${value} بار (${props.payload.percentage}%)`, props.payload.name];
+                                    }}
+                                />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="text-center mt-4 space-y-1">
+                            {assignmentTimingPieData.map((item, idx) => {
+                                let color = '#8884d8';
+                                if (item.name === 'یک روز') color = '#10b981'; // green
+                                else if (item.name === 'دو روز') color = '#f59e0b'; // yellow/amber
+                                else if (item.name === 'سه روز') color = '#f97316'; // orange
+                                else if (item.name === 'چهار روز') color = '#ef4444'; // red
+                                else if (item.name === 'پنج روز به بالا') color = '#dc2626'; // dark red
+                                
+                                return (
+                                    <div key={idx} className="text-sm">
+                                        <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: color }}></span>
+                                        <span className="text-slate-700">{item.name}: {item.value} بار ({item.percentage}%)</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Bar Chart */}
                 <div className="bg-slate-50 rounded-lg p-4 relative">
                     <div className="flex items-center justify-between mb-3">
@@ -566,28 +756,98 @@ const LineRow: React.FC<{
                                     <th className="px-3 py-2 text-center text-slate-700">شخصی</th>
                                     <th className="px-3 py-2 text-center text-slate-700">کل</th>
                                     <th className="px-3 py-2 text-center text-slate-700">موفقیت</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">مانده از قبل</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">یک روز</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">دو روز</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">سه روز</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">چهار روز</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">پنج روز به بالا</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {chartData.map((stat, idx) => (
-                                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-100">
-                                        {/* در جدول کل تاریخ را نمایش می‌دهیم، نه فقط بخشی از آن */}
-                                        <td className="px-3 py-2 text-right">{stat.timePeriod}</td>
-                                        <td className="px-3 py-2 text-center">{stat.totalRequests}</td>
-                                        <td className="px-3 py-2 text-center">{stat.companyAssignments}</td>
-                                        <td className="px-3 py-2 text-center">{stat.personalAssignments}</td>
-                                        <td className="px-3 py-2 text-center">{stat.totalAssignments}</td>
-                                        <td className="px-3 py-2 text-center">
-                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                stat.successRate >= 70 ? 'bg-green-100 text-green-800' :
-                                                stat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-red-100 text-red-800'
-                                            }`}>
-                                                {stat.successRate}%
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {chartData.map((stat, idx) => {
+                                    const day1Percent = stat.assignmentPercentagesByDay?.['0'] || 0; // یک روز = همان روز (day 0)
+                                    const day2Percent = stat.assignmentPercentagesByDay?.['1'] || 0; // دو روز = یک روز بعد (day 1)
+                                    const day3Percent = stat.assignmentPercentagesByDay?.['2'] || 0; // سه روز = دو روز بعد (day 2)
+                                    const day4Percent = stat.assignmentPercentagesByDay?.['3'] || 0; // چهار روز = سه روز بعد (day 3)
+                                    const day5PlusPercent = Object.entries(stat.assignmentPercentagesByDay || {})
+                                        .filter(([day]) => day !== '0' && day !== '1' && day !== '2' && day !== '3')
+                                        .reduce((sum, [, percent]) => sum + (percent || 0), 0);
+                                    
+                                    return (
+                                        <tr key={idx} className="border-b border-slate-200 hover:bg-slate-100">
+                                            {/* در جدول کل تاریخ را نمایش می‌دهیم، نه فقط بخشی از آن */}
+                                            <td className="px-3 py-2 text-right">{stat.timePeriod}</td>
+                                            <td className="px-3 py-2 text-center">{stat.totalRequests}</td>
+                                            <td className="px-3 py-2 text-center">{stat.companyAssignments}</td>
+                                            <td className="px-3 py-2 text-center">{stat.personalAssignments}</td>
+                                            <td className="px-3 py-2 text-center">{stat.totalAssignments}</td>
+                                            <td className="px-3 py-2 text-center">
+                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                    stat.successRate >= 70 ? 'bg-green-100 text-green-800' :
+                                                    stat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-red-100 text-red-800'
+                                                }`}>
+                                                    {stat.successRate}%
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {stat.leftoverFromPrevious > 0 ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-800">
+                                                        {stat.leftoverFromPrevious}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">0</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {day1Percent > 0 ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">
+                                                        {day1Percent}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {day2Percent > 0 ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                                        {day2Percent}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {day3Percent > 0 ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-800">
+                                                        {day3Percent}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {day4Percent > 0 ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">
+                                                        {day4Percent}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {day5PlusPercent > 0 ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-red-200 text-red-900">
+                                                        {day5PlusPercent}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
