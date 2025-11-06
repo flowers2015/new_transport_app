@@ -15,6 +15,44 @@ interface StatisticsData {
     successRate: number;
 }
 
+interface RepresentativeStatisticsData {
+    representativeName: string;
+    city: string;
+    totalFreights: number;
+    companyCount: number;
+    personalCount: number;
+    totalPersonalFreightCost: number;
+    unpaidInvoiceCount: number;
+    unpaidAmount: number;
+}
+
+interface RepresentativeDetailData {
+    id: string;
+    announcementCode: string;
+    loadingDate: string;
+    lineType: string;
+    assignmentType: string;
+    totalFreightCost: number;
+    assignedAt: string | null;
+    driver: {
+        id: string;
+        name: string;
+        employeeId: string;
+        phone: string;
+    } | null;
+    vehicle: {
+        id: string;
+        plateNumber: {
+            part1: string;
+            letter: string;
+            part2: string;
+            cityCode: string;
+        };
+        make: string;
+        model: string;
+    } | null;
+}
+
 const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = ({ currentUser }) => {
     // Statistics for each line separately
     const [iceCreamStats, setIceCreamStats] = useState<StatisticsData[]>([]);
@@ -22,6 +60,11 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     const [ambientStats, setAmbientStats] = useState<StatisticsData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    // Representative statistics
+    const [representativeStats, setRepresentativeStats] = useState<RepresentativeStatisticsData[]>([]);
+    const [representativeStatsLoading, setRepresentativeStatsLoading] = useState(false);
+    const [representativeStatsError, setRepresentativeStatsError] = useState<string | null>(null);
     
     // Filters
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear() - 621);
@@ -99,8 +142,74 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         }
     };
 
+    const fetchRepresentativeStatistics = async () => {
+        try {
+            setRepresentativeStatsLoading(true);
+            setRepresentativeStatsError(null);
+            
+            const token = localStorage.getItem('token');
+            const headers: HeadersInit = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const params = new URLSearchParams();
+            if (selectedYear) params.append('year', selectedYear.toString());
+            if (selectedMonth) params.append('month', selectedMonth.toString());
+            if (selectedDay) params.append('day', selectedDay.toString());
+            params.append('timeRange', timeRange);
+
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/representative-statistics?${params.toString()}`, { headers });
+            
+            if (!res.ok) {
+                throw new Error('خطا در دریافت آمار نمایندگان');
+            }
+            
+            const data = await res.json();
+            setRepresentativeStats(Array.isArray(data) ? data : []);
+        } catch (err: any) {
+            console.error('❌ [RepresentativeStatistics] Failed to fetch:', err);
+            setRepresentativeStatsError(err.message || 'خطا در دریافت آمار نمایندگان');
+        } finally {
+            setRepresentativeStatsLoading(false);
+        }
+    };
+
+    const fetchRepresentativeDetails = async (representativeName: string, city: string, lineType?: string): Promise<RepresentativeDetailData[]> => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers: HeadersInit = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const params = new URLSearchParams();
+            params.append('representativeName', representativeName);
+            params.append('city', city);
+            if (lineType) params.append('lineType', lineType);
+            if (selectedYear) params.append('year', selectedYear.toString());
+            if (selectedMonth) params.append('month', selectedMonth.toString());
+            if (selectedDay) params.append('day', selectedDay.toString());
+            params.append('timeRange', timeRange);
+
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/representative-details?${params.toString()}`, { headers });
+            
+            if (!res.ok) {
+                throw new Error('خطا در دریافت جزئیات نماینده');
+            }
+            
+            const data = await res.json();
+            return Array.isArray(data) ? data : [];
+        } catch (err: any) {
+            console.error('❌ [RepresentativeDetails] Failed to fetch:', err);
+            throw err;
+        }
+    };
+
+
     useEffect(() => {
         fetchStatistics();
+        fetchRepresentativeStatistics();
     }, [selectedYear, selectedMonth, selectedDay, timeRange]);
 
     return (
@@ -119,6 +228,10 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             onDayChange={setSelectedDay}
             onTimeRangeChange={setTimeRange}
             onRefresh={fetchStatistics}
+            representativeStats={representativeStats}
+            representativeStatsLoading={representativeStatsLoading}
+            representativeStatsError={representativeStatsError}
+            onFetchRepresentativeDetails={fetchRepresentativeDetails}
         />
     );
 };

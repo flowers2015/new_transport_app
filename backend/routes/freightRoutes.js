@@ -15,6 +15,10 @@ const {
   getFreightHistory,
   finalizeAssignments,
   getTransportStatistics,
+  getRepresentativeStatistics,
+  getRepresentativeDetails,
+  getCityStatistics,
+  getCityDetails,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -29,6 +33,18 @@ router.get('/history', authenticateToken, getFreightHistory);
 
 // Get transport statistics for dashboard
 router.get('/statistics', authenticateToken, getTransportStatistics);
+
+// Get representative statistics (for transport dashboard)
+router.get('/representative-statistics', authenticateToken, getRepresentativeStatistics);
+
+// Get representative details (vehicle assignments for a specific representative)
+router.get('/representative-details', authenticateToken, getRepresentativeDetails);
+
+// Get city statistics (for transport dashboard)
+router.get('/city-statistics', authenticateToken, getCityStatistics);
+
+// Get city details (vehicle assignments for a specific city)
+router.get('/city-details', authenticateToken, getCityDetails);
 
 // Finalize assignments - اتمام تخصیص
 router.post(

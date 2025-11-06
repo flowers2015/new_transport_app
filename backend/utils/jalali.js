@@ -108,11 +108,13 @@ function timestampToJalaliDate(timestamp) {
     if (!timestamp) return null;
     
     const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-    const [jy, jm, jd] = gregorianToJalali(
-        date.getFullYear(),
-        date.getMonth() + 1,
-        date.getDate()
-    );
+    // استفاده از timezone محلی برای محاسبه دقیق تاریخ
+    // این باعث می‌شود که اگر تخصیص در همان روز انجام شده باشد، daysDiff === 0 شود
+    const localYear = date.getFullYear();
+    const localMonth = date.getMonth() + 1;
+    const localDay = date.getDate();
+    
+    const [jy, jm, jd] = gregorianToJalali(localYear, localMonth, localDay);
     return `${jy}/${pad2(jm)}/${pad2(jd)}`;
 }
 

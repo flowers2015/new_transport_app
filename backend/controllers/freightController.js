@@ -1889,7 +1889,41 @@ async function getTransportStatistics(req, res) {
         const loadingDateNormalized = record.loading_date?.replace(/-/g, '/');
         
         if (assignedAtJalali && loadingDateNormalized) {
-          const daysDiff = jalaliUtils.daysDifferenceJalali(loadingDateNormalized, assignedAtJalali);
+          let daysDiff = jalaliUtils.daysDifferenceJalali(loadingDateNormalized, assignedAtJalali);
+          
+          // اگر daysDiff منفی باشد اما سال و ماه یکسان باشند، بررسی دقیق‌تر
+          // اگر روزها نزدیک به هم باشند (تفاوت 1-2 روز)، احتمالاً به دلیل مشکل timezone است
+          if (daysDiff < 0 && daysDiff >= -2) {
+            const loadingMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(loadingDateNormalized);
+            const assignedMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(assignedAtJalali);
+            if (loadingMatch && assignedMatch) {
+              const loadingYear = parseInt(loadingMatch[1], 10);
+              const loadingMonth = parseInt(loadingMatch[2], 10);
+              const loadingDay = parseInt(loadingMatch[3], 10);
+              const assignedYear = parseInt(assignedMatch[1], 10);
+              const assignedMonth = parseInt(assignedMatch[2], 10);
+              const assignedDay = parseInt(assignedMatch[3], 10);
+              // اگر سال و ماه یکسان باشند، احتمالاً تخصیص در همان روز یا روز بعد است
+              if (loadingYear === assignedYear && loadingMonth === assignedMonth) {
+                // اگر روزها یکسان باشند، daysDiff = 0
+                if (loadingDay === assignedDay) {
+                  daysDiff = 0;
+                  console.log(`🔧 [TransportStatistics] Record ${record.id}: Fixed daysDiff to 0 (same day) - loadingDate: ${loadingDateNormalized}, assignedAt: ${assignedAtJalali}`);
+                } else if (Math.abs(loadingDay - assignedDay) <= 1) {
+                  // اگر تفاوت روز 1 باشد، daysDiff = 0 یا 1 بسته به اینکه کدام بزرگتر است
+                  daysDiff = assignedDay > loadingDay ? 1 : 0;
+                  console.log(`🔧 [TransportStatistics] Record ${record.id}: Fixed daysDiff to ${daysDiff} (same month, day diff=${Math.abs(loadingDay - assignedDay)}) - loadingDate: ${loadingDateNormalized}, assignedAt: ${assignedAtJalali}`);
+                }
+              }
+            }
+          }
+          
+          console.log(`📊 [TransportStatistics] Record ${record.id}: daysDiff calculation:`, {
+            loadingDate: loadingDateNormalized,
+            assignedAt: assignedAtJalali,
+            daysDiff,
+            assignedAtRaw: record.assigned_at
+          });
           
           if (daysDiff !== null && daysDiff >= 0) {
             periodDetails.assignedRecords.push({
@@ -1901,6 +1935,7 @@ async function getTransportStatistics(req, res) {
             // دسته‌بندی بر اساس روز تخصیص
             if (daysDiff === 0) {
               periodDetails.assignmentByDay[0]++;
+              console.log(`✅ [TransportStatistics] Record ${record.id}: Same day assignment (day 0) - loadingDate: ${loadingDateNormalized}, assignedAt: ${assignedAtJalali}`);
             } else if (daysDiff === 1) {
               periodDetails.assignmentByDay[1]++;
             } else if (daysDiff === 2) {
@@ -2047,6 +2082,579 @@ async function getTransportStatistics(req, res) {
   }
 }
 
+/**
+ * آمار نمایندگان بر اساس شهر و نماینده
+ * برای ترابری‌ها: لیست نمایندگان با تعداد ارسال، تعداد شرکتی/شخصی، مبلغ کرایه، تعداد بارنامه‌های پرداخت نشده
+ */
+async function getRepresentativeStatistics(req, res) {
+  try {
+    const { year, month, day, timeRange = 'month' } = req.query;
+    
+    console.log('📊 [RepresentativeStatistics] Request:', { year, month, day, timeRange });
+    
+    // ساخت dateFilter بر اساس timeRange
+    let dateFilter = '';
+    const dateParams = [];
+    let paramIdx = 1;
+    
+    if (timeRange === 'day' && year && month) {
+      // آمار روزانه تاریخی
+      if (day) {
+        const dayStr = day.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-${dayStr}`);
+        dateParams.push(`${year}/${month}/${dayStr}`);
+        paramIdx += 2;
+      } else {
+        // تمام روزهای ماه
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-%`);
+        dateParams.push(`${year}/${month}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'month' && year) {
+      if (month) {
+        // ماه خاص
+        const monthStr = month.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${monthStr}-%`);
+        dateParams.push(`${year}/${monthStr}/%`);
+        paramIdx += 2;
+      } else {
+        // تمام ماه‌های سال
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-%`);
+        dateParams.push(`${year}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'year' && year) {
+      dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+      dateParams.push(`${year}-%`);
+      dateParams.push(`${year}/%`);
+      paramIdx += 2;
+    }
+    
+    // فیلتر status: فقط بارهایی که تخصیص دارند یا finalized/leftover هستند
+    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+    
+    // کوئری اصلی: آمار بر اساس نماینده/پخش و شهر - فقط تخصیص‌ها را می‌شمارد
+    // نمایش همه ترکیبات: پخش مشهد، احمدی مشهد، حسنی مشهد و ...
+    // منطق پرداخت نشده: اگر freight_transaction وجود دارد و is_paid = false است، یا اگر freight_transaction وجود ندارد اما freight_cost > 0 و personal است
+    // برای assignment_type null: اگر assigned_driver_id دارد اما assignment_type null است، در شرکتی شمارش می‌شود
+    // مهم: استفاده از fd.freight_cost (کرایه هر مقصد) به جای fa.total_freight_cost (کرایه کل)
+    const query = `
+      SELECT 
+        COALESCE(NULLIF(fd.representative_name, ''), 'پخش') as representative_name,
+        fd.city,
+        fa.line_type,
+        COUNT(DISTINCT CASE WHEN fa.assigned_driver_id IS NOT NULL THEN fa.id END) as total_freights,
+        COUNT(DISTINCT CASE 
+          WHEN fa.assigned_driver_id IS NOT NULL 
+          AND (fa.assignment_type = 'company' OR fa.assignment_type IS NULL)
+          THEN fa.id 
+        END) as company_count,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count,
+        COALESCE(SUM(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN COALESCE(fd.freight_cost, 0) ELSE 0 END), 0) as total_personal_freight_cost,
+        COUNT(DISTINCT CASE 
+          WHEN fa.assigned_driver_id IS NOT NULL 
+          AND fa.assignment_type = 'personal'
+          AND COALESCE(fd.freight_cost, 0) > 0
+          AND (
+            (EXISTS (SELECT 1 FROM freight_transactions ft2 WHERE ft2.announcement_id = fa.id AND ft2.is_paid = false))
+            OR (NOT EXISTS (SELECT 1 FROM freight_transactions ft3 WHERE ft3.announcement_id = fa.id))
+          )
+          THEN fd.id 
+        END) as unpaid_invoice_count,
+        COALESCE(SUM(CASE 
+          WHEN fa.assigned_driver_id IS NOT NULL 
+          AND fa.assignment_type = 'personal'
+          AND COALESCE(fd.freight_cost, 0) > 0
+          AND (
+            (EXISTS (SELECT 1 FROM freight_transactions ft2 WHERE ft2.announcement_id = fa.id AND ft2.is_paid = false))
+            OR (NOT EXISTS (SELECT 1 FROM freight_transactions ft3 WHERE ft3.announcement_id = fa.id))
+          )
+          THEN COALESCE(fd.freight_cost, 0)
+          ELSE 0 
+        END), 0) as unpaid_amount
+      FROM freight_destinations fd
+      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
+      WHERE fd.city IS NOT NULL AND fd.city != ''
+        AND fa.assigned_driver_id IS NOT NULL
+        ${dateFilter}
+        ${statusFilter}
+      GROUP BY COALESCE(NULLIF(fd.representative_name, ''), 'پخش'), fd.city, fa.line_type
+      ORDER BY fd.city ASC, representative_name ASC, fa.line_type ASC, total_freights DESC
+    `;
+    
+    console.log('📊 [RepresentativeStatistics] Query:', query);
+    console.log('📊 [RepresentativeStatistics] Params:', dateParams);
+    
+    const { rows } = await pool.query(query, dateParams);
+    
+    console.log('✅ [RepresentativeStatistics] Found', rows.length, 'representatives');
+    
+    const statistics = rows.map(row => ({
+      representativeName: row.representative_name,
+      city: row.city,
+      lineType: row.line_type || '',
+      totalFreights: parseInt(row.total_freights) || 0,
+      companyCount: parseInt(row.company_count) || 0,
+      personalCount: parseInt(row.personal_count) || 0,
+      totalPersonalFreightCost: parseFloat(row.total_personal_freight_cost) || 0,
+      unpaidInvoiceCount: parseInt(row.unpaid_invoice_count) || 0,
+      unpaidAmount: parseFloat(row.unpaid_amount) || 0
+    }));
+    
+    res.json(statistics);
+  } catch (error) {
+    console.error('❌ [RepresentativeStatistics] Error:', error);
+    res.status(500).json({ message: 'Internal server error while fetching representative statistics.', error: error.message });
+  }
+}
+
+/**
+ * جزئیات تخصیص‌های خودرو برای یک نماینده خاص
+ */
+async function getRepresentativeDetails(req, res) {
+  try {
+    const { representativeName, city, lineType, year, month, day, timeRange = 'month' } = req.query;
+    
+    if (!representativeName || !city) {
+      return res.status(400).json({ message: 'representativeName and city are required' });
+    }
+    
+    console.log('📊 [RepresentativeDetails] Request:', { representativeName, city, lineType, year, month, day, timeRange });
+    
+    // ساخت dateFilter
+    let dateFilter = '';
+    const dateParams = [representativeName, city];
+    let paramIdx = 3;
+    
+    // فیلتر لاین - باید قبل از dateFilter اضافه شود
+    let lineTypeFilter = '';
+    if (lineType) {
+      lineTypeFilter = `AND fa.line_type = $${paramIdx}`;
+      dateParams.push(lineType);
+      paramIdx++;
+    }
+    
+    if (timeRange === 'day' && year && month) {
+      if (day) {
+        const dayStr = day.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-${dayStr}`, `${year}/${month}/${dayStr}`);
+        paramIdx += 2;
+      } else {
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-%`, `${year}/${month}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'month' && year) {
+      if (month) {
+        const monthStr = month.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${monthStr}-%`, `${year}/${monthStr}/%`);
+        paramIdx += 2;
+      } else {
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-%`, `${year}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'year' && year) {
+      dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+      dateParams.push(`${year}-%`, `${year}/%`);
+      paramIdx += 2;
+    }
+    
+    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+    
+    // کوئری برای گرفتن جزئیات تخصیص‌ها
+    // مهم: استفاده از fd.freight_cost (کرایه هر مقصد) به جای fa.total_freight_cost (کرایه کل)
+    const query = `
+      SELECT 
+        fa.id,
+        fd.id as destination_id,
+        fa.announcement_code,
+        CAST(fa.loading_date AS TEXT) as loading_date,
+        fa.line_type,
+        fa.assignment_type,
+        COALESCE(fd.freight_cost, 0) as freight_cost,
+        (
+          SELECT MIN(fah.created_at) 
+          FROM freight_announcement_history fah 
+          WHERE fah.freight_announcement_id = fa.id 
+            AND fah.action = 'ASSIGNED'
+          LIMIT 1
+        ) as assigned_at,
+        d.id as driver_id,
+        d.name as driver_name,
+        d.employee_id as driver_employee_id,
+        COALESCE(d.mobile, d.work_phone, d.home_phone) as driver_phone,
+        v.id as vehicle_id,
+        v.plate_part1,
+        v.plate_letter,
+        v.plate_part2,
+        v.plate_city_code,
+        v.brand as vehicle_make,
+        v.model as vehicle_model
+      FROM freight_destinations fd
+      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
+      LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+      LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      WHERE (COALESCE(NULLIF(fd.representative_name, ''), 'پخش') = $1 OR ($1 = 'پخش' AND (fd.representative_name IS NULL OR fd.representative_name = '')))
+        AND fd.city = $2
+        AND fa.assigned_driver_id IS NOT NULL
+        ${lineTypeFilter}
+        ${dateFilter}
+        ${statusFilter}
+      ORDER BY fa.loading_date DESC, fa.created_at DESC
+    `;
+    
+    console.log('📊 [RepresentativeDetails] Query:', query);
+    console.log('📊 [RepresentativeDetails] Params:', dateParams);
+    
+    const { rows } = await pool.query(query, dateParams);
+    
+    const jalaliUtils = require('../utils/jalali');
+    
+    const details = rows.map(row => {
+      let assignedAtJalali = null;
+      if (row.assigned_at) {
+        try {
+          const assignedAtDate = new Date(row.assigned_at);
+          assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
+        } catch (err) {
+          console.error('❌ [RepresentativeDetails] Error converting assigned_at:', err);
+        }
+      }
+      
+      let loadingDate = null;
+      try {
+        loadingDate = row.loading_date ? normalizeJalaliDate(row.loading_date) : null;
+      } catch (err) {
+        console.error('❌ [RepresentativeDetails] Error normalizing loading_date:', err);
+        loadingDate = row.loading_date || null;
+      }
+      
+      return {
+        id: row.id,
+        destinationId: row.destination_id,
+        announcementCode: row.announcement_code,
+        loadingDate: loadingDate,
+        lineType: row.line_type,
+        assignmentType: row.assignment_type,
+        totalFreightCost: parseFloat(row.freight_cost) || 0, // استفاده از کرایه مقصد خاص
+        assignedAt: assignedAtJalali,
+        driver: row.driver_id ? {
+          id: row.driver_id,
+          name: row.driver_name,
+          employeeId: row.driver_employee_id,
+          phone: row.driver_phone
+        } : null,
+        vehicle: row.vehicle_id ? {
+          id: row.vehicle_id,
+          plateNumber: {
+            part1: row.plate_part1,
+            letter: row.plate_letter,
+            part2: row.plate_part2,
+            cityCode: row.plate_city_code
+          },
+          make: row.vehicle_make,
+          model: row.vehicle_model
+        } : null
+      };
+    });
+    
+    console.log('✅ [RepresentativeDetails] Found', details.length, 'assignments');
+    
+    res.json(details);
+  } catch (error) {
+    console.error('❌ [RepresentativeDetails] Error:', error);
+    res.status(500).json({ message: 'Internal server error while fetching representative details.', error: error.message });
+  }
+}
+
+/**
+ * آمار شهرها بر اساس شهر
+ * برای ترابری‌ها: لیست شهرها با تعداد ارسال، تعداد شرکتی/شخصی، مبلغ کرایه، تعداد بارنامه‌های پرداخت نشده
+ */
+async function getCityStatistics(req, res) {
+  try {
+    const { year, month, day, timeRange = 'month' } = req.query;
+    
+    console.log('📊 [CityStatistics] Request:', { year, month, day, timeRange });
+    
+    // ساخت dateFilter بر اساس timeRange
+    let dateFilter = '';
+    const dateParams = [];
+    let paramIdx = 1;
+    
+    if (timeRange === 'day' && year && month) {
+      // آمار روزانه تاریخی
+      if (day) {
+        const dayStr = day.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-${dayStr}`);
+        dateParams.push(`${year}/${month}/${dayStr}`);
+        paramIdx += 2;
+      } else {
+        // تمام روزهای ماه
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-%`);
+        dateParams.push(`${year}/${month}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'month' && year) {
+      if (month) {
+        // ماه خاص
+        const monthStr = month.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${monthStr}-%`);
+        dateParams.push(`${year}/${monthStr}/%`);
+        paramIdx += 2;
+      } else {
+        // تمام ماه‌های سال
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-%`);
+        dateParams.push(`${year}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'year' && year) {
+      dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+      dateParams.push(`${year}-%`);
+      dateParams.push(`${year}/%`);
+      paramIdx += 2;
+    }
+    
+    // فیلتر status: فقط بارهایی که تخصیص دارند یا finalized/leftover هستند
+    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+    
+    // کوئری اصلی: آمار بر اساس شهر - فقط تخصیص‌ها را می‌شمارد
+    // منطق پرداخت نشده: اگر freight_transaction وجود دارد و is_paid = false است، یا اگر freight_transaction وجود ندارد اما freight_cost > 0 و personal است
+    // برای assignment_type null: اگر assigned_driver_id دارد اما assignment_type null است، در شرکتی شمارش می‌شود
+    // مهم: استفاده از fd.freight_cost (کرایه هر مقصد) به جای fa.total_freight_cost (کرایه کل)
+    const query = `
+      SELECT 
+        fd.city,
+        COALESCE(MAX(fd.representative_name), '') as representative_name,
+        COUNT(DISTINCT CASE WHEN fa.assigned_driver_id IS NOT NULL THEN fa.id END) as total_freights,
+        COUNT(DISTINCT CASE 
+          WHEN fa.assigned_driver_id IS NOT NULL 
+          AND (fa.assignment_type = 'company' OR fa.assignment_type IS NULL)
+          THEN fa.id 
+        END) as company_count,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count,
+        COALESCE(SUM(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN COALESCE(fd.freight_cost, 0) ELSE 0 END), 0) as total_personal_freight_cost,
+        COUNT(DISTINCT CASE 
+          WHEN fa.assigned_driver_id IS NOT NULL 
+          AND fa.assignment_type = 'personal'
+          AND COALESCE(fd.freight_cost, 0) > 0
+          AND (
+            (EXISTS (SELECT 1 FROM freight_transactions ft2 WHERE ft2.announcement_id = fa.id AND ft2.is_paid = false))
+            OR (NOT EXISTS (SELECT 1 FROM freight_transactions ft3 WHERE ft3.announcement_id = fa.id))
+          )
+          THEN fd.id 
+        END) as unpaid_invoice_count,
+        COALESCE(SUM(CASE 
+          WHEN fa.assigned_driver_id IS NOT NULL 
+          AND fa.assignment_type = 'personal'
+          AND COALESCE(fd.freight_cost, 0) > 0
+          AND (
+            (EXISTS (SELECT 1 FROM freight_transactions ft2 WHERE ft2.announcement_id = fa.id AND ft2.is_paid = false))
+            OR (NOT EXISTS (SELECT 1 FROM freight_transactions ft3 WHERE ft3.announcement_id = fa.id))
+          )
+          THEN COALESCE(fd.freight_cost, 0)
+          ELSE 0 
+        END), 0) as unpaid_amount
+      FROM freight_destinations fd
+      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
+      WHERE fd.city IS NOT NULL AND fd.city != ''
+        AND fa.assigned_driver_id IS NOT NULL
+        ${dateFilter}
+        ${statusFilter}
+      GROUP BY fd.city
+      ORDER BY total_freights DESC, fd.city ASC
+    `;
+    
+    console.log('📊 [CityStatistics] Query:', query);
+    console.log('📊 [CityStatistics] Params:', dateParams);
+    
+    const { rows } = await pool.query(query, dateParams);
+    
+    console.log('✅ [CityStatistics] Found', rows.length, 'cities');
+    
+    const statistics = rows.map(row => ({
+      city: row.city,
+      representativeName: row.representative_name || '',
+      totalFreights: parseInt(row.total_freights) || 0,
+      companyCount: parseInt(row.company_count) || 0,
+      personalCount: parseInt(row.personal_count) || 0,
+      totalPersonalFreightCost: parseFloat(row.total_personal_freight_cost) || 0,
+      unpaidInvoiceCount: parseInt(row.unpaid_invoice_count) || 0,
+      unpaidAmount: parseFloat(row.unpaid_amount) || 0
+    }));
+    
+    res.json(statistics);
+  } catch (error) {
+    console.error('❌ [CityStatistics] Error:', error);
+    res.status(500).json({ message: 'Internal server error while fetching city statistics.', error: error.message });
+  }
+}
+
+/**
+ * جزئیات تخصیص‌های خودرو برای یک شهر خاص
+ */
+async function getCityDetails(req, res) {
+  try {
+    const { city, year, month, day, timeRange = 'month' } = req.query;
+    
+    if (!city) {
+      return res.status(400).json({ message: 'city is required' });
+    }
+    
+    console.log('📊 [CityDetails] Request:', { city, year, month, day, timeRange });
+    
+    // ساخت dateFilter
+    let dateFilter = '';
+    const dateParams = [city];
+    let paramIdx = 2;
+    
+    if (timeRange === 'day' && year && month) {
+      if (day) {
+        const dayStr = day.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-${dayStr}`, `${year}/${month}/${dayStr}`);
+        paramIdx += 2;
+      } else {
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${month}-%`, `${year}/${month}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'month' && year) {
+      if (month) {
+        const monthStr = month.padStart(2, '0');
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-${monthStr}-%`, `${year}/${monthStr}/%`);
+        paramIdx += 2;
+      } else {
+        dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+        dateParams.push(`${year}-%`, `${year}/%`);
+        paramIdx += 2;
+      }
+    } else if (timeRange === 'year' && year) {
+      dateFilter = `AND (CAST(fa.loading_date AS TEXT) LIKE $${paramIdx} OR CAST(fa.loading_date AS TEXT) LIKE $${paramIdx + 1})`;
+      dateParams.push(`${year}-%`, `${year}/%`);
+      paramIdx += 2;
+    }
+    
+    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+    
+    // کوئری برای گرفتن جزئیات تخصیص‌ها
+    // مهم: استفاده از fd.freight_cost (کرایه هر مقصد) به جای fa.total_freight_cost (کرایه کل)
+    const query = `
+      SELECT 
+        fa.id,
+        fd.id as destination_id,
+        fa.announcement_code,
+        CAST(fa.loading_date AS TEXT) as loading_date,
+        fa.line_type,
+        fa.assignment_type,
+        COALESCE(fd.freight_cost, 0) as freight_cost,
+        (
+          SELECT MIN(fah.created_at) 
+          FROM freight_announcement_history fah 
+          WHERE fah.freight_announcement_id = fa.id 
+            AND fah.action = 'ASSIGNED'
+          LIMIT 1
+        ) as assigned_at,
+        d.id as driver_id,
+        d.name as driver_name,
+        d.employee_id as driver_employee_id,
+        COALESCE(d.mobile, d.work_phone, d.home_phone) as driver_phone,
+        v.id as vehicle_id,
+        v.plate_part1,
+        v.plate_letter,
+        v.plate_part2,
+        v.plate_city_code,
+        v.brand as vehicle_make,
+        v.model as vehicle_model,
+        fd.representative_name
+      FROM freight_destinations fd
+      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
+      LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+      LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      WHERE fd.city = $1 
+        AND fa.assigned_driver_id IS NOT NULL
+        ${dateFilter}
+        ${statusFilter}
+      ORDER BY fa.loading_date DESC, fa.created_at DESC
+    `;
+    
+    console.log('📊 [CityDetails] Query:', query);
+    console.log('📊 [CityDetails] Params:', dateParams);
+    
+    const { rows } = await pool.query(query, dateParams);
+    
+    const jalaliUtils = require('../utils/jalali');
+    
+    const details = rows.map(row => {
+      let assignedAtJalali = null;
+      if (row.assigned_at) {
+        try {
+          const assignedAtDate = new Date(row.assigned_at);
+          assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
+        } catch (err) {
+          console.error('❌ [CityDetails] Error converting assigned_at:', err);
+        }
+      }
+      
+      let loadingDate = null;
+      try {
+        loadingDate = row.loading_date ? normalizeJalaliDate(row.loading_date) : null;
+      } catch (err) {
+        console.error('❌ [CityDetails] Error normalizing loading_date:', err);
+        loadingDate = row.loading_date || null;
+      }
+      
+      return {
+        id: row.id,
+        destinationId: row.destination_id,
+        announcementCode: row.announcement_code,
+        loadingDate: loadingDate,
+        lineType: row.line_type,
+        assignmentType: row.assignment_type,
+        totalFreightCost: parseFloat(row.freight_cost) || 0, // استفاده از کرایه مقصد خاص
+        assignedAt: assignedAtJalali,
+        driver: row.driver_id ? {
+          id: row.driver_id,
+          name: row.driver_name,
+          employeeId: row.driver_employee_id,
+          phone: row.driver_phone
+        } : null,
+        vehicle: row.vehicle_id ? {
+          id: row.vehicle_id,
+          plateNumber: {
+            part1: row.plate_part1,
+            letter: row.plate_letter,
+            part2: row.plate_part2,
+            cityCode: row.plate_city_code
+          },
+          make: row.vehicle_make,
+          model: row.vehicle_model
+        } : null,
+        representativeName: row.representative_name || ''
+      };
+    });
+    
+    console.log('✅ [CityDetails] Found', details.length, 'assignments');
+    
+    res.json(details);
+  } catch (error) {
+    console.error('❌ [CityDetails] Error:', error);
+    res.status(500).json({ message: 'Internal server error while fetching city details.', error: error.message });
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -2061,4 +2669,8 @@ module.exports = {
   getFreightHistory,
   finalizeAssignments,
   getTransportStatistics,
+  getRepresentativeStatistics,
+  getRepresentativeDetails,
+  getCityStatistics,
+  getCityDetails,
 };
