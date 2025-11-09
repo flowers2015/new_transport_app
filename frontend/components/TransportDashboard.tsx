@@ -53,6 +53,62 @@ interface RepresentativeDetailData {
     } | null;
 }
 
+interface LineAnalyticsPeriodMeta {
+    key: string;
+    label: string;
+    jalali: {
+        year: number;
+        month: number;
+    };
+}
+
+interface LineAnalyticsComparison {
+    key: string;
+    label: string;
+    modeFare: number | null;
+    changePercent: number | null;
+    sampleSize: number;
+}
+
+interface LineAnalyticsChartPoint {
+    key: string;
+    label: string;
+    meanFare: number | null;
+    modeFare: number | null;
+    sampleSize: number;
+}
+
+interface LineAnalyticsCurrentStats {
+    modeFare: number | null;
+    meanFare: number | null;
+    modeUnitCost: number | null;
+    modePerCargoPercent: number | null;
+    totalUnits: number | null;
+    totalFreight: number | null;
+    sampleSize: number;
+    destinationCountMedian: number | null;
+}
+
+interface LineAnalyticsItem {
+    lineType: string;
+    vehicleType: string;
+    representativeName: string;
+    destinationCity: string;
+    unitType: 'carton' | 'ton';
+    unitLabel: string;
+    current: LineAnalyticsCurrentStats;
+    comparisons: LineAnalyticsComparison[];
+    chartData: LineAnalyticsChartPoint[];
+}
+
+interface LineAnalyticsMeta {
+    lineTypes: string[];
+    year: number;
+    month: number;
+    timeRange: string;
+    periods: LineAnalyticsPeriodMeta[];
+}
+
 interface TransportDashboardProps {
     iceCreamStats: StatisticsData[];
     dairyStats: StatisticsData[];
@@ -71,7 +127,11 @@ interface TransportDashboardProps {
     representativeStats: RepresentativeStatisticsData[];
     representativeStatsLoading: boolean;
     representativeStatsError: string | null;
-    onFetchRepresentativeDetails: (representativeName: string, city: string) => Promise<RepresentativeDetailData[]>;
+    onFetchRepresentativeDetails: (representativeName: string, city: string, lineType?: string) => Promise<RepresentativeDetailData[]>;
+    lineAnalytics: LineAnalyticsItem[];
+    lineAnalyticsMeta: LineAnalyticsMeta | null;
+    lineAnalyticsLoading: boolean;
+    lineAnalyticsError: string | null;
 }
 
 const COLORS = {
@@ -962,6 +1022,10 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     representativeStatsLoading,
     representativeStatsError,
     onFetchRepresentativeDetails,
+    lineAnalytics,
+    lineAnalyticsMeta,
+    lineAnalyticsLoading,
+    lineAnalyticsError,
 }) => {
     const [showDailyStats, setShowDailyStats] = useState(false);
     const [dailyStatsIndex, setDailyStatsIndex] = useState(0);
@@ -1475,6 +1539,14 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                 selectedDay={selectedDay}
                 timeRange={timeRange}
             />
+
+            <LineAnalyticsSection
+                data={lineAnalytics}
+                meta={lineAnalyticsMeta}
+                loading={lineAnalyticsLoading}
+                error={lineAnalyticsError}
+                selectedMonth={selectedMonth}
+            />
         </div>
     );
 };
@@ -1676,27 +1748,27 @@ const RepresentativeStatisticsTable: React.FC<{
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                         <h2 className="text-xl font-bold text-slate-800">آمار کرایه نماینده/پخش</h2>
-                        <button
-                            onClick={() => setIsTableOpen(!isTableOpen)}
-                            className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1 flex-row-reverse"
-                            title={isTableOpen ? "بستن جدول" : "باز کردن جدول"}
-                        >
-                            {isTableOpen ? (
-                                <>
-                                    بستن
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                    </svg>
-                                </>
-                            ) : (
-                                <>
-                                    باز کردن
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </>
-                            )}
-                        </button>
+                    <button
+                        onClick={() => setIsTableOpen(!isTableOpen)}
+                        className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1 flex-row-reverse"
+                        title={isTableOpen ? "بستن جدول" : "باز کردن جدول"}
+                    >
+                        {isTableOpen ? (
+                            <>
+                                بستن
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                </svg>
+                            </>
+                        ) : (
+                            <>
+                                باز کردن
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </>
+                        )}
+                    </button>
                     </div>
                     {isTableOpen && (
                         <button
@@ -1807,27 +1879,25 @@ const RepresentativeStatisticsTable: React.FC<{
                             </div>
                         ) : (
                             <>
-                                <table className="min-w-full text-sm border-collapse">
-                                    <thead>
-                                        <tr className="border-b border-slate-300 bg-slate-50">
-                                            <th className="px-4 py-3 text-right text-slate-700 font-semibold">نماینده/پخش</th>
-                                            <th className="px-4 py-3 text-right text-slate-700 font-semibold">شهر</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">لاین</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">تعداد ارسال</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">شرکتی</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">شخصی</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">جمع کرایه شخصی</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">بارنامه پرداخت نشده</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ پرداخت نشده</th>
-                                            <th className="px-4 py-3 text-center text-slate-700 font-semibold">جزئیات</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
+                            <table className="min-w-full text-sm border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-300 bg-slate-50">
+                                        <th className="px-4 py-3 text-right text-slate-700 font-semibold">شهر</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">لاین</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">تعداد ارسال</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">شرکتی</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">شخصی</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">جمع کرایه شخصی</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">بارنامه پرداخت نشده</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ پرداخت نشده</th>
+                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">جزئیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                         {paginatedGroups.map((group, groupIdx) => (
-                                            <React.Fragment key={`${group.representativeName}_${group.city}_${groupIdx}`}>
+                                            <React.Fragment key={`${group.city}_${groupIdx}`}>
                                                 {group.items.map((stat, itemIdx) => (
-                                                    <tr key={`${stat.representativeName}_${stat.city}_${stat.lineType}_${itemIdx}`} className="border-b border-slate-200 hover:bg-slate-50">
-                                                        <td className="px-4 py-3 text-right font-semibold">{stat.representativeName || 'پخش'}</td>
+                                                    <tr key={`${stat.city}_${stat.lineType}_${itemIdx}`} className="border-b border-slate-200 hover:bg-slate-50">
                                                         <td className="px-4 py-3 text-right">{stat.city}</td>
                                                         <td className="px-4 py-3 text-center">
                                                             <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
@@ -1870,16 +1940,10 @@ const RepresentativeStatisticsTable: React.FC<{
                                                         </td>
                                                     </tr>
                                                 ))}
-                                                {/* خلاصه برای هر گروه */}
                                                 {group.items.length > 0 && (
                                                     <tr className="bg-slate-100 border-b-2 border-slate-300">
-                                                        <td colSpan={3} className="px-4 py-3 text-right font-bold text-slate-800">
-                                                            خلاصه {group.representativeName || 'پخش'} - {group.city}
-                                                        </td>
-                                                        <td colSpan={3} className="px-4 py-3 text-center text-slate-600">
-                                                            {group.items.reduce((sum, item) => sum + item.totalFreights, 0)} ارسال | 
-                                                            {group.items.reduce((sum, item) => sum + item.companyCount, 0)} شرکتی | 
-                                                            {group.items.reduce((sum, item) => sum + item.personalCount, 0)} شخصی
+                                                        <td colSpan={4} className="px-4 py-3 text-center text-slate-600">
+                                                            {group.items.reduce((sum, item) => sum + item.totalFreights, 0)} ارسال | {group.items.reduce((sum, item) => sum + item.companyCount, 0)} شرکتی | {group.items.reduce((sum, item) => sum + item.personalCount, 0)} شخصی
                                                         </td>
                                                         <td className="px-4 py-3 text-center font-bold text-slate-800">
                                                             {formatCurrency(group.totalPersonalFreightCost)}
@@ -1896,13 +1960,13 @@ const RepresentativeStatisticsTable: React.FC<{
                                                         <td className="px-4 py-3 text-center font-bold text-orange-800">
                                                             {formatCurrency(group.totalUnpaidAmount)}
                                                         </td>
-                                                        <td></td>
+                                                        <td className="px-4 py-3"></td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                    ))}
+                                </tbody>
+                            </table>
 
                                 {/* صفحه‌بندی */}
                                 {totalPages > 1 && (
@@ -2068,75 +2132,75 @@ const RepresentativeStatisticsTable: React.FC<{
 
                                         return (
                                             <>
-                                                <div className="overflow-x-auto">
-                                                    <table className="min-w-full text-sm border-collapse">
-                                                        <thead>
-                                                            <tr className="border-b border-slate-300 bg-slate-50">
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">کد اعلام بار</th>
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ بارگیری</th>
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ تخصیص</th>
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">لاین</th>
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">نوع تخصیص</th>
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">راننده</th>
-                                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">خودرو</th>
-                                                                <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ کرایه</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-sm border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-slate-300 bg-slate-50">
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">کد اعلام بار</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ بارگیری</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ تخصیص</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">لاین</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">نوع تخصیص</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">راننده</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">خودرو</th>
+                                                <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ کرایه</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
                                                             {paginatedDetails.map((detail, idx) => (
                                                                 <tr key={`${detail.id}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
-                                                                    <td className="px-4 py-3 text-right">{detail.announcementCode}</td>
-                                                                    <td className="px-4 py-3 text-right">{detail.loadingDate}</td>
-                                                                    <td className="px-4 py-3 text-right">{detail.assignedAt || '-'}</td>
-                                                                    <td className="px-4 py-3 text-right">{detail.lineType}</td>
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                                            detail.assignmentType === 'company' 
-                                                                                ? 'bg-green-100 text-green-800' 
-                                                                                : 'bg-orange-100 text-orange-800'
-                                                                        }`}>
-                                                                            {detail.assignmentType === 'company' ? 'شرکتی' : 'شخصی'}
-                                                                        </span>
-                                                                    </td>
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        {detail.driver ? (
-                                                                            <div>
-                                                                                <div className="font-semibold">{detail.driver.name}</div>
-                                                                                {detail.driver.employeeId && (
-                                                                                    <div className="text-xs text-slate-500">کد: {detail.driver.employeeId}</div>
-                                                                                )}
-                                                                                {detail.driver.phone && (
-                                                                                    <div className="text-xs text-slate-500">{detail.driver.phone}</div>
-                                                                                )}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <span className="text-slate-400">-</span>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        {detail.vehicle ? (
-                                                                            <div>
-                                                                                <div className="font-semibold">
-                                                                                    {detail.vehicle.plateNumber.part1} 
-                                                                                    {detail.vehicle.plateNumber.letter} 
-                                                                                    {detail.vehicle.plateNumber.part2} 
-                                                                                    {detail.vehicle.plateNumber.cityCode && `-${detail.vehicle.plateNumber.cityCode}`}
-                                                                                </div>
-                                                                                {(detail.vehicle.make || detail.vehicle.model) && (
-                                                                                    <div className="text-xs text-slate-500">
-                                                                                        {detail.vehicle.make} {detail.vehicle.model}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <span className="text-slate-400">-</span>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-4 py-3 text-center">{formatCurrency(detail.totalFreightCost)}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                    <td className="px-4 py-3 text-right">{detail.announcementCode}</td>
+                                                    <td className="px-4 py-3 text-right">{detail.loadingDate}</td>
+                                                    <td className="px-4 py-3 text-right">{detail.assignedAt || '-'}</td>
+                                                    <td className="px-4 py-3 text-right">{detail.lineType}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                            detail.assignmentType === 'company' 
+                                                                ? 'bg-green-100 text-green-800' 
+                                                                : 'bg-orange-100 text-orange-800'
+                                                        }`}>
+                                                            {detail.assignmentType === 'company' ? 'شرکتی' : 'شخصی'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {detail.driver ? (
+                                                            <div>
+                                                                <div className="font-semibold">{detail.driver.name}</div>
+                                                                {detail.driver.employeeId && (
+                                                                    <div className="text-xs text-slate-500">کد: {detail.driver.employeeId}</div>
+                                                                )}
+                                                                {detail.driver.phone && (
+                                                                    <div className="text-xs text-slate-500">{detail.driver.phone}</div>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {detail.vehicle ? (
+                                                            <div>
+                                                                <div className="font-semibold">
+                                                                    {detail.vehicle.plateNumber.part1} 
+                                                                    {detail.vehicle.plateNumber.letter} 
+                                                                    {detail.vehicle.plateNumber.part2} 
+                                                                    {detail.vehicle.plateNumber.cityCode && `-${detail.vehicle.plateNumber.cityCode}`}
+                                                                </div>
+                                                                {(detail.vehicle.make || detail.vehicle.model) && (
+                                                                    <div className="text-xs text-slate-500">
+                                                                        {detail.vehicle.make} {detail.vehicle.model}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">{formatCurrency(detail.totalFreightCost)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                                 </div>
 
                                                 {/* خلاصه مبالغ */}
@@ -2172,7 +2236,7 @@ const RepresentativeStatisticsTable: React.FC<{
                                                         >
                                                             بعدی
                                                         </button>
-                                                    </div>
+                                </div>
                                                 )}
                                             </>
                                         );
@@ -2184,6 +2248,683 @@ const RepresentativeStatisticsTable: React.FC<{
                 </div>
             )}
         </>
+    );
+};
+
+const LineAnalyticsSection: React.FC<{
+    data: LineAnalyticsItem[];
+    meta: LineAnalyticsMeta | null;
+    loading: boolean;
+    error: string | null;
+    selectedMonth: number | null;
+}> = ({ data, meta, loading, error, selectedMonth }) => {
+    const periods = meta?.periods ?? [];
+    const comparisonPeriods = periods.filter(period => period.key !== 'current');
+
+    type EnrichedItem = LineAnalyticsItem & {
+        vehicleDisplay: string;
+    };
+
+    const createDefaultFilter = () => ({ vehicleType: '', search: '' });
+
+    const [lineFilters, setLineFilters] = useState<Record<string, { vehicleType: string; search: string }>>({});
+    const [expandedTable, setExpandedTable] = useState<{ lineType: string; rows: EnrichedItem[]; unitLabel: string } | null>(null);
+    const [expandedChart, setExpandedChart] = useState<{ lineType: string; data: { vehicleType: string; meanFare: number | null; sampleSize: number }[] } | null>(null);
+
+    const groupedByLine = useMemo(() => {
+        const lineMap = new Map<string, LineAnalyticsItem[]>();
+        data.forEach(item => {
+            const lineType = item.lineType || 'نامشخص';
+            if (!lineMap.has(lineType)) {
+                lineMap.set(lineType, []);
+            }
+            lineMap.get(lineType)!.push(item);
+        });
+
+        return Array.from(lineMap.entries()).map(([lineType, items]) => ({ lineType, items }));
+    }, [data]);
+
+    useEffect(() => {
+        setLineFilters(prev => {
+            const next = { ...prev };
+            groupedByLine.forEach(group => {
+                if (!next[group.lineType]) {
+                    next[group.lineType] = createDefaultFilter();
+                }
+            });
+            return next;
+        });
+    }, [groupedByLine]);
+
+    const updateLineFilter = (lineType: string, updates: Partial<{ vehicleType: string; search: string }>) => {
+        setLineFilters(prev => {
+            const current = prev[lineType] ?? createDefaultFilter();
+            return {
+                ...prev,
+                [lineType]: {
+                    ...current,
+                    ...updates,
+                },
+            };
+        });
+    };
+
+    const formatCurrency = (value: number | null | undefined, maximumFractionDigits = 0) => {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '—';
+        }
+        return new Intl.NumberFormat('fa-IR', {
+            maximumFractionDigits,
+        }).format(value);
+    };
+
+    const formatCurrencyCompact = (value: number | null | undefined) => {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '';
+        }
+        return new Intl.NumberFormat('fa-IR', {
+            notation: 'compact',
+            compactDisplay: 'short',
+            maximumFractionDigits: 1,
+        }).format(value);
+    };
+
+    const formatPercent = (value: number | null | undefined, fractionDigits = 2) => {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '—';
+        }
+        return `${value >= 0 ? '+' : ''}${value.toFixed(fractionDigits)}%`;
+    };
+
+    const formatUnits = (value: number | null | undefined, unitType: 'carton' | 'ton') => {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '—';
+        }
+        const digits = unitType === 'carton' ? 0 : 2;
+        return new Intl.NumberFormat('fa-IR', {
+            maximumFractionDigits: digits,
+        }).format(value);
+    };
+
+    const toEnglishDigits = (value: string | number | null | undefined) => {
+        if (value === null || value === undefined) return '';
+        const str = String(value);
+        const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+        return str.replace(/[۰-۹]/g, d => String(persianDigits.indexOf(d)));
+    };
+
+    const buildAnalyticsCSV = () => {
+        if (!meta || data.length === 0) return '';
+
+        const header = [
+            'لاین',
+            'نوع خودرو',
+            'شهر مقصد',
+            'حجم بار (واحد)',
+            'مد کرایه جاری (ریال)',
+            'میانگین کرایه جاری (ریال)',
+            'کرایه به‌ازای هر واحد (ریال)',
+            'کرایه / ارزش بار (%)',
+            'جمع کرایه (ریال)',
+            'تعداد سفر جاری',
+            ...comparisonPeriods.flatMap(period => [
+                `مد کرایه - ${period.label}`,
+                `درصد تغییر - ${period.label}`,
+                `تعداد سفر - ${period.label}`,
+            ]),
+        ];
+
+        const rows: string[][] = [];
+
+        data.forEach(item => {
+            const comparisonMap = new Map(item.comparisons.map(comp => [comp.key, comp]));
+            const vehicleDisplay = item.vehicleType || 'نامشخص';
+            const totalUnitsCell = item.current.totalUnits !== null && item.current.totalUnits !== undefined
+                ? `${toEnglishDigits(item.current.totalUnits)} ${item.unitLabel}`
+                : '';
+            const perUnitCostCell = item.current.modeUnitCost !== null && item.current.modeUnitCost !== undefined
+                ? `${toEnglishDigits(item.current.modeUnitCost)} ریال/${item.unitLabel}`
+                : '';
+
+            const row: string[] = [
+                item.lineType,
+                item.vehicleType,
+                item.destinationCity,
+                totalUnitsCell,
+                toEnglishDigits(item.current.modeFare),
+                toEnglishDigits(item.current.meanFare),
+                perUnitCostCell,
+                item.current.modePerCargoPercent !== null && item.current.modePerCargoPercent !== undefined
+                    ? toEnglishDigits(item.current.modePerCargoPercent.toFixed(2))
+                    : '',
+                toEnglishDigits(item.current.totalFreight),
+                toEnglishDigits(item.current.sampleSize),
+            ];
+
+            comparisonPeriods.forEach(period => {
+                const cmp = comparisonMap.get(period.key);
+                row.push(
+                    toEnglishDigits(cmp?.modeFare ?? ''),
+                    cmp?.changePercent !== null && cmp?.changePercent !== undefined
+                        ? toEnglishDigits(cmp.changePercent.toFixed(2))
+                        : '',
+                    toEnglishDigits(cmp?.sampleSize ?? '')
+                );
+            });
+
+            rows.push(row);
+        });
+
+        const csvLines = [
+            '\uFEFF' + header.join(','),
+            ...rows.map(row =>
+                row
+                    .map(cell => {
+                        const str = String(cell ?? '');
+                        return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+                    })
+                    .join(',')
+            ),
+        ];
+
+        return csvLines.join('\n');
+    };
+
+    const handleDownload = () => {
+        const csv = buildAnalyticsCSV();
+        if (!csv) return;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const fileName = `line-analytics-${meta?.year || ''}-${String(meta?.month || '').padStart(2, '0')}.csv`;
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    if (!selectedMonth) {
+        return (
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-bold text-slate-800 mb-4">آنالیز کرایه به تفکیک لاین و خودرو</h2>
+                <p className="text-slate-600">برای مشاهده آنالیز کرایه، ابتدا یک ماه مشخص انتخاب کنید.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-slate-800">آنالیز کرایه به تفکیک لاین و خودرو</h2>
+                {meta && (
+                    <span className="text-sm text-slate-500">
+                        دوره انتخابی: {meta.year}/{String(meta.month).padStart(2, '0')}
+                    </span>
+                )}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleDownload}
+                        disabled={loading || error !== null || data.length === 0}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        خروجی اکسل آنالیز
+                    </button>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="text-center py-8 text-slate-500">در حال بارگذاری آنالیز...</div>
+            ) : error ? (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
+            ) : data.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">داده‌ای برای نمایش وجود ندارد</div>
+            ) : (
+                groupedByLine.map(lineGroup => {
+                    const filter = lineFilters[lineGroup.lineType] ?? createDefaultFilter();
+                    const normalizedSearch = filter.search.trim().toLowerCase();
+
+                    const allItems: EnrichedItem[] = lineGroup.items.map(item => ({
+                        ...item,
+                        vehicleDisplay: item.vehicleType || 'نامشخص',
+                    }));
+
+                    const vehicleOptions = Array.from(new Set(allItems.map(item => item.vehicleDisplay))).sort((a, b) => a.localeCompare(b, 'fa'));
+
+                    const filteredItems = allItems.filter(item => {
+                        const matchesVehicle = !filter.vehicleType || item.vehicleDisplay === filter.vehicleType;
+                        const matchesSearch = !normalizedSearch
+                            || item.destinationCity.toLowerCase().includes(normalizedSearch)
+                            || item.vehicleDisplay.toLowerCase().includes(normalizedSearch);
+                        return matchesVehicle && matchesSearch;
+                    });
+
+                    const unitLabel = filteredItems[0]?.unitLabel ?? allItems[0]?.unitLabel ?? 'واحد';
+
+                    const vehicleAggregation = new Map<string, { weightedMean: number; totalSamples: number }>();
+                    filteredItems.forEach(item => {
+                        const key = item.vehicleDisplay;
+                        const current = vehicleAggregation.get(key) || { weightedMean: 0, totalSamples: 0 };
+                        const sampleSize = item.current.sampleSize && item.current.sampleSize > 0 ? item.current.sampleSize : (item.current.meanFare !== null ? 1 : 0);
+                        if (item.current.meanFare !== null && sampleSize > 0) {
+                            current.weightedMean += item.current.meanFare * sampleSize;
+                        }
+                        current.totalSamples += sampleSize;
+                        vehicleAggregation.set(key, current);
+                    });
+
+                    const vehicleChartData = Array.from(vehicleAggregation.entries()).map(([vehicleType, agg]) => ({
+                        vehicleType,
+                        meanFare: agg.totalSamples > 0 ? Math.round(agg.weightedMean / agg.totalSamples) : null,
+                        sampleSize: agg.totalSamples,
+                    }));
+
+                    const hasData = filteredItems.length > 0;
+
+                    return (
+                        <div key={lineGroup.lineType} className="mb-10">
+                            <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-4">
+                                <h3 className="text-lg font-semibold text-slate-700">لاین: {lineGroup.lineType}</h3>
+                                <span className="text-sm text-slate-500">({allItems.length} ترکیب مقصد)</span>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2 mb-6">
+                                <div className="flex flex-col">
+                                    <label className="text-xs font-medium text-slate-600 mb-1">نوع خودرو</label>
+                                    <select
+                                        value={filter.vehicleType}
+                                        onChange={e => updateLineFilter(lineGroup.lineType, { vehicleType: e.target.value })}
+                                        className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                    >
+                                        <option value="">همه انواع خودرو</option>
+                                        {vehicleOptions.map(option => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="text-xs font-medium text-slate-600 mb-1">جستجوی شهر یا خودرو</label>
+                                    <input
+                                        type="text"
+                                        value={filter.search}
+                                        onChange={e => updateLineFilter(lineGroup.lineType, { search: e.target.value })}
+                                        placeholder="مثلاً مشهد یا تریلی"
+                                        className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                                <div className="bg-white border border-slate-200 rounded-lg shadow-sm order-1 lg:order-1">
+                                    <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                                        <h4 className="text-base font-semibold text-slate-700">جدول جزئیات کرایه</h4>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-slate-500">
+                                                {hasData ? `${filteredItems.length} ردیف پس از فیلتر` : 'داده‌ای مطابق فیلترها یافت نشد'}
+                                            </span>
+                                            {hasData && (
+                                                <>
+                                                    <button
+                                                        onClick={() => setExpandedTable({ lineType: lineGroup.lineType, rows: filteredItems, unitLabel })}
+                                                        className="text-xs text-sky-600 border border-sky-300 px-2 py-1 rounded-md hover:bg-sky-50"
+                                                    >
+                                                        بزرگنمایی جدول
+                                                    </button>
+                                                    <button
+                                                        onClick={() => updateLineFilter(lineGroup.lineType, { search: '' })}
+                                                        className="text-xs text-slate-600 border border-slate-300 px-2 py-1 rounded-md hover:bg-slate-50"
+                                                    >
+                                                        پاک کردن جستجو
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead className="bg-slate-100">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-right font-semibold text-slate-700">نوع خودرو</th>
+                                                    <th className="px-3 py-2 text-right font-semibold text-slate-700">شهر مقصد نهایی</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">حجم بار ({unitLabel})</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">مد کرایه (ریال)</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">میانگین کرایه (ریال)</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">کرایه به‌ازای هر {unitLabel}</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">کرایه / ارزش بار (%)</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">جمع کرایه (ریال)</th>
+                                                    <th className="px-3 py-2 text-center font-semibold text-slate-700">تعداد سفر</th>
+                                                    {comparisonPeriods.map(period => (
+                                                        <th key={period.key} className="px-3 py-2 text-center font-semibold text-slate-700">
+                                                            {period.label}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {hasData ? (
+                                                    filteredItems.map(item => {
+                                                        const comparisonMap = new Map(item.comparisons.map(comp => [comp.key, comp]));
+                                                        const rowKey = `${item.vehicleDisplay}-${item.destinationCity}`;
+                                                        return (
+                                                            <tr key={rowKey} className="border-t border-slate-200">
+                                                                <td className="px-3 py-2 text-right text-slate-800 font-semibold">{item.vehicleDisplay}</td>
+                                                                <td className="px-3 py-2 text-right text-slate-800">{item.destinationCity}</td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">{formatUnits(item.current.totalUnits, item.unitType)}</td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">{formatCurrency(item.current.modeFare, 0)}</td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">{formatCurrency(item.current.meanFare, 0)}</td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">
+                                                                    <div className="flex flex-col items-center leading-tight">
+                                                                        <span className="font-semibold">
+                                                                            {formatCurrency(
+                                                                                item.current.modeUnitCost,
+                                                                                item.unitType === 'carton' ? 0 : 2
+                                                                            )}
+                                                                        </span>
+                                                                        <span className="text-[11px] text-slate-500">ریال برای هر {item.unitLabel}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">
+                                                                    {item.current.modePerCargoPercent !== null
+                                                                        ? `${item.current.modePerCargoPercent.toFixed(2)}%`
+                                                                        : '—'}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">{formatCurrency(item.current.totalFreight, 0)}</td>
+                                                                <td className="px-3 py-2 text-center text-slate-800">{item.current.sampleSize}</td>
+                                                                {comparisonPeriods.map(period => {
+                                                                    const cmp = comparisonMap.get(period.key);
+                                                                    return (
+                                                                        <td key={`${rowKey}-${period.key}`} className="px-3 py-2 text-center">
+                                                                            <div className="flex flex-col items-center gap-1">
+                                                                                <span className="text-slate-800 font-semibold">
+                                                                                    {formatCurrency(cmp?.modeFare ?? null, 0)}
+                                                                                </span>
+                                                                                <span
+                                                                                    className={`text-xs font-medium ${
+                                                                                        cmp?.changePercent !== null && cmp?.changePercent !== undefined
+                                                                                            ? cmp.changePercent > 0
+                                                                                                ? 'text-green-600'
+                                                                                                : cmp.changePercent < 0
+                                                                                                ? 'text-red-600'
+                                                                                                : 'text-slate-500'
+                                                                                            : 'text-slate-400'
+                                                                                    }`}
+                                                                                >
+                                                                                    {formatPercent(cmp?.changePercent)}
+                                                                                </span>
+                                                                            </div>
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan={9 + comparisonPeriods.length} className="px-3 py-6 text-center text-slate-500">
+                                                            هیچ داده‌ای با فیلترهای انتخابی یافت نشد.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 shadow-sm order-2 lg:order-2">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <h4 className="text-base font-semibold text-slate-700">میانگین کرایه به‌ازای نوع خودرو</h4>
+                                            <span className="text-xs text-slate-500">(براساس فیلترهای بالا)</span>
+                                        </div>
+                                        {vehicleChartData.length > 0 && (
+                                            <button
+                                                onClick={() => setExpandedChart({ lineType: lineGroup.lineType, data: vehicleChartData })}
+                                                className="text-xs text-sky-600 border border-sky-300 px-2 py-1 rounded-md hover:bg-sky-50"
+                                            >
+                                                بزرگنمایی نمودار
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="w-full h-72 min-w-0 p-1">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                data={vehicleChartData}
+                                                margin={{ top: 12, right: 6, bottom: 6, left: 6 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis
+                                                    dataKey="vehicleType"
+                                                    tickMargin={8}
+                                                    tick={{ fill: '#475569', fontSize: 12, dy: 2 }}
+                                                    axisLine={{ stroke: '#cbd5f5' }}
+                                                    tickLine={false}
+                                                />
+                                                <YAxis
+                                                    tickFormatter={(value) => formatCurrencyCompact(Number(value))}
+                                                    tickMargin={16}
+                                                    width={96}
+                                                    tick={{ fill: '#475569', fontSize: 12, dx: -4, textAnchor: 'end' }}
+                                                    axisLine={{ stroke: '#cbd5f5' }}
+                                                    tickLine={false}
+                                                    mirror
+                                                    padding={{ left: 32 }}
+                                                />
+                                                <Tooltip
+                                                    formatter={(value: any, _name, item) => {
+                                                        const payload = item?.payload as typeof vehicleChartData[number];
+                                                        const formattedValue = formatCurrency(Number(value), 0);
+                                                        const sample = payload?.sampleSize ?? 0;
+                                                        return [`${formattedValue} (سفر: ${sample})`, 'میانگین کرایه (ریال)'];
+                                                    }}
+                                                />
+                                                <Legend wrapperStyle={{ paddingTop: 12 }} />
+                                                <Bar dataKey="meanFare" name="میانگین کرایه (ریال)" fill="#0ea5e9" barSize={24}>
+                                                    <LabelList
+                                                        dataKey="meanFare"
+                                                        position="top"
+                                                        offset={12}
+                                                        formatter={(value: any) =>
+                                                            value !== null && value !== undefined
+                                                                ? formatCurrency(Number(value), 0)
+                                                                : '—'
+                                                        }
+                                                    />
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })
+            )}
+
+            {expandedTable && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-6xl max-h-full overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">نمایش کامل جدول - لاین {expandedTable.lineType}</h3>
+                                <p className="text-xs text-slate-500 mt-1">اطلاعات همان ردیف‌ها با فیلترهای فعال</p>
+                            </div>
+                            <button
+                                onClick={() => setExpandedTable(null)}
+                                className="text-slate-500 hover:text-slate-700 transition"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="flex-1 px-6 py-4 overflow-auto">
+                            <table className="min-w-full text-sm">
+                                <thead className="bg-slate-100">
+                                    <tr>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-700">نوع خودرو</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-700">شهر مقصد نهایی</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">حجم بار ({expandedTable.unitLabel})</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">مد کرایه (ریال)</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">میانگین کرایه (ریال)</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">کرایه به‌ازای هر {expandedTable.unitLabel}</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">کرایه / ارزش بار (%)</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">جمع کرایه (ریال)</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-700">تعداد سفر</th>
+                                        {comparisonPeriods.map(period => (
+                                            <th key={period.key} className="px-3 py-2 text-center font-semibold text-slate-700">
+                                                {period.label}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {expandedTable.rows.map(row => {
+                                        const comparisonMap = new Map(row.comparisons.map(comp => [comp.key, comp]));
+                                        const rowKey = `${row.vehicleDisplay}-${row.destinationCity}-expanded`;
+                                        return (
+                                            <tr key={rowKey} className="border-t border-slate-200">
+                                                <td className="px-3 py-2 text-right text-slate-800 font-semibold">{row.vehicleDisplay}</td>
+                                                <td className="px-3 py-2 text-right text-slate-800">{row.destinationCity}</td>
+                                                <td className="px-3 py-2 text-center text-slate-800">{formatUnits(row.current.totalUnits, row.unitType)}</td>
+                                                <td className="px-3 py-2 text-center text-slate-800">{formatCurrency(row.current.modeFare, 0)}</td>
+                                                <td className="px-3 py-2 text-center text-slate-800">{formatCurrency(row.current.meanFare, 0)}</td>
+                                                <td className="px-3 py-2 text-center text-slate-800">
+                                                    <div className="flex flex-col items-center leading-tight">
+                                                        <span className="font-semibold">
+                                                            {formatCurrency(
+                                                                row.current.modeUnitCost,
+                                                                row.unitType === 'carton' ? 0 : 2
+                                                            )}
+                                                        </span>
+                                                        <span className="text-[11px] text-slate-500">ریال برای هر {row.unitLabel}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-3 py-2 text-center text-slate-800">
+                                                    {row.current.modePerCargoPercent !== null
+                                                        ? `${row.current.modePerCargoPercent.toFixed(2)}%`
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-3 py-2 text-center text-slate-800">{formatCurrency(row.current.totalFreight, 0)}</td>
+                                                <td className="px-3 py-2 text-center text-slate-800">{row.current.sampleSize}</td>
+                                                {comparisonPeriods.map(period => {
+                                                    const cmp = comparisonMap.get(period.key);
+                                                    return (
+                                                        <td key={`${rowKey}-${period.key}`} className="px-3 py-2 text-center">
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <span className="text-slate-800 font-semibold">
+                                                                    {formatCurrency(cmp?.modeFare ?? null, 0)}
+                                                                </span>
+                                                                <span
+                                                                    className={`text-xs font-medium ${
+                                                                        cmp?.changePercent !== null && cmp?.changePercent !== undefined
+                                                                            ? cmp.changePercent > 0
+                                                                                ? 'text-green-600'
+                                                                                : cmp.changePercent < 0
+                                                                                ? 'text-red-600'
+                                                                                : 'text-slate-500'
+                                                                            : 'text-slate-400'
+                                                                    }`}
+                                                                >
+                                                                    {formatPercent(cmp?.changePercent)}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 text-right">
+                            <button
+                                onClick={() => setExpandedTable(null)}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition text-sm"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {expandedChart && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-full overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">بزرگنمایی نمودار لاین {expandedChart.lineType}</h3>
+                                <p className="text-xs text-slate-500 mt-1">میانگین کرایه بر اساس نوع خودرو</p>
+                            </div>
+                            <button
+                                onClick={() => setExpandedChart(null)}
+                                className="text-slate-500 hover:text-slate-700 transition"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="flex-1 px-6 py-4">
+                            <div className="w-full h-[440px] min-w-0 p-1">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        data={expandedChart.data}
+                                        margin={{ top: 18, right: 8, bottom: 10, left: 10 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis
+                                            dataKey="vehicleType"
+                                            tickMargin={10}
+                                            tick={{ fill: '#475569', fontSize: 13, dy: 4 }}
+                                            axisLine={{ stroke: '#cbd5f5' }}
+                                            tickLine={false}
+                                        />
+                                        <YAxis
+                                            tickFormatter={(value) => formatCurrencyCompact(Number(value))}
+                                            tickMargin={18}
+                                            width={110}
+                                            tick={{ fill: '#475569', fontSize: 13, dx: -6, textAnchor: 'end' }}
+                                            axisLine={{ stroke: '#cbd5f5' }}
+                                            tickLine={false}
+                                            mirror
+                                            padding={{ left: 40 }}
+                                        />
+                                        <Tooltip
+                                            formatter={(value: any, _name, item) => {
+                                                const payload = item?.payload as typeof expandedChart.data[number];
+                                                const formattedValue = formatCurrency(Number(value), 0);
+                                                const sample = payload?.sampleSize ?? 0;
+                                                return [`${formattedValue} (سفر: ${sample})`, 'میانگین کرایه (ریال)'];
+                                            }}
+                                        />
+                                        <Legend wrapperStyle={{ paddingTop: 20 }} />
+                                        <Bar dataKey="meanFare" name="میانگین کرایه (ریال)" fill="#0284c7" barSize={26}>
+                                            <LabelList
+                                                dataKey="meanFare"
+                                                position="top"
+                                                offset={14}
+                                                formatter={(value: any) =>
+                                                    value !== null && value !== undefined
+                                                        ? formatCurrency(Number(value), 0)
+                                                        : '—'
+                                                }
+                                            />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 text-right">
+                            <button
+                                onClick={() => setExpandedChart(null)}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition text-sm"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 

@@ -53,6 +53,64 @@ interface RepresentativeDetailData {
     } | null;
 }
 
+interface LineAnalyticsPeriodMeta {
+    key: string;
+    label: string;
+    jalali: {
+        year: number;
+        month: number;
+    };
+}
+
+interface LineAnalyticsComparison {
+    key: string;
+    label: string;
+    modeFare: number | null;
+    changePercent: number | null;
+    sampleSize: number;
+}
+
+interface LineAnalyticsChartPoint {
+    key: string;
+    label: string;
+    meanFare: number | null;
+    modeFare: number | null;
+    sampleSize: number;
+}
+
+interface LineAnalyticsCurrentStats {
+    modeFare: number | null;
+    meanFare: number | null;
+    modeUnitCost: number | null;
+    modePerCargoPercent: number | null;
+    totalUnits: number | null;
+    totalFreight: number | null;
+    sampleSize: number;
+    destinationCountMedian: number | null;
+}
+
+interface LineAnalyticsItem {
+    lineType: string;
+    vehicleType: string;
+    destinationCity: string;
+    unitType: 'carton' | 'ton';
+    unitLabel: string;
+    current: LineAnalyticsCurrentStats;
+    comparisons: LineAnalyticsComparison[];
+    chartData: LineAnalyticsChartPoint[];
+}
+
+interface LineAnalyticsResponse {
+    meta: {
+        lineTypes: string[];
+        year: number;
+        month: number;
+        timeRange: string;
+        periods: LineAnalyticsPeriodMeta[];
+    };
+    data: LineAnalyticsItem[];
+}
+
 const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = ({ currentUser }) => {
     // Statistics for each line separately
     const [iceCreamStats, setIceCreamStats] = useState<StatisticsData[]>([]);
@@ -65,6 +123,11 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     const [representativeStats, setRepresentativeStats] = useState<RepresentativeStatisticsData[]>([]);
     const [representativeStatsLoading, setRepresentativeStatsLoading] = useState(false);
     const [representativeStatsError, setRepresentativeStatsError] = useState<string | null>(null);
+
+    const [lineAnalytics, setLineAnalytics] = useState<LineAnalyticsItem[]>([]);
+    const [lineAnalyticsMeta, setLineAnalyticsMeta] = useState<LineAnalyticsResponse['meta'] | null>(null);
+    const [lineAnalyticsLoading, setLineAnalyticsLoading] = useState(false);
+    const [lineAnalyticsError, setLineAnalyticsError] = useState<string | null>(null);
     
     // Filters
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear() - 621);
@@ -206,10 +269,51 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         }
     };
 
+    const fetchLineAnalytics = async () => {
+        if (!selectedYear || !selectedMonth) {
+            setLineAnalytics([]);
+            setLineAnalyticsMeta(null);
+            setLineAnalyticsError(null);
+            return;
+        }
+
+        try {
+            setLineAnalyticsLoading(true);
+            setLineAnalyticsError(null);
+
+            const token = localStorage.getItem('token');
+            const headers: HeadersInit = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const params = new URLSearchParams();
+            params.append('year', selectedYear.toString());
+            params.append('month', selectedMonth.toString());
+            params.append('timeRange', 'month');
+
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/line-analytics?${params.toString()}`, { headers });
+
+            if (!res.ok) {
+                throw new Error('خطا در دریافت آنالیز لاین');
+            }
+
+            const data: LineAnalyticsResponse = await res.json();
+            setLineAnalytics(Array.isArray(data?.data) ? data.data : []);
+            setLineAnalyticsMeta(data?.meta || null);
+        } catch (err: any) {
+            console.error('❌ [LineAnalytics] Failed to fetch:', err);
+            setLineAnalyticsError(err.message || 'خطا در دریافت آنالیز لاین');
+        } finally {
+            setLineAnalyticsLoading(false);
+        }
+    };
+
 
     useEffect(() => {
         fetchStatistics();
         fetchRepresentativeStatistics();
+        fetchLineAnalytics();
     }, [selectedYear, selectedMonth, selectedDay, timeRange]);
 
     return (
@@ -232,6 +336,10 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             representativeStatsLoading={representativeStatsLoading}
             representativeStatsError={representativeStatsError}
             onFetchRepresentativeDetails={fetchRepresentativeDetails}
+            lineAnalytics={lineAnalytics}
+            lineAnalyticsMeta={lineAnalyticsMeta}
+            lineAnalyticsLoading={lineAnalyticsLoading}
+            lineAnalyticsError={lineAnalyticsError}
         />
     );
 };

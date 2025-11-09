@@ -8,9 +8,10 @@ interface HeaderProps {
     alertsCount: number;
     currentUser?: User; // currentUser may be undefined before login
     onLogout: () => void;
+    defaultDashboardView: View;
 }
 
-const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, onLogout, defaultDashboardView }) => {
     const [isMgmtDropdownOpen, setMgmtDropdownOpen] = useState(false);
     const mgmtDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -42,6 +43,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
     };
 
     const isAdmin = !!currentUser && currentUser.role === UserRole.Admin;
+    const isTransportDefault = defaultDashboardView === View.TransportDashboard;
 
     const navItems = [
       // Freight Management Section
@@ -84,7 +86,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center">
-                         <div className="flex items-center cursor-pointer" onClick={() => onNavigate(View.Dashboard)}>
+                         <div className="flex items-center cursor-pointer" onClick={() => onNavigate(defaultDashboardView)}>
                             <WrenchScrewdriverIcon className="h-8 w-8 text-sky-600" />
                             <h1 className="text-xl font-bold mr-3 text-slate-800">مدیریت ناوگان</h1>
                         </div>
@@ -95,7 +97,9 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                     </div>
                     <div className="flex items-center">
                         <nav className="hidden md:flex items-center flex-wrap gap-x-2 gap-y-1">
-                            <button onClick={() => onNavigate(View.Dashboard)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
+                            {!isTransportDefault && (
+                                <button onClick={() => onNavigate(defaultDashboardView)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
+                            )}
                             
                             {isAdmin ? (
                                 <div className="relative" ref={mgmtDropdownRef}>

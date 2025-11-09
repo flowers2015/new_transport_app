@@ -19,6 +19,7 @@ const {
   getRepresentativeDetails,
   getCityStatistics,
   getCityDetails,
+  getLineAnalytics,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -39,6 +40,9 @@ router.get('/representative-statistics', authenticateToken, getRepresentativeSta
 
 // Get representative details (vehicle assignments for a specific representative)
 router.get('/representative-details', authenticateToken, getRepresentativeDetails);
+
+// Get line analytics (per line/vehicle/destination medians)
+router.get('/line-analytics', authenticateToken, getLineAnalytics);
 
 // Get city statistics (for transport dashboard)
 router.get('/city-statistics', authenticateToken, getCityStatistics);

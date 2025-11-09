@@ -30,6 +30,16 @@ import AuditTrailView from './components/AuditTrailView';
 import CustomerManagement from './components/CustomerManagement';
 // Import other components as needed...
 
+const getDefaultViewForRole = (role?: UserRole | null): View => {
+    switch (role) {
+        case UserRole.TransportationUser:
+        case UserRole.Transportation_Personal_Vehicle_User:
+            return View.TransportDashboard;
+        default:
+            return View.Dashboard;
+    }
+};
+
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [currentView, setCurrentView] = useState<View>(View.Login);
@@ -86,12 +96,12 @@ const App: React.FC = () => {
                 const normalized = normalizeUser(rawUser);
                 if (normalized) {
                     setCurrentUser(normalized);
+                    setCurrentView(getDefaultViewForRole(normalized.role));
                 } else {
                     // role mismatch → clear storage
                     localStorage.removeItem('token');
                     localStorage.removeItem('user');
                 }
-                setCurrentView(View.Dashboard); // Go to dashboard if logged in
             } catch (error) {
                 // If there's an error parsing the stored user, clear storage
                 localStorage.removeItem('token');
@@ -110,7 +120,7 @@ const App: React.FC = () => {
         setCurrentUser(normalized);
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(normalized));
-        setCurrentView(View.Dashboard);
+        setCurrentView(getDefaultViewForRole(normalized.role));
     };
 
     const handleLogout = () => {
@@ -484,16 +494,19 @@ const App: React.FC = () => {
         }
     };
 
+    const defaultDashboardView = getDefaultViewForRole(currentUser?.role);
+ 
     return (
         <div dir="rtl" className="bg-slate-50 min-h-screen font-vazirmatn">
             {currentUser && (
-                <Header 
-                    onNavigate={handleNavigate}
-                    alertsCount={0}
-                    currentUser={currentUser}
-                    onLogout={handleLogout}
-                />
-            )}
+                 <Header 
+                     onNavigate={handleNavigate}
+                     alertsCount={0}
+                     currentUser={currentUser}
+                     onLogout={handleLogout}
+                     defaultDashboardView={defaultDashboardView}
+                 />
+             )}
             <main className="p-4 sm:p-6 lg:p-8">
                 {renderView()}
             </main>

@@ -7,7 +7,7 @@ const {
   calculateTotalFreightCost,
   generateChangeDescription
 } = require('../services/freightHistoryService');
-const { formatJalali } = require('../utils/jalali');
+const { formatJalali, parseJalaliDateString, jalaliToGregorian, timestampToJalaliDate } = require('../utils/jalali');
 
 /**
  * تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14
@@ -56,6 +56,83 @@ function ensureJalaliDateFormat(dateStr) {
     console.log(`📅 [ensureJalaliDateFormat] Converted: "${original}" → "${result}"`);
   }
   return result;
+}
+
+function jalaliDateToDate(jy, jm, jd) {
+  const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
+  return new Date(gy, gm - 1, gd);
+}
+
+function shiftJalaliMonth(jy, jm, offset) {
+  let year = jy;
+  let month = jm + offset;
+  while (month > 12) {
+    month -= 12;
+    year += 1;
+  }
+  while (month < 1) {
+    month += 12;
+    year -= 1;
+  }
+  return { year, month };
+}
+
+function getJalaliMonthRange(jy, jm, offset) {
+  const { year: startYear, month: startMonth } = shiftJalaliMonth(jy, jm, offset);
+  const startDate = jalaliDateToDate(startYear, startMonth, 1);
+  const { year: nextYear, month: nextMonth } = shiftJalaliMonth(startYear, startMonth, 1);
+  const nextStartDate = jalaliDateToDate(nextYear, nextMonth, 1);
+  return {
+    start: startDate,
+    endExclusive: nextStartDate,
+    jalali: { year: startYear, month: startMonth }
+  };
+}
+
+function roundNumber(value, digits = 0) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return null;
+  }
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function calculateMedian(values) {
+  if (!values || values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
+function calculateMode(values, precision = 2) {
+  if (!values || values.length === 0) {
+    return null;
+  }
+
+  const counts = new Map();
+  let maxCount = 0;
+  let modeValue = null;
+
+  values.forEach(value => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return;
+    }
+    const rounded = Number(value.toFixed(precision));
+    const freq = (counts.get(rounded) || 0) + 1;
+    counts.set(rounded, freq);
+
+    if (freq > maxCount || (freq === maxCount && (modeValue === null || rounded < modeValue))) {
+      maxCount = freq;
+      modeValue = rounded;
+    }
+  });
+
+  return modeValue;
 }
 
 /**
@@ -2655,6 +2732,335 @@ async function getCityDetails(req, res) {
   }
 }
 
+async function getLineAnalytics(req, res) {
+  try {
+    const supportedLineTypes = ['بستنی', 'پاستوریزه', 'لبنیات-فروتلند'];
+    const { year, month, timeRange = 'month' } = req.query;
+    const parsedYear = parseInt(year, 10);
+    const parsedMonth = parseInt(month, 10);
+
+    if (!parsedYear || !parsedMonth) {
+      return res.status(400).json({ message: 'year and month are required for line analytics.' });
+    }
+
+    const periodDefinitions = [
+      { key: 'current', label: 'دوره انتخابی', offset: 0 },
+      { key: 'm1', label: '۱ ماه قبل', offset: -1 },
+      { key: 'm3', label: '۳ ماه قبل', offset: -3 },
+      { key: 'm6', label: '۶ ماه قبل', offset: -6 },
+      { key: 'm9', label: '۹ ماه قبل', offset: -9 },
+      { key: 'm12', label: '۱۲ ماه قبل', offset: -12 }
+    ];
+
+    const periods = periodDefinitions.map(def => {
+      const range = getJalaliMonthRange(parsedYear, parsedMonth, def.offset);
+      return {
+        ...def,
+        start: range.start,
+        endExclusive: range.endExclusive,
+        jalali: range.jalali
+      };
+    });
+
+    const earliestStart = periods.reduce((min, period) => (period.start < min ? period.start : min), periods[0].start);
+    const latestEndExclusive = periods[0].endExclusive;
+
+    console.log('📊 [getLineAnalytics] Periods:', periods.map(p => ({
+      key: p.key,
+      label: p.label,
+      start: p.start.toISOString(),
+      endExclusive: p.endExclusive.toISOString(),
+    })));
+
+    const analyticsQuery = `
+      SELECT
+        fa.id AS announcement_id,
+        fa.loading_date,
+        CAST(fa.loading_date AS TEXT) AS loading_date_text,
+        fa.line_type,
+        fa.vehicle_type,
+        fa.assignment_type,
+        fa.cargo_value,
+        fa.carton_count,
+        fd.id AS destination_id,
+        fd.city,
+        fd.representative_name,
+        fd.freight_cost,
+        fd.tonnage,
+        fd.created_at AS destination_created_at
+      FROM freight_destinations fd
+      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
+      WHERE fa.assignment_type = 'personal'
+        AND fa.assigned_driver_id IS NOT NULL
+        AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')
+        AND fa.line_type = ANY($1)
+    `;
+
+    console.log('📊 [getLineAnalytics] Running query for line types:', supportedLineTypes);
+    const { rows } = await pool.query(analyticsQuery, [supportedLineTypes]);
+    console.log(`📊 [getLineAnalytics] Query returned ${rows.length} destination rows`);
+
+    const announcements = new Map();
+    let skippedOutOfRange = 0;
+    let skippedNoLineType = 0;
+    let skippedUnsupportedLine = 0;
+
+    rows.forEach(row => {
+      let loadingDate = null;
+      let jalaliString = null;
+
+      if (row.loading_date_text && typeof row.loading_date_text === 'string') {
+        jalaliString = row.loading_date_text;
+      } else if (typeof row.loading_date === 'string') {
+        jalaliString = row.loading_date;
+      }
+
+      if (jalaliString) {
+        const withoutTime = jalaliString.split('T')[0];
+        const normalized = withoutTime.replace(/-/g, '/');
+        loadingDate = parseJalaliDateString(normalized);
+      }
+
+      if (!loadingDate && row.loading_date instanceof Date) {
+        // به عنوان آخرین تلاش، از تاریخ میلادی ذخیره‌شده استفاده می‌کنیم
+        // اما قبل از آن آن را به شمسی تبدیل و دوباره به میلادی برمی‌گردانیم تا در بازه صحیح مقایسه شود
+        const jalaliFromTimestamp = timestampToJalaliDate(row.loading_date);
+        if (jalaliFromTimestamp) {
+          loadingDate = parseJalaliDateString(jalaliFromTimestamp);
+        }
+      }
+
+      if (!loadingDate || loadingDate < earliestStart || loadingDate >= latestEndExclusive) {
+        console.log('⚠️ [getLineAnalytics] Skipping destination for out-of-range date:', {
+          announcementId: row.announcement_id,
+          lineType: row.line_type,
+          vehicleType: row.vehicle_type,
+          loadingDateRaw: row.loading_date,
+          loadingDateText: row.loading_date_text,
+          parsedDate: loadingDate ? loadingDate.toISOString() : null,
+          earliestStart: earliestStart.toISOString(),
+          latestEndExclusive: latestEndExclusive.toISOString()
+        });
+        skippedOutOfRange += 1;
+        return;
+      }
+
+      const lineType = row.line_type || 'نامشخص';
+      if (!supportedLineTypes.includes(lineType)) {
+        skippedUnsupportedLine += 1;
+        return;
+      }
+
+      const announcementId = row.announcement_id;
+      let announcement = announcements.get(announcementId);
+      if (!announcement) {
+        announcement = {
+          id: announcementId,
+          lineType,
+          vehicleType: row.vehicle_type || 'نامشخص',
+          loadingDate,
+          loadingDateRaw: row.loading_date_text || row.loading_date,
+          cargoValue: row.cargo_value ? Number(row.cargo_value) : 0,
+          cartonCount: row.carton_count ? Number(row.carton_count) : null,
+          destinations: []
+        };
+        announcements.set(announcementId, announcement);
+      }
+
+      announcement.destinations.push({
+        id: row.destination_id,
+        city: row.city || 'نامشخص',
+        representativeName: row.representative_name || null,
+        freightCost: row.freight_cost ? Number(row.freight_cost) : 0,
+        tonnage: row.tonnage ? Number(row.tonnage) : 0,
+        createdAt: row.destination_created_at ? new Date(row.destination_created_at) : null
+      });
+    });
+
+    console.log(`📊 [getLineAnalytics] Built ${announcements.size} announcements, skippedOutOfRange=${skippedOutOfRange}, skippedUnsupportedLine=${skippedUnsupportedLine}`);
+
+    const combinations = new Map();
+    let skippedNoFreight = 0;
+    let skippedNoUnits = 0;
+
+    announcements.forEach(announcement => {
+      if (!announcement.destinations || announcement.destinations.length === 0) {
+        return;
+      }
+
+      const sortedDestinations = [...announcement.destinations].sort((a, b) => {
+        const timeA = a.createdAt ? a.createdAt.getTime() : 0;
+        const timeB = b.createdAt ? b.createdAt.getTime() : 0;
+        if (timeA === timeB) {
+          return String(a.id).localeCompare(String(b.id));
+        }
+        return timeA - timeB;
+      });
+
+      const finalDestination = sortedDestinations[sortedDestinations.length - 1];
+      const finalFreight = finalDestination.freightCost || 0;
+      if (finalFreight <= 0) {
+        skippedNoFreight += 1;
+        return;
+      }
+
+      let unitType = 'ton';
+      let totalUnits = 0;
+      if (announcement.lineType === 'بستنی') {
+        unitType = 'carton';
+        totalUnits = announcement.cartonCount ? Number(announcement.cartonCount) : 0;
+      } else {
+        totalUnits = sortedDestinations.reduce((sum, dest) => sum + (dest.tonnage || 0), 0);
+      }
+
+      if (!totalUnits || totalUnits <= 0) {
+        skippedNoUnits += 1;
+        return;
+      }
+
+      const perUnitCost = finalFreight / totalUnits;
+      const perCargoPercent = announcement.cargoValue ? (finalFreight / announcement.cargoValue) * 100 : null;
+      const combinationKey = `${announcement.lineType}__${announcement.vehicleType || 'نامشخص'}__${finalDestination.city || 'نامشخص'}`;
+
+      let combination = combinations.get(combinationKey);
+      if (!combination) {
+        combination = {
+          lineType: announcement.lineType,
+          vehicleType: announcement.vehicleType || 'نامشخص',
+          destinationCity: finalDestination.city || 'نامشخص',
+          unitType,
+          records: []
+        };
+        combinations.set(combinationKey, combination);
+      }
+
+      combination.records.push({
+        loadingDate: announcement.loadingDate,
+        unitCost: perUnitCost,
+        perCargoPercent,
+        finalFreight,
+        totalUnits,
+        destinationCount: sortedDestinations.length
+      });
+    });
+
+    console.log(`📊 [getLineAnalytics] Built ${combinations.size} combinations, skippedNoFreight=${skippedNoFreight}, skippedNoUnits=${skippedNoUnits}`);
+
+    const results = [];
+
+    combinations.forEach(combination => {
+      const periodStats = {};
+
+      periods.forEach(period => {
+        const periodRecords = combination.records.filter(record => record.loadingDate >= period.start && record.loadingDate < period.endExclusive);
+        if (periodRecords.length === 0) {
+          periodStats[period.key] = null;
+          return;
+        }
+
+        const unitCosts = periodRecords.map(r => r.unitCost).filter(Number.isFinite);
+        const perCargoValues = periodRecords.map(r => r.perCargoPercent).filter(Number.isFinite);
+        const destinationCounts = periodRecords.map(r => r.destinationCount).filter(Number.isFinite);
+        const finalFreights = periodRecords.map(r => r.finalFreight).filter(Number.isFinite);
+
+        const totalUnits = periodRecords.reduce((sum, r) => sum + (r.totalUnits || 0), 0);
+        const totalFreight = periodRecords.reduce((sum, r) => sum + (r.finalFreight || 0), 0);
+        const finalFreightMean = finalFreights.length ? finalFreights.reduce((sum, val) => sum + val, 0) / finalFreights.length : null;
+
+        periodStats[period.key] = {
+          sampleSize: periodRecords.length,
+          unitCostMode: unitCosts.length ? calculateMode(unitCosts, combination.unitType === 'carton' ? 0 : 2) : null,
+          perCargoMode: perCargoValues.length ? calculateMode(perCargoValues, 4) : null,
+          finalFreightMode: finalFreights.length ? calculateMode(finalFreights, 0) : null,
+          finalFreightMean,
+          totalUnits,
+          totalFreight,
+          destinationCountMedian: destinationCounts.length ? calculateMedian(destinationCounts) : null
+        };
+      });
+
+      const currentStats = periodStats.current;
+      if (!currentStats || currentStats.sampleSize === 0 || currentStats.finalFreightMode === null) {
+        return;
+      }
+
+      const comparisons = periods.slice(1).map(period => {
+        const comparisonStats = periodStats[period.key];
+        let changePercent = null;
+        if (comparisonStats && comparisonStats.finalFreightMode && comparisonStats.finalFreightMode !== 0) {
+          changePercent = ((currentStats.finalFreightMode - comparisonStats.finalFreightMode) / comparisonStats.finalFreightMode) * 100;
+        }
+        return {
+          key: period.key,
+          label: period.label,
+          modeFare: comparisonStats ? roundNumber(comparisonStats.finalFreightMode, 0) : null,
+          changePercent: changePercent !== null ? roundNumber(changePercent, 2) : null,
+          sampleSize: comparisonStats ? comparisonStats.sampleSize : 0
+        };
+      });
+
+      const chartData = periods.map(period => {
+        const stats = periodStats[period.key];
+        return {
+          key: period.key,
+          label: period.label,
+          meanFare: stats ? roundNumber(stats.finalFreightMean, 0) : null,
+          modeFare: stats ? roundNumber(stats.finalFreightMode, 0) : null,
+          sampleSize: stats ? stats.sampleSize : 0
+        };
+      });
+
+      results.push({
+        lineType: combination.lineType,
+        vehicleType: combination.vehicleType,
+        destinationCity: combination.destinationCity,
+        unitType: combination.unitType,
+        unitLabel: combination.unitType === 'carton' ? 'کارتن' : 'تن',
+        current: {
+          modeFare: roundNumber(currentStats.finalFreightMode, 0),
+          meanFare: roundNumber(currentStats.finalFreightMean, 0),
+          modeUnitCost: currentStats.unitCostMode !== null ? roundNumber(currentStats.unitCostMode, 0) : null,
+          modePerCargoPercent: currentStats.perCargoMode !== null ? roundNumber(currentStats.perCargoMode, 2) : null,
+          totalUnits: roundNumber(currentStats.totalUnits, combination.unitType === 'carton' ? 0 : 2),
+          totalFreight: roundNumber(currentStats.totalFreight, 0),
+          sampleSize: currentStats.sampleSize,
+          destinationCountMedian: currentStats.destinationCountMedian !== null ? roundNumber(currentStats.destinationCountMedian, 0) : null
+        },
+        comparisons,
+        chartData
+      });
+    });
+
+    results.sort((a, b) => {
+      if (a.lineType !== b.lineType) {
+        return a.lineType.localeCompare(b.lineType, 'fa');
+      }
+      if ((a.vehicleType || '') !== (b.vehicleType || '')) {
+        return (a.vehicleType || '').localeCompare(b.vehicleType || '', 'fa');
+      }
+      return (a.destinationCity || '').localeCompare(b.destinationCity || '', 'fa');
+    });
+
+    res.json({
+      meta: {
+        lineTypes: supportedLineTypes,
+        year: parsedYear,
+        month: parsedMonth,
+        timeRange,
+        periods: periods.map(period => ({
+          key: period.key,
+          label: period.label,
+          jalali: period.jalali
+        }))
+      },
+      data: results
+    });
+  } catch (error) {
+    console.error('❌ [getLineAnalytics] Error:', error);
+    res.status(500).json({ message: 'Internal server error while computing line analytics.', error: error.message });
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -2673,4 +3079,5 @@ module.exports = {
   getRepresentativeDetails,
   getCityStatistics,
   getCityDetails,
+  getLineAnalytics,
 };
