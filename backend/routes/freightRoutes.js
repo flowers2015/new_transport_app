@@ -115,7 +115,7 @@ router.put(
 router.post(
   '/:id/assignment-queue',
   authenticateToken,
-  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
+  authorizeRole(['planner', 'transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
   setAssignmentQueue
 );
 

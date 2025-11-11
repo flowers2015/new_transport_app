@@ -1,5 +1,19 @@
 const { Pool } = require('pg');
-require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Load root .env first (if present)
+dotenv.config();
+
+// Fallback: also load backend/.env if it exists and variables are still missing
+const backendEnvPath = path.resolve(__dirname, '.env');
+if (fs.existsSync(backendEnvPath)) {
+  dotenv.config({
+    path: backendEnvPath,
+    override: false, // keep already defined vars
+  });
+}
 
 const dbUser = process.env.DB_USER || 'postgres';
 const dbHost = process.env.DB_HOST || 'localhost';
