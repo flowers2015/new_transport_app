@@ -3061,6 +3061,67 @@ async function getLineAnalytics(req, res) {
   }
 }
 
+async function searchDispatchRoutes(req, res) {
+  try {
+    const { q, limit } = req.query;
+    const trimmed = typeof q === 'string' ? q.trim() : '';
+    const maxLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+
+    let rows;
+    if (trimmed) {
+      const normalized = `%${trimmed.replace(/\s+/g, '%')}%`;
+      const query = `
+        SELECT id,
+               province,
+               city,
+               round_trip_km,
+               approved_allowance,
+               route_category,
+               distance_category
+        FROM dispatch_routes
+        WHERE is_active = TRUE
+          AND city ILIKE $1
+        ORDER BY
+          city ASC
+        LIMIT $2
+      `;
+      const { rows: result } = await pool.query(query, [normalized, maxLimit]);
+      rows = result;
+    } else {
+      const query = `
+        SELECT id,
+               province,
+               city,
+               round_trip_km,
+               approved_allowance,
+               route_category,
+               distance_category
+        FROM dispatch_routes
+        WHERE is_active = TRUE
+        ORDER BY city ASC
+        LIMIT $1
+      `;
+      const { rows: result } = await pool.query(query, [maxLimit]);
+      rows = result;
+    }
+
+    const payload = rows.map((row) => ({
+      id: row.id,
+      province: row.province,
+      city: row.city,
+      roundTripKm: row.round_trip_km,
+      approvedAllowance: row.approved_allowance,
+      routeCategory: row.route_category,
+      distanceCategory: row.distance_category,
+    }));
+
+    res.json(payload);
+  } catch (error) {
+    console.error('❌ [searchDispatchRoutes] Error:', error);
+    res.status(500).json({ message: 'Internal server error while searching dispatch routes.' });
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -3080,4 +3141,5 @@ module.exports = {
   getCityStatistics,
   getCityDetails,
   getLineAnalytics,
+  searchDispatchRoutes,
 };

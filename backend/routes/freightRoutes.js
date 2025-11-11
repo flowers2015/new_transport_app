@@ -20,6 +20,7 @@ const {
   getCityStatistics,
   getCityDetails,
   getLineAnalytics,
+  searchDispatchRoutes,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -43,6 +44,13 @@ router.get('/representative-details', authenticateToken, getRepresentativeDetail
 
 // Get line analytics (per line/vehicle/destination medians)
 router.get('/line-analytics', authenticateToken, getLineAnalytics);
+
+router.get(
+  '/routes/search',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'transport_user', 'personal_transport_user', 'admin']),
+  searchDispatchRoutes
+);
 
 // Get city statistics (for transport dashboard)
 router.get('/city-statistics', authenticateToken, getCityStatistics);

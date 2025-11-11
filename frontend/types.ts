@@ -686,3 +686,13 @@ export interface FreightTransaction {
     receiptImage?: string; // file name
     extraDocumentImage?: string; // file name
 }
+
+export interface DispatchRouteSuggestion {
+    id: string;
+    province: string;
+    city: string;
+    roundTripKm: number | null;
+    approvedAllowance: number | null;
+    routeCategory?: string | null;
+    distanceCategory?: string | null;
+}

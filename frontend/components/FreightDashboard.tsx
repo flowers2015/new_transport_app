@@ -1,6 +1,6 @@
 // This is a new file: components/FreightDashboard.tsx
-import React, { useState, useMemo, useEffect } from 'react';
-import { FreightAnnouncement, FreightLineType, Destination, FreightAnnouncementStatus, UserRole, User, View } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { FreightAnnouncement, FreightLineType, Destination, FreightAnnouncementStatus, UserRole, User, View, DispatchRouteSuggestion } from '../types';
 import { formatJalaliDateTime, formatJalali, parseJalaliDateString } from '../utils/jalali';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
@@ -16,9 +16,6 @@ const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پا�
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 const PRIORITIES = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
 const ICE_CREAM_PRODUCTS = ['کره', 'کترینگ', 'پنیر پیتزا', 'خامه قنادی'];
-const mockCities = ["تهران", "اصفهان", "شیراز", "مشهد", "تبریز", "کرج", "اهواز", "کرمانشاه", "رشت", "زاهدان", "اسلامشهر"];
-
-
 interface FreightDashboardProps {
     announcements: FreightAnnouncement[];
     onAddAnnouncement: (announcement: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'>, isDraft: boolean) => void;
@@ -31,6 +28,7 @@ interface FreightDashboardProps {
     onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     onSendForApproval?: (announcement: FreightAnnouncement) => void;
+    onSearchRoutes: (query: string) => Promise<DispatchRouteSuggestion[]>;
 }
 
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
@@ -239,6 +237,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const [managerView, setManagerView] = useState<'approval' | 'all'>('approval');
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [historyDialog, setHistoryDialog] = useState<{ isOpen: boolean; announcementId: string; announcementCode: string } | null>(null);
+    const [routeQuery, setRouteQuery] = useState('');
+    const [routeSuggestions, setRouteSuggestions] = useState<DispatchRouteSuggestion[]>([]);
+    const routeSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
     const handleOpenCreatePanel = () => {
@@ -312,6 +313,40 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         try { console.log('[DBG][FreightDashboard] allColumns headers:', cols.map((c:any)=>c.header)); } catch {}
         return cols;
     }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete, onReAnnounce]);
+
+    useEffect(() => {
+        if (routeSearchTimeout.current) {
+            clearTimeout(routeSearchTimeout.current);
+        }
+        const trimmed = routeQuery.trim();
+        routeSearchTimeout.current = setTimeout(async () => {
+            try {
+                const results = trimmed.length >= 2 ? await props.onSearchRoutes(trimmed) : [];
+                setRouteSuggestions(results);
+            } catch (error) {
+                console.error('[FreightDashboard] Route suggestion fetch failed', error);
+                setRouteSuggestions([]);
+            }
+        }, 300);
+
+        return () => {
+            if (routeSearchTimeout.current) {
+                clearTimeout(routeSearchTimeout.current);
+            }
+        };
+    }, [routeQuery, props.onSearchRoutes]);
+
+    const uniqueRouteOptions = useMemo(() => {
+        const seen = new Set<string>();
+        return routeSuggestions.filter((route) => {
+            const key = `${route.city}-${route.province}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+    }, [routeSuggestions]);
 
     const visibleColumns = useMemo(() => {
         // Enforce exact order for Dairy compact
@@ -644,6 +679,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 onClose={handleClosePanel}
                 onSaveNew={onAddAnnouncement}
                 onSaveEdit={onUpdateAnnouncement}
+                routeOptions={uniqueRouteOptions}
+                onRouteQueryChange={setRouteQuery}
             />
 
             {rejectInfo && <RejectDialog reason={rejectInfo.reason} onReasonChange={(r) => setRejectInfo({...rejectInfo, reason: r})} onClose={handleCloseRejectDialog} onSubmit={handleRejectSubmit} />}
@@ -693,7 +730,15 @@ const RejectDialog: React.FC<{reason: string, onReasonChange: (r: string) => voi
     </div>
 );
 
-const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | null, onClose: () => void, onSaveNew: Function, onSaveEdit: (data: FreightAnnouncement) => void}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit }) => {
+const AnnouncementPanel: React.FC<{
+    isOpen: boolean;
+    data: FreightAnnouncement | null;
+    onClose: () => void;
+    onSaveNew: Function;
+    onSaveEdit: (data: FreightAnnouncement) => void;
+    routeOptions: DispatchRouteSuggestion[];
+    onRouteQueryChange: (value: string) => void;
+}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange }) => {
     const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', cargoValue: '', vehicleType: '', notes: '' };
@@ -795,7 +840,12 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
 
     const addDestination = () => { if(destinations.length < 4) setDestinations([...destinations, { id: crypto.randomUUID(), city: '', representativeName: '' }]); };
     const removeDestination = (id: string) => setDestinations(destinations.filter(d => d.id !== id));
-    const handleDestinationChange = (id: string, field: keyof Destination, value: any) => setDestinations(destinations.map(d => d.id === id ? { ...d, [field]: value } : d));
+    const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
+        if (field === 'city' && typeof value === 'string') {
+            onRouteQueryChange(value);
+        }
+        setDestinations(destinations.map(d => d.id === id ? { ...d, [field]: value } : d));
+    };
     const handleProductChange = (product: string, checked: boolean) => setIceCreamState(s => ({ ...s, products: checked ? [...s.products, product] : s.products.filter(p => p !== product)}));
 
     const handleSubmit = (e: React.FormEvent, isDraft: boolean = false) => {
@@ -905,8 +955,8 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">مسیر و بار</legend>
                             <div className="grid grid-cols-3 gap-3">
-                                <div><label className="text-xs">مبدا بارگیری*</label><input value={iceCreamState.originCity} onChange={e=>setIceCreamState(s=>({...s, originCity: e.target.value}))} className="input-style mt-1" list="cities" required/></div>
-                                <div><label className="text-xs">شهر مقصد*</label><input value={iceCreamState.destinationCity} onChange={e=>setIceCreamState(s=>({...s, destinationCity: e.target.value}))} className="input-style mt-1" list="cities" required/></div>
+                                <div><label className="text-xs">مبدا بارگیری*</label><input value={iceCreamState.originCity} onChange={e=>{const value = e.target.value; onRouteQueryChange(value); setIceCreamState(s=>({...s, originCity: value}));}} className="input-style mt-1" list="cities" required/></div>
+                                <div><label className="text-xs">شهر مقصد*</label><input value={iceCreamState.destinationCity} onChange={e=>{const value = e.target.value; onRouteQueryChange(value); setIceCreamState(s=>({...s, destinationCity: value}));}} className="input-style mt-1" list="cities" required/></div>
                                 <div><label className="text-xs">تعداد کارتن*</label><input type="number" value={iceCreamState.cartonCount} onChange={e=>setIceCreamState(s=>({...s, cartonCount: e.target.value}))} className="input-style mt-1" required/></div>
                             </div>
                         </fieldset>
@@ -960,7 +1010,16 @@ const AnnouncementPanel: React.FC<{isOpen: boolean, data: FreightAnnouncement | 
                     {!isEditMode && <button type="button" onClick={(e) => handleSubmit(e, true)} className="px-4 py-2 bg-slate-600 text-white rounded-md text-sm">ذخیره پیش‌نویس</button>}
                     <button type="submit" form="freight-form" className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">{isEditMode ? 'ذخیره تغییرات' : 'ثبت و ارجاع'}</button>
                 </div>
-                 <datalist id="cities">{mockCities.map(c => <option key={c} value={c} />)}</datalist>
+                <datalist id="cities">
+                    {routeOptions.map(route => (
+                        <option
+                            key={`${route.id}-${route.city}-${route.province}`}
+                            value={route.city}
+                        >
+                            {route.city}{route.province ? ` - ${route.province}` : ''}{route.roundTripKm ? ` (${route.roundTripKm} کیلومتر رفت و برگشت)` : ''}
+                        </option>
+                    ))}
+                </datalist>
             </aside>
         </>
     );

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import FreightDashboard from './FreightDashboard';
-import { FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
+import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
+import { useCallback } from 'react';
 
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -101,6 +102,24 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     };
 
     useEffect(() => { fetchAnnouncements(); }, []);
+
+    const searchRouteSuggestions = useCallback(async (query: string): Promise<DispatchRouteSuggestion[]> => {
+        const trimmed = query.trim();
+        if (!trimmed) {
+            return [];
+        }
+        try {
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/routes/search?q=${encodeURIComponent(trimmed)}`, { headers });
+            if (!res.ok) {
+                throw new Error(`Failed to search routes: ${res.status}`);
+            }
+            const data = await res.json();
+            return Array.isArray(data) ? data : [];
+        } catch (error) {
+            console.error('[FreightPlanning] Route search failed', error);
+            return [];
+        }
+    }, [headers]);
 
     const handleAddAnnouncement = async (
         announcement: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'>,
@@ -354,6 +373,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 onDelete={handleDelete as any}
                 onReAnnounce={handleReAnnounce}
                 onSendForApproval={handleSendForApproval}
+                onSearchRoutes={searchRouteSuggestions}
                 currentUser={currentUser}
                 onSwitchQueue={handleSwitchQueue as any}
             />
