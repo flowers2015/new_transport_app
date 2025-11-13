@@ -1,5 +1,13 @@
 {
   "name": "اپلیکیشن مدیریت تعمیرگاه",
   "description": "یک اپلیکیشن کامل برای مدیریت تعمیرگاه شامل پذیرش خودرو، مدیریت تعمیرکاران، انبار قطعات و صدور فاکتور.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "viewTitles": {
+    "Freight Planning": "برنامه‌ریزی ارسال بار",
+    "Freight Finance": "مالی حمل",
+    "Freight History": "تاریخچه اعلام بار",
+    "Transport Dashboard": "داشبورد ترابری",
+    "Transport Live": "پیگیری اعلام بار زنده",
+    "Transport Dispatch": "مدیریت نوبت و تخصیص"
+  }
 }

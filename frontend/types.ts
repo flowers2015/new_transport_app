@@ -28,6 +28,9 @@ export enum View {
     FreightFinance = 'freight-finance',
     FreightHistory = 'freight-history',
     TransportDashboard = 'transport-dashboard',
+    TransportDispatchQueue = 'transport-dispatch-queue',
+    TransportDispatchAssignment = 'transport-dispatch-assignment',
+    TransportDispatchBoard = 'transport-dispatch-board',
 }
 
 export enum UserRole {
@@ -695,4 +698,115 @@ export interface DispatchRouteSuggestion {
     approvedAllowance: number | null;
     routeCategory?: string | null;
     distanceCategory?: string | null;
+}
+
+export type DispatchQueueType = 'near' | 'far' | 'workshop' | 'external' | 'leave' | 'other';
+
+export interface DispatchQueueDriver {
+    id: string;
+    name: string;
+    mobile?: string;
+    employeeId?: string;
+}
+
+export interface DispatchQueueVehicle {
+    id: string;
+    model?: string;
+    brand?: string;
+    vehicleCode?: string;
+    vehicleCategory?: string | null;
+}
+
+export interface DispatchQueueEntry {
+    id: string;
+    driverId: string;
+    vehicleId: string;
+    queueType: DispatchQueueType;
+    vehicleCategory: string | null;
+    position: number;
+    notes?: string | null;
+    createdAt: string;
+    createdByUserId?: string | null;
+    updatedAt?: string | null;
+    updatedByUserId?: string | null;
+    driver: DispatchQueueDriver;
+    vehicle: DispatchQueueVehicle;
+    longRouteHistory?: DispatchAssignmentHistory[];
+    blockedStage1?: boolean;
+}
+
+export interface DispatchAssignmentHistory {
+    id: string;
+    created_at: string;
+    stage: string;
+    city?: string;
+    route_category?: string;
+    round_trip_km?: number;
+    announcement_code?: string;
+}
+
+export interface DispatchAnnouncementCandidate {
+    id: string;
+    announcementCode?: string;
+    lineType?: string;
+    vehicleType?: string;
+    originCity?: string;
+    createdAt?: string;
+    cargoValue?: number;
+    totalFreightCost?: number;
+    notes?: string | null;
+    brand?: string | null;
+    priority?: string | null;
+    products?: string[];
+    destination?: {
+        id: string;
+        city?: string;
+        representativeName?: string;
+        tonnage?: number;
+        freightCost?: number;
+    };
+    route?: {
+        id: string;
+        city?: string;
+        province?: string;
+        route_category?: string;
+        distance_category?: string;
+        round_trip_km?: number;
+    } | null;
+}
+
+export interface DispatchBoardEntry {
+    assignmentId: string;
+    stage: string;
+    createdAt: string;
+    announcementCode?: string;
+    lineType?: string;
+    vehicleType?: string;
+    originCity?: string;
+    driver?: DispatchQueueDriver;
+    vehicle?: DispatchQueueVehicle;
+    route?: {
+        id: string;
+        province?: string;
+        routeCategory?: string;
+        roundTripKm?: number;
+    } | null;
+}
+
+export interface DispatchBoardCityColumn {
+    city: string;
+    entries: DispatchBoardEntry[];
+}
+
+export interface DispatchVehicleSearchResult extends DispatchQueueVehicle {
+    plate?: {
+        part1?: string | null;
+        letter?: string | null;
+        part2?: string | null;
+        cityCode?: string | null;
+    };
+}
+
+export interface DispatchDriverSearchResult extends DispatchQueueDriver {
+    nationalCode?: string | null;
 }

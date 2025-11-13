@@ -21,6 +21,9 @@ import SupportTickets from './components/SupportTickets';
 import VehicleAllocationManagement from './components/VehicleAllocationManagement';
 import TransportLive from './components/TransportLive';
 import TransportLiveContainer from './components/TransportLiveContainer';
+import DispatchQueueManager from './components/DispatchQueueManager';
+import DispatchAssignmentManager from './components/DispatchAssignmentManager';
+import DispatchBoardView from './components/DispatchBoardView';
 import FreightHistoryContainer from './components/FreightHistoryContainer';
 import TransportDashboardContainer from './components/TransportDashboardContainer';
 import FreightDashboard from './components/FreightDashboard';
@@ -453,6 +456,15 @@ const App: React.FC = () => {
             case View.TransportLive:
                 console.log('[App] Render view:', View.TransportLive);
                 return <TransportLiveContainer currentUser={currentUser} />;
+            case View.TransportDispatchQueue:
+                console.log('[App] Render view:', View.TransportDispatchQueue);
+                return <DispatchQueueManager />;
+            case View.TransportDispatchAssignment:
+                console.log('[App] Render view:', View.TransportDispatchAssignment);
+                return <DispatchAssignmentManager />;
+            case View.TransportDispatchBoard:
+                console.log('[App] Render view:', View.TransportDispatchBoard);
+                return <DispatchBoardView />;
             case View.FreightPlanning:
                 console.log('[App] Render view:', View.FreightPlanning);
                 return (
