@@ -35,6 +35,14 @@ const DispatchBoardView: React.FC = () => {
         loadBoard();
     }, []);
 
+    useEffect(() => {
+        const handler = () => loadBoard();
+        window.addEventListener('dispatch-board:update', handler);
+        return () => {
+            window.removeEventListener('dispatch-board:update', handler);
+        };
+    }, []);
+
     return (
         <div className="p-4 space-y-4">
             <section className="bg-white rounded-2xl shadow-sm border border-slate-200">

@@ -810,3 +810,79 @@ export interface DispatchVehicleSearchResult extends DispatchQueueVehicle {
 export interface DispatchDriverSearchResult extends DispatchQueueDriver {
     nationalCode?: string | null;
 }
+
+export interface DriverPreferenceAssignment {
+    id: string;
+    announcementId?: string;
+    announcementCode?: string;
+    stage: string;
+    lineType?: string | null;
+    vehicleType?: string | null;
+    originCity?: string | null;
+    destinationCity?: string | null;
+    routeCategory?: string | null;
+    distanceCategory?: string | null;
+    roundTripKm?: number | null;
+    assignedAt: string;
+    assignedAtJalali?: string | null;
+    queuePosition?: number | null;
+}
+
+export interface DriverPreferencePeerAssignment {
+    id: string;
+    driverId: string;
+    driverName?: string | null;
+    employeeId?: string | null;
+    stage?: string | null;
+    queuePosition?: number | null;
+    lineType?: string | null;
+    destinationCity?: string | null;
+    roundTripKm?: number | null;
+    assignedAt: string;
+    assignedAtJalali?: string | null;
+    previousOriginCity?: string | null;
+    announcementCode?: string | null;
+}
+
+export interface DriverPreferenceOpportunity {
+    id: string;
+    announcementId?: string;
+    announcementCode?: string;
+    stage: string;
+    lineType?: string | null;
+    vehicleType?: string | null;
+    originCity?: string | null;
+    destinationCity?: string | null;
+    routeCategory?: string | null;
+    distanceCategory?: string | null;
+    roundTripKm?: number | null;
+    seenAt: string;
+    seenAtJalali?: string | null;
+    queuePosition?: number | null;
+    others?: Array<{
+        driverId: string;
+        driverName?: string | null;
+        queuePosition?: number | null;
+        chosenAnnouncementCode?: string | null;
+        lastOriginCity?: string | null;
+    }>;
+    sourceDriverId?: string | null;
+    sourceDriverName?: string | null;
+}
+
+export interface DriverPreferencesResponse {
+    driver: {
+        id: string;
+        name?: string | null;
+        employeeId?: string | null;
+        mobile?: string | null;
+    };
+    from: string;
+    to: string;
+    fromJalali: string;
+    toJalali: string;
+    taken: DriverPreferenceAssignment[];
+    skipped: DriverPreferenceOpportunity[];
+    peerAssignments?: DriverPreferencePeerAssignment[];
+}
+

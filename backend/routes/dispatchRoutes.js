@@ -8,6 +8,7 @@ const {
   updateQueuePosition,
   getStageCandidates,
   assignFreight,
+  getDriverPreferences,
   getBoard,
   searchVehicles,
   searchDrivers,
@@ -58,6 +59,13 @@ router.post(
 );
 
 router.get(
+  '/drivers/:driverId/preferences',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  getDriverPreferences
+);
+
+router.get(
   '/board',
   authenticateToken,
   authorizeRole(transportRoles),
@@ -74,7 +82,7 @@ router.get(
 router.get(
   '/search/drivers',
   authenticateToken,
-  authorizeRole(transportRoles),
+  authorizeRole([...transportRoles, 'system_user']),
   searchDrivers
 );
 

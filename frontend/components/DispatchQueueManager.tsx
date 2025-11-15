@@ -1,11 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     DispatchQueueEntry,
     DispatchQueueType,
+    DispatchQueueDriver,
     DispatchVehicleSearchResult,
     DispatchDriverSearchResult,
     DispatchAnnouncementCandidate,
+    DriverPreferencesResponse,
+    DriverPreferenceAssignment,
+    DriverPreferencePeerAssignment,
 } from '../types';
+import { gregorianToJalali } from '../utils/jalali';
 
 type QueueBuckets = Record<DispatchQueueType | 'other', DispatchQueueEntry[]>;
 type QueueGroup = Record<string, QueueBuckets>;
@@ -60,6 +65,17 @@ type AssignDialogState = {
     assigning: boolean;
 };
 
+type PreferencesDialogState = {
+    isOpen: boolean;
+    driver: DispatchQueueDriver | null;
+    queueEntry: DispatchQueueEntry | null;
+    dateFrom: string;
+    dateTo: string;
+    loading: boolean;
+    data: DriverPreferencesResponse | null;
+    error?: string | null;
+};
+
 const stageOptions: { value: StageKey; label: string; helper: string }[] = [
     {
         value: 'stage1',
@@ -83,6 +99,17 @@ const initialAssignDialogState: AssignDialogState = {
     assigning: false,
 };
 
+const initialPreferencesDialogState: PreferencesDialogState = {
+    isOpen: false,
+    driver: null,
+    queueEntry: null,
+    dateFrom: '',
+    dateTo: '',
+    loading: false,
+    data: null,
+    error: null,
+};
+
 const queueTypeLabels: Record<DispatchQueueType, string> = {
     near: 'مسیر نزدیک',
     far: 'مسیر دور',
@@ -90,6 +117,26 @@ const queueTypeLabels: Record<DispatchQueueType, string> = {
     external: 'تعمیرگاه خارج',
     leave: 'مرخصی راننده',
     other: 'سایر',
+};
+
+const preferenceRowAccent: Record<
+    'far' | 'near',
+    {
+        labelClass: string;
+        otherEntryClass: string;
+        otherBadgeClass: string;
+    }
+> = {
+    far: {
+        labelClass: 'bg-sky-100 text-sky-800',
+        otherEntryClass: 'border-sky-100 bg-sky-50 text-slate-700',
+        otherBadgeClass: 'bg-sky-200 text-sky-700',
+    },
+    near: {
+        labelClass: 'bg-emerald-100 text-emerald-800',
+        otherEntryClass: 'border-emerald-100 bg-emerald-50 text-slate-700',
+        otherBadgeClass: 'bg-emerald-200 text-emerald-800',
+    },
 };
 
 const presetCategories: PresetCategory[] = [
@@ -200,6 +247,31 @@ const vehicleMatchesCategory = (vehicleType?: string | null, categoryLabel?: str
     return keywords.some(keyword => keyword && normalizedType.includes(keyword));
 };
 
+const normalizeRouteText = (value?: string | null): string =>
+    value
+        ? value
+              .replace(/ي/g, 'ی')
+              .replace(/ك/g, 'ک')
+              .replace(/[\s\u200c\-_]/g, '')
+              .toLowerCase()
+        : '';
+
+const farDistanceValues = ['خیلیدور', 'خیلی‌دور', 'veryfar'];
+
+const isFarRouteCandidate = (item: DispatchAnnouncementCandidate): boolean => {
+    const route = item.route;
+    if (!route) return false;
+    const primary = normalizeRouteText(route.distance_category);
+    if (farDistanceValues.some(value => primary.includes(value))) {
+        return true;
+    }
+    const secondary = normalizeRouteText(route.route_category);
+    if (farDistanceValues.some(value => secondary.includes(value))) {
+        return true;
+    }
+    return false;
+};
+
 const queueAccent: Record<
     'far' | 'near',
     { border: string; headerBg: string; headerText: string; badge: string }
@@ -241,10 +313,164 @@ const formatDistance = (km?: number | null) => {
     return `${km.toLocaleString('fa-IR')} کیلومتر`;
 };
 
+const pad2 = (value: number) => (value < 10 ? `0${value}` : `${value}`);
+
+const getDefaultJalaliCycleRange = () => {
+    const today = new Date();
+    const [jy, jm] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    const currentYear = jy;
+    const currentMonth = jm;
+    const toYear = currentYear;
+    const toMonth = currentMonth;
+    const toDay = 25;
+    const fromMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const fromYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    const fromDay = 26;
+    const from = `${fromYear}-${pad2(fromMonth)}-${pad2(fromDay)}`;
+    const to = `${toYear}-${pad2(toMonth)}-${pad2(toDay)}`;
+    return { from, to };
+};
+
+const formatDateTime = (value?: string | null) => {
+    if (!value) return 'نامشخص';
+    if (/^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/.test(value)) {
+        return value.replace(/-/g, '/');
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'نامشخص';
+    const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    const hh = pad2(date.getHours());
+    const mm = pad2(date.getMinutes());
+    return `${jy}/${pad2(jm)}/${pad2(jd)} ${hh}:${mm}`;
+};
+
 const normalizeProducts = (items?: string[] | null): string[] => {
     if (!items) return [];
     if (Array.isArray(items)) return items.filter(Boolean);
     return [];
+};
+
+const buildTimelineDays = (fromIso?: string, toIso?: string, maxDays = 31) => {
+    if (!fromIso || !toIso) return [];
+    const days: Array<{
+        key: string;
+        iso: string;
+        jalaliLabel: string;
+        dayNumber: string;
+    }> = [];
+    const start = new Date(fromIso);
+    const end = new Date(toIso);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+    let cursor = new Date(start);
+    while (cursor <= end && days.length < maxDays) {
+        const iso = cursor.toISOString();
+        const [jy, jm, jd] = gregorianToJalali(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
+        days.push({
+            key: iso,
+            iso,
+            jalaliLabel: `${jy}/${pad2(jm)}/${pad2(jd)}`,
+            dayNumber: `${jd}`,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+};
+
+const mapAssignmentSummary = (
+    items: DriverPreferenceAssignment[] | undefined,
+    queueTypeLabels: Record<DispatchQueueType, string>
+) => {
+    if (!items || items.length === 0) return [];
+    return items
+        .map(item => ({
+            key: item.id || `${item.announcementId || 'ann'}-${item.assignedAt}`,
+            destinationCity: item.destinationCity || item.originCity || null,
+            distanceCategory: item.distanceCategory || item.routeCategory || null,
+            lineType: item.lineType || null,
+                roundTripKm: item.roundTripKm != null ? Number(item.roundTripKm) : null,
+                queueTypeLabel: queueTypeLabels[(item.stage === 'stage1' ? 'far' : 'near') as DispatchQueueType] || '',
+            assignment: item,
+        }))
+        .sort((a, b) => (b.roundTripKm ?? 0) - (a.roundTripKm ?? 0));
+};
+
+const useDriverSearch = (headers: Record<string, string>) => {
+    const [term, setTerm] = useState('');
+    const [results, setResults] = useState<DispatchDriverSearchResult[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const search = useCallback(
+        async (value: string) => {
+            const query = value.trim();
+            if (query.length < 2) {
+                setResults([]);
+                setLoading(false);
+                return;
+            }
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(
+                    `http://localhost:3000/api/v1/dispatch/search/drivers?q=${encodeURIComponent(query)}`,
+                    { headers }
+                );
+                if (!res.ok) throw new Error(await res.text());
+                const data = (await res.json()) as DispatchDriverSearchResult[];
+                setResults(data);
+            } catch (err: any) {
+                console.error('driver search failed', err);
+                let message = 'خطا در جستجوی راننده';
+                if (typeof err?.message === 'string') {
+                    try {
+                        const parsed = JSON.parse(err.message);
+                        message = parsed.message || parsed.details || message;
+                    } catch {
+                        message = err.message;
+                    }
+                }
+                setError(message);
+            } finally {
+                setLoading(false);
+            }
+        },
+        [headers]
+    );
+
+    const updateTerm = (value: string) => {
+        setTerm(value);
+        if (searchTimeout.current) {
+            clearTimeout(searchTimeout.current);
+        }
+        searchTimeout.current = setTimeout(() => search(value), 300);
+    };
+
+    const clear = () => {
+        setTerm('');
+        setResults([]);
+        setError(null);
+        if (searchTimeout.current) {
+            clearTimeout(searchTimeout.current);
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (searchTimeout.current) {
+                clearTimeout(searchTimeout.current);
+            }
+        };
+    }, []);
+
+    return {
+        term,
+        results,
+        loading,
+        error,
+        setTerm: updateTerm,
+        clear,
+    };
 };
 
 const createRow = (category: PresetCategory, queueType: DispatchQueueType = 'near'): RowEditor => ({
@@ -277,6 +503,10 @@ const DispatchQueueManager: React.FC = () => {
     const [loadingQueue, setLoadingQueue] = useState(false);
     const [positionEdits, setPositionEdits] = useState<Record<string, PositionEditState>>({});
     const [assignDialog, setAssignDialog] = useState<AssignDialogState>(initialAssignDialogState);
+    const [preferencesDialog, setPreferencesDialog] = useState<PreferencesDialogState>(initialPreferencesDialogState);
+    const [preferencesPanelOpen, setPreferencesPanelOpen] = useState(false);
+    const [selectedDriver, setSelectedDriver] = useState<DispatchDriverSearchResult | null>(null);
+    const [preferencesRange, setPreferencesRange] = useState(getDefaultJalaliCycleRange);
     const searchTimers = useRef<Record<string, { vehicle?: ReturnType<typeof setTimeout>; driver?: ReturnType<typeof setTimeout> }>>({});
 
     const token = useMemo(() => localStorage.getItem('token') || '', []);
@@ -289,6 +519,125 @@ const DispatchQueueManager: React.FC = () => {
         [token]
     );
 
+    const driverSearch = useDriverSearch(headers);
+    const takenRows = useMemo(
+        () => mapAssignmentSummary(preferencesDialog.data?.taken, queueTypeLabels),
+        [preferencesDialog.data?.taken]
+    );
+    const preferenceGrid = useMemo(() => {
+        if (!preferencesDialog.data || takenRows.length === 0) return null;
+        const dayKey = (value: string) => {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return null;
+            return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+        };
+        const dayMap = new Map<
+            string,
+            {
+                key: string;
+                iso: string;
+                jalaliLabel: string;
+                label: string;
+            }
+        >();
+        takenRows.forEach(row => {
+            const key = dayKey(row.assignment.assignedAt);
+            if (!key) return;
+            if (!dayMap.has(key)) {
+                const date = new Date(row.assignment.assignedAt);
+                const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+                dayMap.set(key, {
+                    key,
+                    iso: date.toISOString(),
+                    jalaliLabel: `${jy}/${pad2(jm)}/${pad2(jd)}`,
+                    label: `روز ${jd}`,
+                });
+            }
+        });
+        const columns = Array.from(dayMap.values())
+            .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
+            .slice(0, 31);
+        if (columns.length === 0) return null;
+        const columnIndexMap = new Map(columns.map((col, idx) => [col.key, idx]));
+        const initCells = () =>
+            columns.map(() => [] as Array<{
+                isTarget: boolean;
+                driverName: string;
+                queuePosition?: number | null;
+                destination?: string;
+                distance?: string;
+            }>);
+        const farRows = initCells();
+        const nearRows = initCells();
+
+        const pushEntry = (
+            stage: string | null | undefined,
+            idx: number,
+            payload: {
+                isTarget: boolean;
+                driverName: string;
+                queuePosition?: number | null;
+                destination?: string;
+                distance?: string;
+            }
+        ) => {
+            const targetRow = stage === 'stage1' ? farRows : nearRows;
+            if (idx >= 0 && idx < targetRow.length) {
+                targetRow[idx].push(payload);
+            }
+        };
+
+        takenRows.forEach(row => {
+            const assignment = row.assignment;
+            const key = dayKey(assignment.assignedAt);
+            if (!key) return;
+            const idx = columnIndexMap.get(key);
+            if (idx == null) return;
+            pushEntry(assignment.stage, idx, {
+                isTarget: true,
+                driverName: preferencesDialog.driver?.name || 'راننده فعلی',
+                queuePosition: assignment.queuePosition ?? null,
+                destination: row.destinationCity || assignment.destinationCity || '',
+                distance: row.roundTripKm != null ? formatDistance(row.roundTripKm) : '',
+            });
+        });
+
+        (preferencesDialog.data.peerAssignments || []).forEach(peer => {
+            const key = dayKey(peer.assignedAt);
+            if (!key) return;
+            const idx = columnIndexMap.get(key);
+            if (idx == null) return;
+            pushEntry(peer.stage, idx, {
+                isTarget: false,
+                driverName: peer.driverName || 'راننده نامشخص',
+                queuePosition: peer.queuePosition ?? null,
+                destination: peer.destinationCity || '',
+                distance: peer.roundTripKm != null ? formatDistance(peer.roundTripKm) : '',
+            });
+        });
+
+        const sortCells = (cells: ReturnType<typeof initCells>) => {
+            cells.forEach(list => {
+                list.sort((a, b) => {
+                    const ax = a.queuePosition ?? 999;
+                    const bx = b.queuePosition ?? 999;
+                    return ax - bx;
+                });
+            });
+        };
+
+        sortCells(farRows);
+        sortCells(nearRows);
+
+        return {
+            columns,
+            rows: [
+                { key: 'far', label: 'نوبت مسیر دور', data: farRows },
+                { key: 'near', label: 'نوبت مسیر نزدیک', data: nearRows },
+            ],
+        };
+    }, [preferencesDialog.data, takenRows]);
+
     const updateRow = (rowId: string, patch: Partial<RowEditor> | ((row: RowEditor) => RowEditor)) => {
         setRows(prev =>
             prev.map(row => {
@@ -296,6 +645,124 @@ const DispatchQueueManager: React.FC = () => {
                 return typeof patch === 'function' ? patch(row) : { ...row, ...patch };
             })
         );
+    };
+
+    const loadDriverPreferences = async (
+        driverId: string,
+        fromDate: string,
+        toDate: string,
+        options?: { category?: string | null }
+    ) => {
+        setPreferencesDialog(prev => ({
+            ...prev,
+            loading: true,
+            error: null,
+        }));
+        try {
+            const params = new URLSearchParams();
+            if (fromDate) params.append('from', fromDate);
+            if (toDate) params.append('to', toDate);
+            if (options?.category) params.append('category', options.category);
+            const res = await fetch(
+                `http://localhost:3000/api/v1/dispatch/drivers/${driverId}/preferences?${params.toString()}`,
+                { headers }
+            );
+            if (!res.ok) throw new Error(await res.text());
+            const payload = (await res.json()) as DriverPreferencesResponse;
+            setPreferencesDialog(prev => ({
+                ...prev,
+                loading: false,
+                data: payload,
+                dateFrom: payload.fromJalali ? payload.fromJalali.replace(/\//g, '-') : prev.dateFrom,
+                dateTo: payload.toJalali ? payload.toJalali.replace(/\//g, '-') : prev.dateTo,
+                error: null,
+            }));
+            setPreferencesRange(prev => ({
+                from: payload.fromJalali ? payload.fromJalali.replace(/\//g, '-') : prev.from,
+                to: payload.toJalali ? payload.toJalali.replace(/\//g, '-') : prev.to,
+            }));
+        } catch (error: any) {
+            let message = 'خطا در دریافت ترجیحات راننده';
+            if (typeof error?.message === 'string') {
+                try {
+                    const parsed = JSON.parse(error.message);
+                    message = parsed.message || parsed.details || message;
+                } catch {
+                    message = error.message;
+                }
+            }
+            setPreferencesDialog(prev => ({
+                ...prev,
+                loading: false,
+                error: message,
+            }));
+        }
+    };
+
+    const openPreferencesPanel = () => {
+        setPreferencesPanelOpen(true);
+        setPreferencesRange(getDefaultJalaliCycleRange());
+        setSelectedDriver(null);
+        driverSearch.clear();
+    };
+
+    const closePreferencesPanel = () => {
+        setPreferencesPanelOpen(false);
+        driverSearch.clear();
+        setSelectedDriver(null);
+    };
+
+    const handlePreferencesPanelSearchSelect = (driver: DispatchDriverSearchResult) => {
+        setSelectedDriver(driver);
+        driverSearch.setTerm(driver.name || driver.employeeId || '');
+        if (driver.id) {
+            setPreferencesDialog(prev => ({
+                ...initialPreferencesDialogState,
+                isOpen: false,
+            }));
+        }
+    };
+
+    const handlePreferencesRangeChange = (field: 'from' | 'to', value: string) => {
+        setPreferencesRange(prev => ({
+            ...prev,
+            [field]: value,
+        }));
+    };
+
+    const handlePreferencesPanelLoad = () => {
+        if (!selectedDriver?.id) {
+            alert('لطفاً راننده را انتخاب کنید.');
+            return;
+        }
+        const { from, to } = preferencesRange;
+        if (!from || !to) {
+            alert('لطفاً بازه زمانی را مشخص کنید.');
+            return;
+        }
+        setPreferencesDialog({
+            isOpen: true,
+            driver: {
+                id: selectedDriver.id,
+                name: selectedDriver.name,
+                employeeId: selectedDriver.employeeId,
+                mobile: selectedDriver.mobile,
+            },
+            queueEntry: null,
+            dateFrom: from,
+            dateTo: to,
+            loading: true,
+            data: null,
+            error: null,
+        });
+        setPreferencesPanelOpen(false);
+        loadDriverPreferences(selectedDriver.id, from, to, {
+            category: activeCategoryLabel || undefined,
+        });
+    };
+
+    const closePreferencesDialog = () => {
+        setPreferencesDialog(initialPreferencesDialogState);
     };
 
     const fetchQueue = async () => {
@@ -462,6 +929,7 @@ const DispatchQueueManager: React.FC = () => {
             } else if (categoryLabel && categoryLabel !== 'نامشخص') {
                 params.append('category', categoryLabel);
             }
+            params.append('queueEntryId', entry.id);
             if (options?.forceStage2) {
                 params.append('forceStage2', 'true');
             }
@@ -520,19 +988,31 @@ const DispatchQueueManager: React.FC = () => {
         return assignDialog.data.queue.find(item => item.id === assignDialog.entry!.id) || assignDialog.entry;
     }, [assignDialog.entry, assignDialog.data]);
 
-    const sortedAnnouncements = useMemo(() => {
+    const filteredAnnouncements = useMemo(() => {
         if (!assignDialog.data) return [];
+
         const categoryLabel =
             activeQueueEntry?.vehicleCategory ||
             assignDialog.entry?.vehicleCategory ||
             null;
-        const filtered = assignDialog.data.announcements.filter(item =>
-            vehicleMatchesCategory(item.vehicleType, categoryLabel)
-        );
-        return [...filtered].sort(
+
+        return assignDialog.data.announcements.filter(item => {
+            const matchesCategory = vehicleMatchesCategory(item.vehicleType, categoryLabel);
+            if (!matchesCategory) return false;
+
+            if (assignDialog.stage === 'stage1') {
+                return isFarRouteCandidate(item);
+            }
+
+            return true;
+        });
+    }, [assignDialog.data, activeQueueEntry, assignDialog.entry, assignDialog.stage]);
+
+    const sortedAnnouncements = useMemo(() => {
+        return [...filteredAnnouncements].sort(
             (a, b) => (b.route?.round_trip_km ?? 0) - (a.route?.round_trip_km ?? 0)
         );
-    }, [assignDialog.data, activeQueueEntry, assignDialog.entry]);
+    }, [filteredAnnouncements]);
 
     const categoryPendingCount = assignDialog.data?.pendingStage1Count ?? 0;
     const globalPendingCount = assignDialog.data?.globalPendingStage1Count ?? 0;
@@ -590,9 +1070,21 @@ const DispatchQueueManager: React.FC = () => {
             alert('تخصیص با موفقیت انجام شد.');
             closeAssignDialog();
             fetchQueue();
+            window.dispatchEvent(new CustomEvent('dispatch-board:update'));
         } catch (error: any) {
             console.error('Failed to assign freight', error);
-            alert(error?.message || 'ثبت تخصیص ناموفق بود.');
+            let message = 'ثبت تخصیص ناموفق بود.';
+            if (typeof error?.message === 'string') {
+                try {
+                    const parsed = JSON.parse(error.message);
+                    message = parsed.details || parsed.message || message;
+                } catch {
+                    if (error.message) {
+                        message = error.message;
+                    }
+                }
+            }
+            alert(message);
             setAssignDialog(prev => ({
                 ...prev,
                 assigning: false,
@@ -1052,6 +1544,12 @@ const DispatchQueueManager: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
+                            onClick={openPreferencesPanel}
+                            className="px-3 py-1.5 text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        >
+                            بررسی ترجیحات راننده
+                        </button>
+                        <button
                             onClick={fetchQueue}
                             className="px-3 py-1.5 text-sm rounded-md border border-slate-200 hover:bg-slate-50"
                         >
@@ -1082,6 +1580,128 @@ const DispatchQueueManager: React.FC = () => {
                     )}
                 </div>
             </section>
+
+            {preferencesPanelOpen && (
+                <div
+                    className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/40 backdrop-blur-sm px-4 py-12"
+                    onClick={closePreferencesPanel}
+                >
+                    <div
+                        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-800">بررسی ترجیحات راننده</h2>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    با جستجوی نام یا کد پرسنلی راننده و انتخاب بازه زمانی، سوابق تخصیص و فرصت‌های استفاده‌نشده نمایش داده می‌شود.
+                                </p>
+                            </div>
+                            <button
+                                onClick={closePreferencesPanel}
+                                className="text-slate-500 hover:text-slate-700 text-sm"
+                            >
+                                بستن
+                            </button>
+                        </div>
+
+                        <div className="px-5 py-4 space-y-4 overflow-y-auto">
+                            <div className="flex flex-col gap-3">
+                                <div className="flex flex-col text-xs text-slate-500">
+                                    <label className="mb-1 font-medium text-slate-600">جستجوی راننده (نام یا کد پرسنلی)</label>
+                                    <input
+                                        className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-sky-500 focus:ring-0"
+                                        placeholder="مثلاً علی رضایی یا 12345"
+                                        value={driverSearch.term}
+                                        onChange={e => driverSearch.setTerm(e.target.value)}
+                                    />
+                                    {driverSearch.loading && (
+                                        <span className="mt-1 text-[11px] text-slate-400">در حال جستجو...</span>
+                                    )}
+                                    {driverSearch.error && (
+                                        <span className="mt-1 text-[11px] text-rose-500">{driverSearch.error}</span>
+                                    )}
+                                </div>
+                                {driverSearch.results.length > 0 && (
+                                    <div className="rounded-lg border border-slate-200">
+                                        <ul className="max-h-48 overflow-auto text-sm divide-y divide-slate-100">
+                                            {driverSearch.results.map(result => {
+                                                const isSelected = selectedDriver?.id === result.id;
+                                                return (
+                                                    <li
+                                                        key={result.id}
+                                                        className={`px-3 py-2 cursor-pointer transition ${
+                                                            isSelected
+                                                                ? 'bg-sky-50 text-sky-700'
+                                                                : 'hover:bg-slate-50'
+                                                        }`}
+                                                        onClick={() => handlePreferencesPanelSearchSelect(result)}
+                                                    >
+                                                        <div className="font-medium">
+                                                            {result.name || 'راننده'}
+                                                            {result.employeeId ? ` • ${result.employeeId}` : ''}
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-500 mt-0.5">
+                                                            {result.mobile || ''}
+                                                        </div>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+                                {driverSearch.term.length >= 2 && !driverSearch.loading && driverSearch.results.length === 0 && !driverSearch.error && (
+                                    <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-400">
+                                        نتیجه‌ای برای جستجو یافت نشد.
+                                    </div>
+                                )}
+                                {selectedDriver && (
+                                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                                        راننده انتخاب شده: {selectedDriver.name || 'نامشخص'}
+                                        {selectedDriver.employeeId ? ` • ${selectedDriver.employeeId}` : ''}
+                                        {selectedDriver.mobile ? ` • ${selectedDriver.mobile}` : ''}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap items-end gap-3 text-xs text-slate-500">
+                                <div className="flex flex-col">
+                                    <label className="mb-1 font-medium text-slate-600">از تاریخ</label>
+                                    <input
+                                        type="text"
+                                        value={preferencesRange.from}
+                                        onChange={e => handlePreferencesRangeChange('from', e.target.value)}
+                                        placeholder="مثلاً 1404-07-26"
+                                        dir="ltr"
+                                        className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-sky-500 focus:ring-0"
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="mb-1 font-medium text-slate-600">تا تاریخ</label>
+                                    <input
+                                        type="text"
+                                        value={preferencesRange.to}
+                                        onChange={e => handlePreferencesRangeChange('to', e.target.value)}
+                                        placeholder="مثلاً 1404-08-25"
+                                        dir="ltr"
+                                        className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-sky-500 focus:ring-0"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handlePreferencesPanelLoad}
+                                    className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-700 disabled:opacity-60"
+                                    disabled={!selectedDriver?.id}
+                                >
+                                    نمایش ترجیحات
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                                بازه پیش‌فرض: ۲۶ ماه قبل تا ۲۵ ماه جاری (شمسی). فرمت تاریخ: YYYY-MM-DD.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isDrawerOpen && (
                 <div
@@ -1319,9 +1939,16 @@ const DispatchQueueManager: React.FC = () => {
                                                 <table className="min-w-full text-right text-[11px]">
                                                     <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide">
                                                         <tr className="border-b border-slate-200">
-                                                            <th className="px-2 py-2 text-right font-medium">نوع خط</th>
+                                                            <th className="px-2 py-2 text-right font-medium whitespace-nowrap">نوع خط</th>
                                                             <th className="px-2 py-2 text-right font-medium">کد / مبدا → مقصد</th>
-                                                            <th className="px-2 py-2 text-right font-medium">مسیر و مسافت</th>
+                                                            <th className="px-2 py-2 text-right font-medium">
+                                                                مسیر و مسافت
+                                                                {assignDialog.stage === 'stage1' && filteredAnnouncements.length > 0 && (
+                                                                    <span className="mr-1 text-[10px] text-slate-400">
+                                                                        (فقط مسیرهای دور)
+                                                                    </span>
+                                                                )}
+                                                            </th>
                                                             <th className="px-2 py-2 text-right font-medium">اطلاعات مالی</th>
                                                             <th className="px-2 py-2 text-right font-medium">برند / اولویت</th>
                                                             <th className="px-2 py-2 text-right font-medium">محصولات</th>
@@ -1344,8 +1971,21 @@ const DispatchQueueManager: React.FC = () => {
                                                                             : 'normal'
                                                                 ] || 'bg-slate-100 text-slate-600';
                                                             const products = normalizeProducts(item.products);
-                                                            const routeLabel = item.route?.route_category || 'مسیر';
+                                                            const distanceStatus = item.route?.distance_category || '';
+                                                            let routeLabel = item.route?.route_category || 'مسیر';
                                                             const kmLabel = formatDistance(item.route?.round_trip_km);
+                                                            const showExactDistance =
+                                                                assignDialog.stage === 'stage1'
+                                                                    ? kmLabel
+                                                                        ? `${kmLabel} • ${distanceStatus || 'خیلی دور'}`
+                                                                        : distanceStatus || 'خیلی دور'
+                                                                    : kmLabel;
+                                                            if (assignDialog.stage === 'stage1') {
+                                                                routeLabel =
+                                                                    distanceStatus
+                                                                        ? `${routeLabel === 'مسیر' ? 'مسیر' : routeLabel} (${distanceStatus})`
+                                                                        : `${routeLabel === 'مسیر' ? 'مسیر' : routeLabel} (خیلی دور)`;
+                                                            }
                                                             const productsPreview =
                                                                 products.length > 0
                                                                     ? products.slice(0, 3).join('، ') +
@@ -1392,8 +2032,10 @@ const DispatchQueueManager: React.FC = () => {
                                                                     </td>
                                                                     <td className="px-2 py-1.5 align-top text-slate-600">
                                                                         <div className="text-slate-600">{routeLabel}</div>
-                                                                        {kmLabel && (
-                                                                            <div className="mt-0.5 text-[10px] text-slate-400">{kmLabel}</div>
+                                                                        {showExactDistance && (
+                                                                            <div className="mt-0.5 text-[10px] text-slate-400">
+                                                                                {showExactDistance}
+                                                                            </div>
                                                                         )}
                                                                     </td>
                                                                     <td className="px-2 py-1.5 align-top text-slate-600">
@@ -1489,6 +2131,177 @@ const DispatchQueueManager: React.FC = () => {
                                     {assignDialog.assigning ? 'در حال ثبت...' : 'تایید تخصیص'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {preferencesDialog.isOpen && (
+                <div
+                    className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/40 backdrop-blur-sm px-4 py-12"
+                    onClick={closePreferencesDialog}
+                >
+                    <div
+                        className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-800">بررسی ترجیحات راننده</h2>
+                                <div className="mt-1 text-xs text-slate-500 space-y-1">
+                                    <div>
+                                        راننده:{' '}
+                                        <span className="font-semibold text-slate-700">
+                                            {preferencesDialog.driver?.name || 'نامشخص'}
+                                        </span>
+                                        {preferencesDialog.driver?.employeeId
+                                            ? ` • ${preferencesDialog.driver.employeeId}`
+                                            : ''}
+                                        {preferencesDialog.driver?.mobile ? ` • ${preferencesDialog.driver.mobile}` : ''}
+                                    </div>
+                                    <div>
+                                        بازه بررسی: {preferencesDialog.data?.fromJalali || preferencesDialog.dateFrom || '---'} تا{' '}
+                                        {preferencesDialog.data?.toJalali || preferencesDialog.dateTo || '---'}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={closePreferencesDialog}
+                                className="text-slate-500 hover:text-slate-700 text-sm"
+                            >
+                                بستن
+                            </button>
+                        </div>
+
+                        <div className="px-5 py-4 space-y-4 overflow-y-auto">
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => {
+                                        closePreferencesDialog();
+                                        openPreferencesPanel();
+                                    }}
+                                    className="rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                                >
+                                    تغییر راننده یا بازه
+                                </button>
+                            </div>
+
+                            {preferencesDialog.loading ? (
+                                <div className="py-10 text-center text-slate-500 text-sm">در حال بارگذاری...</div>
+                            ) : preferencesDialog.error ? (
+                                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                    {preferencesDialog.error}
+                                </div>
+                            ) : preferencesDialog.data ? (
+                                preferenceGrid ? (
+                                    <section className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-sm font-semibold text-slate-700">
+                                                نوبت‌های ثبت‌شده در روزهای فعال راننده (حداکثر ۳۱ روز)
+                                            </h3>
+                                            <span className="text-[11px] text-slate-400">
+                                                ستون‌ها فقط روزهایی را نمایش می‌دهند که راننده در آن‌ها حضور داشته است.
+                                            </span>
+                                        </div>
+                                        <div className="overflow-auto rounded-xl border border-slate-200">
+                                            <table className="min-w-[720px] text-right text-[11px]">
+                                                <thead>
+                                                    <tr className="bg-slate-50 text-slate-600 text-[10px]">
+                                                        <th className="px-3 py-2 font-medium">نوع نوبت</th>
+                                                        <th className="px-3 py-2 font-medium">نوبت‌های راننده</th>
+                                                        {preferenceGrid.columns.map(day => (
+                                                            <th key={day.key} className="px-2 py-2 font-medium text-center">
+                                                                <div>{day.label}</div>
+                                                                <div className="text-[9px] text-slate-400">{day.jalaliLabel}</div>
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {preferenceGrid.rows.map(row => {
+                                                        const accent =
+                                                            row.key === 'far' ? preferenceRowAccent.far : preferenceRowAccent.near;
+                                                        const targetPositions = row.data
+                                                            .flatMap(cellEntries =>
+                                                                cellEntries
+                                                                    .filter(entry => entry.isTarget && entry.queuePosition != null)
+                                                                    .map(entry => entry.queuePosition)
+                                                            )
+                                                            .map(position => `نوبت ${position}`);
+                                                        return (
+                                                            <tr key={row.key} className="bg-white">
+                                                                <td className={`px-3 py-3 font-semibold whitespace-nowrap ${accent.labelClass}`}>
+                                                                    {row.label}
+                                                                </td>
+                                                                <td className={`px-3 py-3 text-[10px] ${accent.labelClass}`}>
+                                                                    {targetPositions.length > 0 ? targetPositions.join(' ، ') : '—'}
+                                                                </td>
+                                                                {row.data.map((cellEntries, idx) => (
+                                                                    <td key={`${row.key}-${idx}`} className="px-2 py-2 align-top">
+                                                                        {cellEntries.length === 0 ? (
+                                                                            <div className="text-slate-300 text-center">—</div>
+                                                                        ) : (
+                                                                            <div className="space-y-1 text-[10px]">
+                                                                                {cellEntries.map((entry, entryIdx) => (
+                                                                                    <div
+                                                                                        key={`${row.key}-${idx}-${entryIdx}`}
+                                                                                        className={`rounded-lg border px-2 py-1 ${
+                                                                                            entry.isTarget
+                                                                                                ? 'border-amber-400 bg-amber-50 text-red-600'
+                                                                                                : accent.otherEntryClass
+                                                                                        }`}
+                                                                                    >
+                                                                                        <div className="flex items-center justify-between gap-2">
+                                                                                            <span
+                                                                                                className={`text-[11px] font-semibold ${
+                                                                                                    entry.isTarget ? 'text-red-600' : 'text-slate-800'
+                                                                                                }`}
+                                                                                            >
+                                                                                                {entry.driverName}
+                                                                                            </span>
+                                                                                            {entry.queuePosition != null && (
+                                                                                                <span
+                                                                                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${
+                                                                                                        entry.isTarget
+                                                                                                            ? 'bg-amber-200 text-amber-800'
+                                                                                                            : accent.otherBadgeClass
+                                                                                                    }`}
+                                                                                                >
+                                                                                                    نوبت {entry.queuePosition}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        {entry.destination && (
+                                                                                            <div className="text-[12px] font-semibold text-slate-900">
+                                                                                                {entry.destination}
+                                                                                            </div>
+                                                                                        )}
+                                                                                        {entry.distance && (
+                                                                                            <div className="text-[10px] text-slate-500">{entry.distance}</div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </section>
+                                ) : (
+                                    <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
+                                        برای این راننده در بازه انتخابی نوبتی ثبت نشده است.
+                                    </div>
+                                )
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
+                                    داده‌ای برای نمایش وجود ندارد.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
