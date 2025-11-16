@@ -20,6 +20,7 @@ const {
   getCityStatistics,
   getCityDetails,
   getLineAnalytics,
+  cancelAssignment,
   searchDispatchRoutes,
 } = require('../controllers/freightController');
 
@@ -117,6 +118,14 @@ router.put(
   authenticateToken,
   authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
   assignVehicleAndDriver
+);
+
+// Cancel an assignment on an announcement (returns it to its queue)
+router.post(
+  '/:id/cancel',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user']),
+  cancelAssignment
 );
 
 // Switch assignment queue between company/personal

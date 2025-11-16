@@ -3143,3 +3143,83 @@ module.exports = {
   getLineAnalytics,
   searchDispatchRoutes,
 };
+
+/**
+ * لغو تخصیص یک اعلام بار و بازگرداندن آن به صف مربوطه
+ * POST /api/v1/freight/:id/cancel
+ */
+async function cancelAssignment(req, res) {
+  const { id: announcementId } = req.params;
+  const { userId, name, username } = req.user || {};
+  const userName = name || username || 'system';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // قفل رکورد اعلام بار
+    const { rows } = await client.query(
+      `SELECT id, announcement_code, status, assignment_type, assigned_driver_id, assigned_vehicle_id
+       FROM freight_announcements
+       WHERE id = $1
+       FOR UPDATE`,
+      [announcementId]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    const ann = rows[0];
+    const oldStatus = ann.status || null;
+    const oldDriverId = ann.assigned_driver_id || null;
+    const oldVehicleId = ann.assigned_vehicle_id || null;
+
+    // تعیین وضعیت جدید برای بازگشت به صف مربوطه
+    let newStatus = 'PendingCompanyAssignment';
+    if (ann.assignment_type === 'personal') {
+      newStatus = 'PendingPersonalAssignment';
+    } else if (ann.assignment_type === 'company') {
+      newStatus = 'PendingCompanyAssignment';
+    }
+
+    await client.query(
+      `UPDATE freight_announcements
+         SET assigned_driver_id = NULL,
+             assigned_vehicle_id = NULL,
+             status = $1,
+             updated_at = NOW()
+       WHERE id = $2`,
+      [newStatus, announcementId]
+    );
+
+    // ثبت تاریخچه
+    await logFreightHistory({
+      announcementId: announcementId,
+      userId: userId || null,
+      userName: userName,
+      action: 'CANCELLED',
+      oldStatus: oldStatus,
+      newStatus: newStatus,
+      fieldChanges: {
+        assigned_driver_id: { old: oldDriverId, new: null },
+        assigned_vehicle_id: { old: oldVehicleId, new: null },
+        status: { old: oldStatus, new: newStatus }
+      },
+      description: `لغو تخصیص برای اعلام بار #${ann.announcement_code || ''}`,
+      ipAddress: req.ip,
+      client
+    });
+
+    await client.query('COMMIT');
+    return res.status(200).json({ message: 'تخصیص با موفقیت لغو شد', newStatus });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [freight] cancelAssignment failed:', error);
+    return res.status(500).json({ message: 'خطا در لغو تخصیص' });
+  } finally {
+    client.release();
+  }
+}
+
+// extend exports with cancelAssignment
+module.exports.cancelAssignment = cancelAssignment;

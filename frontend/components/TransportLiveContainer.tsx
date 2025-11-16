@@ -332,11 +332,32 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onCancel = async (announcementId: string) => {
-        console.log('❌ [TransportLive] Cancel Request:', {
-            announcementId,
-            timestamp: new Date().toISOString()
-        });
-        alert(`لغو اعلام بار #${announcementId}`);
+        try {
+            console.log('❌ [TransportLive] Cancel Request:', {
+                announcementId,
+                timestamp: new Date().toISOString()
+            });
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${encodeURIComponent(announcementId)}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                console.error('❌ [TransportLive] Cancel API error:', text);
+                throw new Error(JSON.parse(text)?.message || 'خطا در لغو تخصیص');
+            }
+            const data = await res.json();
+            console.log('✅ [TransportLive] Cancelled:', data);
+            alert('تخصیص با موفقیت لغو شد. امکان ارجاع مجدد فعال شد.');
+            // Refresh data to reflect new status (should now be Pending* and show "ارجاع" button)
+            await fetchData();
+        } catch (e: any) {
+            alert(e.message || 'لغو ناموفق بود');
+        }
     };
 
     const [historyDialog, setHistoryDialog] = React.useState<{ isOpen: boolean; announcementId: string; announcementCode: string } | null>(null);
