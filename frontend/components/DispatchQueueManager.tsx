@@ -123,19 +123,14 @@ const preferenceRowAccent: Record<
     'far' | 'near',
     {
         labelClass: string;
-        otherEntryClass: string;
-        otherBadgeClass: string;
     }
 > = {
+    // رنگ‌های بسیار ملایم برای جداسازی فقط برچسب ردیف‌ها
     far: {
-        labelClass: 'bg-sky-100 text-sky-800',
-        otherEntryClass: 'border-sky-100 bg-sky-50 text-slate-700',
-        otherBadgeClass: 'bg-sky-200 text-sky-700',
+        labelClass: 'bg-sky-50 text-slate-700',
     },
     near: {
-        labelClass: 'bg-emerald-100 text-emerald-800',
-        otherEntryClass: 'border-emerald-100 bg-emerald-50 text-slate-700',
-        otherBadgeClass: 'bg-emerald-200 text-emerald-800',
+        labelClass: 'bg-emerald-50 text-slate-700',
     },
 };
 
@@ -2208,7 +2203,6 @@ const DispatchQueueManager: React.FC = () => {
                                                 <thead>
                                                     <tr className="bg-slate-50 text-slate-600 text-[10px]">
                                                         <th className="px-3 py-2 font-medium">نوع نوبت</th>
-                                                        <th className="px-3 py-2 font-medium">نوبت‌های راننده</th>
                                                         {preferenceGrid.columns.map(day => (
                                                             <th key={day.key} className="px-2 py-2 font-medium text-center">
                                                                 <div>{day.label}</div>
@@ -2221,20 +2215,10 @@ const DispatchQueueManager: React.FC = () => {
                                                     {preferenceGrid.rows.map(row => {
                                                         const accent =
                                                             row.key === 'far' ? preferenceRowAccent.far : preferenceRowAccent.near;
-                                                        const targetPositions = row.data
-                                                            .flatMap(cellEntries =>
-                                                                cellEntries
-                                                                    .filter(entry => entry.isTarget && entry.queuePosition != null)
-                                                                    .map(entry => entry.queuePosition)
-                                                            )
-                                                            .map(position => `نوبت ${position}`);
                                                         return (
                                                             <tr key={row.key} className="bg-white">
                                                                 <td className={`px-3 py-3 font-semibold whitespace-nowrap ${accent.labelClass}`}>
                                                                     {row.label}
-                                                                </td>
-                                                                <td className={`px-3 py-3 text-[10px] ${accent.labelClass}`}>
-                                                                    {targetPositions.length > 0 ? targetPositions.join(' ، ') : '—'}
                                                                 </td>
                                                                 {row.data.map((cellEntries, idx) => (
                                                                     <td key={`${row.key}-${idx}`} className="px-2 py-2 align-top">
@@ -2245,39 +2229,25 @@ const DispatchQueueManager: React.FC = () => {
                                                                                 {cellEntries.map((entry, entryIdx) => (
                                                                                     <div
                                                                                         key={`${row.key}-${idx}-${entryIdx}`}
-                                                                                        className={`rounded-lg border px-2 py-1 ${
-                                                                                            entry.isTarget
-                                                                                                ? 'border-amber-400 bg-amber-50 text-red-600'
-                                                                                                : accent.otherEntryClass
-                                                                                        }`}
+                                                                                        className={`rounded-lg border px-2 py-1 ${entry.isTarget ? 'border-amber-400 bg-amber-50 text-red-600' : 'border-slate-200 bg-slate-50 text-slate-500'} `}
                                                                                     >
                                                                                         <div className="flex items-center justify-between gap-2">
-                                                                                            <span
-                                                                                                className={`text-[11px] font-semibold ${
-                                                                                                    entry.isTarget ? 'text-red-600' : 'text-slate-800'
-                                                                                                }`}
-                                                                                            >
+                                                                                            <span className={`text-[11px] font-semibold ${entry.isTarget ? 'text-red-600' : 'text-slate-700'}`}>
                                                                                                 {entry.driverName}
                                                                                             </span>
                                                                                             {entry.queuePosition != null && (
-                                                                                                <span
-                                                                                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${
-                                                                                                        entry.isTarget
-                                                                                                            ? 'bg-amber-200 text-amber-800'
-                                                                                                            : accent.otherBadgeClass
-                                                                                                    }`}
-                                                                                                >
+                                                                                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] bg-slate-300 text-slate-800">
                                                                                                     نوبت {entry.queuePosition}
                                                                                                 </span>
                                                                                             )}
                                                                                         </div>
                                                                                         {entry.destination && (
-                                                                                            <div className="text-[12px] font-semibold text-slate-900">
+                                                                                            <div className={`text-[12px] font-semibold ${entry.isTarget ? 'text-slate-900' : 'text-slate-600'}`}>
                                                                                                 {entry.destination}
                                                                                             </div>
                                                                                         )}
                                                                                         {entry.distance && (
-                                                                                            <div className="text-[10px] text-slate-500">{entry.distance}</div>
+                                                                                            <div className={`text-[10px] ${entry.isTarget ? 'text-slate-600' : 'text-slate-400'}`}>{entry.distance}</div>
                                                                                         )}
                                                                                     </div>
                                                                                 ))}
