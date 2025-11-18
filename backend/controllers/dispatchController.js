@@ -318,6 +318,7 @@ async function createQueueEntry(req, res) {
   try {
     await client.query('BEGIN');
 
+    // بررسی اینکه آیا راننده/خودرو در نوبت موجود است
     const existing = await client.query(
       `SELECT id, queue_type, position, driver_id, vehicle_id,
               (SELECT name FROM drivers WHERE id = dispatch_queue_entries.driver_id) as driver_name,
@@ -341,6 +342,35 @@ async function createQueueEntry(req, res) {
         existingQueueType: existingEntry.queue_type,
         existingPosition: existingEntry.position
       });
+    }
+
+    // بررسی اینکه آیا راننده/خودرو در تابلو اعلام بار است (یعنی تخصیص فعال دارد)
+    // اگر هست، یعنی از مسیر برگشته و باید تخصیص قبلی را finalize کنیم
+    const activeAssignments = await client.query(
+      `SELECT da.id, da.freight_announcement_id, fa.status, fa.announcement_code
+       FROM dispatch_assignments da
+       INNER JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
+       WHERE (da.driver_id = $1 OR da.vehicle_id = $2)
+         AND fa.status IN ('Assigned', 'InTransit')
+         AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)`,
+      [driverId, vehicleId]
+    );
+
+    // اگر تخصیص فعال دارد، آن را finalize می‌کنیم (یعنی از تابلو خارج می‌شود)
+    if (activeAssignments.rowCount > 0) {
+      console.log(`🔄 [createQueueEntry] Finalizing ${activeAssignments.rowCount} active assignment(s) for driver/vehicle before adding to queue`);
+      
+      for (const assignment of activeAssignments.rows) {
+        // تغییر status اعلام بار به Finalized
+        await client.query(
+          `UPDATE freight_announcements 
+           SET status = 'Finalized', updated_at = NOW() 
+           WHERE id = $1`,
+          [assignment.freight_announcement_id]
+        );
+        
+        console.log(`✅ [createQueueEntry] Finalized freight announcement ${assignment.announcement_code} (ID: ${assignment.freight_announcement_id})`);
+      }
     }
 
     const { rows: maxRows } = await client.query(

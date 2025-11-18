@@ -1552,24 +1552,21 @@ async function finalizeAssignments(req, res) {
       console.log(`🔍 [finalizeAssignments] Processing ${annId}: hasAssignment=${hasAssignment}, status=${ann.status}, line_type=${ann.line_type}`);
       
       if (hasAssignment) {
-        // تخصیص دارد → Finalized
-        const updateResult = await client.query(
-          'UPDATE freight_announcements SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status',
-          ['Finalized', annId]
-        );
-        
-        console.log(`✅ [finalizeAssignments] Finalized ${annId}:`, updateResult.rows[0]);
+        // تخصیص دارد → status را تغییر نمی‌دهیم (در تابلو می‌ماند)
+        // فقط وقتی راننده/خودرو دوباره در نوبت قرار می‌گیرد، از تابلو خارج می‌شود
+        // این یعنی "اتمام تخصیص" فقط برای ثبت آماده بودن بار است، نه خروج از تابلو
+        console.log(`✅ [finalizeAssignments] Assignment confirmed for ${annId}, keeping status ${ann.status} (stays in board)`);
         finalizedIds.push(annId);
         
-        // ثبت تاریخچه
+        // ثبت تاریخچه (بدون تغییر status)
         await logFreightHistory({
           announcementId: annId,
           userId: userId,
           userName: name || username || 'کاربر',
-          action: 'FINALIZED',
+          action: 'ASSIGNMENT_CONFIRMED',
           oldStatus: ann.status || 'Assigned',
-          newStatus: 'Finalized',
-          description: `اعلام بار نهایی شد (تخصیص تکمیل شده)`,
+          newStatus: ann.status || 'Assigned',
+          description: `تخصیص تأیید شد (بار در تابلو باقی می‌ماند تا راننده/خودرو دوباره در نوبت قرار گیرد)`,
           ipAddress: req.ip,
           client: client
         });
