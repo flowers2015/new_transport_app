@@ -141,9 +141,10 @@ function calculateMode(values, precision = 2) {
 async function getFreightAnnouncements(req, res) {
   try {
     // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
+    // ChangeRequested باید نمایش داده شود تا planner بتواند آن را ببیند و تأیید/رد کند
     const { includeLeftover } = req.query;
     
-    let whereClause = "WHERE fa.status NOT IN ('Finalized'";
+    let whereClause = "WHERE fa.status NOT IN ('Finalized', 'Reannounced', 'Archived', 'Cancelled'";
     if (includeLeftover !== 'true') {
       whereClause += ", 'Leftover'";
     }
@@ -413,9 +414,27 @@ async function updateFreightAnnouncement(req, res) {
           action = 'STATUS_CHANGED';
         }
         
+        // اگر فقط وضعیت از Draft یا Leftover به PendingManagerApproval تغییر کرده (ارجاع)، فقط تغییر وضعیت را ثبت کن
+        // تغییرات کرایه و سایر فیلدها در این مرحله معنی ندارند
+        let filteredChanges = allChanges;
+        if ((oldRecord.status === 'Draft' || oldRecord.status === 'Leftover') && newRecord.status === 'PendingManagerApproval') {
+          // فقط تغییر وضعیت را نگه دار، بقیه را حذف کن
+          // حذف تمام فیلدها به جز status
+          filteredChanges = {};
+          if (allChanges && allChanges.status) {
+            filteredChanges.status = allChanges.status;
+          } else {
+            // اگر status در allChanges نیست، آن را از oldStatus و newStatus بساز
+            filteredChanges.status = {
+              old: oldRecord.status,
+              new: newRecord.status
+            };
+          }
+        }
+        
         const description = generateChangeDescription(
           action,
-          allChanges,
+          filteredChanges,
           oldRecord.status,
           newRecord.status,
           newRecord.line_type
@@ -428,7 +447,7 @@ async function updateFreightAnnouncement(req, res) {
           action: action,
           oldStatus: oldRecord.status,
           newStatus: newRecord.status,
-          fieldChanges: allChanges,
+          fieldChanges: filteredChanges,
           description: description,
           ipAddress: req.ip,
           client: client
@@ -641,13 +660,26 @@ async function createFreightAnnouncement(req, res) {
     // ثبت رویداد CREATED در تاریخچه
     const userName = req.user?.name || req.user?.username || 'کاربر';
     const userId = req.user?.userId || req.user?.id;
+    // گرفتن شهر برای نمایش در توضیحات (از همان destRows استفاده می‌کنیم)
+    const city = destRows.rows[0]?.city || 'بدون مقصد';
+    const description = `اعلام بار به مقصد ${city} ایجاد شد (${lineType})`;
+    
+    console.log(`📝 [createFreightAnnouncement] Creating history entry:`, {
+      announcementId: id,
+      city,
+      lineType,
+      description,
+      destinationsCount: destRows.rows.length,
+      firstDestination: destRows.rows[0]
+    });
+    
     await logFreightHistory({
       announcementId: id,
       userId: userId,
       userName: userName,
       action: 'CREATED',
       newStatus: status,
-      description: `اعلام بار با کد ${announcementCode} ایجاد شد (${lineType})`,
+      description: description,
       ipAddress: req.ip
     });
 
@@ -1217,7 +1249,10 @@ async function setAssignmentQueue(req, res) {
     
   const newStatus = nextQueue === 'company' ? 'PendingCompanyAssignment' : 'PendingPersonalAssignment';
     const queueLabel = nextQueue === 'company' ? 'شرکتی' : 'شخصی';
-    const description = `بار به مقصد ${destinationLabel} توسط ${userName} به صف ${queueLabel} ارجاع شد`;
+    // تبدیل نام کاربر به فارسی
+    const userLabel = userName === 'personal_transport_user' ? 'کاربر ترابری (شخصی)' : 
+                     userName === 'transport_user' ? 'کاربر ترابری (شرکت)' : userName;
+    const description = `بار به مقصد ${destinationLabel} توسط ${userLabel} به صف ${queueLabel} ارجاع شد`;
     
     // آپدیت وضعیت و صف
     await client.query(
@@ -1694,9 +1729,9 @@ async function getTransportStatistics(req, res) {
     } else {
       // برای آمار روزانه تاریخچه یا آمار ماهانه/سالانه: حذف فقط Draft, PendingManagerApproval, Rejected
       if (dateFilter || lineTypeFilter) {
-        statusFilter = ` AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+        statusFilter = ` AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')`;
       } else {
-        statusFilter = `WHERE fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+        statusFilter = `WHERE fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')`;
       }
     }
     
@@ -1812,7 +1847,7 @@ async function getTransportStatistics(req, res) {
         // برای آمار ماهانه/سالانه: همه به جز Draft, PendingManagerApproval, Rejected
         debugQuery = `
           SELECT COUNT(*) as total_count, 
-                 COUNT(CASE WHEN fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر') THEN 1 END) as status_match_count
+                 COUNT(CASE WHEN fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced') THEN 1 END) as status_match_count
           FROM freight_announcements fa
           WHERE fa.line_type = $1
         `;
@@ -1838,7 +1873,7 @@ async function getTransportStatistics(req, res) {
         sampleQuery = `
           SELECT loading_date, status, line_type
           FROM freight_announcements fa
-          WHERE fa.line_type = $1 AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')
+          WHERE fa.line_type = $1 AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')
           LIMIT 5
         `;
       }
@@ -1863,7 +1898,7 @@ async function getTransportStatistics(req, res) {
           FROM freight_announcements fa
           WHERE fa.line_type = $1 
             AND (CAST(fa.loading_date AS TEXT) LIKE $2 OR CAST(fa.loading_date AS TEXT) LIKE $3)
-            AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')
+            AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')
           ORDER BY month_period ASC
         `;
         const monthResult = await pool.query(monthQuery, [lineType, `${year}-%`, `${year}/%`]);
@@ -2212,7 +2247,7 @@ async function getRepresentativeStatistics(req, res) {
     }
     
     // فیلتر status: فقط بارهایی که تخصیص دارند یا finalized/leftover هستند
-    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')`;
     
     // کوئری اصلی: آمار بر اساس نماینده/پخش و شهر - فقط تخصیص‌ها را می‌شمارد
     // نمایش همه ترکیبات: پخش مشهد، احمدی مشهد، حسنی مشهد و ...
@@ -2343,7 +2378,7 @@ async function getRepresentativeDetails(req, res) {
       paramIdx += 2;
     }
     
-    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر')`;
+    const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')`;
     
     // کوئری برای گرفتن جزئیات تخصیص‌ها
     // مهم: استفاده از fd.freight_cost (کرایه هر مقصد) به جای fa.total_freight_cost (کرایه کل)
@@ -3192,6 +3227,23 @@ async function cancelAssignment(req, res) {
       [newStatus, announcementId]
     );
 
+    // علامت‌گذاری تخصیص‌های مربوطه به عنوان لغو شده
+    // تخصیص‌های لغو شده در ترجیحات راننده نمایش داده می‌شوند اما با علامت لغو
+    // اما در آمار و تابلو اعلام بار نمایش داده نمی‌شوند
+    await client.query(
+      `UPDATE dispatch_assignments
+       SET is_cancelled = TRUE
+       WHERE freight_announcement_id = $1 AND is_cancelled = FALSE`,
+      [announcementId]
+    );
+
+    // گرفتن شهر برای نمایش در توضیحات
+    const destRows = await client.query(
+      'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 1',
+      [announcementId]
+    );
+    const city = destRows.rows[0]?.city || 'بدون مقصد';
+    
     // ثبت تاریخچه
     await logFreightHistory({
       announcementId: announcementId,
@@ -3205,7 +3257,7 @@ async function cancelAssignment(req, res) {
         assigned_vehicle_id: { old: oldVehicleId, new: null },
         status: { old: oldStatus, new: newStatus }
       },
-      description: `لغو تخصیص برای اعلام بار #${ann.announcement_code || ''}`,
+      description: `لغو تخصیص برای بار به مقصد ${city}`,
       ipAddress: req.ip,
       client
     });
@@ -3223,3 +3275,494 @@ async function cancelAssignment(req, res) {
 
 // extend exports with cancelAssignment
 module.exports.cancelAssignment = cancelAssignment;
+
+/**
+ * ثبت درخواست تغییر/تقسیم برای یک اعلام بار
+ * نقش‌های مجاز: transport_user, personal_transport_user
+ * Body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company'|'personal', description?: string, payload?: any }
+ * اثر: ایجاد رکورد در freight_change_requests، تغییر وضعیت اعلان به 'ChangeRequested'، خالی کردن تخصیص‌ها (در صورت وجود)، ثبت تاریخچه.
+ */
+async function createChangeRequest(req, res) {
+  const { id: announcementId } = req.params;
+  const { type, targetQueue, description, payload } = req.body || {};
+  const { id: actingUserId, name, username } = req.user || {};
+  const userName = name || username || 'system';
+
+  if (!type || !['change', 'split', 'merge'].includes(type)) {
+    return res.status(400).json({ message: 'نوع درخواست نامعتبر است.' });
+  }
+  if (targetQueue && !['company', 'personal'].includes(targetQueue)) {
+    return res.status(400).json({ message: 'targetQueue باید company یا personal باشد.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // قفل رکورد اعلام بار
+    const { rows } = await client.query(
+      `SELECT id, announcement_code, status, assignment_type, assigned_driver_id, assigned_vehicle_id
+       FROM freight_announcements
+       WHERE id = $1
+       FOR UPDATE`,
+      [announcementId]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    const ann = rows[0];
+    const oldStatus = ann.status || null;
+    const oldDriverId = ann.assigned_driver_id || null;
+    const oldVehicleId = ann.assigned_vehicle_id || null;
+
+    // تغییر وضعیت به درخواست تغییر و خالی کردن تخصیص‌ها
+    await client.query(
+      `UPDATE freight_announcements
+         SET status = 'ChangeRequested',
+             assigned_driver_id = NULL,
+             assigned_vehicle_id = NULL,
+             updated_at = NOW()
+       WHERE id = $1`,
+      [announcementId]
+    );
+
+    // ایجاد رکورد درخواست
+    const requestId = require('crypto').randomUUID();
+    // تبدیل payload به JSON string اگر object است
+    const payloadJson = payload ? (typeof payload === 'string' ? payload : JSON.stringify(payload)) : null;
+    
+    // اطمینان از وجود جدول (با try-catch برای جلوگیری از خطا)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS freight_change_requests (
+          id VARCHAR(255) PRIMARY KEY,
+          freight_announcement_id VARCHAR(255) NOT NULL,
+          requester_user_id VARCHAR(255),
+          requested_at TIMESTAMPTZ DEFAULT NOW(),
+          type VARCHAR(50) NOT NULL,
+          target_queue VARCHAR(50),
+          payload JSONB,
+          status VARCHAR(50) DEFAULT 'requested',
+          reviewed_by VARCHAR(255),
+          reviewed_at TIMESTAMPTZ,
+          review_note TEXT
+        );
+      `);
+      // اضافه کردن foreign key اگر وجود ندارد
+      await client.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'freight_change_requests_freight_announcement_id_fkey'
+          ) THEN
+            ALTER TABLE freight_change_requests 
+            ADD CONSTRAINT freight_change_requests_freight_announcement_id_fkey 
+            FOREIGN KEY (freight_announcement_id) REFERENCES freight_announcements(id) ON DELETE CASCADE;
+          END IF;
+        END $$;
+      `).catch(() => {});
+    } catch (e) {
+      // ignore if table exists or other errors
+      console.log('⚠️ [createChangeRequest] Table creation skipped:', e.message);
+    }
+    
+    // اگر actingUserId وجود ندارد، از req.user تلاش می‌کنیم
+    let finalUserId = actingUserId || req.user?.id || null;
+    
+    try {
+      await client.query(
+        `INSERT INTO freight_change_requests
+           (id, freight_announcement_id, requester_user_id, type, target_queue, payload, status)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'requested')`,
+        [requestId, announcementId, finalUserId, type, targetQueue || null, payloadJson]
+      );
+    } catch (insertError) {
+      console.error('❌ [createChangeRequest] Insert failed:', insertError);
+      throw insertError;
+    }
+
+    // ثبت تاریخچه
+    await logFreightHistory({
+      announcementId: announcementId,
+      userId: actingUserId || null,
+      userName: userName,
+      action: 'CHANGE_REQUESTED',
+      oldStatus: oldStatus,
+      newStatus: 'ChangeRequested',
+      fieldChanges: {
+        assigned_driver_id: oldDriverId ? { old: oldDriverId, new: null } : undefined,
+        assigned_vehicle_id: oldVehicleId ? { old: oldVehicleId, new: null } : undefined,
+        status: { old: oldStatus, new: 'ChangeRequested' },
+        target_queue: targetQueue ? { old: ann.assignment_type || null, new: targetQueue } : undefined,
+        request_type: { old: null, new: type },
+      },
+      description: description ? `درخواست تغییر/تقسیم توسط ترابری: ${description}` : 'درخواست تغییر/تقسیم توسط ترابری',
+      ipAddress: req.ip,
+      client
+    });
+
+    await client.query('COMMIT');
+    return res.status(201).json({ id: requestId, status: 'requested' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('❌ [freight] createChangeRequest failed:', e);
+    return res.status(500).json({ message: 'خطا در ثبت درخواست تغییر' });
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * لیست درخواست‌های تغییر/تقسیم برای برنامه‌ریزی
+ * GET /api/v1/freight-change-requests?status=requested
+ * نقش‌های مجاز: planner, planner_manager
+ */
+async function listChangeRequests(req, res) {
+  const { status } = req.query || {};
+  const filterStatus = typeof status === 'string' ? status : 'requested';
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        r.id,
+        r.type,
+        r.status,
+        r.target_queue,
+        r.payload,
+        r.requested_at,
+        ru.name as requester_name,
+        r.freight_announcement_id as announcement_id,
+        fa.announcement_code,
+        fa.origin_city,
+        fa.line_type,
+        fa.status as announcement_status,
+        fa.assignment_type,
+        fa.loading_date,
+        fa.created_at
+      FROM freight_change_requests r
+      LEFT JOIN freight_announcements fa ON fa.id = r.freight_announcement_id
+      LEFT JOIN users ru ON ru.id = r.requester_user_id
+      WHERE r.status = $1
+      ORDER BY r.requested_at DESC
+      `,
+      [filterStatus]
+    );
+
+    for (const row of rows) {
+      if (row.loading_date) {
+        row.loading_date = String(row.loading_date).replace(/-/g, '/');
+      }
+    }
+    return res.json(rows);
+  } catch (e) {
+    console.error('❌ [freight] listChangeRequests failed:', e);
+    return res.status(500).json({ message: 'خطا در دریافت درخواست‌های تغییر' });
+  }
+}
+
+/**
+ * تأیید/رد درخواست تغییر/تقسیم
+ * POST /api/v1/freight-change-requests/:id/approve
+ * POST /api/v1/freight-change-requests/:id/reject
+ * نقش‌های مجاز: planner, planner_manager
+ * برای approve: body می‌تواند شامل { newAnnouncements: [...] } باشد (برای تقسیم/تجمیع)
+ * برای reject: body می‌تواند شامل { reviewNote: string } باشد
+ */
+async function approveChangeRequest(req, res) {
+  const { id: requestId } = req.params;
+  const { newAnnouncements } = req.body || {};
+  const { id: actingUserId, name, username } = req.user || {};
+  const userName = name || username || 'system';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // دریافت درخواست
+    const { rows: reqRows } = await client.query(
+      `SELECT r.*, fa.id as announcement_id, fa.announcement_code, fa.status as announcement_status
+       FROM freight_change_requests r
+       LEFT JOIN freight_announcements fa ON fa.id = r.freight_announcement_id
+       WHERE r.id = $1 AND r.status = 'requested'
+       FOR UPDATE`,
+      [requestId]
+    );
+    if (reqRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'درخواست یافت نشد یا قبلاً پردازش شده است.' });
+    }
+    const changeReq = reqRows[0];
+    const originalAnnId = changeReq.freight_announcement_id;
+
+    // اگر newAnnouncements ارسال شده (تقسیم/تجمیع)، ایجاد اعلام‌بارهای جدید
+    if (Array.isArray(newAnnouncements) && newAnnouncements.length > 0) {
+      // تغییر وضعیت اعلام بار اصلی به Reannounced
+      await client.query(
+        `UPDATE freight_announcements SET status = 'Reannounced', updated_at = NOW() WHERE id = $1`,
+        [originalAnnId]
+      );
+
+      // ثبت تاریخچه برای اعلام بار اصلی
+      await logFreightHistory({
+        announcementId: originalAnnId,
+        userId: actingUserId || null,
+        userName: userName,
+        action: 'REANNOUNCED',
+        oldStatus: changeReq.announcement_status,
+        newStatus: 'Reannounced',
+        fieldChanges: {
+          status: { old: changeReq.announcement_status, new: 'Reannounced' },
+        },
+        description: `اعلام بار به ${newAnnouncements.length} اعلام بار جدید تقسیم/تجمیع شد`,
+        ipAddress: req.ip,
+        client
+      });
+
+      // ایجاد اعلام‌بارهای جدید (استفاده از createFreightAnnouncement logic)
+      const crypto = require('crypto');
+      for (const newAnn of newAnnouncements) {
+        const newId = crypto.randomUUID();
+        const annCode = `ANN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const assignmentType = newAnn.assignmentType || changeReq.target_queue || 'company';
+        const newStatus = assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
+
+        await client.query(
+          `INSERT INTO freight_announcements 
+           (id, announcement_code, loading_date, line_type, cargo_value, vehicle_type, notes, origin_city, brand, 
+            representative_type, representative_name, carton_count, priority, products, platform_arrival_time, 
+            assignment_type, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())`,
+          [
+            newId, annCode, newAnn.loadingDate, newAnn.lineType || changeReq.type, newAnn.cargoValue || 0,
+            newAnn.vehicleType, newAnn.notes || null, newAnn.originCity || null, newAnn.brand || null,
+            newAnn.representativeType || null, newAnn.representativeName || null, newAnn.cartonCount || null,
+            newAnn.priority || 'normal', Array.isArray(newAnn.products) ? JSON.stringify(newAnn.products) : '[]',
+            newAnn.platformArrivalTime || null, assignmentType, newStatus
+          ]
+        );
+
+        // افزودن مقاصد
+        if (Array.isArray(newAnn.destinations)) {
+          for (const dest of newAnn.destinations) {
+            await client.query(
+              `INSERT INTO freight_destinations (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [crypto.randomUUID(), newId, dest.city, dest.representativeName || null, dest.tonnage || null, dest.freightCost || null]
+            );
+          }
+        }
+
+        // گرفتن شهر برای نمایش در توضیحات
+        const newDestRows = await client.query(
+          'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 1',
+          [newId]
+        );
+        const newCity = newDestRows.rows[0]?.city || 'بدون مقصد';
+        
+        // ثبت تاریخچه برای اعلام بار جدید
+        await logFreightHistory({
+          announcementId: newId,
+          userId: actingUserId || null,
+          userName: userName,
+          action: 'DESTINATIONS_CHANGED',
+          oldStatus: null,
+          newStatus: newStatus,
+          fieldChanges: {
+            created_from: { old: null, new: originalAnnId },
+            request_id: { old: null, new: requestId },
+          },
+          description: `اعلام بار جدید به مقصد ${newCity} از تقسیم/تجمیع ایجاد شد`,
+          ipAddress: req.ip,
+          client
+        });
+      }
+    } else {
+      // فقط تغییر نوع خودرو/تناژ: ویرایش اعلام بار موجود
+      // این بخش را می‌توان با updateFreightAnnouncement انجام داد
+      // برای سادگی، فقط وضعیت را به Pending* برمی‌گردانیم
+      const assignmentType = changeReq.target_queue || 'company';
+      const newStatus = assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
+      
+      await client.query(
+        `UPDATE freight_announcements SET status = $1, updated_at = NOW() WHERE id = $2`,
+        [newStatus, originalAnnId]
+      );
+
+      await logFreightHistory({
+        announcementId: originalAnnId,
+        userId: actingUserId || null,
+        userName: userName,
+        action: 'DESTINATIONS_CHANGED',
+        oldStatus: 'ChangeRequested',
+        newStatus: newStatus,
+        fieldChanges: {
+          status: { old: 'ChangeRequested', new: newStatus },
+        },
+        description: `درخواست تغییر تأیید شد و اعلام بار به صف ${assignmentType} بازگشت`,
+        ipAddress: req.ip,
+        client
+      });
+    }
+
+    // به‌روزرسانی وضعیت درخواست
+    await client.query(
+      `UPDATE freight_change_requests 
+       SET status = 'approved', reviewed_by = $1, reviewed_at = NOW()
+       WHERE id = $2`,
+      [actingUserId || null, requestId]
+    );
+
+    await client.query('COMMIT');
+    return res.status(200).json({ message: 'درخواست با موفقیت تأیید شد' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('❌ [freight] approveChangeRequest failed:', e);
+    return res.status(500).json({ message: 'خطا در تأیید درخواست' });
+  } finally {
+    client.release();
+  }
+}
+
+async function rejectChangeRequest(req, res) {
+  const { id: requestId } = req.params;
+  const { reviewNote } = req.body || {};
+  const { id: actingUserId, name, username } = req.user || {};
+  const userName = name || username || 'system';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: reqRows } = await client.query(
+      `SELECT r.*, fa.id as announcement_id, fa.announcement_code, fa.status as announcement_status, fa.assignment_type
+       FROM freight_change_requests r
+       LEFT JOIN freight_announcements fa ON fa.id = r.freight_announcement_id
+       WHERE r.id = $1 AND r.status = 'requested'
+       FOR UPDATE`,
+      [requestId]
+    );
+    if (reqRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'درخواست یافت نشد یا قبلاً پردازش شده است.' });
+    }
+    const changeReq = reqRows[0];
+    const originalAnnId = changeReq.announcement_id;
+
+    // بازگرداندن وضعیت اعلام بار به وضعیت قبلی (Pending*)
+    const assignmentType = changeReq.assignment_type || 'company';
+    const newStatus = assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
+
+    await client.query(
+      `UPDATE freight_announcements SET status = $1, updated_at = NOW() WHERE id = $2`,
+      [newStatus, originalAnnId]
+    );
+
+    await logFreightHistory({
+      announcementId: originalAnnId,
+      userId: actingUserId || null,
+      userName: userName,
+      action: 'REJECTED',
+      oldStatus: 'ChangeRequested',
+      newStatus: newStatus,
+      fieldChanges: {
+        status: { old: 'ChangeRequested', new: newStatus },
+      },
+      description: `درخواست تغییر رد شد${reviewNote ? `: ${reviewNote}` : ''}`,
+      ipAddress: req.ip,
+      client
+    });
+
+    await client.query(
+      `UPDATE freight_change_requests 
+       SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2
+       WHERE id = $3`,
+      [actingUserId || null, reviewNote || null, requestId]
+    );
+
+    await client.query('COMMIT');
+    return res.status(200).json({ message: 'درخواست رد شد' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('❌ [freight] rejectChangeRequest failed:', e);
+    return res.status(500).json({ message: 'خطا در رد درخواست' });
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * خارج کردن درخواست تغییر از کارتابل
+ * POST /api/v1/freight-announcements/change-requests/:id/archive
+ * نقش‌های مجاز: planner, planner_manager
+ */
+async function archiveChangeRequest(req, res) {
+  const { id: requestId } = req.params;
+  const { id: actingUserId, name, username } = req.user || {};
+  const userName = name || username || 'system';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: reqRows } = await client.query(
+      `SELECT r.*, fa.id as announcement_id, fa.announcement_code, fa.status as announcement_status, fa.assignment_type
+       FROM freight_change_requests r
+       LEFT JOIN freight_announcements fa ON fa.id = r.freight_announcement_id
+       WHERE r.id = $1 AND r.status = 'requested'
+       FOR UPDATE`,
+      [requestId]
+    );
+    if (reqRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'درخواست یافت نشد یا قبلاً پردازش شده است.' });
+    }
+    const changeReq = reqRows[0];
+    const originalAnnId = changeReq.announcement_id;
+
+    // خارج کردن از کارتابل: تغییر وضعیت به Archived (دیگر در لیست نمایش داده نمی‌شود)
+    await client.query(
+      `UPDATE freight_announcements SET status = 'Archived', updated_at = NOW() WHERE id = $1`,
+      [originalAnnId]
+    );
+
+    await logFreightHistory({
+      announcementId: originalAnnId,
+      userId: actingUserId || null,
+      userName: userName,
+      action: 'ARCHIVED',
+      oldStatus: 'ChangeRequested',
+      newStatus: 'Archived',
+      fieldChanges: {
+        status: { old: 'ChangeRequested', new: 'Archived' },
+      },
+      description: `درخواست تغییر از کارتابل خارج شد`,
+      ipAddress: req.ip,
+      client
+    });
+
+    // به‌روزرسانی وضعیت درخواست به archived
+    await client.query(
+      `UPDATE freight_change_requests 
+       SET status = 'archived', reviewed_by = $1, reviewed_at = NOW()
+       WHERE id = $2`,
+      [actingUserId || null, requestId]
+    );
+
+    await client.query('COMMIT');
+    return res.status(200).json({ message: 'درخواست از کارتابل خارج شد' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('❌ [freight] archiveChangeRequest failed:', e);
+    return res.status(500).json({ message: 'خطا در خارج کردن از کارتابل' });
+  } finally {
+    client.release();
+  }
+}
+
+// expose new handlers
+module.exports.createChangeRequest = createChangeRequest;
+module.exports.listChangeRequests = listChangeRequests;
+module.exports.approveChangeRequest = approveChangeRequest;
+module.exports.rejectChangeRequest = rejectChangeRequest;
+module.exports.archiveChangeRequest = archiveChangeRequest;

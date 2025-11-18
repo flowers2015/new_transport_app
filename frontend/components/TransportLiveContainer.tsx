@@ -87,6 +87,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     Finalized: FreightAnnouncementStatus.Finalized,
                     Cancelled: FreightAnnouncementStatus.Cancelled,
                     ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+                    ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
                 };
 
                 const normalize = (a: any): FreightAnnouncement => {
@@ -129,9 +130,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 };
 
                 const announcementsData: FreightAnnouncement[] = Array.isArray(announcementsRaw) ? announcementsRaw.map(normalize) : [];
-                // console.log('🧭 [TransportLive] Normalized Announcements:', announcementsData);
+                // فیلتر کردن ChangeRequested از TransportLive (فقط برای planner نمایش داده می‌شود)
+                const filteredAnnouncements = announcementsData.filter(a => 
+                    a.status !== FreightAnnouncementStatus.ChangeRequested && a.status !== 'ChangeRequested'
+                );
+                // console.log('🧭 [TransportLive] Normalized Announcements:', filteredAnnouncements);
 
-                setAnnouncements(announcementsData);
+                setAnnouncements(filteredAnnouncements);
                 setVehicles(vehiclesData);
                 setDrivers(driversData);
                 setPersonalDrivers(personalDriversData);
@@ -360,6 +365,29 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
+    const onChangeRequest = async (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${encodeURIComponent(announcementId)}/change-request`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(body || {})
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                console.error('❌ [TransportLive] ChangeRequest API error:', text);
+                throw new Error(JSON.parse(text)?.message || 'خطا در ثبت درخواست تغییر');
+            }
+            alert('درخواست تغییر/تقسیم ثبت شد و بار از کارتابل خارج شد.');
+            await fetchData();
+        } catch (e: any) {
+            alert(e.message || 'ثبت درخواست ناموفق بود');
+        }
+    };
+
     const [historyDialog, setHistoryDialog] = React.useState<{ isOpen: boolean; announcementId: string; announcementCode: string } | null>(null);
 
     const onOpenHistory = (announcementId: string, announcementCode: string) => {
@@ -395,6 +423,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onTransferDestination={onTransferDestination}
                 onForward={onForward}
                 onCancel={onCancel}
+                onChangeRequest={onChangeRequest}
                 onOpenHistory={onOpenHistory}
                 currentUser={currentUser}
                 activeLine={activeLine}

@@ -312,15 +312,46 @@ const pad2 = (value: number) => (value < 10 ? `0${value}` : `${value}`);
 
 const getDefaultJalaliCycleRange = () => {
     const today = new Date();
-    const [jy, jm] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
     const currentYear = jy;
     const currentMonth = jm;
-    const toYear = currentYear;
-    const toMonth = currentMonth;
-    const toDay = 25;
-    const fromMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-    const fromYear = currentMonth === 1 ? currentYear - 1 : currentYear;
-    const fromDay = 26;
+    const currentDay = jd;
+    
+    // اگر روز جاری >= 26 است، از 26 ماه جاری تا 25 ماه بعد
+    // اگر روز جاری < 26 است، از 26 ماه قبل تا 25 ماه جاری
+    let fromYear, fromMonth, fromDay;
+    let toYear, toMonth, toDay;
+    
+    if (currentDay >= 26) {
+        // از 26 ماه جاری تا 25 ماه بعد
+        fromYear = currentYear;
+        fromMonth = currentMonth;
+        fromDay = 26;
+        
+        if (currentMonth === 12) {
+            toYear = currentYear + 1;
+            toMonth = 1;
+        } else {
+            toYear = currentYear;
+            toMonth = currentMonth + 1;
+        }
+        toDay = 25;
+    } else {
+        // از 26 ماه قبل تا 25 ماه جاری
+        if (currentMonth === 1) {
+            fromYear = currentYear - 1;
+            fromMonth = 12;
+        } else {
+            fromYear = currentYear;
+            fromMonth = currentMonth - 1;
+        }
+        fromDay = 26;
+        
+        toYear = currentYear;
+        toMonth = currentMonth;
+        toDay = 25;
+    }
+    
     const from = `${fromYear}-${pad2(fromMonth)}-${pad2(fromDay)}`;
     const to = `${toYear}-${pad2(toMonth)}-${pad2(toDay)}`;
     return { from, to };
@@ -383,7 +414,7 @@ const mapAssignmentSummary = (
             distanceCategory: item.distanceCategory || item.routeCategory || null,
             lineType: item.lineType || null,
                 roundTripKm: item.roundTripKm != null ? Number(item.roundTripKm) : null,
-                queueTypeLabel: queueTypeLabels[(item.stage === 'stage1' ? 'far' : 'near') as DispatchQueueType] || '',
+                queueTypeLabel: queueTypeLabels[(item.queueType || (item.stage === 'stage1' ? 'far' : 'near')) as DispatchQueueType] || '',
             assignment: item,
         }))
         .sort((a, b) => (b.roundTripKm ?? 0) - (a.roundTripKm ?? 0));
@@ -520,7 +551,19 @@ const DispatchQueueManager: React.FC = () => {
         [preferencesDialog.data?.taken]
     );
     const preferenceGrid = useMemo(() => {
-        if (!preferencesDialog.data || takenRows.length === 0) return null;
+        if (!preferencesDialog.data) return null;
+        // اگر نه taken و نه peerAssignments نداریم، grid را نمایش نده
+        if (takenRows.length === 0 && (!preferencesDialog.data.peerAssignments || preferencesDialog.data.peerAssignments.length === 0)) {
+            console.log('🔍 [preferenceGrid] No data to display:', {
+                takenRowsLength: takenRows.length,
+                peerAssignmentsLength: preferencesDialog.data.peerAssignments?.length || 0
+            });
+            return null;
+        }
+        console.log('🔍 [preferenceGrid] Building grid:', {
+            takenRowsLength: takenRows.length,
+            peerAssignmentsLength: preferencesDialog.data.peerAssignments?.length || 0
+        });
         const dayKey = (value: string) => {
             const date = new Date(value);
             if (Number.isNaN(date.getTime())) return null;
@@ -535,11 +578,31 @@ const DispatchQueueManager: React.FC = () => {
                 label: string;
             }
         >();
+        // جمع‌آوری روزها از taken assignments
         takenRows.forEach(row => {
             const key = dayKey(row.assignment.assignedAt);
             if (!key) return;
             if (!dayMap.has(key)) {
                 const date = new Date(row.assignment.assignedAt);
+                const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+                dayMap.set(key, {
+                    key,
+                    iso: date.toISOString(),
+                    jalaliLabel: `${jy}/${pad2(jm)}/${pad2(jd)}`,
+                    label: `روز ${jd}`,
+                });
+            }
+        });
+        // جمع‌آوری روزها از peer assignments
+        (preferencesDialog.data.peerAssignments || []).forEach(peer => {
+            // تبدیل assignedAt از string به Date اگر لازم باشد
+            const assignedAtDate = typeof peer.assignedAt === 'string' ? new Date(peer.assignedAt) : peer.assignedAt;
+            const assignedAtStr = assignedAtDate instanceof Date ? assignedAtDate.toISOString() : String(peer.assignedAt);
+            const key = dayKey(assignedAtStr);
+            if (!key) return;
+            if (!dayMap.has(key)) {
+                const date = assignedAtDate instanceof Date ? assignedAtDate : new Date(peer.assignedAt);
+                if (Number.isNaN(date.getTime())) return;
                 const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
                 dayMap.set(key, {
                     key,
@@ -561,12 +624,13 @@ const DispatchQueueManager: React.FC = () => {
                 queuePosition?: number | null;
                 destination?: string;
                 distance?: string;
+                isCancelled?: boolean;
             }>);
         const farRows = initCells();
         const nearRows = initCells();
 
         const pushEntry = (
-            stage: string | null | undefined,
+            queueType: 'far' | 'near' | string | null | undefined,
             idx: number,
             payload: {
                 isTarget: boolean;
@@ -574,9 +638,10 @@ const DispatchQueueManager: React.FC = () => {
                 queuePosition?: number | null;
                 destination?: string;
                 distance?: string;
+                isCancelled?: boolean;
             }
         ) => {
-            const targetRow = stage === 'stage1' ? farRows : nearRows;
+            const targetRow = queueType === 'far' ? farRows : nearRows;
             if (idx >= 0 && idx < targetRow.length) {
                 targetRow[idx].push(payload);
             }
@@ -588,26 +653,60 @@ const DispatchQueueManager: React.FC = () => {
             if (!key) return;
             const idx = columnIndexMap.get(key);
             if (idx == null) return;
-            pushEntry(assignment.stage, idx, {
+            // استفاده از queueType از assignment یا fallback به stage
+            const queueType = (assignment as any).queueType || (assignment.stage === 'stage1' ? 'far' : 'near');
+            pushEntry(queueType, idx, {
                 isTarget: true,
                 driverName: preferencesDialog.driver?.name || 'راننده فعلی',
                 queuePosition: assignment.queuePosition ?? null,
                 destination: row.destinationCity || assignment.destinationCity || '',
                 distance: row.roundTripKm != null ? formatDistance(row.roundTripKm) : '',
+                isCancelled: assignment.isCancelled || false,
             });
         });
 
         (preferencesDialog.data.peerAssignments || []).forEach(peer => {
-            const key = dayKey(peer.assignedAt);
-            if (!key) return;
+            // تبدیل assignedAt از string به Date اگر لازم باشد
+            let assignedAtDate: Date;
+            if (typeof peer.assignedAt === 'string') {
+                assignedAtDate = new Date(peer.assignedAt);
+            } else if (peer.assignedAt instanceof Date) {
+                assignedAtDate = peer.assignedAt;
+            } else {
+                console.warn('🔍 [preferenceGrid] Invalid assignedAt for peer:', peer);
+                return;
+            }
+            if (Number.isNaN(assignedAtDate.getTime())) {
+                console.warn('🔍 [preferenceGrid] Invalid date for peer:', peer);
+                return;
+            }
+            const key = dayKey(assignedAtDate.toISOString());
+            if (!key) {
+                console.warn('🔍 [preferenceGrid] No dayKey for peer:', peer);
+                return;
+            }
             const idx = columnIndexMap.get(key);
-            if (idx == null) return;
-            pushEntry(peer.stage, idx, {
+            if (idx == null) {
+                console.warn('🔍 [preferenceGrid] No column index for key:', key, 'peer:', peer);
+                return;
+            }
+            // استفاده از queueType از peer یا fallback به stage
+            const queueType = (peer as any).queueType || (peer.stage === 'stage1' ? 'far' : 'near');
+            console.log('🔍 [preferenceGrid] Adding peer entry:', {
+                driverName: peer.driverName,
+                queueType,
+                queuePosition: peer.queuePosition,
+                key,
+                idx,
+                isCancelled: peer.isCancelled
+            });
+            pushEntry(queueType, idx, {
                 isTarget: false,
                 driverName: peer.driverName || 'راننده نامشخص',
                 queuePosition: peer.queuePosition ?? null,
                 destination: peer.destinationCity || '',
                 distance: peer.roundTripKm != null ? formatDistance(peer.roundTripKm) : '',
+                isCancelled: peer.isCancelled || false,
             });
         });
 
@@ -664,6 +763,18 @@ const DispatchQueueManager: React.FC = () => {
             );
             if (!res.ok) throw new Error(await res.text());
             const payload = (await res.json()) as DriverPreferencesResponse;
+            console.log('🔍 [DispatchQueueManager] Driver preferences loaded:', {
+                driverName: payload.driver?.name,
+                takenCount: payload.taken?.length || 0,
+                peerAssignmentsCount: payload.peerAssignments?.length || 0,
+                samplePeerAssignments: payload.peerAssignments?.slice(0, 3).map(p => ({
+                    driverName: p.driverName,
+                    queueType: p.queueType,
+                    queuePosition: p.queuePosition,
+                    assignedAt: p.assignedAt,
+                    isCancelled: p.isCancelled
+                }))
+            });
             setPreferencesDialog(prev => ({
                 ...prev,
                 loading: false,
@@ -791,6 +902,30 @@ const DispatchQueueManager: React.FC = () => {
     useEffect(() => {
         setPositionEdits({});
     }, [queueData]);
+
+    // به‌روزرسانی خودکار بازه زمانی وقتی ماه عوض می‌شود
+    useEffect(() => {
+        const updateRangeIfNeeded = () => {
+            const currentRange = getDefaultJalaliCycleRange();
+            const [currentToYear, currentToMonth] = currentRange.to.split('-').map(Number);
+            
+            setPreferencesRange(prev => {
+                const [prevToYear, prevToMonth] = prev.to.split('-').map(Number);
+                
+                // اگر ماه جاری با ماه ذخیره شده متفاوت است، به‌روزرسانی کن
+                if (currentToYear !== prevToYear || currentToMonth !== prevToMonth) {
+                    return currentRange;
+                }
+                return prev;
+            });
+        };
+        
+        // بررسی هر دقیقه
+        const interval = setInterval(updateRangeIfNeeded, 60000);
+        updateRangeIfNeeded(); // بررسی فوری
+        
+        return () => clearInterval(interval);
+    }, []);
 
     const scheduleSearch = (
         rowId: string,
@@ -2229,10 +2364,22 @@ const DispatchQueueManager: React.FC = () => {
                                                                                 {cellEntries.map((entry, entryIdx) => (
                                                                                     <div
                                                                                         key={`${row.key}-${idx}-${entryIdx}`}
-                                                                                        className={`rounded-lg border px-2 py-1 ${entry.isTarget ? 'border-amber-400 bg-amber-50 text-red-600' : 'border-slate-200 bg-slate-50 text-slate-500'} `}
+                                                                                        className={`rounded-lg border px-2 py-1 ${
+                                                                                            entry.isCancelled
+                                                                                                ? 'border-red-400 bg-red-50 text-red-700 line-through'
+                                                                                                : entry.isTarget 
+                                                                                                    ? 'border-amber-400 bg-amber-50 text-red-600'
+                                                                                                    : 'border-slate-200 bg-slate-50 text-slate-500'
+                                                                                        }`}
                                                                                     >
                                                                                         <div className="flex items-center justify-between gap-2">
-                                                                                            <span className={`text-[11px] font-semibold ${entry.isTarget ? 'text-red-600' : 'text-slate-700'}`}>
+                                                                                            <span className={`text-[11px] font-semibold ${
+                                                                                                entry.isCancelled
+                                                                                                    ? 'text-red-700'
+                                                                                                    : entry.isTarget 
+                                                                                                        ? 'text-red-600'
+                                                                                                        : 'text-slate-700'
+                                                                                            }`}>
                                                                                                 {entry.driverName}
                                                                                             </span>
                                                                                             {entry.queuePosition != null && (

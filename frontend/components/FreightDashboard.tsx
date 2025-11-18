@@ -1,5 +1,5 @@
 // This is a new file: components/FreightDashboard.tsx
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { FreightAnnouncement, FreightLineType, Destination, FreightAnnouncementStatus, UserRole, User, View, DispatchRouteSuggestion } from '../types';
 import { formatJalaliDateTime, formatJalali, parseJalaliDateString } from '../utils/jalali';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
@@ -29,6 +29,12 @@ interface FreightDashboardProps {
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     onSendForApproval?: (announcement: FreightAnnouncement) => void;
     onSearchRoutes: (query: string) => Promise<DispatchRouteSuggestion[]>;
+    changeRequests?: any[];
+    loadingChangeRequests?: boolean;
+    onFetchChangeRequests?: () => void;
+    onApproveChangeRequest?: (requestId: string, newAnnouncements?: any[]) => void;
+    onRejectChangeRequest?: (requestId: string, reviewNote?: string) => void;
+    onArchiveChangeRequest?: (requestId: string) => void;
 }
 
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
@@ -43,6 +49,8 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.Cancelled]: 'bg-slate-100 text-slate-800',
     [FreightAnnouncementStatus.ReAnnounced]: 'bg-gray-400 text-white',
     [FreightAnnouncementStatus.Leftover]: 'bg-red-200 text-red-900',
+    [FreightAnnouncementStatus.ChangeRequested]: 'bg-orange-200 text-orange-900',
+    [FreightAnnouncementStatus.Archived]: 'bg-slate-300 text-slate-800',
 };
 
 const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')}` : '-';
@@ -57,11 +65,39 @@ const columnsConfig = (props: {
     onDelete: (id: string) => void,
     onReAnnounce: (announcementId: string) => void,
     onSwitchQueue?: (id: string, nextQueue: 'company' | 'personal') => void,
-    onOpenHistory?: (announcementId: string, announcementCode: string) => void
+    onOpenHistory?: (announcementId: string, announcementCode: string) => void,
+    changeRequests?: any[],
+    onApproveChangeRequest?: (requestId: string, newAnnouncements?: any[]) => void,
+    onRejectChangeRequest?: (requestId: string, reviewNote?: string) => void,
+    onArchiveChangeRequest?: (requestId: string) => void,
+    selectedIds?: string[],
+    onToggleSelect?: (id: string) => void
 }) => {
     const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete, onReAnnounce } = props;
     
     return [
+        // --- Checkbox column for bulk selection ---
+        { header: '', width: '40px', display: () => true, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const { selectedIds = [], onToggleSelect } = props;
+            const isSelected = selectedIds.includes(ann.id);
+            // Draft، Rejected، Leftover و PendingManagerApproval قابل انتخاب هستند
+            // بررسی تطابق با enum و همچنین مقادیر رشته‌ای
+            const statusStr = String(ann.status);
+            const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
+            const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
+            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
+            const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
+            const isSelectable = isDraft || isRejected || isLeftover || isPendingApproval;
+            return (
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect?.(ann.id)}
+                    className="cursor-pointer"
+                    disabled={!isSelectable}
+                />
+            );
+        }, accessor: (_: any) => '' },
         // --- Ice Cream (بستنی) desired order in both compact/full ---
         { header: 'ردیف', width: '70px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
@@ -75,14 +111,36 @@ const columnsConfig = (props: {
         { header: 'اولویت', accessor: 'priority', width: '100px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => PRIORITIES[ann.priority || 'normal'] },
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
-        { header: 'وضعیت', accessor: 'status', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+        { header: 'وضعیت', accessor: 'status', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+            const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+        }},
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+            if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                return desc || '-';
+            }
+            return ann.rejectionReason || '-';
+        }},
 
         // --- Common Columns (for Dairy & Ambient) ---
         { header: 'ردیف', width: '70px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         // Announcement code removed across all tabs per request → not displayed anywhere
-        { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
+        { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+            const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+        }},
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+            if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                return desc || '-';
+            }
+            return ann.rejectionReason || '-';
+        }},
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && !(vm === 'compact' && lt === FreightLineType.Dairy), render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && !(vm === 'compact' && lt === FreightLineType.Dairy), render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -124,9 +182,79 @@ const columnsConfig = (props: {
         { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.notes || '-' },
-        { header: 'وضعیت', accessor: 'status', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-        { header: 'عملیات', width: '270px', display: () => true, render: (ann: FreightAnnouncement) => {
+        { header: 'وضعیت', accessor: 'status', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+        }},
+        { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+            if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                return desc || '-';
+            }
+            return ann.rejectionReason || '-';
+        }},
+        { header: 'عملیات', width: '270px', display: () => true, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete, onReAnnounce } = props;
+            
+            // Debug: بررسی وضعیت
+            if (!currentUser) {
+                console.warn('[FreightDashboard] Operations: currentUser is missing', { annId: ann.id, annStatus: ann.status });
+            }
+            
+            // بررسی اینکه آیا کاربر ترابری است و بار به ترابری دیگر ارجاع شده
+            const isCompanyUser = currentUser?.role === UserRole.TransportationUser || currentUser?.role === UserRole.Transportation;
+            const isPersonalUser = currentUser?.role === UserRole.Transportation_Personal_Vehicle_User;
+            const assignmentTypeStr = String(ann.assignmentType || '').toLowerCase().trim();
+            const statusStr = String(ann.status || '');
+            
+            // تشخیص اینکه بار به کدام ترابری ارجاع شده
+            // اول از status استفاده می‌کنیم (قابل اعتمادتر است)
+            // سپس از assignmentType استفاده می‌کنیم
+            const isCompanyAssigned = 
+                // بررسی بر اساس status
+                ann.status === FreightAnnouncementStatus.PendingCompanyAssignment ||
+                statusStr === 'PendingCompanyAssignment' ||
+                statusStr === 'در انتظار تخصیص ترابری شرکت' ||
+                // بررسی بر اساس assignmentType
+                assignmentTypeStr === 'company' || 
+                assignmentTypeStr === 'شرکتی' ||
+                // برای status‌های Assigned و InTransit، از assignmentType استفاده می‌کنیم
+                ((ann.status === FreightAnnouncementStatus.Assigned || ann.status === FreightAnnouncementStatus.InTransit) && 
+                 (assignmentTypeStr === 'company' || assignmentTypeStr === 'شرکتی'));
+            
+            const isPersonalAssigned = 
+                // بررسی بر اساس status
+                ann.status === FreightAnnouncementStatus.PendingPersonalAssignment ||
+                statusStr === 'PendingPersonalAssignment' ||
+                statusStr === 'در انتظار تخصیص ترابری شخصی' ||
+                // بررسی بر اساس assignmentType
+                assignmentTypeStr === 'personal' || 
+                assignmentTypeStr === 'شخصی' ||
+                // برای status‌های Assigned و InTransit، از assignmentType استفاده می‌کنیم
+                ((ann.status === FreightAnnouncementStatus.Assigned || ann.status === FreightAnnouncementStatus.InTransit) && 
+                 (assignmentTypeStr === 'personal' || assignmentTypeStr === 'شخصی'));
+            
+            // اگر کاربر ترابری شرکت است و بار به ترابری شخصی ارجاع شده، یا برعکس، همه اکشن‌ها غیرفعال
+            const isAssignedToOtherTransport = (isCompanyUser && isPersonalAssigned) || (isPersonalUser && isCompanyAssigned);
+            
+            // لاگ برای دیباگ - برای همه بارها (نه فقط ترابری)
+            console.log('🔍 [FreightDashboard] Transport assignment check:', {
+                annId: ann.id,
+                annCode: ann.announcementCode,
+                userRole: currentUser?.role,
+                assignmentType: ann.assignmentType,
+                assignmentTypeStr,
+                status: ann.status,
+                statusStr,
+                isCompanyUser,
+                isPersonalUser,
+                isCompanyAssigned,
+                isPersonalAssigned,
+                isAssignedToOtherTransport,
+                assignedDriverId: ann.assignedDriverId
+            });
+            
             // تشخیص اینکه آیا دکمه تاریخچه نمایش داده بشه - همه پرسنل می‌تونن ببینن
             const showHistory = [
                 FreightAnnouncementStatus.Draft,
@@ -141,20 +269,37 @@ const columnsConfig = (props: {
             ].includes(ann.status);
             
             // بررسی اینکه آیا Leftover است
-            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || ann.status === 'Leftover';
+            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover;
+            
+            // اگر بار به ترابری دیگر ارجاع شده، همه اکشن‌ها غیرفعال (قبل از همه چک‌ها)
+            // این باید در ابتدای تابع بررسی شود تا همه حالات را پوشش دهد
+            if (isAssignedToOtherTransport) {
+                console.log('🔍 [FreightDashboard] Bar assigned to other transport:', {
+                    annId: ann.id,
+                    annCode: ann.announcementCode,
+                    userRole: currentUser?.role,
+                    assignmentType: ann.assignmentType,
+                    status: ann.status,
+                    isCompanyUser,
+                    isPersonalUser,
+                    isCompanyAssigned,
+                    isPersonalAssigned
+                });
+                return <span className="text-xs text-slate-400">-</span>;
+            }
             
             // تایید/رد مدیر
-            if (currentUser.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
+            if (currentUser?.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
                 return (
                     <div className="flex justify-center gap-1">
-                        <button onClick={() => onApprove(ann.id)} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600">تایید</button>
-                        <button onClick={() => onReject(ann.id)} className="px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600">رد</button>
+                        <button onClick={() => onApprove?.(ann.id)} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600">تایید</button>
+                        <button onClick={() => onReject?.(ann.id)} className="px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600">رد</button>
                     </div>
                 );
             }
             
             // دکمه تاریخچه برای مدیر برنامه‌ریزی (بدون دکمه‌های ارجاع)
-            if (currentUser.role === UserRole.PlanningManager && showHistory) {
+            if (currentUser?.role === UserRole.PlanningManager && showHistory) {
                 return (
                     <div className="flex justify-center gap-1">
                         <button 
@@ -170,11 +315,11 @@ const columnsConfig = (props: {
             }
             
             // برای Leftover: اعلام مجدد، ویرایش، حذف، تاریخچه
-            if (isLeftover && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === UserRole.PlanningManager)) {
+            if (isLeftover && (currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager)) {
                 return (
                     <div className="flex justify-center gap-1">
-                        <button onClick={() => onReAnnounce && onReAnnounce(ann.id)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">اعلام مجدد</button>
-                        <button onClick={() => onEdit(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
+                        <button onClick={() => onReAnnounce?.(ann.id)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">اعلام مجدد</button>
+                        <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
                         <button type="button" onClick={() => { try { console.log('🗑️ [FreightDashboard] Delete click:', ann.id); } catch {} try { onDelete && onDelete(ann.id); } catch (e) { console.error('❌ [FreightDashboard] Delete failed:', e); } }} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
                         {props.onOpenHistory && (
                             <button 
@@ -190,19 +335,88 @@ const columnsConfig = (props: {
                 );
             }
             
+            // درخواست تغییر: دکمه‌های ویرایش، ارجاع، تاریخچه و خارج کردن از کارتابل برای planner
+            if (ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                const changeReq = (props?.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+                if (changeReq && (currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager)) {
+                    return (
+                        <div className="flex justify-center gap-1 flex-wrap">
+                            <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
+                            <button onClick={() => onSendForApproval?.(ann)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">ارجاع</button>
+                            {props?.onOpenHistory && (
+                                <button 
+                                    onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
+                                    className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                                    title="مشاهده تاریخچه تغییرات"
+                                >
+                                    <HistoryIcon className="w-4 h-4" />
+                                    <span>تاریخچه</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    if (confirm('آیا می‌خواهید این درخواست را از کارتابل خارج کنید؟')) {
+                                        props?.onArchiveChangeRequest?.(changeReq.id);
+                                    }
+                                }}
+                                className="px-3 py-1 bg-orange-500 text-white rounded text-xs hover:bg-orange-600"
+                            >
+                                از کارتابل خارج شود
+                            </button>
+                        </div>
+                    );
+                }
+                // اگر changeReq پیدا نشد یا کاربر planner نیست، فقط تاریخچه نمایش بده
+                if (props?.onOpenHistory) {
+                    return (
+                        <div className="flex justify-center gap-1">
+                            <button 
+                                onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
+                                className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                                title="مشاهده تاریخچه تغییرات"
+                            >
+                                <HistoryIcon className="w-4 h-4" />
+                                <span>تاریخچه</span>
+                            </button>
+                        </div>
+                    );
+                }
+            }
+            
             // ویرایش/حذف (کارمند و مدیر برنامه‌ریزی) - فقط برای Draft و Rejected
-            if ((currentUser.role === UserRole.PlanningEmployee || currentUser.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
+            if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
                  return (
                     <div className="flex justify-center gap-1">
-                        <button onClick={() => onEdit(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
-                        <button onClick={() => onSendForApproval(ann)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">ارجاع</button>
+                        <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
+                        <button onClick={() => onSendForApproval?.(ann)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">ارجاع</button>
                         <button type="button" onClick={() => { try { console.log('🗑️ [FreightDashboard] Delete click:', ann.id); } catch {} try { onDelete && onDelete(ann.id); } catch (e) { console.error('❌ [FreightDashboard] Delete failed:', e); } }} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
                     </div>
                  );
             }
             
-            // دکمه تاریخچه برای همه پرسنل (شامل ترابری شرکتی و شخصی)
-            if (props.onOpenHistory) {
+            // برای Archived: ویرایش و ارجاع (برای بازگرداندن به چرخه)
+            if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager) && ann.status === FreightAnnouncementStatus.Archived) {
+                return (
+                    <div className="flex justify-center gap-1">
+                        <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
+                        <button onClick={() => onSendForApproval?.(ann)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">ارجاع</button>
+                        {props?.onOpenHistory && (
+                            <button 
+                                onClick={() => props.onOpenHistory(ann.id, ann.announcementCode)} 
+                                className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                                title="مشاهده تاریخچه تغییرات"
+                            >
+                                <HistoryIcon className="w-4 h-4" />
+                                <span>تاریخچه</span>
+                            </button>
+                        )}
+                    </div>
+                );
+            }
+            
+            // دکمه تاریخچه برای همه پرسنل (شامل ترابری شرکتی و شخصی) - fallback
+            // این باید همیشه نمایش داده شود اگر onOpenHistory موجود باشد
+            if (props?.onOpenHistory) {
                 return (
                     <div className="flex justify-center gap-1">
                         <button 
@@ -217,18 +431,20 @@ const columnsConfig = (props: {
                 );
             }
             
+            // اگر هیچ دکمه‌ای نمایش داده نشد، یک placeholder نمایش بده
             return <span className="text-xs text-slate-400">-</span>;
         }}
     ];
 };
 
 const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
-    const { announcements, onAddAnnouncement, onUpdateAnnouncement, onApprove, onReject, onDelete, onReAnnounce, currentUser, onSendForApproval } = props;
+    const { announcements, onAddAnnouncement, onUpdateAnnouncement, onApprove, onReject, onDelete, onReAnnounce, currentUser, onSendForApproval, changeRequests = [], loadingChangeRequests = false, onFetchChangeRequests, onApproveChangeRequest, onRejectChangeRequest, onArchiveChangeRequest } = props;
     
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelData, setPanelData] = useState<FreightAnnouncement | null>(null); // null for new, object for edit
 
     const [rejectInfo, setRejectInfo] = useState<{ id: string; reason: string } | null>(null);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
     const [activeTab, setActiveTab] = useState<FreightLineType>(FreightLineType.IceCream);
     const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
@@ -285,6 +501,140 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         }
     };
 
+    const handleToggleSelect = (id: string) => {
+        setSelectedIds(prev => 
+            prev.includes(id) 
+                ? prev.filter(selectedId => selectedId !== id)
+                : [...prev, id]
+        );
+    };
+
+    const handleBulkSendForApproval = async () => {
+        if (selectedIds.length === 0) {
+            alert('لطفاً حداقل یک اعلام بار را انتخاب کنید');
+            return;
+        }
+        if (!confirm(`آیا می‌خواهید ${selectedIds.length} اعلام بار را ارجاع دهید؟`)) {
+            return;
+        }
+        try {
+            // فیلتر بر اساس lineType فعلی (پاستوریزه، بستنی، لبنیات-فروتلند)
+            const currentLineTypeAnnouncements = announcements.filter(ann => ann.lineType === activeTab);
+            console.log('🔍 [handleBulkSendForApproval] Current lineType:', activeTab, 'Total announcements:', currentLineTypeAnnouncements.length);
+            
+            const selectedAnnouncements = currentLineTypeAnnouncements.filter(ann => {
+                if (!selectedIds.includes(ann.id)) return false;
+                const statusStr = String(ann.status);
+                const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
+                const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
+                const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
+                const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
+                const isSelectable = isDraft || isRejected || isLeftover || isPendingApproval;
+                console.log('🔍 [handleBulkSendForApproval] Announcement:', ann.announcementCode, 'lineType:', ann.lineType, 'status:', ann.status, 'isSelectable:', isSelectable);
+                return isSelectable;
+            });
+            
+            console.log('🔍 [handleBulkSendForApproval] Selected announcements:', selectedAnnouncements.length, selectedAnnouncements.map(a => ({ code: a.announcementCode, lineType: a.lineType, status: a.status })));
+            
+            if (selectedAnnouncements.length === 0) {
+                alert('هیچ اعلام باری برای ارجاع یافت نشد. فقط اعلام بارهای پیش‌نویس، رد شده، بار مانده یا در انتظار تایید مدیر قابل انتخاب هستند.');
+                setSelectedIds([]);
+                return;
+            }
+
+            // تقسیم بارها به دو دسته:
+            // 1. بارهای PendingManagerApproval: باید تایید شوند (onApprove) تا به ترابری ارجاع شوند
+            // 2. بارهای Draft/Rejected/Leftover: باید ارجاع شوند (onSendForApproval) تا به مدیر ارجاع شوند
+            const announcementsToApprove = selectedAnnouncements.filter(ann => {
+                const statusStr = String(ann.status);
+                return ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
+            });
+            
+            const announcementsToSend = selectedAnnouncements.filter(ann => {
+                const statusStr = String(ann.status);
+                const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
+                const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
+                const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
+                return isDraft || isRejected || isLeftover;
+            });
+            
+            // اگر هیچ باری برای ارجاع یا تایید وجود ندارد
+            if (announcementsToApprove.length === 0 && announcementsToSend.length === 0) {
+                alert('هیچ اعلام باری برای ارجاع یافت نشد.');
+                setSelectedIds([]);
+                return;
+            }
+            
+            let successCount = 0;
+            let errorCount = 0;
+            const errors: string[] = [];
+            
+            // تایید بارهای PendingManagerApproval (ارجاع به ترابری)
+            await Promise.allSettled(announcementsToApprove.map(async (ann) => {
+                try {
+                    if (onApprove) {
+                        await onApprove(ann.id);
+                    } else {
+                        await onUpdateAnnouncement({ ...ann, status: FreightAnnouncementStatus.PendingCompanyAssignment });
+                    }
+                    successCount++;
+                } catch (error: any) {
+                    errorCount++;
+                    errors.push(`بار ${ann.announcementCode}: ${error.message || 'خطای نامشخص'}`);
+                }
+            }));
+            
+            // ارجاع بارهای Draft/Rejected/Leftover (ارجاع به مدیر)
+            await Promise.allSettled(announcementsToSend.map(async (ann) => {
+                try {
+                    if (onSendForApproval) {
+                        // ارسال بدون نمایش نوتیفیکیشن (پارامتر دوم false)
+                        await (onSendForApproval as any)(ann, false);
+                    } else {
+                        await onUpdateAnnouncement({ ...ann, status: FreightAnnouncementStatus.PendingManagerApproval });
+                    }
+                    successCount++;
+                } catch (error: any) {
+                    errorCount++;
+                    errors.push(`بار ${ann.announcementCode}: ${error.message || 'خطای نامشخص'}`);
+                }
+            }));
+            
+            setSelectedIds([]);
+            
+            // نمایش یک نوتیفیکیشن واحد
+            const approveCount = announcementsToApprove.length;
+            const sendCount = announcementsToSend.length;
+            let message = '';
+            
+            if (errorCount === 0) {
+                if (approveCount > 0 && sendCount > 0) {
+                    message = `${approveCount} اعلام بار تایید شد و ${sendCount} اعلام بار ارجاع شد`;
+                } else if (approveCount > 0) {
+                    message = `${approveCount} اعلام بار با موفقیت تایید شد و به ترابری ارجاع شد`;
+                } else if (sendCount > 0) {
+                    message = `${sendCount} اعلام بار با موفقیت ارجاع شد`;
+                }
+                alert(message);
+            } else if (successCount > 0) {
+                if (approveCount > 0 && sendCount > 0) {
+                    message = `${successCount} اعلام بار با موفقیت پردازش شد (${approveCount} تایید، ${sendCount} ارجاع)، ${errorCount} مورد ناموفق بود`;
+                } else if (approveCount > 0) {
+                    message = `${successCount} اعلام بار با موفقیت تایید شد، ${errorCount} مورد ناموفق بود`;
+                } else if (sendCount > 0) {
+                    message = `${successCount} اعلام بار با موفقیت ارجاع شد، ${errorCount} مورد ناموفق بود`;
+                }
+                alert(message);
+            } else {
+                alert(`خطا در پردازش: ${errors.join('، ')}`);
+            }
+        } catch (error) {
+            console.error('Bulk send for approval failed:', error);
+            alert('خطا در ارجاع دسته‌ای');
+        }
+    };
+
+
     const hasAccess = (allowedRoles: UserRole[]): boolean => {
         if (currentUser.role === UserRole.Admin) return true;
         return allowedRoles.includes(currentUser.role);
@@ -307,12 +657,18 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             onEdit: handleOpenEditPanel, 
             onSendForApproval: handleSendForApproval, 
             onDelete: onDelete,
+            changeRequests: changeRequests,
             onReAnnounce: onReAnnounce,
-            onOpenHistory: handleOpenHistory 
+            onOpenHistory: handleOpenHistory,
+            onApproveChangeRequest: onApproveChangeRequest,
+            onRejectChangeRequest: onRejectChangeRequest,
+            onArchiveChangeRequest: onArchiveChangeRequest,
+            selectedIds: selectedIds,
+            onToggleSelect: handleToggleSelect
         });
         try { console.log('[DBG][FreightDashboard] allColumns headers:', cols.map((c:any)=>c.header)); } catch {}
         return cols;
-    }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete, onReAnnounce]);
+    }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete, onReAnnounce, selectedIds]);
 
     useEffect(() => {
         if (routeSearchTimeout.current) {
@@ -351,7 +707,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const visibleColumns = useMemo(() => {
         // Enforce exact order for Dairy compact
         if (viewMode === 'compact' && activeTab === FreightLineType.Dairy) {
-            const dairyCompactCols: any[] = [
+            const checkboxCol = allColumns.find((c: any) => c.header === '');
+            const dairyCompactCols: any[] = checkboxCol ? [checkboxCol] : [];
+            dairyCompactCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
@@ -370,9 +728,19 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-            ];
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+                }},
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+                    if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                        const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                        return desc || '-';
+                    }
+                    return ann.rejectionReason || '-';
+                }},
+            );
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) dairyCompactCols.push(action);
             try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-compact):', dairyCompactCols.map((c:any)=>c.header)); } catch {}
@@ -381,7 +749,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
 
         // Enforce exact order for Ambient compact (mirror Dairy compact)
         if (viewMode === 'compact' && activeTab === FreightLineType.Ambient) {
-            const ambientCompactCols: any[] = [
+            const checkboxCol = allColumns.find((c: any) => c.header === '');
+            const ambientCompactCols: any[] = checkboxCol ? [checkboxCol] : [];
+            ambientCompactCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
@@ -400,9 +770,19 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-            ];
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+                }},
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+                    if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                        const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                        return desc || '-';
+                    }
+                    return ann.rejectionReason || '-';
+                }},
+            );
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) ambientCompactCols.push(action);
             try { console.log('[DBG][FreightDashboard] visibleColumns (ambient-compact):', ambientCompactCols.map((c:any)=>c.header)); } catch {}
@@ -411,7 +791,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
 
         // Enforce exact order for Dairy full (before grouped destinations)
         if (viewMode === 'full' && activeTab === FreightLineType.Dairy) {
-            const dairyFullCommonCols: any[] = [
+            const checkboxCol = allColumns.find((c: any) => c.header === '');
+            const dairyFullCommonCols: any[] = checkboxCol ? [checkboxCol] : [];
+            dairyFullCommonCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
@@ -419,9 +801,19 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-            ];
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+                }},
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+                    if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                        const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                        return desc || '-';
+                    }
+                    return ann.rejectionReason || '-';
+                }},
+            );
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) dairyFullCommonCols.push(action);
             try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-full):', dairyFullCommonCols.map((c:any)=>c.header)); } catch {}
@@ -430,7 +822,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
 
         // Enforce exact order for Ambient full (mirror Dairy full)
         if (viewMode === 'full' && activeTab === FreightLineType.Ambient) {
-            const ambientFullCommonCols: any[] = [
+            const checkboxCol = allColumns.find((c: any) => c.header === '');
+            const ambientFullCommonCols: any[] = checkboxCol ? [checkboxCol] : [];
+            ambientFullCommonCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
@@ -438,9 +832,19 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
-            ];
+                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
+                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+                }},
+                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                    const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
+                    if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                        const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
+                        return desc || '-';
+                    }
+                    return ann.rejectionReason || '-';
+                }},
+            );
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) ambientFullCommonCols.push(action);
             try { console.log('[DBG][FreightDashboard] visibleColumns (ambient-full):', ambientFullCommonCols.map((c:any)=>c.header)); } catch {}
@@ -512,6 +916,36 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         return data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns]);
 
+    // Helper function to check if an announcement is selectable
+    const isAnnouncementSelectable = useCallback((ann: FreightAnnouncement) => {
+        const statusStr = String(ann.status);
+        const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
+        const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
+        const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
+        const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
+        return isDraft || isRejected || isLeftover || isPendingApproval;
+    }, []);
+
+    const handleSelectAll = useCallback(() => {
+        console.log('[handleSelectAll] Total filteredAnnouncements:', filteredAnnouncements.length);
+        console.log('[handleSelectAll] All statuses:', filteredAnnouncements.map(a => ({ id: a.id, status: a.status, statusEnum: FreightAnnouncementStatus.Draft, statusMatch: a.status === FreightAnnouncementStatus.Draft || a.status === 'پیش‌نویس' || a.status === 'Draft' })));
+        
+        // بررسی تطابق با enum و همچنین مقادیر رشته‌ای
+        const selectableAnnouncements = filteredAnnouncements.filter(isAnnouncementSelectable);
+        
+        console.log('[handleSelectAll] Selectable announcements:', selectableAnnouncements.length, selectableAnnouncements.map(a => ({ id: a.id, status: a.status })));
+        console.log('[handleSelectAll] Current selectedIds:', selectedIds);
+        const allSelected = selectableAnnouncements.length > 0 && selectableAnnouncements.every(ann => selectedIds.includes(ann.id));
+        console.log('[handleSelectAll] All selected?', allSelected);
+        if (allSelected) {
+            setSelectedIds([]);
+        } else {
+            const newSelectedIds = selectableAnnouncements.map(ann => ann.id);
+            console.log('[handleSelectAll] Setting new selectedIds:', newSelectedIds);
+            setSelectedIds(newSelectedIds);
+        }
+    }, [filteredAnnouncements, selectedIds, isAnnouncementSelectable]);
+
     const handlePrint = () => {
         window.print();
     };
@@ -578,6 +1012,14 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                             <h2 className="text-xl font-bold text-slate-800 flex items-center"><DocumentTextIcon className="w-6 h-6 mr-2 text-sky-600" />برنامه ریزی و اعلام بار</h2>
                             <div className="flex items-center gap-2 flex-wrap justify-end">
                                 <input type="text" placeholder="جستجوی کلی..." value={filter} onChange={e => setFilter(e.target.value)} className="input-style w-40"/>
+                                {selectedIds.length > 0 && (
+                                    <button 
+                                        onClick={handleBulkSendForApproval} 
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                    >
+                                        ارجاع انتخابی ({selectedIds.length})
+                                    </button>
+                                )}
                                 <button onClick={handleExportToCSV} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"><DocumentArrowDownIcon className="w-4 h-4" />اکسل</button>
                                 <button onClick={handlePrint} className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700"><PrinterIcon className="w-4 h-4" />چاپ</button>
                                 <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
@@ -591,12 +1033,24 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                 <button key={lt} onClick={() => setActiveTab(lt as any)} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === lt ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>{lt}</button>
                             ))}
                         </div>
+                        {(
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="text-xs uppercase bg-gray-50">
                                      {isFullDairyAmbient ? (
                                         <>
                                             <tr>
+                                                    <th rowSpan={2} className="p-2 text-center" style={{ width: '40px' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={(() => {
+                                                                const selectable = filteredAnnouncements.filter(isAnnouncementSelectable);
+                                                                return selectable.length > 0 && selectable.every(ann => selectedIds.includes(ann.id));
+                                                            })()}
+                                                            onChange={handleSelectAll}
+                                                            className="cursor-pointer"
+                                                        />
+                                                    </th>
                                                 {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center" style={{ width: col.width }}>{col.header}</th>)}
                                                 <th colSpan={5} className="p-2 text-center border-x">مقصد اول</th>
                                                 <th colSpan={5} className="p-2 text-center border-x">مقصد دوم</th>
@@ -618,7 +1072,21 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                         </>
                                     ) : (
                                         <tr>
-                                            {visibleColumns.map(col => <th key={col.header} className="p-2 text-center" style={{ width: col.width }}>{col.header}</th>)}
+                                                {visibleColumns.map(col => (
+                                                    <th key={col.header} className="p-2 text-center" style={{ width: col.width }}>
+                                                        {col.header === '' ? (
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={(() => {
+                                                                const selectable = filteredAnnouncements.filter(isAnnouncementSelectable);
+                                                                return selectable.length > 0 && selectable.every(ann => selectedIds.includes(ann.id));
+                                                            })()}
+                                                                onChange={handleSelectAll}
+                                                                className="cursor-pointer"
+                                                            />
+                                                        ) : col.header}
+                                                    </th>
+                                                ))}
                                         </tr>
                                     )}
                                     <tr className="print:hidden">
@@ -643,7 +1111,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                         <tr key={ann.id} className="border-b hover:bg-slate-50">
                                              {isFullDairyAmbient ? (
                                                 <>
-                                                    {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, props, activeTab as FreightLineType)}</td>)}
+                                                    {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>)}
                                                     {[0, 1, 2, 3].map(i => {
                                                         const dest = ann.destinations[i];
                                                         return (
@@ -656,10 +1124,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             </React.Fragment>
                                                         );
                                                     })}
-                                                    {actionCol && <td className="p-2 text-center">{actionCol.render(ann, idx, props, activeTab as FreightLineType)}</td>}
+                                                        {actionCol && <td className="p-2 text-center">{actionCol.render(ann, idx, { ...props, onOpenHistory: handleOpenHistory, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete, onApprove: onApprove, onReject: handleOpenRejectDialog, onReAnnounce: onReAnnounce, changeRequests: changeRequests, onApproveChangeRequest: onApproveChangeRequest, onRejectChangeRequest: onRejectChangeRequest, onArchiveChangeRequest: onArchiveChangeRequest, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>}
                                                 </>
                                             ) : (
-                                                visibleColumns.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, props, activeTab as FreightLineType)}</td>)
+                                                    visibleColumns.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { changeRequests: changeRequests, onApproveChangeRequest: onApproveChangeRequest, onRejectChangeRequest: onRejectChangeRequest, onArchiveChangeRequest: onArchiveChangeRequest, onOpenHistory: handleOpenHistory, currentUser, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete, onApprove: onApprove, onReject: handleOpenRejectDialog, onReAnnounce: onReAnnounce, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>)
                                             )}
                                         </tr>
                                     ))}
@@ -669,6 +1137,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                 </tbody>
                             </table>
                         </div>
+                        )}
                     </div>
                 </div>
             </main>

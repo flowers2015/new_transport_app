@@ -32,6 +32,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 Cancelled: FreightAnnouncementStatus.Cancelled,
                 ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
                 Leftover: FreightAnnouncementStatus.Leftover,
+                ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
+                Archived: FreightAnnouncementStatus.Archived,
             };
             const normalize = (a: any): FreightAnnouncement => ({
                 id: a.id,
@@ -324,7 +326,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
-    const handleSendForApproval = async (announcement: FreightAnnouncement) => {
+    const handleSendForApproval = async (announcement: FreightAnnouncement, showNotification: boolean = true) => {
         try {
             console.log('📤 [FreightPlanning] Send for approval:', announcement.id);
             const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcement.id}`, {
@@ -354,10 +356,87 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 throw new Error(errorText || 'خطا در ارجاع');
             }
             await fetchAnnouncements();
-            alert('اعلام بار با موفقیت برای تایید ارسال شد');
+            if (showNotification) {
+                alert('اعلام بار با موفقیت برای تایید ارسال شد');
+            }
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Send for approval failed:', e);
-            alert(e.message || 'ارجاع ناموفق بود');
+            if (showNotification) {
+                alert(e.message || 'ارجاع ناموفق بود');
+            }
+            throw e; // پرتاب خطا برای مدیریت در bulk operation
+        }
+    };
+
+    const [changeRequests, setChangeRequests] = useState<any[]>([]);
+    const [loadingChangeRequests, setLoadingChangeRequests] = useState(false);
+
+    const fetchChangeRequests = async () => {
+        try {
+            setLoadingChangeRequests(true);
+            const res = await fetch('http://localhost:3000/api/v1/freight-announcements/change-requests?status=requested', { headers });
+            if (!res.ok) throw new Error('Failed to fetch change requests');
+            const data = await res.json();
+            setChangeRequests(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('[FreightPlanning] Failed to load change requests', err);
+        } finally {
+            setLoadingChangeRequests(false);
+        }
+    };
+
+    // دریافت خودکار درخواست‌های تغییر هنگام بارگذاری
+    useEffect(() => {
+        fetchChangeRequests();
+    }, []);
+
+    const handleApproveChangeRequest = async (requestId: string, newAnnouncements?: any[]) => {
+        try {
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/change-requests/${requestId}/approve`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ newAnnouncements }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            alert('درخواست با موفقیت تأیید شد');
+            await fetchChangeRequests();
+            await fetchAnnouncements();
+        } catch (e: any) {
+            console.error('❌ [FreightPlanning] Approve change request failed:', e);
+            alert(e.message || 'تأیید ناموفق بود');
+        }
+    };
+
+    const handleRejectChangeRequest = async (requestId: string, reviewNote?: string) => {
+        try {
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/change-requests/${requestId}/reject`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ reviewNote }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            alert('درخواست رد شد');
+            await fetchChangeRequests();
+            await fetchAnnouncements();
+        } catch (e: any) {
+            console.error('❌ [FreightPlanning] Reject change request failed:', e);
+            alert(e.message || 'رد ناموفق بود');
+        }
+    };
+
+    const handleArchiveChangeRequest = async (requestId: string) => {
+        try {
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/change-requests/${requestId}/archive`, {
+                method: 'POST',
+                headers,
+            });
+            if (!res.ok) throw new Error(await res.text());
+            alert('درخواست از کارتابل خارج شد');
+            await fetchChangeRequests();
+            await fetchAnnouncements();
+        } catch (e: any) {
+            console.error('❌ [FreightPlanning] Archive change request failed:', e);
+            alert(e.message || 'خارج کردن از کارتابل ناموفق بود');
         }
     };
 
@@ -376,6 +455,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 onSearchRoutes={searchRouteSuggestions}
                 currentUser={currentUser}
                 onSwitchQueue={handleSwitchQueue as any}
+                changeRequests={changeRequests}
+                loadingChangeRequests={loadingChangeRequests}
+                onFetchChangeRequests={fetchChangeRequests}
+                onApproveChangeRequest={handleApproveChangeRequest}
+                onRejectChangeRequest={handleRejectChangeRequest}
+                onArchiveChangeRequest={handleArchiveChangeRequest}
             />
         </div>
     );

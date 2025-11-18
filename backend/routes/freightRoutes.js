@@ -22,6 +22,11 @@ const {
   getLineAnalytics,
   cancelAssignment,
   searchDispatchRoutes,
+  createChangeRequest,
+  listChangeRequests,
+  approveChangeRequest,
+  rejectChangeRequest,
+  archiveChangeRequest,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -75,6 +80,14 @@ router.get(
   getFreightAnnouncementHistory
 );
 
+// List change requests for planners (must be before /:id route)
+router.get(
+  '/change-requests',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  listChangeRequests
+);
+
 router.get('/:id', authenticateToken, getFreightAnnouncementById);
 
 // Create a new freight announcement
@@ -126,6 +139,37 @@ router.post(
   authenticateToken,
   authorizeRole(['transport_user', 'personal_transport_user']),
   cancelAssignment
+);
+
+// Create change/split/merge request by transport
+router.post(
+  '/:id/change-request',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user']),
+  createChangeRequest
+);
+
+// Approve/Reject change requests
+router.post(
+  '/change-requests/:id/approve',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  approveChangeRequest
+);
+
+router.post(
+  '/change-requests/:id/reject',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  rejectChangeRequest
+);
+
+// Archive change request (remove from queue)
+router.post(
+  '/change-requests/:id/archive',
+  authenticateToken,
+  authorizeRole(['planner', 'planner_manager', 'admin']),
+  archiveChangeRequest
 );
 
 // Switch assignment queue between company/personal

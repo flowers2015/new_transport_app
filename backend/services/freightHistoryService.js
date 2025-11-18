@@ -219,6 +219,10 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       'Delivered': 'تحویل داده شده',
       'Cancelled': 'لغو شده',
       'Rejected': 'رد شده',
+      'ChangeRequested': 'درخواست تغییر',
+      'Reannounced': 'اعلام مجدد شده',
+      'Leftover': 'بار مانده',
+      'Archived': 'بایگانی شده',
       'رد شده': 'رد شده',
       'پیش‌نویس': 'پیش‌نویس',
       'در انتظار تایید مدیر': 'در انتظار تایید مدیر',
@@ -227,7 +231,11 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       'تخصیص یافته': 'تخصیص یافته',
       'در حال حمل': 'در حال حمل',
       'تحویل داده شده': 'تحویل داده شده',
-      'لغو شده': 'لغو شده'
+      'لغو شده': 'لغو شده',
+      'درخواست تغییر': 'درخواست تغییر',
+      'اعلام مجدد شده': 'اعلام مجدد شده',
+      'بار مانده': 'بار مانده',
+      'بایگانی شده': 'بایگانی شده'
     };
     
     const oldStatusLabel = statusLabels[oldStatus] || oldStatus;
@@ -285,6 +293,13 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
         continue;
       }
       
+      // اگر وضعیت از Draft یا Leftover به PendingManagerApproval تغییر کرده، فقط تغییر وضعیت را نمایش بده
+      // تغییرات کرایه و سایر فیلدها در این مرحله معنی ندارند
+      if (field === 'total_freight_cost' || field === 'totalFreightCost') {
+        // همیشه کرایه کل را نمایش نده (در همه حالات)
+        continue;
+      }
+      
       // تغییرات مقاصد
       if (field.startsWith('destination_')) {
         if (field.endsWith('_added')) {
@@ -300,7 +315,7 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
           if (change.representativeName) subChanges.push('نام نماینده');
           if (change.tonnage) subChanges.push('تناژ');
           if (change.unloadTime) subChanges.push('ساعت تخلیه');
-          if (change.freightCost) subChanges.push(`کرایه (${formatNumber(change.freightCost.old)} ← ${formatNumber(change.freightCost.new)})`);
+          if (change.freightCost) subChanges.push(`کرایه (از ${formatNumber(change.freightCost.old)} به ${formatNumber(change.freightCost.new)})`);
           
           if (subChanges.length > 0) {
             descriptions.push(`مقصد ${destNum}: ${subChanges.join('، ')}`);
@@ -310,7 +325,7 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
         // ترجمه صف تخصیص
         const oldQueue = change.old === 'company' ? 'شرکتی' : change.old === 'personal' ? 'شخصی' : change.old;
         const newQueue = change.new === 'company' ? 'شرکتی' : change.new === 'personal' ? 'شخصی' : change.new;
-        descriptions.push(`صف تخصیص: ${oldQueue || '-'} ← ${newQueue}`);
+        descriptions.push(`صف تخصیص: از ${oldQueue || '-'} به ${newQueue}`);
       } else {
         const label = fieldLabels[field] || field;
         
@@ -318,9 +333,9 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
         if (['cargoValue', 'cartonCount'].includes(field)) {
           // اگه هر دو مقدار معتبر باشند
           if ((change.old !== null && change.old !== undefined) || (change.new !== null && change.new !== undefined)) {
-            descriptions.push(`${label}: ${formatNumber(change.old)} ← ${formatNumber(change.new)}`);
+            descriptions.push(`${label}: از ${formatNumber(change.old)} به ${formatNumber(change.new)}`);
           }
-        } else if (field === 'totalFreightCost') {
+        } else if (field === 'totalFreightCost' || field === 'total_freight_cost') {
           // totalFreightCost رو نمایش نده (حذف شده)
           continue;
         } else if (field === 'products') {
@@ -350,7 +365,10 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       PAYMENT_RECORDED: 'اطلاعات پرداخت ثبت شد',
       PAYMENT_CONFIRMED: 'پرداخت تایید شد',
       DELETED: 'اعلام بار حذف شد',
-      REANNOUNCED: 'اعلام بار مجدد انجام شد'
+      REANNOUNCED: 'اعلام بار مجدد انجام شد',
+      ARCHIVED: 'اعلام بار بایگانی شد',
+      CHANGE_REQUESTED: 'درخواست تغییر / تقسیم',
+      CANCELLED: 'لغو تخصیص'
     };
     return actionLabels[action] || 'تغییر انجام شد';
   }

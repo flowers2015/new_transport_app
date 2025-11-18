@@ -108,6 +108,22 @@ const ActionIcon: React.FC<{ action: string }> = ({ action }) => {
           </svg>
         </div>
       );
+    case 'CHANGE_REQUESTED':
+      return (
+        <div className="bg-orange-100 p-2 rounded-full">
+          <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </div>
+      );
+    case 'CANCELLED':
+      return (
+        <div className="bg-red-100 p-2 rounded-full">
+          <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+      );
     default:
       return (
         <div className="bg-gray-100 p-2 rounded-full">
@@ -120,7 +136,7 @@ const ActionIcon: React.FC<{ action: string }> = ({ action }) => {
 };
 
 // نمایش تغییرات فیلد (اگر موجود باشد)
-const FieldChangesDetails: React.FC<{ fieldChanges: any }> = ({ fieldChanges }) => {
+const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: string]: { name: string; employeeId: string } }; vehicleMap?: { [key: string]: { plate: string; model?: string } } }> = ({ fieldChanges, driverMap = {}, vehicleMap = {} }) => {
   if (!fieldChanges || Object.keys(fieldChanges).length === 0) {
     return null;
   }
@@ -152,10 +168,10 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any }> = ({ fieldChanges }) 
                 <div key={key} className="text-blue-700">
                   <div className="font-semibold">مقصد {destNum}:</div>
                   <div className="mr-4 space-y-0.5">
-                    {value.city && <div>شهر: {value.city.old} ← {value.city.new}</div>}
-                    {value.tonnage && <div>تناژ: {Number(value.tonnage.old || 0).toLocaleString('fa-IR')} ← {Number(value.tonnage.new || 0).toLocaleString('fa-IR')} کیلوگرم</div>}
-                    {value.freightCost && <div>کرایه: {Number(value.freightCost.old || 0).toLocaleString('fa-IR')} ← {Number(value.freightCost.new || 0).toLocaleString('fa-IR')} ریال</div>}
-                    {value.unloadTime && <div>ساعت تخلیه: {value.unloadTime.old} ← {value.unloadTime.new}</div>}
+                    {value.city && <div>شهر: از {value.city.old} به {value.city.new}</div>}
+                    {value.tonnage && <div>تناژ: از {Number(value.tonnage.old || 0).toLocaleString('fa-IR')} به {Number(value.tonnage.new || 0).toLocaleString('fa-IR')} کیلوگرم</div>}
+                    {value.freightCost && <div>کرایه: از {Number(value.freightCost.old || 0).toLocaleString('fa-IR')} به {Number(value.freightCost.new || 0).toLocaleString('fa-IR')} ریال</div>}
+                    {value.unloadTime && <div>ساعت تخلیه: از {value.unloadTime.old} به {value.unloadTime.new}</div>}
                   </div>
                 </div>
               );
@@ -193,7 +209,9 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any }> = ({ fieldChanges }) 
         representativeName: 'نام نماینده',
         representative_name: 'نام نماینده',
         representativeType: 'نوع نماینده',
-        representative_type: 'نوع نماینده'
+        representative_type: 'نوع نماینده',
+        request_type: 'نوع درخواست',
+        target_queue: 'صف مقصد'
       };
       
       const label = fieldLabels[key] || key;
@@ -202,9 +220,17 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any }> = ({ fieldChanges }) 
       let oldValue = value.old;
       let newValue = value.new;
       
-      if (key === 'assignmentType' || key === 'assignment_type') {
+      if (key === 'assignmentType' || key === 'assignment_type' || key === 'target_queue') {
         oldValue = oldValue === 'company' ? 'شرکتی' : oldValue === 'personal' ? 'شخصی' : oldValue;
         newValue = newValue === 'company' ? 'شرکتی' : newValue === 'personal' ? 'شخصی' : newValue;
+      } else if (key === 'request_type') {
+        const requestTypeLabels: { [key: string]: string } = {
+          'change': 'تغییر نوع خودرو',
+          'split': 'تقسیم',
+          'merge': 'تجمیع'
+        };
+        oldValue = requestTypeLabels[oldValue] || oldValue;
+        newValue = requestTypeLabels[newValue] || newValue;
       } else if (key === 'status') {
         // ترجمه وضعیت‌ها
         const statusLabels: { [key: string]: string } = {
@@ -216,7 +242,10 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any }> = ({ fieldChanges }) 
           'InTransit': 'در حال حمل',
           'Delivered': 'تحویل داده شده',
           'Cancelled': 'لغو شده',
-          'Rejected': 'رد شده'
+          'Rejected': 'رد شده',
+          'ChangeRequested': 'درخواست تغییر',
+          'Reannounced': 'اعلام مجدد شده',
+          'Leftover': 'بار مانده'
         };
         oldValue = statusLabels[oldValue] || oldValue;
         newValue = statusLabels[newValue] || newValue;
@@ -234,13 +263,30 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any }> = ({ fieldChanges }) 
         } catch (e) {
           // اگه تاریخ معتبر نبود، همون مقدار اصلی رو نگه دار
         }
+      } else if (key === 'assigned_driver_id' || key === 'assignedDriverId') {
+        // تبدیل UUID راننده به نام و کد پرسنلی
+        const oldDriver = oldValue ? driverMap[oldValue] : null;
+        const newDriver = newValue ? driverMap[newValue] : null;
+        oldValue = oldDriver ? `${oldDriver.name} (${oldDriver.employeeId})` : (oldValue || '-');
+        newValue = newDriver ? `${newDriver.name} (${newDriver.employeeId})` : (newValue || '-');
+      } else if (key === 'assigned_vehicle_id' || key === 'assignedVehicleId') {
+        // تبدیل UUID خودرو به پلاک
+        const oldVehicle = oldValue ? vehicleMap[oldValue] : null;
+        const newVehicle = newValue ? vehicleMap[newValue] : null;
+        oldValue = oldVehicle ? oldVehicle.plate : (oldValue || '-');
+        newValue = newVehicle ? newVehicle.plate : (newValue || '-');
+      }
+      
+      // فیلتر کردن total_freight_cost و totalFreightCost
+      if (key === 'total_freight_cost' || key === 'totalFreightCost') {
+        return null; // نمایش نده
       }
       
       return (
         <div key={key} className="text-slate-700">
-          {label}: 
+          {label}: از 
           <span className="text-red-600 line-through mx-1">{String(oldValue || '-')}</span>
-          ←
+          به 
           <span className="text-green-600 mx-1">{String(newValue || '-')}</span>
         </div>
       );
@@ -254,6 +300,8 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [driverMap, setDriverMap] = useState<{ [key: string]: { name: string; employeeId: string } }>({});
+  const [vehicleMap, setVehicleMap] = useState<{ [key: string]: { plate: string; model?: string } }>({});
   
   useEffect(() => {
     if (isOpen && announcementId) {
@@ -266,19 +314,76 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/history`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/history`, { headers });
       
       if (!response.ok) {
         throw new Error('خطا در دریافت تاریخچه');
       }
       
       const data: HistoryResponse = await response.json();
-      setHistory(data.history || []);
+      const historyEntries = data.history || [];
+      setHistory(historyEntries);
+      
+      // استخراج UUID های راننده و خودرو از fieldChanges
+      const driverIds = new Set<string>();
+      const vehicleIds = new Set<string>();
+      
+      historyEntries.forEach(entry => {
+        if (entry.field_changes) {
+          Object.entries(entry.field_changes).forEach(([key, value]: [string, any]) => {
+            if ((key === 'assigned_driver_id' || key === 'assignedDriverId') && value?.old) driverIds.add(value.old);
+            if ((key === 'assigned_driver_id' || key === 'assignedDriverId') && value?.new) driverIds.add(value.new);
+            if ((key === 'assigned_vehicle_id' || key === 'assignedVehicleId') && value?.old) vehicleIds.add(value.old);
+            if ((key === 'assigned_vehicle_id' || key === 'assignedVehicleId') && value?.new) vehicleIds.add(value.new);
+          });
+        }
+      });
+      
+      // دریافت اطلاعات رانندگان
+      if (driverIds.size > 0) {
+        try {
+          const driversRes = await fetch('http://localhost:3000/api/v1/drivers', { headers });
+          if (driversRes.ok) {
+            const drivers: any[] = await driversRes.json();
+            const driverMapData: { [key: string]: { name: string; employeeId: string } } = {};
+            drivers.forEach(d => {
+              if (driverIds.has(d.id)) {
+                driverMapData[d.id] = { name: d.name, employeeId: d.employee_id || '' };
+              }
+            });
+            setDriverMap(driverMapData);
+          }
+        } catch (e) {
+          console.error('Failed to fetch drivers:', e);
+        }
+      }
+      
+      // دریافت اطلاعات خودروها
+      if (vehicleIds.size > 0) {
+        try {
+          const vehiclesRes = await fetch('http://localhost:3000/api/v1/vehicles', { headers });
+          if (vehiclesRes.ok) {
+            const vehicles: any[] = await vehiclesRes.json();
+            const vehicleMapData: { [key: string]: { plate: string; model?: string } } = {};
+            vehicles.forEach(v => {
+              if (vehicleIds.has(v.id)) {
+                const plate = v.plate_part1 && v.plate_letter && v.plate_part2 && v.plate_city_code
+                  ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}-${v.plate_city_code}`
+                  : v.vehicle_code || v.model || 'نامشخص';
+                vehicleMapData[v.id] = { plate, model: v.model };
+              }
+            });
+            setVehicleMap(vehicleMapData);
+          }
+        } catch (e) {
+          console.error('Failed to fetch vehicles:', e);
+        }
+      }
     } catch (err: any) {
       console.error('Failed to fetch history:', err);
       setError(err.message || 'خطای ناشناخته');
@@ -361,7 +466,18 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
                           <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
-                          <span className="font-semibold text-slate-700">{entry.user_name}</span>
+                          <span className="font-semibold text-slate-700">
+                            {(() => {
+                              const userLabels: { [key: string]: string } = {
+                                'transport_user': 'کاربر ترابری (شرکت)',
+                                'personal_transport_user': 'کاربر ترابری (شخصی)',
+                                'planner': 'کارمند برنامه‌ریزی',
+                                'planner_manager': 'مدیر برنامه‌ریزی',
+                                'system': 'سیستم'
+                              };
+                              return userLabels[entry.user_name] || entry.user_name;
+                            })()}
+                          </span>
                         </div>
                         <div className="flex items-center gap-1 text-xs text-slate-500">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -379,17 +495,52 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
                       {/* تغییر وضعیت */}
                       {entry.old_status && entry.new_status && entry.old_status !== entry.new_status && (
                         <div className="flex items-center gap-2 text-xs mb-2">
-                          <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded">{entry.old_status}</span>
-                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-semibold">{entry.new_status}</span>
+                          <span className="text-slate-400">از</span>
+                          <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded">
+                            {(() => {
+                              const statusLabels: { [key: string]: string } = {
+                                'Draft': 'پیش‌نویس',
+                                'PendingManagerApproval': 'در انتظار تایید مدیر',
+                                'PendingCompanyAssignment': 'در انتظار تخصیص شرکتی',
+                                'PendingPersonalAssignment': 'در انتظار تخصیص شخصی',
+                                'Assigned': 'تخصیص یافته',
+                                'InTransit': 'در حال حمل',
+                                'Delivered': 'تحویل داده شده',
+                                'Cancelled': 'لغو شده',
+                                'Rejected': 'رد شده',
+                                'ChangeRequested': 'درخواست تغییر',
+                                'Reannounced': 'اعلام مجدد شده',
+                                'Leftover': 'بار مانده'
+                              };
+                              return statusLabels[entry.old_status] || entry.old_status;
+                            })()}
+                          </span>
+                          <span className="text-slate-400">به</span>
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-semibold">
+                            {(() => {
+                              const statusLabels: { [key: string]: string } = {
+                                'Draft': 'پیش‌نویس',
+                                'PendingManagerApproval': 'در انتظار تایید مدیر',
+                                'PendingCompanyAssignment': 'در انتظار تخصیص شرکتی',
+                                'PendingPersonalAssignment': 'در انتظار تخصیص شخصی',
+                                'Assigned': 'تخصیص یافته',
+                                'InTransit': 'در حال حمل',
+                                'Delivered': 'تحویل داده شده',
+                                'Cancelled': 'لغو شده',
+                                'Rejected': 'رد شده',
+                                'ChangeRequested': 'درخواست تغییر',
+                                'Reannounced': 'اعلام مجدد شده',
+                                'Leftover': 'بار مانده'
+                              };
+                              return statusLabels[entry.new_status] || entry.new_status;
+                            })()}
+                          </span>
                         </div>
                       )}
                       
                       {/* جزئیات تغییرات فیلدها */}
                       {entry.field_changes && (
-                        <FieldChangesDetails fieldChanges={entry.field_changes} />
+                        <FieldChangesDetails fieldChanges={entry.field_changes} driverMap={driverMap} vehicleMap={vehicleMap} />
                       )}
                     </div>
                   </div>

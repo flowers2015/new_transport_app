@@ -168,6 +168,8 @@ export enum FreightAnnouncementStatus {
     Cancelled = 'لغو شده',
     ReAnnounced = 'اعلام مجدد شده',
     Leftover = 'بار مانده',
+    ChangeRequested = 'درخواست تغییر',
+    Archived = 'بایگانی شده',
 }
 
 
@@ -790,7 +792,9 @@ export interface DispatchBoardEntry {
         province?: string;
         routeCategory?: string;
         roundTripKm?: number;
+        expectedDays?: number | null;
     } | null;
+    daysSinceAssignment?: number;
 }
 
 export interface DispatchBoardCityColumn {
@@ -816,6 +820,7 @@ export interface DriverPreferenceAssignment {
     announcementId?: string;
     announcementCode?: string;
     stage: string;
+    queueType?: 'far' | 'near' | 'workshop' | 'external' | 'leave' | 'other';
     lineType?: string | null;
     vehicleType?: string | null;
     originCity?: string | null;
@@ -826,6 +831,7 @@ export interface DriverPreferenceAssignment {
     assignedAt: string;
     assignedAtJalali?: string | null;
     queuePosition?: number | null;
+    isCancelled?: boolean;
 }
 
 export interface DriverPreferencePeerAssignment {
@@ -835,6 +841,7 @@ export interface DriverPreferencePeerAssignment {
     employeeId?: string | null;
     stage?: string | null;
     queuePosition?: number | null;
+    queueType?: 'far' | 'near' | 'workshop' | 'external' | 'leave' | 'other';
     lineType?: string | null;
     destinationCity?: string | null;
     roundTripKm?: number | null;
@@ -842,6 +849,7 @@ export interface DriverPreferencePeerAssignment {
     assignedAtJalali?: string | null;
     previousOriginCity?: string | null;
     announcementCode?: string | null;
+    isCancelled?: boolean;
 }
 
 export interface DriverPreferenceOpportunity {

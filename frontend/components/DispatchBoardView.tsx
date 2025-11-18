@@ -74,40 +74,43 @@ const DispatchBoardView: React.FC = () => {
                                     <span className="text-xs text-slate-500">{entries.length} مورد</span>
                                 </div>
                                 <div className="p-3 space-y-2 max-h-80 overflow-auto text-xs">
-                                    {entries.map(entry => (
-                                        <div key={entry.assignmentId} className="border border-slate-200 rounded-lg p-3 space-y-1">
-                                            <div className="flex justify-between text-slate-700">
-                                                <span className="font-semibold">
-                                                    {entry.driver?.name || 'راننده'}
-                                                </span>
-                                                <span>{entry.stage === 'stage1' ? 'مرحله ۱' : 'مرحله ۲'}</span>
-                                            </div>
-                                            <div className="flex justify-between text-slate-500">
-                                                <span>{entry.driver?.mobile || ''}</span>
-                                                <span>{entry.driver?.employeeId || '-'}</span>
-                                            </div>
-                                            <div className="text-slate-500">
-                                                {entry.vehicle?.vehicleCode || entry.vehicle?.model || 'خودرو'}
-                                            </div>
-                                            <div className="text-slate-500">
-                                                {entry.announcementCode || 'اعلام بار'} • {entry.lineType || ''}
-                                            </div>
-                                            <div className="flex justify-between text-slate-400 text-[11px]">
-                                                <span>{entry.originCity || 'مبدا نامشخص'}</span>
-                                                <span>
-                                                    {entry.createdAt
-                                                        ? new Date(entry.createdAt).toLocaleString('fa-IR')
-                                                        : ''}
-                                                </span>
-                                            </div>
-                                            {entry.route && (
-                                                <div className="text-slate-400 text-[11px]">
-                                                    {entry.route.routeCategory || ''}{' '}
-                                                    {entry.route.roundTripKm ? `• ${entry.route.roundTripKm} کیلومتر` : ''}
+                                    {entries.map(entry => {
+                                        const daysSince = entry.daysSinceAssignment ?? 0;
+                                        const expectedDays = entry.route?.expectedDays;
+                                        const isOverdue = expectedDays != null && daysSince > expectedDays;
+                                        const isDue = expectedDays != null && daysSince === expectedDays;
+                                        const bgColor = isOverdue ? 'bg-red-50 border-red-200' : isDue ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-slate-200';
+                                        
+                                        // تبدیل دسته خودرو به فارسی
+                                        const category = entry.vehicle?.vehicleCategory;
+                                        const categoryMap: Record<string, string> = {
+                                            'trailer': 'تریلی',
+                                            'mini-trailer': 'مینی تریلی',
+                                            'ten-wheel': 'ده چرخ',
+                                        };
+                                        const categoryLabel = category ? (categoryMap[category] || category) : 'دسته خودرو';
+                                        
+                                        return (
+                                            <div key={entry.assignmentId} className={`border rounded-lg p-3 space-y-1 ${bgColor}`}>
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="font-semibold text-slate-800">
+                                                            {entry.driver?.name || 'راننده'}
+                                                        </div>
+                                                        <div className="text-sm text-slate-600 mt-1">
+                                                            {categoryLabel} • {entry.vehicle?.vehicleCode || entry.vehicle?.model || 'کد خودرو'}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    ))}
+                                                <div className={`text-xs font-medium mt-1 ${
+                                                    isOverdue ? 'text-red-700' : isDue ? 'text-yellow-700' : 'text-slate-600'
+                                                }`}>
+                                                    {daysSince > 0 ? `${daysSince} روز از تخصیص گذشته` : 'امروز تخصیص داده شده'}
+                                                    {expectedDays != null && ` / مدت مصوب: ${expectedDays} روز`}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}

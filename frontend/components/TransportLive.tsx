@@ -33,6 +33,7 @@ interface TransportLiveProps {
     onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => void;
     onForward: (announcementId: string) => void;
     onCancel: (announcementId: string) => void;
+    onChangeRequest: (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     currentUser: User;
     activeLine: FreightLineType;
@@ -83,7 +84,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [dateView, setDateView] = useState<'today' | 'all'>('today');
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     
-    const [dialog, setDialog] = useState<'assign' | 'transfer' | null>(null);
+    const [dialog, setDialog] = useState<'assign' | 'transfer' | 'change' | null>(null);
     
     // Helper functions inside component to ensure proper re-rendering
     const getDriverName = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
@@ -280,6 +281,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     isDairyAmbient: a.lineType === FreightLineType.Dairy || a.lineType === FreightLineType.Ambient
                 });
                 
+                // Exclude cancelled freight
+                if (a.status === FreightAnnouncementStatus.Cancelled) {
+                    return false;
+                }
+                
                 // قانون ارجاع خودکار: ترابری شرکت باید بستنی را ببیند و بتواند روی آن عمل کند
                 if (isAllowed && (a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی')) {
                     // بستنی: ترابری شرکت اولویت دارد - همیشه نمایش داده می‌شود
@@ -326,6 +332,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     isDairyAmbient: a.lineType === FreightLineType.Dairy || a.lineType === FreightLineType.Ambient
                 });
                 
+                // Exclude cancelled freight
+                if (a.status === FreightAnnouncementStatus.Cancelled) {
+                    return false;
+                }
+                
                 // قانون ارجاع خودکار: ترابری شخصی باید پاستوریزه و لبنیات را ببیند و بتواند روی آن عمل کند
                 if (isAllowed && ((a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه') || (a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند'))) {
                     // پاستوریزه و لبنیات: ترابری شخصی اولویت دارد - همیشه نمایش داده می‌شود
@@ -349,7 +360,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
                  return a.destinations.some(d => d.city === currentUser.branchCity) && a.status === FreightAnnouncementStatus.Assigned;
             }
-            // Other roles like planners see everything that's live (but not Finalized or Leftover)
+            // Other roles like planners see everything that's live (but not Finalized, Leftover, or Cancelled)
             const liveStatuses = [
                 FreightAnnouncementStatus.PendingCompanyAssignment, 
                 FreightAnnouncementStatus.PendingPersonalAssignment, 
@@ -358,7 +369,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             ];
             return liveStatuses.includes(a.status) && 
                    a.status !== FreightAnnouncementStatus.Finalized && 
-                   a.status !== FreightAnnouncementStatus.Leftover;
+                   a.status !== FreightAnnouncementStatus.Leftover &&
+                   a.status !== FreightAnnouncementStatus.Cancelled;
         });
         
         console.log('🔍 [TransportLive] Filtered result:', {
@@ -392,7 +404,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return filtered;
     }, [liveAnnouncements, activeLine]);
 
-    const handleOpenDialog = (type: 'assign' | 'transfer', ann: FreightAnnouncement) => {
+    const handleOpenDialog = (type: 'assign' | 'transfer' | 'change', ann: FreightAnnouncement) => {
         setSelectedAnnouncement(ann);
         setDialog(type);
     };
@@ -702,10 +714,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     canTakeAction = !isAnnLeftover;
                                 }
 
-                                const isAssignedByOther = ann.status === FreightAnnouncementStatus.Assigned && (
-                                    (ann.assignmentType === 'personal' && currentUser.role === UserRole.TransportationUser) ||
-                                    (ann.assignmentType === 'company' && currentUser.role === UserRole.Transportation_Personal_Vehicle_User)
-                                );
+                                // بررسی اینکه آیا بار به ترابری دیگر ارجاع شده است
+                                // این باید برای همه status‌ها کار کند (PendingPersonalAssignment, PendingCompanyAssignment, Assigned, InTransit)
+                                const isAssignedToOtherTransport = 
+                                    (currentUser.role === UserRole.TransportationUser && isPersonalAssigned) ||
+                                    (currentUser.role === UserRole.Transportation_Personal_Vehicle_User && isCompanyAssigned);
+                                
+                                // برای backward compatibility
+                                const isAssignedByOther = isAssignedToOtherTransport;
                                 
                                 const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-400";
 
@@ -780,12 +796,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         visibleColumns.map(col => <td key={col.header} className="p-2" style={{textAlign: (col.align || 'right') as any}}>{col.render(ann, idx, props)}</td>)
                                     )}
 
-                                    <td className="p-2 sticky -left-px z-10" style={{width: '180px', backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}>
+                                    <td className="p-2 sticky -left-px z-10" style={{width: '260px', backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}>
                                         <div className="flex gap-1 flex-wrap">
                                             {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                                             {canPerformActions && ann.destinations.length > 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="انتقال مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
                                             {canPerformActions && <button disabled={!canForward} onClick={() => onForward(ann.id)} title="ارجاع به ترابری دیگر" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed`}>ارجاع</button>}
                                             {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو اعلام بار" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
+                                            {canPerformActions && <button disabled={isAssignedToOtherTransport} onClick={() => handleOpenDialog('change', ann)} title="درخواست تغییر/تقسیم" className={`px-3 py-1 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 ${disabledClasses}`}>درخواست تغییر</button>}
                                             {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
                                         </div>
                                     </td>
@@ -798,6 +815,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             </div>
              {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog {...props} announcement={selectedAnnouncement} onClose={handleCloseDialog} />}
              {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
+             {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
@@ -1228,6 +1246,57 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
          </div>
     )
 }
+
+const ChangeRequestDialog: React.FC<{ announcement: FreightAnnouncement, onClose: ()=>void, onSubmit: TransportLiveProps['onChangeRequest'] }> = ({ announcement, onClose, onSubmit }) => {
+    const [type, setType] = useState<'change' | 'split' | 'merge'>('change');
+    const [targetQueue, setTargetQueue] = useState<'company' | 'personal' | ''>('');
+    const [description, setDescription] = useState('');
+
+    const handleSubmit = () => {
+        if (!description.trim()) { alert('توضیحات برای کارشناس الزامی است.'); return; }
+        onSubmit(announcement.id, {
+            type,
+            targetQueue: (targetQueue || undefined) as any,
+            description,
+            payload: { description }
+        });
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-end items-stretch z-50" onClick={onClose}>
+            <div className="bg-white h-full w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b"><h3 className="text-lg font-bold">درخواست تغییر/تقسیم برای #{announcement.announcementCode}</h3></div>
+                <div className="p-4 space-y-4">
+                    <div>
+                        <label className="text-sm font-medium">نوع درخواست</label>
+                        <div className="mt-2 flex flex-col gap-2">
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={type==='change'} onChange={()=>setType('change')}/> تغییر نوع خودرو (مثلاً: تریلی → مینی‌تریلی یا تغییر تناژ/ارزش بار)</label>
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={type==='split'} onChange={()=>setType('split')}/> تقسیم (تبدیل یک بار به چند بار)</label>
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={type==='merge'} onChange={()=>setType('merge')}/> تجمیع (ادغام با بار دیگر)</label>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium">صف مقصد پس از اعمال تغییر (اختیاری)</label>
+                        <select className="input-style mt-1" value={targetQueue} onChange={e=>setTargetQueue(e.target.value as any)}>
+                            <option value="">— انتخاب نشده —</option>
+                            <option value="company">شرکتی</option>
+                            <option value="personal">شخصی</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium">توضیحات برای کارشناس (اجباری)</label>
+                        <textarea className="input-style mt-1" rows={6} placeholder="مثلاً: تریلی → ۳ مینی‌تریلی، هرکدام ~۶t؛ لطفاً اعلام‌بار جدید ساخته شود. یا: نوع خودرو را به ده‌چرخ تغییر دهید." value={description} onChange={e=>setDescription(e.target.value)} />
+                    </div>
+                </div>
+                <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-sm">انصراف</button>
+                    <button onClick={handleSubmit} className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">ثبت درخواست</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 export default TransportLive;
