@@ -153,19 +153,28 @@ async function getFreightAnnouncements(req, res) {
     console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, whereClause=${whereClause}`);
     
     const { rows } = await pool.query(`
-      SELECT 
+      SELECT DISTINCT ON (fa.id)
         fa.*,
         fa.rejection_reason,
         d.name as assigned_driver_name,
         d.employee_id as assigned_driver_employee_id,
         v.model as assigned_vehicle_model,
         v.brand as assigned_vehicle_brand,
-        v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
+        v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
+        da.assignment_finalized_at
       FROM freight_announcements fa
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      LEFT JOIN LATERAL (
+        SELECT assignment_finalized_at
+        FROM dispatch_assignments
+        WHERE freight_announcement_id = fa.id 
+          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) da ON true
       ${whereClause}
-      ORDER BY fa.created_at DESC
+      ORDER BY fa.id, fa.created_at DESC
     `);
     
     console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Leftover count: ${rows.filter(r => r.status === 'Leftover').length}`);
@@ -1552,21 +1561,41 @@ async function finalizeAssignments(req, res) {
       console.log(`🔍 [finalizeAssignments] Processing ${annId}: hasAssignment=${hasAssignment}, status=${ann.status}, line_type=${ann.line_type}`);
       
       if (hasAssignment) {
-        // تخصیص دارد → status را تغییر نمی‌دهیم (در تابلو می‌ماند)
-        // فقط وقتی راننده/خودرو دوباره در نوبت قرار می‌گیرد، از تابلو خارج می‌شود
-        // این یعنی "اتمام تخصیص" فقط برای ثبت آماده بودن بار است، نه خروج از تابلو
-        console.log(`✅ [finalizeAssignments] Assignment confirmed for ${annId}, keeping status ${ann.status} (stays in board)`);
+        // تخصیص دارد → status را به InTransit تغییر می‌دهیم
+        // این باعث می‌شود که از "پیگیری اعلام بار زنده" خارج شود
+        // اما در "تابلو اعلام بار" باقی می‌ماند (چون InTransit در getBoard نمایش داده می‌شود)
+        const oldStatus = ann.status || 'Assigned';
+        const newStatus = 'InTransit';
+        
+        // آپدیت status اعلام بار
+        await client.query(
+          `UPDATE freight_announcements 
+           SET status = $1, updated_at = NOW() 
+           WHERE id = $2`,
+          [newStatus, annId]
+        );
+        
+        // آپدیت dispatch_assignments برای ثبت زمان نهایی‌سازی
+        await client.query(
+          `UPDATE dispatch_assignments 
+           SET assignment_finalized_at = NOW() 
+           WHERE freight_announcement_id = $1 AND (assignment_finalized_at IS NULL OR is_cancelled = FALSE)`,
+          [annId]
+        );
+        
+        console.log(`✅ [finalizeAssignments] Assignment finalized for ${annId}, status changed from ${oldStatus} to ${newStatus} (removed from TransportLive, stays in Dispatch Board)`);
+        
         finalizedIds.push(annId);
         
-        // ثبت تاریخچه (بدون تغییر status)
+        // ثبت تاریخچه
         await logFreightHistory({
           announcementId: annId,
           userId: userId,
           userName: name || username || 'کاربر',
-          action: 'ASSIGNMENT_CONFIRMED',
-          oldStatus: ann.status || 'Assigned',
-          newStatus: ann.status || 'Assigned',
-          description: `تخصیص تأیید شد (بار در تابلو باقی می‌ماند تا راننده/خودرو دوباره در نوبت قرار گیرد)`,
+          action: 'ASSIGNMENT_FINALIZED',
+          oldStatus: oldStatus,
+          newStatus: newStatus,
+          description: `تخصیص نهایی شد - بار از پیگیری اعلام بار زنده خارج شد (در تابلو اعلام بار باقی می‌ماند)`,
           ipAddress: req.ip,
           client: client
         });

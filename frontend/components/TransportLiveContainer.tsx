@@ -126,6 +126,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             freightCost: d.freight_cost ?? d.freightCost,
                         })) : [],
                         history: a.history || [],
+                        assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,
                     };
                 };
 

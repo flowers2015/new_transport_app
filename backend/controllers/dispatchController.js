@@ -67,7 +67,8 @@ async function ensureDriverOpportunityTable() {
       ADD COLUMN IF NOT EXISTS queue_entry_id VARCHAR(255),
       ADD COLUMN IF NOT EXISTS queue_type VARCHAR(50),
       ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS vehicle_category VARCHAR(255)
+      ADD COLUMN IF NOT EXISTS vehicle_category VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
     `);
     // اضافه کردن فیلد expected_days به dispatch_routes اگر وجود ندارد
     try {
@@ -651,9 +652,10 @@ async function getStageCandidates(req, res) {
       }
     }
 
+    // ابتدا اعلام بارها را بدون join با destinations بگیریم
     const freightRows = await pool.query(
       `
-        SELECT
+        SELECT DISTINCT
           fa.id,
           fa.announcement_code,
           fa.line_type,
@@ -667,14 +669,8 @@ async function getStageCandidates(req, res) {
           fa.notes,
           fa.brand,
           fa.priority,
-          fa.products,
-          fd.id AS destination_id,
-          fd.city,
-          fd.representative_name,
-          fd.tonnage,
-          fd.freight_cost
+          fa.products
         FROM freight_announcements fa
-        LEFT JOIN freight_destinations fd ON fd.freight_announcement_id = fa.id
         WHERE fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned')
           AND (fa.assignment_type IS NULL OR fa.assignment_type = 'company')
           AND (fa.assigned_driver_id IS NULL)
@@ -701,22 +697,72 @@ async function getStageCandidates(req, res) {
         .replace(/[\s_\-‌]/g, '')
         .toLowerCase();
     const farDistanceTokens = ['خیلی‌دور', 'خیلیدور', 'veryfar'];
+    
+    // برای هر اعلام بار، همه مقاصد را بگیریم
     for (const row of freightRows.rows) {
-      const destCity = row.city;
+      // گرفتن همه مقاصد این اعلام بار
+      const destRows = await pool.query(
+        `SELECT id, city, representative_name, tonnage, freight_cost
+         FROM freight_destinations
+         WHERE freight_announcement_id = $1
+         ORDER BY created_at ASC`,
+        [row.id]
+      );
+      
+      const destinations = destRows.rows || [];
+      
+      // اگر مقصدی نداشت، skip کنیم
+      if (destinations.length === 0) {
+        continue;
+      }
+      
+      // پیدا کردن route برای آخرین مقصد (یا مقصدی که بیشترین کیلومتر را دارد)
       let routeInfo = null;
-      if (destCity) {
+      let maxKm = 0;
+      let lastDestinationCity = null;
+      
+      for (const dest of destinations) {
         const { rows: routeRows } = await pool.query(
           `SELECT id, city, province, route_category, round_trip_km, distance_category
            FROM dispatch_routes
            WHERE is_active = TRUE AND city = $1
            ORDER BY route_category DESC`,
-          [destCity]
+          [dest.city]
         );
 
         if (routeRows.length > 0) {
-          routeInfo = routeRows[0];
+          const route = routeRows[0];
+          const km = route.round_trip_km ? Number(route.round_trip_km) : 0;
+          // اگر این route کیلومتر بیشتری دارد، آن را انتخاب کن
+          if (km > maxKm) {
+            maxKm = km;
+            routeInfo = route;
+            lastDestinationCity = dest.city;
+          }
         }
       }
+      
+      // اگر route پیدا نشد، از آخرین مقصد استفاده کن
+      if (!routeInfo && destinations.length > 0) {
+        const lastDest = destinations[destinations.length - 1];
+        const { rows: routeRows } = await pool.query(
+          `SELECT id, city, province, route_category, round_trip_km, distance_category
+           FROM dispatch_routes
+           WHERE is_active = TRUE AND city = $1
+           ORDER BY route_category DESC`,
+          [lastDest.city]
+        );
+        if (routeRows.length > 0) {
+          routeInfo = routeRows[0];
+          lastDestinationCity = lastDest.city;
+        }
+      }
+      
+      // ساخت رشته شهرها (مثلاً "سمنان-سبزوار")
+      const citiesString = destinations.map(d => d.city).join('-');
+      
+      // استفاده از آخرین مقصد برای نمایش (اما همه مقاصد را در destination array نگه داریم)
+      const primaryDestination = destinations[destinations.length - 1];
 
       announcements.push({
         id: row.id,
@@ -741,14 +787,23 @@ async function getStageCandidates(req, res) {
                 }
               })()
           : [],
+        // نمایش همه شهرها با - (مثلاً "سمنان-سبزوار")
         destination: {
-          id: row.destination_id,
-          city: row.city,
-          representativeName: row.representative_name,
-          tonnage: row.tonnage,
-          freightCost: row.freight_cost,
+          id: primaryDestination.id,
+          city: citiesString, // همه شهرها با - جدا شده
+          representativeName: primaryDestination.representative_name,
+          tonnage: destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0), // مجموع تناژ
+          freightCost: destinations.reduce((sum, d) => sum + (Number(d.freight_cost) || 0), 0), // مجموع کرایه
         },
-        route: routeInfo,
+        // همه مقاصد را هم نگه داریم (برای استفاده در assignFreight)
+        allDestinations: destinations.map(d => ({
+          id: d.id,
+          city: d.city,
+          representativeName: d.representative_name,
+          tonnage: d.tonnage,
+          freightCost: d.freight_cost,
+        })),
+        route: routeInfo, // route آخرین مقصد یا مقصد با بیشترین کیلومتر
       });
     }
 
@@ -909,25 +964,58 @@ async function assignFreight(req, res) {
       return res.status(409).json({ message: 'اعلام بار قبلاً نهایی شده است.' });
     }
 
-    const { rows: destRows } = await client.query(
+    // گرفتن همه مقاصد این اعلام بار (نه فقط یک مقصد)
+    const { rows: allDestRows } = await client.query(
       `SELECT id, city
        FROM freight_destinations
-       WHERE id = $1 AND freight_announcement_id = $2`,
-      [destinationId, freightAnnouncementId]
+       WHERE freight_announcement_id = $1
+       ORDER BY created_at ASC`,
+      [freightAnnouncementId]
     );
 
-    const destination = destRows[0] || null;
+    // اگر مقصدی نداشت، خطا برگردان
+    if (allDestRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'اعلام بار مقصدی ندارد.' });
+    }
+
+    // پیدا کردن route برای آخرین مقصد (یا مقصدی که بیشترین کیلومتر را دارد)
     let route = null;
-    if (destination?.city) {
+    let maxKm = 0;
+    let primaryDestination = allDestRows[allDestRows.length - 1]; // آخرین مقصد به عنوان primary
+    
+    for (const dest of allDestRows) {
       const { rows: routeRows } = await client.query(
         `SELECT id, city, province, route_category, round_trip_km, distance_category
          FROM dispatch_routes
          WHERE is_active = TRUE AND city = $1
          ORDER BY route_category DESC`,
-        [destination.city]
+        [dest.city]
+      );
+      if (routeRows.length > 0) {
+        const routeKm = routeRows[0].round_trip_km ? Number(routeRows[0].round_trip_km) : 0;
+        // اگر این route کیلومتر بیشتری دارد، آن را انتخاب کن
+        if (routeKm > maxKm) {
+          maxKm = routeKm;
+          route = routeRows[0];
+          primaryDestination = dest;
+        }
+      }
+    }
+    
+    // اگر route پیدا نشد، از آخرین مقصد استفاده کن
+    if (!route && allDestRows.length > 0) {
+      const lastDest = allDestRows[allDestRows.length - 1];
+      const { rows: routeRows } = await client.query(
+        `SELECT id, city, province, route_category, round_trip_km, distance_category
+         FROM dispatch_routes
+         WHERE is_active = TRUE AND city = $1
+         ORDER BY route_category DESC`,
+        [lastDest.city]
       );
       if (routeRows.length > 0) {
         route = routeRows[0];
+        primaryDestination = lastDest;
       }
     }
 
@@ -1028,26 +1116,30 @@ async function assignFreight(req, res) {
       finalVehicleCategory = vehicleRows[0]?.vehicle_category || null;
     }
     
-    await client.query(
-      `INSERT INTO dispatch_assignments
-        (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, queue_position, assigned_at_jalali, queue_entry_id, queue_type, vehicle_category)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)`,
-      [
-        freightAnnouncementId,
-        destination ? destination.id : null,
-        vehicleId,
-        driverId,
-        stage,
-        route ? route.id : null,
-        route ? route.round_trip_km : null,
-        actingUserId,
-        queuePosition,
-        timestampToJalaliDate(now),
-        queueEntryId || null,
-        queueTypeFromEntry || (stage === 'stage1' ? 'far' : 'near'),
-        finalVehicleCategory,
-      ]
-    );
+    // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
+    // اما route و distance_km را از primary destination (آخرین یا بیشترین کیلومتر) می‌گیریم
+    for (const dest of allDestRows) {
+      await client.query(
+        `INSERT INTO dispatch_assignments
+          (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, queue_position, assigned_at_jalali, queue_entry_id, queue_type, vehicle_category)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)`,
+        [
+          freightAnnouncementId,
+          dest.id, // هر مقصد
+          vehicleId,
+          driverId,
+          stage,
+          route ? route.id : null, // route از primary destination (آخرین یا بیشترین کیلومتر)
+          route ? route.round_trip_km : null, // distance از primary route
+          actingUserId,
+          queuePosition,
+          timestampToJalaliDate(now),
+          queueEntryId || null,
+          queueTypeFromEntry || (stage === 'stage1' ? 'far' : 'near'),
+          finalVehicleCategory,
+        ]
+      );
+    }
 
     if (queueEntryId) {
       await client.query('DELETE FROM dispatch_queue_entries WHERE id = $1', [queueEntryId]);
@@ -1498,9 +1590,11 @@ async function getDriverPreferences(req, res) {
 
 async function getBoard(req, res) {
   try {
-    const { rows } = await pool.query(
+    // ابتدا همه dispatch_assignments را با مقاصدشان بگیریم
+    const { rows: allRows } = await pool.query(
       `SELECT
          da.id,
+         da.freight_announcement_id,
          da.stage,
          da.created_at,
          da.vehicle_id,
@@ -1510,7 +1604,7 @@ async function getBoard(req, res) {
          fa.line_type,
          fa.vehicle_type,
          fa.origin_city,
-         fd.city,
+         fd.city AS destination_city,
          fd.representative_name,
          dr.province,
          dr.route_category,
@@ -1531,44 +1625,103 @@ async function getBoard(req, res) {
        WHERE fa.status IN ('Assigned', 'InTransit')
          AND fa.status NOT IN ('Cancelled')
          AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-       ORDER BY fd.city, da.created_at DESC`
+       ORDER BY da.freight_announcement_id, fd.created_at ASC`
     );
 
-    const grouped = {};
-    for (const row of rows) {
-      const city = row.city || 'نامشخص';
-      if (!grouped[city]) {
-        grouped[city] = [];
+    // گروه‌بندی بر اساس freight_announcement_id
+    const announcementMap = new Map();
+    
+    for (const row of allRows) {
+      const annId = row.freight_announcement_id;
+      
+      if (!announcementMap.has(annId)) {
+        // اولین ردیف برای این اعلام بار - ایجاد entry جدید
+        announcementMap.set(annId, {
+          assignmentId: row.id,
+          freightAnnouncementId: annId,
+          stage: row.stage,
+          createdAt: row.created_at,
+          announcementCode: row.announcement_code,
+          lineType: row.line_type,
+          vehicleType: row.vehicle_type,
+          originCity: row.origin_city,
+          driver: {
+            id: row.driver_id,
+            name: row.driver_name,
+            mobile: row.driver_mobile,
+            employeeId: row.employee_id,
+          },
+          vehicle: {
+            id: row.vehicle_id,
+            model: row.vehicle_model,
+            vehicleCode: row.vehicle_code,
+            vehicleCategory: row.vehicle_category,
+          },
+          route: {
+            id: row.route_id,
+            province: row.province,
+            routeCategory: row.route_category,
+            roundTripKm: row.round_trip_km,
+            expectedDays: row.expected_days,
+          },
+          destinations: [], // لیست همه مقاصد
+          lastDestinationCity: null, // مقصد آخر برای grouping
+        });
       }
-      grouped[city].push({
-        assignmentId: row.id,
-        stage: row.stage,
-        createdAt: row.created_at,
-        announcementCode: row.announcement_code,
-        lineType: row.line_type,
-        vehicleType: row.vehicle_type,
-        originCity: row.origin_city,
-        driver: {
-          id: row.driver_id,
-          name: row.driver_name,
-          mobile: row.driver_mobile,
-          employeeId: row.employee_id,
-        },
-        vehicle: {
-          id: row.vehicle_id,
-          model: row.vehicle_model,
-          vehicleCode: row.vehicle_code,
-          vehicleCategory: row.vehicle_category,
-        },
-        route: {
+      
+      // اضافه کردن مقصد به لیست
+      const entry = announcementMap.get(annId);
+      if (row.destination_city) {
+        entry.destinations.push(row.destination_city);
+        entry.lastDestinationCity = row.destination_city; // آخرین مقصد
+      }
+      
+      // اگر route این مقصد کیلومتر بیشتری دارد، آن را استفاده کن
+      if (row.round_trip_km && (!entry.route.roundTripKm || Number(row.round_trip_km) > Number(entry.route.roundTripKm))) {
+        entry.route = {
           id: row.route_id,
           province: row.province,
           routeCategory: row.route_category,
           roundTripKm: row.round_trip_km,
           expectedDays: row.expected_days,
+        };
+      }
+    }
+
+    // تبدیل به array و ساخت route summary
+    const entries = Array.from(announcementMap.values()).map(entry => {
+      // ساخت خلاصه مسیر (مثلاً "سمنان-سبزوار")
+      const routeSummary = entry.destinations.join('-');
+      
+      // اضافه کردن route summary به اسم راننده
+      const driverNameWithRoute = entry.destinations.length > 1 
+        ? `${entry.driver.name} (${routeSummary})`
+        : entry.driver.name;
+      
+      return {
+        ...entry,
+        driver: {
+          ...entry.driver,
+          name: driverNameWithRoute,
         },
-        daysSinceAssignment: Math.floor((new Date() - new Date(row.created_at)) / (1000 * 60 * 60 * 24)),
-      });
+        routeSummary, // برای استفاده در frontend
+        daysSinceAssignment: Math.floor((new Date() - new Date(entry.createdAt)) / (1000 * 60 * 60 * 24)),
+      };
+    });
+
+    // گروه‌بندی بر اساس آخرین مقصد
+    const grouped = {};
+    for (const entry of entries) {
+      const city = entry.lastDestinationCity || 'نامشخص';
+      if (!grouped[city]) {
+        grouped[city] = [];
+      }
+      grouped[city].push(entry);
+    }
+
+    // مرتب‌سازی entries در هر شهر بر اساس created_at DESC
+    for (const city in grouped) {
+      grouped[city].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
     res.json(grouped);

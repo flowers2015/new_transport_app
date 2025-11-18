@@ -660,6 +660,7 @@ export interface FreightAnnouncement {
     assignedDriverName?: string;
     assignedDriverContact?: string;
     assignedVehiclePlate?: string;
+    assignmentFinalizedAt?: string | Date; // زمان نهایی‌سازی تخصیص
 
 
     // Line-specific fields

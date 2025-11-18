@@ -255,6 +255,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             //     return false;
             // }
 
+            // اگر تخصیص نهایی شده است (assignment_finalized_at وجود دارد)، از پیگیری اعلام بار زنده خارج می‌شود
+            if (a.assignmentFinalizedAt) {
+                return false;
+            }
+
             if (currentUser.role === UserRole.TransportationUser) {
                 // ترابری شرکت: بر اساس قانون ارجاع خودکار
                 // بستنی: ابتدا به ترابری شرکت، در صورت عدم پوشش به ترابری شخصی
@@ -423,12 +428,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         });
     };
 
-    const handleFinalizeSelected = () => {
-        if (selectedIds.size > 0) {
-            onFinalize(Array.from(selectedIds));
-            setSelectedIds(new Set());
-        }
-    }
 
     const visibleColumns = useMemo(() => {
         // Extra transport columns (for both modes, position differs)
@@ -438,6 +437,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            { header: 'نهایی شده', render: (ann: FreightAnnouncement) => ann.assignmentFinalizedAt ? (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                    <CheckCircleIcon className="w-4 h-4" />
+                    {formatJalaliDateTime(new Date(ann.assignmentFinalizedAt))}
+                </span>
+            ) : '-' },
         ];
 
         // Ice Cream: mirror planner order, then extras
@@ -562,19 +567,49 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />پیگیری اعلام بار-زنده و تخصیص</h2>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                        {canPerformActions && selectedIds.size > 0 && <button onClick={handleFinalizeSelected} className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"><CheckCircleIcon className="w-4 h-4" />نهایی‌سازی ({selectedIds.size})</button>}
                         {canPerformActions && filteredAnnouncements.length > 0 && (
                             <button 
                                 onClick={() => {
-                                    // اتمام تخصیص برای همه اعلام بارهای لاین فعلی
-                                    const allIds = filteredAnnouncements.map(a => a.id);
-                                    onFinalize(allIds);
+                                    // اگر اعلام بار انتخاب شده باشد، فقط همان‌ها را نهایی می‌کند
+                                    // اما فقط IDهایی که در filteredAnnouncements هستند (یعنی لاین فعلی)
+                                    // در غیر این صورت، همه اعلام بارهای لاین فعلی را نهایی می‌کند
+                                    let idsToFinalize: string[];
+                                    
+                                    if (selectedIds.size > 0) {
+                                        // فقط IDهایی که در filteredAnnouncements هستند را بگیر
+                                        const filteredIds = filteredAnnouncements
+                                            .filter(a => selectedIds.has(a.id))
+                                            .map(a => a.id);
+                                        
+                                        if (filteredIds.length === 0) {
+                                            alert('هیچ اعلام باری از لاین فعلی انتخاب نشده است');
+                                            return;
+                                        }
+                                        
+                                        idsToFinalize = filteredIds;
+                                    } else {
+                                        idsToFinalize = filteredAnnouncements.map(a => a.id);
+                                    }
+                                    
+                                    console.log('🔍 [TransportLive] Finalizing:', {
+                                        selectedIdsCount: selectedIds.size,
+                                        filteredIdsCount: idsToFinalize.length,
+                                        idsToFinalize,
+                                        activeLine
+                                    });
+                                    
+                                    onFinalize(idsToFinalize);
+                                    setSelectedIds(new Set()); // پاک کردن انتخاب‌ها بعد از نهایی‌سازی
                                 }} 
                                 className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
-                                title={`اتمام تخصیص برای تمام ${filteredAnnouncements.length} اعلام بار ${activeLine}`}
+                                title={
+                                    selectedIds.size > 0 
+                                        ? `اتمام تخصیص برای ${selectedIds.size} اعلام بار انتخاب شده`
+                                        : `اتمام تخصیص برای تمام ${filteredAnnouncements.length} اعلام بار ${activeLine}`
+                                }
                             >
                                 <CheckCircleIcon className="w-4 h-4" />
-                                اتمام تخصیص ({filteredAnnouncements.length})
+                                اتمام تخصیص {selectedIds.size > 0 ? `(${selectedIds.size} انتخاب شده)` : `(${filteredAnnouncements.length})`}
                             </button>
                         )}
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg">
