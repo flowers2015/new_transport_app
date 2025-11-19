@@ -1459,11 +1459,24 @@ const DispatchQueueManager: React.FC = () => {
         const dotClass = preset ? categoryDotClasses[preset.key] : 'bg-slate-400';
         return (
             <div key={label} className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                    <span className={`inline-flex h-3 w-3 rounded-full ${dotClass}`}></span>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] ${accentClass}`}>
-                        {label}
-                    </span>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                        <span className={`inline-flex h-3 w-3 rounded-full ${dotClass}`}></span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] ${accentClass}`}>
+                            {label}
+                        </span>
+                    </div>
+                    {preset && (
+                        <button
+                            onClick={() => {
+                                setActiveCategoryKey(preset.key);
+                                setIsDrawerOpen(true);
+                            }}
+                            className={`px-3 py-1 text-xs rounded-md text-white hover:opacity-90 ${categoryAccentClasses[preset.key] || 'bg-sky-600'}`}
+                        >
+                            ثبت نوبت
+                        </button>
+                    )}
                 </div>
                 {renderQueueList('نوبت مسیر دور', farEntries, 'far')}
                 {renderQueueList('نوبت مسیر نزدیک', nearEntries, 'near')}
@@ -1684,17 +1697,6 @@ const DispatchQueueManager: React.FC = () => {
                             className="px-3 py-1.5 text-sm rounded-md border border-slate-200 hover:bg-slate-50"
                         >
                             بروزرسانی
-                        </button>
-                        <button
-                            onClick={() => {
-                                setIsDrawerOpen(true);
-                                if (!activeCategoryKey && presetCategories.length > 0) {
-                                    setActiveCategoryKey(presetCategories[0].key);
-                                }
-                            }}
-                            className="px-4 py-1.5 text-sm rounded-md bg-sky-600 text-white hover:bg-sky-700"
-                        >
-                            ثبت نوبت جدید
                         </button>
                     </div>
                 </header>
