@@ -27,6 +27,9 @@ const {
   approveChangeRequest,
   rejectChangeRequest,
   archiveChangeRequest,
+  transferDestination,
+  getVehicleTypes,
+  changeVehicleType,
 } = require('../controllers/freightController');
 
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
@@ -178,6 +181,30 @@ router.post(
   authenticateToken,
   authorizeRole(['planner', 'transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
   setAssignmentQueue
+);
+
+// Get available vehicle types
+router.get(
+  '/vehicle-types',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
+  getVehicleTypes
+);
+
+// Transfer destination from one announcement to another
+router.put(
+  '/:id/transfer-destination',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
+  transferDestination
+);
+
+// Change vehicle type for an announcement
+router.put(
+  '/:id/vehicle-type',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
+  changeVehicleType
 );
 
 // Delete an announcement (allowed for planner/manager/admin when not finalized)

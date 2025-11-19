@@ -182,7 +182,7 @@ async function getFreightAnnouncements(req, res) {
     // Fetch destinations for each announcement and convert dates
     for (let announcement of rows) {
       const destRows = await pool.query(
-        'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1',
+        'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
         [announcement.id]
       );
       announcement.destinations = destRows.rows;
@@ -3792,3 +3792,387 @@ module.exports.listChangeRequests = listChangeRequests;
 module.exports.approveChangeRequest = approveChangeRequest;
 module.exports.rejectChangeRequest = rejectChangeRequest;
 module.exports.archiveChangeRequest = archiveChangeRequest;
+
+/**
+ * انتقال مقصد از یک اعلام بار به اعلام بار دیگر
+ * PUT /api/v1/freight-announcements/:id/transfer-destination
+ * Body: { destinationId, targetAnnouncementId, newPosition }
+ */
+async function transferDestination(req, res) {
+  const { id: sourceAnnouncementId } = req.params;
+  const { destinationId, targetAnnouncementId, newPosition } = req.body || {};
+  const { id: userId, name, username } = req.user || {};
+  const userName = name || username || 'کاربر';
+
+  console.log('🔄 [transferDestination] Request received:', {
+    sourceAnnouncementId,
+    destinationId,
+    targetAnnouncementId,
+    newPosition,
+    userId,
+    userName
+  });
+
+  if (!destinationId || !targetAnnouncementId || !newPosition) {
+    return res.status(400).json({ message: 'پارامترهای destinationId، targetAnnouncementId و newPosition الزامی است.' });
+  }
+
+  if (newPosition < 1 || newPosition > 4) {
+    return res.status(400).json({ message: 'موقعیت جدید باید بین 1 تا 4 باشد.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // بررسی source announcement
+    const { rows: sourceRows } = await client.query(
+      `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [sourceAnnouncementId]
+    );
+    if (sourceRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار مبدا یافت نشد.' });
+    }
+    const sourceAnn = sourceRows[0];
+
+    // بررسی target announcement
+    const { rows: targetRows } = await client.query(
+      `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [targetAnnouncementId]
+    );
+    if (targetRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار هدف یافت نشد.' });
+    }
+    const targetAnn = targetRows[0];
+
+    // بررسی destination
+    const { rows: destRows } = await client.query(
+      `SELECT id, city, representative_name, tonnage, freight_cost, freight_announcement_id
+       FROM freight_destinations
+       WHERE id = $1 AND freight_announcement_id = $2 FOR UPDATE`,
+      [destinationId, sourceAnnouncementId]
+    );
+    if (destRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'مقصد یافت نشد یا متعلق به این اعلام بار نیست.' });
+    }
+    const destination = destRows[0];
+
+    console.log('📋 [transferDestination] Found:', {
+      sourceAnnouncement: { id: sourceAnn.id, code: sourceAnn.announcement_code },
+      targetAnnouncement: { id: targetAnn.id, code: targetAnn.announcement_code },
+      destination: { id: destination.id, city: destination.city }
+    });
+
+    // گرفتن مقاصد target برای تعیین موقعیت
+    const { rows: targetDestRows } = await client.query(
+      `SELECT id, city, created_at FROM freight_destinations
+       WHERE freight_announcement_id = $1
+       ORDER BY created_at ASC`,
+      [targetAnnouncementId]
+    );
+
+    console.log('🔍 [transferDestination] Target destinations before transfer:', {
+      targetAnnouncementId,
+      count: targetDestRows.length,
+      destinations: targetDestRows.map((d, idx) => ({
+        index: idx + 1,
+        id: d.id,
+        city: d.city,
+        created_at: d.created_at,
+        timestamp: new Date(d.created_at).getTime()
+      }))
+    });
+
+    // محاسبه created_at برای موقعیت جدید
+    let newCreatedAt;
+    const actualPosition = Math.min(newPosition, targetDestRows.length + 1);
+    
+    console.log('🔍 [transferDestination] Position calculation start:', {
+      requestedPosition: newPosition,
+      targetDestinationsCount: targetDestRows.length,
+      actualPosition
+    });
+    
+    if (targetDestRows.length === 0) {
+      // اگر مقصدی وجود ندارد، از NOW() استفاده می‌کنیم
+      newCreatedAt = new Date();
+      console.log('📅 [transferDestination] No existing destinations, using NOW():', newCreatedAt.toISOString());
+    } else if (actualPosition === 1) {
+      // اگر باید در اول قرار بگیرد، created_at را قبل از اولین مقصد قرار می‌دهیم
+      const firstCreatedAt = new Date(targetDestRows[0].created_at);
+      const firstTimestamp = firstCreatedAt.getTime();
+      // استفاده از یک بازه زمانی بزرگ‌تر برای اطمینان از قرار گرفتن در اول
+      const offsetMs = (targetDestRows.length + 1) * 1000;
+      newCreatedAt = new Date(firstTimestamp - offsetMs);
+      console.log('📅 [transferDestination] Position 1 calculation:', {
+        firstCreatedAt: firstCreatedAt.toISOString(),
+        firstTimestamp,
+        offsetMs,
+        newCreatedAt: newCreatedAt.toISOString(),
+        newTimestamp: newCreatedAt.getTime(),
+        difference: firstTimestamp - newCreatedAt.getTime()
+      });
+    } else if (actualPosition > targetDestRows.length) {
+      // اگر باید در آخر قرار بگیرد، created_at را بعد از آخرین مقصد قرار می‌دهیم
+      const lastCreatedAt = new Date(targetDestRows[targetDestRows.length - 1].created_at);
+      newCreatedAt = new Date(lastCreatedAt.getTime() + 1000); // 1 ثانیه بعد
+      console.log('📅 [transferDestination] Position last calculation:', {
+        lastCreatedAt: lastCreatedAt.toISOString(),
+        newCreatedAt: newCreatedAt.toISOString()
+      });
+    } else {
+      // اگر باید در وسط قرار بگیرد، created_at را بین مقصد قبلی و بعدی قرار می‌دهیم
+      const prevIndex = actualPosition - 2;
+      const nextIndex = actualPosition - 1;
+      const prevCreatedAt = new Date(targetDestRows[prevIndex].created_at);
+      const nextCreatedAt = new Date(targetDestRows[nextIndex].created_at);
+      const diff = nextCreatedAt.getTime() - prevCreatedAt.getTime();
+      console.log('📅 [transferDestination] Position middle calculation:', {
+        actualPosition,
+        prevIndex,
+        nextIndex,
+        prevCity: targetDestRows[prevIndex].city,
+        nextCity: targetDestRows[nextIndex].city,
+        prevCreatedAt: prevCreatedAt.toISOString(),
+        nextCreatedAt: nextCreatedAt.toISOString(),
+        diffMs: diff
+      });
+      // اگر diff خیلی کوچک است (مثلاً کمتر از 2 ثانیه)، از یک مقدار ثابت استفاده می‌کنیم
+      if (diff < 2000) {
+        newCreatedAt = new Date(prevCreatedAt.getTime() + 1000);
+        console.log('📅 [transferDestination] Using fixed offset (diff < 2000ms):', newCreatedAt.toISOString());
+      } else {
+        newCreatedAt = new Date(prevCreatedAt.getTime() + Math.floor(diff / 2));
+        console.log('📅 [transferDestination] Using half diff:', {
+          halfDiff: Math.floor(diff / 2),
+          newCreatedAt: newCreatedAt.toISOString()
+        });
+      }
+    }
+
+    console.log('📅 [transferDestination] Final position calculation:', {
+      targetDestinationsCount: targetDestRows.length,
+      requestedPosition: newPosition,
+      actualPosition,
+      newCreatedAt: newCreatedAt.toISOString(),
+      newTimestamp: newCreatedAt.getTime()
+    });
+
+    // انتقال مقصد: تغییر freight_announcement_id و created_at
+    await client.query(
+      `UPDATE freight_destinations
+       SET freight_announcement_id = $1, created_at = $2
+       WHERE id = $3`,
+      [targetAnnouncementId, newCreatedAt, destinationId]
+    );
+
+    console.log('✅ [transferDestination] Destination transferred:', {
+      destinationId,
+      from: sourceAnnouncementId,
+      to: targetAnnouncementId,
+      newPosition: actualPosition,
+      newCreatedAt: newCreatedAt.toISOString()
+    });
+
+    // بررسی ترتیب نهایی مقاصد بعد از انتقال
+    const { rows: finalDestRows } = await client.query(
+      `SELECT id, city, created_at FROM freight_destinations
+       WHERE freight_announcement_id = $1
+       ORDER BY created_at ASC`,
+      [targetAnnouncementId]
+    );
+
+    console.log('🔍 [transferDestination] Final destinations order after transfer:', {
+      targetAnnouncementId,
+      count: finalDestRows.length,
+      destinations: finalDestRows.map((d, idx) => ({
+        position: idx + 1,
+        id: d.id,
+        city: d.city,
+        created_at: d.created_at,
+        timestamp: new Date(d.created_at).getTime(),
+        isTransferred: d.id === destinationId
+      }))
+    });
+
+    // ثبت تاریخچه برای source announcement
+    await logFreightHistory({
+      announcementId: sourceAnnouncementId,
+      userId: userId,
+      userName: userName,
+      action: 'DESTINATION_TRANSFERRED',
+      oldStatus: sourceAnn.status,
+      newStatus: sourceAnn.status,
+      description: `مقصد ${destination.city} به اعلام بار ${targetAnn.announcement_code} منتقل شد (توسط ${userName})`,
+      ipAddress: req.ip,
+      client: client
+    });
+
+    // ثبت تاریخچه برای target announcement
+    await logFreightHistory({
+      announcementId: targetAnnouncementId,
+      userId: userId,
+      userName: userName,
+      action: 'DESTINATION_RECEIVED',
+      oldStatus: targetAnn.status,
+      newStatus: targetAnn.status,
+      description: `مقصد ${destination.city} از اعلام بار ${sourceAnn.announcement_code} دریافت شد (موقعیت: ${actualPosition}) (توسط ${userName})`,
+      ipAddress: req.ip,
+      client: client
+    });
+
+    await client.query('COMMIT');
+    
+    console.log('✅ [transferDestination] Transfer completed successfully');
+    
+    return res.status(200).json({ 
+      message: 'انتقال مقصد با موفقیت انجام شد',
+      sourceAnnouncementId,
+      targetAnnouncementId,
+      destinationId,
+      newPosition: actualPosition
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [transferDestination] Error:', error);
+    return res.status(500).json({ message: 'خطا در انتقال مقصد', details: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports.transferDestination = transferDestination;
+
+/**
+ * دریافت لیست انواع خودروهای موجود
+ * GET /api/v1/freight-announcements/vehicle-types
+ */
+async function getVehicleTypes(req, res) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT vehicle_type, vehicle_category
+       FROM vehicles
+       WHERE vehicle_type IS NOT NULL AND vehicle_type != ''
+       ORDER BY vehicle_type ASC`
+    );
+    
+    // اگر vehicle_type خالی بود، از vehicle_category استفاده می‌کنیم
+    const types = rows
+      .map(r => r.vehicle_type || r.vehicle_category)
+      .filter(t => t && t.trim() !== '')
+      .filter((value, index, self) => self.indexOf(value) === index) // حذف تکراری‌ها
+      .sort();
+    
+    console.log('📋 [getVehicleTypes] Found vehicle types:', types);
+    
+    return res.json({ vehicleTypes: types });
+  } catch (error) {
+    console.error('❌ [getVehicleTypes] Error:', error);
+    return res.status(500).json({ message: 'خطا در دریافت لیست انواع خودرو', details: error.message });
+  }
+}
+
+/**
+ * تغییر نوع خودرو یک اعلام بار
+ * PUT /api/v1/freight-announcements/:id/vehicle-type
+ * Body: { vehicleType }
+ */
+async function changeVehicleType(req, res) {
+  const { id: announcementId } = req.params;
+  const { vehicleType } = req.body || {};
+  const { id: userId, name, username } = req.user || {};
+  const userName = name || username || 'کاربر';
+
+  console.log('🔄 [changeVehicleType] Request received:', {
+    announcementId,
+    vehicleType,
+    userId,
+    userName
+  });
+
+  if (!vehicleType || vehicleType.trim() === '') {
+    return res.status(400).json({ message: 'نوع خودرو الزامی است.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // بررسی اعلام بار
+    const { rows: annRows } = await client.query(
+      `SELECT id, announcement_code, status, vehicle_type, line_type
+       FROM freight_announcements
+       WHERE id = $1 FOR UPDATE`,
+      [announcementId]
+    );
+    if (annRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    const announcement = annRows[0];
+
+    // بررسی اینکه فقط برای پاستوریزه و لبنیات-فروتلند مجاز است
+    if (!['پاستوریزه', 'لبنیات-فروتلند'].includes(announcement.line_type)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'تغییر نوع خودرو فقط برای پاستوریزه و لبنیات-فروتلند مجاز است.' });
+    }
+
+    const oldVehicleType = announcement.vehicle_type;
+
+    // تغییر نوع خودرو
+    await client.query(
+      `UPDATE freight_announcements
+       SET vehicle_type = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [vehicleType, announcementId]
+    );
+
+    console.log('✅ [changeVehicleType] Vehicle type changed:', {
+      announcementId,
+      oldVehicleType,
+      newVehicleType: vehicleType
+    });
+
+    // ثبت تاریخچه
+    await logFreightHistory({
+      announcementId: announcementId,
+      userId: userId,
+      userName: userName,
+      action: 'VEHICLE_TYPE_CHANGED',
+      oldStatus: announcement.status,
+      newStatus: announcement.status,
+      fieldChanges: {
+        vehicle_type: {
+          old: oldVehicleType,
+          new: vehicleType
+        }
+      },
+      description: `نوع خودرو از "${oldVehicleType}" به "${vehicleType}" تغییر یافت (توسط ${userName})`,
+      ipAddress: req.ip,
+      client: client
+    });
+
+    await client.query('COMMIT');
+    
+    console.log('✅ [changeVehicleType] Change completed successfully');
+    
+    return res.status(200).json({ 
+      message: 'نوع خودرو با موفقیت تغییر یافت',
+      announcementId,
+      oldVehicleType,
+      newVehicleType: vehicleType
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [changeVehicleType] Error:', error);
+    return res.status(500).json({ message: 'خطا در تغییر نوع خودرو', details: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports.getVehicleTypes = getVehicleTypes;
+module.exports.changeVehicleType = changeVehicleType;

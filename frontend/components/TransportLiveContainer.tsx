@@ -91,6 +91,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 };
 
                 const normalize = (a: any): FreightAnnouncement => {
+                    // لاگ برای بررسی representative_type
+                    if (a.representative_type || a.representativeType) {
+                        console.log('🔍 [normalize] Found representative_type:', {
+                            id: a.id,
+                            representative_type: a.representative_type,
+                            representativeType: a.representativeType,
+                            representative_name: a.representative_name || a.representativeName
+                        });
+                    }
                     return {
                         id: a.id,
                         announcementCode: a.announcement_code || a.announcementCode,
@@ -111,7 +120,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         billOfLadingNumber: a.bill_of_lading_number ?? a.billOfLadingNumber,
                         originCity: a.origin_city || a.originCity,
                         brand: a.brand,
-                        representativeType: a.representative_type || a.representativeType,
+                        representativeType: a.representative_type || a.representativeType || null,
                         representativeName: a.representative_name || a.representativeName,
                         cartonCount: a.carton_count ?? a.cartonCount,
                         priority: a.priority,
@@ -279,15 +288,117 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onTransferDestination = async (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => {
-        // console.log('🔄 [TransportLive] Destination Transfer Request:', {
-        //     sourceAnnouncementId,
-        //     destinationId,
-        //     targetAnnouncementId,
-        //     newPosition,
-        //     timestamp: new Date().toISOString()
-        // });
-        // Placeholder: no direct backend route; rely on future endpoint
-        alert('انتقال مقصد ثبت شد.');
+        console.log('🔄 [TransportLive] Destination Transfer Request:', {
+            sourceAnnouncementId,
+            destinationId,
+            targetAnnouncementId,
+            newPosition,
+            timestamp: new Date().toISOString()
+        });
+        
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                console.error('❌ [TransportLive] No token found');
+                alert('لطفا دوباره وارد شوید');
+                return;
+            }
+            
+            // پیدا کردن source و target announcements برای لاگ
+            const sourceAnn = announcements.find(a => a.id === sourceAnnouncementId);
+            const targetAnn = announcements.find(a => a.id === targetAnnouncementId);
+            const selectedDest = sourceAnn?.destinations.find(d => d.id === destinationId);
+            
+            console.log('📋 [TransportLive] Transfer details BEFORE:', {
+                sourceAnnouncement: sourceAnn ? {
+                    id: sourceAnn.id,
+                    code: sourceAnn.announcementCode,
+                    destinations: sourceAnn.destinations.map((d, idx) => ({
+                        position: idx + 1,
+                        id: d.id,
+                        city: d.city
+                    }))
+                } : null,
+                targetAnnouncement: targetAnn ? {
+                    id: targetAnn.id,
+                    code: targetAnn.announcementCode,
+                    destinations: targetAnn.destinations.map((d, idx) => ({
+                        position: idx + 1,
+                        id: d.id,
+                        city: d.city
+                    })),
+                    destinationsCount: targetAnn.destinations.length
+                } : null,
+                selectedDestination: selectedDest,
+                requestedPosition: newPosition,
+                expectedFinalPosition: newPosition
+            });
+            
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${sourceAnnouncementId}/transfer-destination`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({
+                    destinationId,
+                    targetAnnouncementId,
+                    newPosition
+                })
+            });
+            
+            console.log('📡 [TransportLive] Transfer API Response:', {
+                status: res.status,
+                statusText: res.statusText,
+                ok: res.ok
+            });
+            
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error('❌ [TransportLive] Transfer API error:', {
+                    status: res.status,
+                    statusText: res.statusText,
+                    errorText
+                });
+                throw new Error(errorText || 'خطا در انتقال مقصد');
+            }
+            
+            const result = await res.json();
+            console.log('✅ [TransportLive] Transfer API response:', result);
+            
+            // به‌روزرسانی state بدون reload کامل
+            setAnnouncements(prev => {
+                const updated = prev.map(ann => {
+                    if (ann.id === sourceAnnouncementId) {
+                        // حذف مقصد از source
+                        const updatedDestinations = ann.destinations.filter(d => d.id !== destinationId);
+                        return { ...ann, destinations: updatedDestinations };
+                    } else if (ann.id === targetAnnouncementId) {
+                        // اضافه کردن مقصد به target در موقعیت جدید
+                        const transferredDest = sourceAnn?.destinations.find(d => d.id === destinationId);
+                        if (transferredDest) {
+                            const newDestinations = [...ann.destinations];
+                            // حذف مقصد از موقعیت فعلی (اگر در همان ردیف است)
+                            const existingIndex = newDestinations.findIndex(d => d.id === destinationId);
+                            if (existingIndex >= 0) {
+                                newDestinations.splice(existingIndex, 1);
+                            }
+                            // اضافه کردن در موقعیت جدید
+                            const insertIndex = Math.min(newPosition - 1, newDestinations.length);
+                            newDestinations.splice(insertIndex, 0, transferredDest);
+                            return { ...ann, destinations: newDestinations };
+                        }
+                    }
+                    return ann;
+                });
+                return updated;
+            });
+            
+            console.log('✅ [TransportLive] State updated without full reload');
+        } catch (error: any) {
+            console.error('❌ [TransportLive] Transfer error:', error);
+            alert(error.message || 'خطا در انتقال مقصد');
+        }
     };
 
     const onForward = async (announcementId: string) => {
@@ -366,6 +477,59 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
+    const onChangeVehicleType = async (announcementId: string, vehicleType: string) => {
+        console.log('🔄 [TransportLive] Change Vehicle Type Request:', {
+            announcementId,
+            vehicleType,
+            timestamp: new Date().toISOString()
+        });
+        
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                console.error('❌ [TransportLive] No token found');
+                alert('لطفا دوباره وارد شوید');
+                return;
+            }
+            
+            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/vehicle-type`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({ vehicleType })
+            });
+            
+            console.log('📡 [TransportLive] Change Vehicle Type API Response:', {
+                status: res.status,
+                statusText: res.statusText,
+                ok: res.ok
+            });
+            
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error('❌ [TransportLive] Change Vehicle Type API error:', {
+                    status: res.status,
+                    statusText: res.statusText,
+                    errorText
+                });
+                throw new Error(errorText || 'خطا در تغییر نوع خودرو');
+            }
+            
+            const result = await res.json();
+            console.log('✅ [TransportLive] Change Vehicle Type successful:', result);
+            
+            alert('نوع خودرو با موفقیت تغییر یافت');
+            
+            // Refresh data after successful change
+            await fetchData();
+        } catch (error: any) {
+            console.error('❌ [TransportLive] Change Vehicle Type error:', error);
+            alert(error.message || 'خطا در تغییر نوع خودرو');
+        }
+    };
+
     const onChangeRequest = async (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => {
         try {
             const token = localStorage.getItem('token');
@@ -425,6 +589,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onForward={onForward}
                 onCancel={onCancel}
                 onChangeRequest={onChangeRequest}
+                onChangeVehicleType={onChangeVehicleType}
                 onOpenHistory={onOpenHistory}
                 currentUser={currentUser}
                 activeLine={activeLine}

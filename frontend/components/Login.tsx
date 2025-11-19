@@ -45,11 +45,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-slate-100">
-            <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+        <div className="flex items-center justify-center min-h-screen" style={{ 
+            fontFamily: 'Vazirmatn, sans-serif',
+            background: 'linear-gradient(to bottom right, #f8fafc, #e2e8f0)'
+        }}>
+            <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl" style={{
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                border: '1px solid #e2e8f0'
+            }}>
                 <div className="flex flex-col items-center">
-                    <WrenchScrewdriverIcon className="h-12 w-12 text-sky-600" />
-                    <h2 className="mt-4 text-2xl font-bold text-center text-slate-800">ورود به سامانه مدیریت ناوگان</h2>
+                    <div className="mb-4 p-3 bg-sky-50 rounded-full flex items-center justify-center" style={{ width: '80px', height: '80px' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '48px', height: '48px', color: '#0284c7' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.474-4.474c-.048-.58-.087-1.193-.14-1.743A4.5 4.5 0 0012.45 3.75c-.58.052-1.163.09-1.743.14a4.5 4.5 0 00-4.474 4.474c.048.58.087 1.193.14 1.743" />
+                        </svg>
+                    </div>
+                    <h2 className="mt-2 text-2xl font-bold text-center text-slate-800">ورود به سامانه مدیریت ناوگان</h2>
                 </div>
                 <form className="space-y-6" onSubmit={handleSubmit}>
                     <div>
@@ -63,10 +73,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             onChange={(e) => setUsername(e.target.value)}
                             className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                             placeholder="مثال: workshop"
+                            autoComplete="username"
                         />
                     </div>
                     <div>
-                        <label htmlFor="password"className="block text-sm font-medium text-slate-700">رمز عبور</label>
+                        <label htmlFor="password" className="block text-sm font-medium text-slate-700">رمز عبور</label>
                         <input
                             id="password"
                             name="password"
@@ -76,6 +87,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             onChange={(e) => setPassword(e.target.value)}
                             className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                             placeholder="●●●●●●●●"
+                            autoComplete="current-password"
                         />
                     </div>
                     {error && <p className="text-sm text-red-600 text-center">{error}</p>}

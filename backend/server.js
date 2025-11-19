@@ -26,8 +26,50 @@ const dispatchRoutes = require('./routes/dispatchRoutes');
 const app = express();
 
 // Middleware
-app.use(cors()); // Enable CORS for all routes
+app.use(cors({
+  origin: true, // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+})); // Enable CORS for all routes
 app.use(express.json());
+
+// Set security headers (only in production, relaxed for development)
+app.use((req, res, next) => {
+  // In development, use relaxed CSP to allow Tailwind CDN
+  if (process.env.NODE_ENV !== 'production') {
+    // Relaxed CSP for development - allows Tailwind CDN with eval
+    res.setHeader('Content-Security-Policy', 
+      "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://aistudiocdn.com http://localhost:*; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; " +
+      "font-src 'self' data: https://fonts.gstatic.com; " +
+      "img-src 'self' data: blob: https:; " +
+      "connect-src 'self' 'unsafe-inline' http://localhost:* https://aistudiocdn.com https://cdn.tailwindcss.com; " +
+      "frame-src 'self' https:; " +
+      "object-src 'none'; " +
+      "base-uri 'self';"
+    );
+  } else {
+    // Stricter CSP for production
+    res.setHeader('Content-Security-Policy', 
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' https://aistudiocdn.com; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "font-src 'self' https://fonts.gstatic.com; " +
+      "img-src 'self' data: https:; " +
+      "connect-src 'self' https://aistudiocdn.com;"
+    );
+  }
+  
+  // Prevent CORB issues - allow cross-origin resources
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  
+  next();
+});
 
 // API Routes
 app.use('/api/v1/auth', authRoutes);

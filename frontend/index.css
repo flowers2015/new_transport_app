@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
+
+body {
+  font-family: 'Vazirmatn', sans-serif;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.blinking-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: #22c55e; /* green-500 */
+  border-radius: 50%;
+  animation: blink 1.5s linear infinite;
+}
+
