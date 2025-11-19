@@ -1597,6 +1597,7 @@ async function getBoard(req, res) {
          da.freight_announcement_id,
          da.stage,
          da.created_at,
+         da.assignment_finalized_at,
          da.vehicle_id,
          da.driver_id,
          da.route_id,
@@ -1625,6 +1626,10 @@ async function getBoard(req, res) {
        WHERE fa.status IN ('Assigned', 'InTransit')
          AND fa.status NOT IN ('Cancelled')
          AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
+         -- فقط راننده‌ها و خودروهای شرکتی: بررسی می‌کنیم که vehicle_id و driver_id در جداول company وجود دارند
+         -- اگر vehicle_id یا driver_id NULL باشد، آن را رد می‌کنیم (چون باید در جداول company باشند)
+         AND (da.vehicle_id IS NOT NULL AND v.id IS NOT NULL)
+         AND (da.driver_id IS NOT NULL AND d.id IS NOT NULL)
        ORDER BY da.freight_announcement_id, fd.created_at ASC`
     );
 
@@ -1641,6 +1646,7 @@ async function getBoard(req, res) {
           freightAnnouncementId: annId,
           stage: row.stage,
           createdAt: row.created_at,
+          assignmentFinalizedAt: row.assignment_finalized_at,
           announcementCode: row.announcement_code,
           lineType: row.line_type,
           vehicleType: row.vehicle_type,
@@ -1705,7 +1711,32 @@ async function getBoard(req, res) {
           name: driverNameWithRoute,
         },
         routeSummary, // برای استفاده در frontend
-        daysSinceAssignment: Math.floor((new Date() - new Date(entry.createdAt)) / (1000 * 60 * 60 * 24)),
+        daysSinceAssignment: (() => {
+          // استفاده از created_at (تاریخ تخصیص) برای محاسبه تعداد روزها
+          // assignment_finalized_at تاریخ finalize است، نه تاریخ تخصیص
+          const assignmentDate = entry.createdAt;
+          if (!assignmentDate) return 0;
+          const assignmentDateTime = new Date(assignmentDate);
+          const now = new Date();
+          
+          // محاسبه تفاوت روزها بر اساس تاریخ (بدون در نظر گیری ساعت)
+          // استفاده از UTC برای مقایسه دقیق‌تر
+          const assignmentDateUTC = new Date(Date.UTC(
+            assignmentDateTime.getFullYear(),
+            assignmentDateTime.getMonth(),
+            assignmentDateTime.getDate()
+          ));
+          const nowUTC = new Date(Date.UTC(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate()
+          ));
+          
+          const diffTime = nowUTC.getTime() - assignmentDateUTC.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          
+          return diffDays;
+        })(),
       };
     });
 

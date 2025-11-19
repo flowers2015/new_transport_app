@@ -395,7 +395,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     <div className="flex gap-1 flex-wrap">
                         {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                         {canPerformActions && ann.destinations.length > 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
-                    </div>
+                </div>
                 );
             } },
         ];
@@ -645,24 +645,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     if (isDairyOrAmbient) {
                         if (isEditing) {
                             return (
-                                <select
-                                    value={ann.vehicleType || ''}
-                                    onChange={(e) => {
+                        <select
+                            value={ann.vehicleType || ''}
+                            onChange={(e) => {
                                         if (e.target.value && e.target.value !== ann.vehicleType) {
-                                            onChangeVehicleType(ann.id, e.target.value);
+                                    onChangeVehicleType(ann.id, e.target.value);
                                             setEditingVehicleTypeId(null);
-                                        }
-                                    }}
+                                }
+                            }}
                                     onBlur={() => setEditingVehicleTypeId(null)}
                                     autoFocus
                                     className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                                    autoComplete="off"
-                                >
+                            autoComplete="off"
+                        >
                                     <option value="">-- انتخاب --</option>
-                                    {VEHICLE_TYPES.map(vt => (
-                                        <option key={vt} value={vt}>{vt}</option>
-                                    ))}
-                                </select>
+                            {VEHICLE_TYPES.map(vt => (
+                                <option key={vt} value={vt}>{vt}</option>
+                            ))}
+                        </select>
                             );
                         } else {
                             return (
@@ -758,24 +758,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     if (isDairyOrAmbient) {
                         if (isEditing) {
                             return (
-                                <select
-                                    value={ann.vehicleType || ''}
-                                    onChange={(e) => {
+                        <select
+                            value={ann.vehicleType || ''}
+                            onChange={(e) => {
                                         if (e.target.value && e.target.value !== ann.vehicleType) {
-                                            onChangeVehicleType(ann.id, e.target.value);
+                                    onChangeVehicleType(ann.id, e.target.value);
                                             setEditingVehicleTypeId(null);
-                                        }
-                                    }}
+                                }
+                            }}
                                     onBlur={() => setEditingVehicleTypeId(null)}
                                     autoFocus
                                     className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                                    autoComplete="off"
-                                >
+                            autoComplete="off"
+                        >
                                     <option value="">-- انتخاب --</option>
-                                    {VEHICLE_TYPES.map(vt => (
-                                        <option key={vt} value={vt}>{vt}</option>
-                                    ))}
-                                </select>
+                            {VEHICLE_TYPES.map(vt => (
+                                <option key={vt} value={vt}>{vt}</option>
+                            ))}
+                        </select>
                             );
                         } else {
                             return (
@@ -871,24 +871,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     if (isDairyOrAmbient) {
                         if (isEditing) {
                             return (
-                                <select
-                                    value={ann.vehicleType || ''}
-                                    onChange={(e) => {
+                        <select
+                            value={ann.vehicleType || ''}
+                            onChange={(e) => {
                                         if (e.target.value && e.target.value !== ann.vehicleType) {
-                                            onChangeVehicleType(ann.id, e.target.value);
+                                    onChangeVehicleType(ann.id, e.target.value);
                                             setEditingVehicleTypeId(null);
-                                        }
-                                    }}
+                                }
+                            }}
                                     onBlur={() => setEditingVehicleTypeId(null)}
                                     autoFocus
                                     className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                                    autoComplete="off"
-                                >
+                            autoComplete="off"
+                        >
                                     <option value="">-- انتخاب --</option>
-                                    {VEHICLE_TYPES.map(vt => (
-                                        <option key={vt} value={vt}>{vt}</option>
-                                    ))}
-                                </select>
+                            {VEHICLE_TYPES.map(vt => (
+                                <option key={vt} value={vt}>{vt}</option>
+                            ))}
+                        </select>
                             );
                         } else {
                             return (
@@ -933,24 +933,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     if (isDairyOrAmbient) {
                         if (isEditing) {
                             return (
-                                <select
-                                    value={ann.vehicleType || ''}
-                                    onChange={(e) => {
+                        <select
+                            value={ann.vehicleType || ''}
+                            onChange={(e) => {
                                         if (e.target.value && e.target.value !== ann.vehicleType) {
-                                            onChangeVehicleType(ann.id, e.target.value);
+                                    onChangeVehicleType(ann.id, e.target.value);
                                             setEditingVehicleTypeId(null);
-                                        }
-                                    }}
+                                }
+                            }}
                                     onBlur={() => setEditingVehicleTypeId(null)}
                                     autoFocus
                                     className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                                    autoComplete="off"
-                                >
+                            autoComplete="off"
+                        >
                                     <option value="">-- انتخاب --</option>
-                                    {VEHICLE_TYPES.map(vt => (
-                                        <option key={vt} value={vt}>{vt}</option>
-                                    ))}
-                                </select>
+                            {VEHICLE_TYPES.map(vt => (
+                                <option key={vt} value={vt}>{vt}</option>
+                            ))}
+                        </select>
                             );
                         } else {
                             return (
@@ -1320,7 +1320,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [personalVehicleDetails, setPersonalVehicleDetails] = useState({ type: '', plate: '', truckSmartId: '' });
     const [foundPersonalVehicle, setFoundPersonalVehicle] = useState<any | null | 'not_found'>(null);
     const [destinations, setDestinations] = useState<Destination[]>([]);
-    const [costMode, setCostMode] = useState<'manual' | 'auto'>('manual');
+    const [costMode, setCostMode] = useState<'manual' | 'auto'>('auto'); // پیش‌فرض: خودکار
     const [autoTotalCost, setAutoTotalCost] = useState('');
     
     // States for search results
@@ -1359,19 +1359,60 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 }
             }
         }
-        setDestinations(JSON.parse(JSON.stringify(announcement.destinations))); // Deep copy
+        const destsCopy = JSON.parse(JSON.stringify(announcement.destinations)); // Deep copy
+        setDestinations(destsCopy);
         setBlNumber(announcement.billOfLadingNumber || '');
+        
+        // اگر تخصیص شخصی است، کرایه‌ها را مدیریت کن
+        if (announcement.assignmentType === 'personal' && destsCopy.length > 0) {
+            const existingTotalCost = destsCopy.reduce((sum: number, d: any) => sum + (Number(d.freightCost) || 0), 0);
+            const totalTonnage = destsCopy.reduce((sum: number, d: any) => sum + (Number(d.tonnage) || 0), 0);
+            
+            if (existingTotalCost > 0) {
+                // اگر کرایه قبلاً ثبت شده، از آن استفاده کن و حالت خودکار را فعال کن
+                setAutoTotalCost(existingTotalCost.toString());
+                setCostMode('auto');
+                // کرایه‌های مقاصد قبلاً در destsCopy هستند، نیازی به محاسبه مجدد نیست
+            } else if (totalTonnage > 0) {
+                // اگر کرایه ثبت نشده، محاسبه خودکار کن
+                const ratePerTon = 10000000; // 10 میلیون ریال به ازای هر تن
+                const calculatedTotal = Math.round(totalTonnage * ratePerTon);
+                setAutoTotalCost(calculatedTotal.toString());
+                setCostMode('auto');
+                // محاسبه کرایه هر مقصد
+                const updatedDests = destsCopy.map((dest: any) => {
+                    const tonnageRatio = (Number(dest.tonnage) || 0) / totalTonnage;
+                    return {...dest, freightCost: Math.round(calculatedTotal * tonnageRatio)};
+                });
+                setDestinations(updatedDests);
+            }
+        } else if (announcement.assignmentType !== 'personal') {
+            // برای تخصیص شرکت، حالت دستی را فعال کن
+            setCostMode('manual');
+            setAutoTotalCost('');
+        }
     }, [announcement, drivers, vehicles]);
     
+    // محاسبه خودکار کرایه هر مقصد بر اساس کرایه کل و تناژ
+    // این useEffect فقط وقتی اجرا می‌شود که کاربر کرایه کل را تغییر دهد
     useEffect(() => {
-        if(costMode === 'auto') {
+        if(costMode === 'auto' && destinations.length > 0 && autoTotalCost) {
             const totalCost = Number(autoTotalCost) || 0;
-            const totalTonnage = destinations.reduce((sum, d) => sum + (d.tonnage || 0), 0);
+            const totalTonnage = destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0);
             if(totalTonnage > 0 && totalCost > 0) {
-                setDestinations(prevDests => prevDests.map(dest => {
-                    const tonnageRatio = (dest.tonnage || 0) / totalTonnage;
-                    return {...dest, freightCost: Math.round(totalCost * tonnageRatio)};
-                }));
+                // محاسبه کرایه هر مقصد بر اساس نسبت تناژ
+                // فقط اگر کرایه کل تغییر کرده باشد (نه در اولین بار که لود می‌شود)
+                setDestinations(prevDests => {
+                    const currentTotal = prevDests.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
+                    // اگر تفاوت وجود دارد، به‌روز کن
+                    if (Math.abs(currentTotal - totalCost) > 1) {
+                        return prevDests.map(dest => {
+                            const tonnageRatio = (Number(dest.tonnage) || 0) / totalTonnage;
+                            return {...dest, freightCost: Math.round(totalCost * tonnageRatio)};
+                        });
+                    }
+                    return prevDests;
+                });
             }
         }
     }, [autoTotalCost, costMode]);
@@ -1518,7 +1559,13 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         }
     };
     
-    const totalPersonalCost = useMemo(() => destinations.reduce((sum, d) => sum + (d.freightCost || 0), 0), [destinations]);
+    const totalPersonalCost = useMemo(() => {
+        const total = destinations.reduce((sum, d) => {
+            const cost = typeof d.freightCost === 'string' ? Number(d.freightCost) : (d.freightCost || 0);
+            return sum + cost;
+        }, 0);
+        return total;
+    }, [destinations]);
 
     const handleSave = () => {
         if (currentUser.role === UserRole.TransportationUser) {
@@ -1661,11 +1708,14 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 {destinations.map((dest, i) => (
                                     <div key={dest.id} className="grid grid-cols-5 gap-2 items-center text-sm p-1">
                                         <div className="col-span-2"><strong>مقصد {i+1}:</strong> {dest.city} ({dest.tonnage || 0} تن)</div>
-                                        <div className="col-span-3 flex items-center gap-2"><label>کرایه:</label><input type="number" value={dest.freightCost || ''} onChange={e => setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: Number(e.target.value)}: d))} className="input-style" autoComplete="off" /><span className="text-xs">ریال</span></div>
+                                        <div className="col-span-3 flex items-center gap-2"><label>کرایه:</label><input type="number" value={dest.freightCost || ''} onChange={e => {
+                                            const newValue = e.target.value === '' ? 0 : Number(e.target.value);
+                                            setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: newValue}: d));
+                                        }} className="input-style" autoComplete="off" /><span className="text-xs">ریال</span></div>
                                     </div>
                                 ))}
                             </div>
-                             <div className="text-right font-bold pt-2 border-t">کرایه کل: {totalPersonalCost.toLocaleString('fa-IR')} ریال</div>
+                             <div className="text-right font-bold pt-2 border-t">کرایه کل: {typeof totalPersonalCost === 'number' ? totalPersonalCost.toLocaleString('fa-IR') : String(totalPersonalCost)} ریال</div>
                         </fieldset>
                         <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
                     </div>

@@ -90,6 +90,15 @@ const DispatchBoardView: React.FC = () => {
                                         };
                                         const categoryLabel = category ? (categoryMap[category] || category) : 'دسته خودرو';
                                         
+                                        // Debug log
+                                        console.log('📅 [DispatchBoardView] Entry:', {
+                                            assignmentId: entry.assignmentId,
+                                            daysSince,
+                                            assignmentFinalizedAt: entry.assignmentFinalizedAt,
+                                            createdAt: entry.createdAt,
+                                            expectedDays
+                                        });
+                                        
                                         return (
                                             <div key={entry.assignmentId} className={`border rounded-lg p-3 space-y-1 ${bgColor}`}>
                                                 <div className="flex justify-between items-start">

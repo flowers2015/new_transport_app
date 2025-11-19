@@ -1415,7 +1415,7 @@ async function getFreightHistory(req, res) {
       FROM freight_announcements fa
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
-      WHERE fa.status = 'Finalized'
+      WHERE fa.status IN ('Finalized', 'InTransit')
     `;
     const params = [];
     let paramIndex = 1;
@@ -1452,7 +1452,7 @@ async function getFreightHistory(req, res) {
     
     const { rows } = await pool.query(query, params);
     
-    console.log(`📊 [getFreightHistory] Found ${rows.length} Finalized announcements`);
+    console.log(`📊 [getFreightHistory] Found ${rows.length} Finalized/InTransit announcements`);
     
     // Fetch destinations for each announcement and convert dates
     for (let announcement of rows) {
@@ -1561,29 +1561,84 @@ async function finalizeAssignments(req, res) {
       console.log(`🔍 [finalizeAssignments] Processing ${annId}: hasAssignment=${hasAssignment}, status=${ann.status}, line_type=${ann.line_type}`);
       
       if (hasAssignment) {
-        // تخصیص دارد → status را به InTransit تغییر می‌دهیم
+        // تخصیص دارد → status را به InTransit تغییر می‌دهیم (اگر قبلاً InTransit نبود)
         // این باعث می‌شود که از "پیگیری اعلام بار زنده" خارج شود
         // اما در "تابلو اعلام بار" باقی می‌ماند (چون InTransit در getBoard نمایش داده می‌شود)
         const oldStatus = ann.status || 'Assigned';
         const newStatus = 'InTransit';
         
-        // آپدیت status اعلام بار
-        await client.query(
-          `UPDATE freight_announcements 
-           SET status = $1, updated_at = NOW() 
-           WHERE id = $2`,
-          [newStatus, annId]
-        );
+        // آپدیت status اعلام بار (فقط اگر قبلاً InTransit نبود)
+        if (oldStatus !== 'InTransit' && oldStatus !== 'in_transit') {
+          await client.query(
+            `UPDATE freight_announcements 
+             SET status = $1, updated_at = NOW() 
+             WHERE id = $2`,
+            [newStatus, annId]
+          );
+        }
         
         // آپدیت dispatch_assignments برای ثبت زمان نهایی‌سازی
-        await client.query(
-          `UPDATE dispatch_assignments 
-           SET assignment_finalized_at = NOW() 
-           WHERE freight_announcement_id = $1 AND (assignment_finalized_at IS NULL OR is_cancelled = FALSE)`,
+        // این مهم است که assignment_finalized_at set شود تا در frontend فیلتر شود
+        // ابتدا بررسی می‌کنیم که آیا dispatch_assignments برای این اعلام بار وجود دارد یا نه
+        const checkDispatch = await client.query(
+          `SELECT id FROM dispatch_assignments 
+           WHERE freight_announcement_id = $1 
+           AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+           LIMIT 1`,
           [annId]
         );
         
-        console.log(`✅ [finalizeAssignments] Assignment finalized for ${annId}, status changed from ${oldStatus} to ${newStatus} (removed from TransportLive, stays in Dispatch Board)`);
+        if (checkDispatch.rowCount > 0) {
+          // اگر dispatch_assignments وجود دارد، فقط assignment_finalized_at را set می‌کنیم
+          const updateResult = await client.query(
+            `UPDATE dispatch_assignments 
+             SET assignment_finalized_at = NOW() 
+             WHERE freight_announcement_id = $1 
+             AND (assignment_finalized_at IS NULL OR is_cancelled = FALSE)
+             RETURNING id`,
+            [annId]
+          );
+          console.log(`✅ [finalizeAssignments] Assignment finalized for ${annId}, status: ${oldStatus} -> ${newStatus}, assignment_finalized_at updated: ${updateResult.rowCount > 0}`);
+        } else {
+          // اگر dispatch_assignments وجود ندارد، یک رکورد جدید ایجاد می‌کنیم
+          // این برای تخصیص‌های شخصی که ممکن است dispatch_assignments نداشته باشند
+          // stage باید 'stage1' یا 'stage2' باشد - برای تخصیص شخصی از 'stage2' استفاده می‌کنیم
+          // برای تخصیص‌های شخصی، vehicle_id و driver_id ممکن است به جداول personal_vehicles و personal_drivers اشاره کنند
+          // پس باید آنها را null بگذاریم یا بررسی کنیم که آیا در جداول company وجود دارند یا نه
+          let vehicleIdForDispatch = null;
+          let driverIdForDispatch = null;
+          
+          // بررسی اینکه آیا vehicle_id در جدول vehicles وجود دارد
+          if (ann.assigned_vehicle_id) {
+            const vehicleCheck = await client.query(
+              'SELECT id FROM vehicles WHERE id = $1',
+              [ann.assigned_vehicle_id]
+            );
+            if (vehicleCheck.rowCount > 0) {
+              vehicleIdForDispatch = ann.assigned_vehicle_id;
+            }
+          }
+          
+          // بررسی اینکه آیا driver_id در جدول drivers وجود دارد
+          if (ann.assigned_driver_id) {
+            const driverCheck = await client.query(
+              'SELECT id FROM drivers WHERE id = $1',
+              [ann.assigned_driver_id]
+            );
+            if (driverCheck.rowCount > 0) {
+              driverIdForDispatch = ann.assigned_driver_id;
+            }
+          }
+          
+          const insertResult = await client.query(
+            `INSERT INTO dispatch_assignments 
+             (freight_announcement_id, vehicle_id, driver_id, stage, assignment_finalized_at, created_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())
+             RETURNING id`,
+            [annId, vehicleIdForDispatch, driverIdForDispatch, 'stage2']
+          );
+          console.log(`✅ [finalizeAssignments] Assignment finalized for ${annId}, status: ${oldStatus} -> ${newStatus}, dispatch_assignments created: ${insertResult.rowCount > 0}, vehicle_id: ${vehicleIdForDispatch}, driver_id: ${driverIdForDispatch}`);
+        }
         
         finalizedIds.push(annId);
         
@@ -2407,16 +2462,15 @@ async function getRepresentativeDetails(req, res) {
     const statusFilter = `AND fa.status NOT IN ('Draft', 'PendingManagerApproval', 'Rejected', 'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced')`;
     
     // کوئری برای گرفتن جزئیات تخصیص‌ها
-    // مهم: استفاده از fd.freight_cost (کرایه هر مقصد) به جای fa.total_freight_cost (کرایه کل)
+    // ابتدا announcements را پیدا می‌کنیم که حداقل یک destination با فیلترهای representative و city دارند
+    // سپس برای هر announcement، همه destinations را می‌گیریم
     const query = `
       SELECT 
         fa.id,
-        fd.id as destination_id,
         fa.announcement_code,
         CAST(fa.loading_date AS TEXT) as loading_date,
         fa.line_type,
         fa.assignment_type,
-        COALESCE(fd.freight_cost, 0) as freight_cost,
         (
           SELECT MIN(fah.created_at) 
           FROM freight_announcement_history fah 
@@ -2424,28 +2478,40 @@ async function getRepresentativeDetails(req, res) {
             AND fah.action = 'ASSIGNED'
           LIMIT 1
         ) as assigned_at,
-        d.id as driver_id,
-        d.name as driver_name,
-        d.employee_id as driver_employee_id,
-        COALESCE(d.mobile, d.work_phone, d.home_phone) as driver_phone,
-        v.id as vehicle_id,
-        v.plate_part1,
-        v.plate_letter,
-        v.plate_part2,
-        v.plate_city_code,
-        v.brand as vehicle_make,
-        v.model as vehicle_model
-      FROM freight_destinations fd
-      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
+        COALESCE(d.id, pd.id) as driver_id,
+        COALESCE(d.name, pd.name) as driver_name,
+        COALESCE(d.employee_id, pd.driver_smart_id) as driver_employee_id,
+        COALESCE(d.mobile, d.work_phone, d.home_phone, pd.mobile) as driver_phone,
+        COALESCE(v.id, pv.id) as vehicle_id,
+        COALESCE(v.plate_part1, pv.plate_part1) as plate_part1,
+        COALESCE(v.plate_letter, pv.plate_letter) as plate_letter,
+        COALESCE(v.plate_part2, pv.plate_part2) as plate_part2,
+        COALESCE(v.plate_city_code, pv.plate_city_code) as plate_city_code,
+        COALESCE(v.brand, NULL) as vehicle_make,
+        COALESCE(v.model, pv.vehicle_type) as vehicle_model,
+        fd.id as destination_id,
+        fd.city as destination_city,
+        COALESCE(fd.freight_cost, 0) as freight_cost,
+        fd_filter.city as filter_city,
+        -- کرایه مقصد خاص (مشهد) که کاربر روی آن کلیک کرده
+        CASE 
+          WHEN fd.city = fd_filter.city THEN COALESCE(fd.freight_cost, 0)
+          ELSE 0
+        END as destination_specific_freight_cost
+      FROM freight_announcements fa
+      INNER JOIN freight_destinations fd_filter ON fd_filter.freight_announcement_id = fa.id
+      INNER JOIN freight_destinations fd ON fd.freight_announcement_id = fa.id
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
-      WHERE (COALESCE(NULLIF(fd.representative_name, ''), 'پخش') = $1 OR ($1 = 'پخش' AND (fd.representative_name IS NULL OR fd.representative_name = '')))
-        AND fd.city = $2
+      LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
+      LEFT JOIN personal_vehicles pv ON fa.assigned_vehicle_id = pv.id
+      WHERE (COALESCE(NULLIF(fd_filter.representative_name, ''), 'پخش') = $1 OR ($1 = 'پخش' AND (fd_filter.representative_name IS NULL OR fd_filter.representative_name = '')))
+        AND fd_filter.city = $2
         AND fa.assigned_driver_id IS NOT NULL
         ${lineTypeFilter}
         ${dateFilter}
         ${statusFilter}
-      ORDER BY fa.loading_date DESC, fa.created_at DESC
+      ORDER BY fa.id, fd.created_at ASC
     `;
     
     console.log('📊 [RepresentativeDetails] Query:', query);
@@ -2455,53 +2521,103 @@ async function getRepresentativeDetails(req, res) {
     
     const jalaliUtils = require('../utils/jalali');
     
-    const details = rows.map(row => {
-      let assignedAtJalali = null;
-      if (row.assigned_at) {
-        try {
-          const assignedAtDate = new Date(row.assigned_at);
-          assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
-        } catch (err) {
-          console.error('❌ [RepresentativeDetails] Error converting assigned_at:', err);
+    // گروه‌بندی بر اساس announcement_id برای جمع‌آوری همه مقاصد
+    const announcementMap = new Map();
+    
+    for (const row of rows) {
+      const annId = row.id;
+      
+      if (!announcementMap.has(annId)) {
+        let assignedAtJalali = null;
+        if (row.assigned_at) {
+          try {
+            const assignedAtDate = new Date(row.assigned_at);
+            assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
+          } catch (err) {
+            console.error('❌ [RepresentativeDetails] Error converting assigned_at:', err);
+          }
         }
+        
+        let loadingDate = null;
+        try {
+          loadingDate = row.loading_date ? normalizeJalaliDate(row.loading_date) : null;
+        } catch (err) {
+          console.error('❌ [RepresentativeDetails] Error normalizing loading_date:', err);
+          loadingDate = row.loading_date || null;
+        }
+        
+        announcementMap.set(annId, {
+          id: annId,
+          announcementCode: row.announcement_code,
+          loadingDate: loadingDate,
+          lineType: row.line_type,
+          assignmentType: row.assignment_type,
+          totalFreightCost: 0, // بعداً جمع می‌کنیم
+          destinationFreightCost: 0, // کرایه مقصد خاص (مشهد)
+          assignedAt: assignedAtJalali,
+          driver: row.driver_id ? {
+            id: row.driver_id,
+            name: row.driver_name,
+            employeeId: row.driver_employee_id,
+            phone: row.driver_phone
+          } : null,
+          vehicle: row.vehicle_id ? {
+            id: row.vehicle_id,
+            plateNumber: {
+              part1: row.plate_part1,
+              letter: row.plate_letter,
+              part2: row.plate_part2,
+              cityCode: row.plate_city_code
+            },
+            make: row.vehicle_make,
+            model: row.vehicle_model
+          } : null,
+          destinations: []
+        });
       }
       
-      let loadingDate = null;
-      try {
-        loadingDate = row.loading_date ? normalizeJalaliDate(row.loading_date) : null;
-      } catch (err) {
-        console.error('❌ [RepresentativeDetails] Error normalizing loading_date:', err);
-        loadingDate = row.loading_date || null;
+      // اضافه کردن مقصد به لیست مقاصد
+      const announcement = announcementMap.get(annId);
+      const destCity = row.destination_city || null;
+      const destCost = parseFloat(row.freight_cost) || 0;
+      const destSpecificCost = parseFloat(row.destination_specific_freight_cost) || 0;
+      
+      // اگر این مقصد همان مقصد خاص (مشهد) است، کرایه آن را ذخیره کنیم
+      if (destSpecificCost > 0) {
+        announcement.destinationFreightCost = destSpecificCost;
       }
       
-      return {
-        id: row.id,
-        destinationId: row.destination_id,
-        announcementCode: row.announcement_code,
-        loadingDate: loadingDate,
-        lineType: row.line_type,
-        assignmentType: row.assignment_type,
-        totalFreightCost: parseFloat(row.freight_cost) || 0, // استفاده از کرایه مقصد خاص
-        assignedAt: assignedAtJalali,
-        driver: row.driver_id ? {
-          id: row.driver_id,
-          name: row.driver_name,
-          employeeId: row.driver_employee_id,
-          phone: row.driver_phone
-        } : null,
-        vehicle: row.vehicle_id ? {
-          id: row.vehicle_id,
-          plateNumber: {
-            part1: row.plate_part1,
-            letter: row.plate_letter,
-            part2: row.plate_part2,
-            cityCode: row.plate_city_code
-          },
-          make: row.vehicle_make,
-          model: row.vehicle_model
-        } : null
-      };
-    });
+      // جلوگیری از اضافه کردن مقاصد تکراری
+      const existingDest = announcement.destinations.find(d => d.city === destCity);
+      if (!existingDest && destCity) {
+        announcement.destinations.push({
+          id: row.destination_id || null,
+          city: destCity,
+          freightCost: destCost
+        });
+        announcement.totalFreightCost += destCost;
+      }
+    }
+    
+    // تبدیل Map به Array
+    const details = Array.from(announcementMap.values());
+    
+    // برای هر announcement، همه مقاصد را از database بگیریم (برای اطمینان از کامل بودن)
+    for (const detail of details) {
+      const destRows = await pool.query(
+        'SELECT id, city, freight_cost FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+        [detail.id]
+      );
+      
+      // همیشه از database بگیریم تا مطمئن شویم همه مقاصد را داریم
+      detail.destinations = destRows.rows.map(dest => ({
+        id: dest.id || null,
+        city: dest.city,
+        freightCost: parseFloat(dest.freight_cost) || 0
+      }));
+      // محاسبه مجدد totalFreightCost از همه مقاصد
+      detail.totalFreightCost = detail.destinations.reduce((sum, d) => sum + d.freightCost, 0);
+    }
     
     console.log('✅ [RepresentativeDetails] Found', details.length, 'assignments');
     

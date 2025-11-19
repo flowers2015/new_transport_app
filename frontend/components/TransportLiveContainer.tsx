@@ -279,8 +279,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // نمایش پیام موفقیت
             alert(`اتمام تخصیص انجام شد:\n${result.finalized} مورد نهایی شد\n${result.leftover} مورد به بارهای مانده برگشت`);
             
-            // Refresh data
-            await fetchData();
+            // Refresh data - با کمی تاخیر برای اطمینان از به‌روزرسانی backend
+            setTimeout(async () => {
+                await fetchData();
+            }, 1000);
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
             alert(error.message || 'خطا در اتمام تخصیص');

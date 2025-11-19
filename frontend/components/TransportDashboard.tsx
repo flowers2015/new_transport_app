@@ -33,7 +33,13 @@ interface RepresentativeDetailData {
     lineType: string;
     assignmentType: string;
     totalFreightCost: number;
+    destinationFreightCost?: number; // کرایه مقصد خاص (مشهد)
     assignedAt: string | null;
+    destinations?: Array<{
+        id: string | null;
+        city: string;
+        freightCost: number;
+    }>;
     driver: {
         id: string;
         name: string;
@@ -1942,9 +1948,13 @@ const RepresentativeStatisticsTable: React.FC<{
                                                 ))}
                                                 {group.items.length > 0 && (
                                                     <tr className="bg-slate-100 border-b-2 border-slate-300">
-                                                        <td colSpan={4} className="px-4 py-3 text-center text-slate-600">
+                                                        <td className="px-4 py-3 text-center text-slate-600 font-bold">
                                                             {group.items.reduce((sum, item) => sum + item.totalFreights, 0)} ارسال | {group.items.reduce((sum, item) => sum + item.companyCount, 0)} شرکتی | {group.items.reduce((sum, item) => sum + item.personalCount, 0)} شخصی
                                                         </td>
+                                                        <td className="px-4 py-3"></td>
+                                                        <td className="px-4 py-3"></td>
+                                                        <td className="px-4 py-3"></td>
+                                                        <td className="px-4 py-3"></td>
                                                         <td className="px-4 py-3 text-center font-bold text-slate-800">
                                                             {formatCurrency(group.totalPersonalFreightCost)}
                                                         </td>
@@ -2102,7 +2112,6 @@ const RepresentativeStatisticsTable: React.FC<{
                                         const filteredDetails = details.filter(detail => {
                                             const searchLower = detailsSearch.toLowerCase();
                                             const matchesSearch = !detailsSearch || 
-                                                detail.announcementCode?.toLowerCase().includes(searchLower) ||
                                                 detail.driver?.name?.toLowerCase().includes(searchLower) ||
                                                 detail.driver?.employeeId?.toLowerCase().includes(searchLower) ||
                                                 detail.driver?.phone?.toLowerCase().includes(searchLower) ||
@@ -2110,7 +2119,8 @@ const RepresentativeStatisticsTable: React.FC<{
                                                 detail.vehicle?.make?.toLowerCase().includes(searchLower) ||
                                                 detail.vehicle?.model?.toLowerCase().includes(searchLower) ||
                                                 detail.loadingDate?.toLowerCase().includes(searchLower) ||
-                                                detail.assignedAt?.toLowerCase().includes(searchLower);
+                                                detail.assignedAt?.toLowerCase().includes(searchLower) ||
+                                                detail.destinations?.some(dest => dest.city?.toLowerCase().includes(searchLower));
                                             
                                             const matchesLine = !detailsLineFilter || detail.lineType === detailsLineFilter;
                                             
@@ -2121,14 +2131,14 @@ const RepresentativeStatisticsTable: React.FC<{
                                         const startIndex = (detailsPage - 1) * detailsPageSize;
                                         const paginatedDetails = filteredDetails.slice(startIndex, startIndex + detailsPageSize);
 
-                                        // محاسبه مبالغ
+                                        // محاسبه مبالغ - استفاده از destinationFreightCost (کرایه مقصد خاص) به جای totalFreightCost
                                         const totalPaid = filteredDetails
                                             .filter(d => d.assignmentType === 'personal')
-                                            .reduce((sum, d) => sum + (d.totalFreightCost || 0), 0);
+                                            .reduce((sum, d) => sum + (d.destinationFreightCost || d.totalFreightCost || 0), 0);
                                         
                                         const totalUnpaid = filteredDetails
                                             .filter(d => d.assignmentType === 'personal')
-                                            .reduce((sum, d) => sum + (d.totalFreightCost || 0), 0);
+                                            .reduce((sum, d) => sum + (d.destinationFreightCost || d.totalFreightCost || 0), 0);
 
                                         return (
                                             <>
@@ -2136,11 +2146,11 @@ const RepresentativeStatisticsTable: React.FC<{
                                     <table className="min-w-full text-sm border-collapse">
                                         <thead>
                                             <tr className="border-b border-slate-300 bg-slate-50">
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">کد اعلام بار</th>
                                                 <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ بارگیری</th>
                                                 <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ تخصیص</th>
                                                 <th className="px-4 py-3 text-right text-slate-700 font-semibold">لاین</th>
                                                 <th className="px-4 py-3 text-right text-slate-700 font-semibold">نوع تخصیص</th>
+                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">مقاصد</th>
                                                 <th className="px-4 py-3 text-right text-slate-700 font-semibold">راننده</th>
                                                 <th className="px-4 py-3 text-right text-slate-700 font-semibold">خودرو</th>
                                                 <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ کرایه</th>
@@ -2149,7 +2159,6 @@ const RepresentativeStatisticsTable: React.FC<{
                                         <tbody>
                                                             {paginatedDetails.map((detail, idx) => (
                                                                 <tr key={`${detail.id}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
-                                                    <td className="px-4 py-3 text-right">{detail.announcementCode}</td>
                                                     <td className="px-4 py-3 text-right">{detail.loadingDate}</td>
                                                     <td className="px-4 py-3 text-right">{detail.assignedAt || '-'}</td>
                                                     <td className="px-4 py-3 text-right">{detail.lineType}</td>
@@ -2161,6 +2170,27 @@ const RepresentativeStatisticsTable: React.FC<{
                                                         }`}>
                                                             {detail.assignmentType === 'company' ? 'شرکتی' : 'شخصی'}
                                                         </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {detail.destinations && detail.destinations.length > 0 ? (
+                                                            <div>
+                                                                <div>
+                                                                    {detail.destinations.map((dest: any, destIdx: number) => (
+                                                                        <span key={destIdx} className="font-semibold text-blue-700">
+                                                                            {dest.city}
+                                                                            {destIdx < detail.destinations.length - 1 ? '، ' : ''}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                                {detail.totalFreightCost > 0 && (
+                                                                    <div className="text-xs text-slate-500 mt-1">
+                                                                        ({formatCurrency(detail.totalFreightCost)})
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400">-</span>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
                                                         {detail.driver ? (
@@ -2196,7 +2226,7 @@ const RepresentativeStatisticsTable: React.FC<{
                                                             <span className="text-slate-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center">{formatCurrency(detail.totalFreightCost)}</td>
+                                                    <td className="px-4 py-3 text-center">{formatCurrency(detail.destinationFreightCost || detail.totalFreightCost)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
