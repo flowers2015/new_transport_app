@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import FreightHistory from './FreightHistory';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
+import { gregorianToJalali } from '../utils/jalali';
 
 const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -12,23 +13,30 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     const [error, setError] = useState<string | null>(null);
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     
-    // فیلترهای جستجو
-    const [filterDate, setFilterDate] = useState<string>(''); // تاریخ شمسی: 1403/10/15
+    // فیلترهای جستجو - بدون تاریخ پیش‌فرض (خالی باشد تا همه را نشان بده)
+    const [filterDate, setFilterDate] = useState<string>(''); // تاریخ شمسی: خالی = همه
     const [filterDestination, setFilterDestination] = useState<string>('');
+    const [filterBillOfLading, setFilterBillOfLading] = useState<string>(''); // شماره بارنامه
+    const [filterDriverName, setFilterDriverName] = useState<string>(''); // نام راننده
 
-    const fetchHistoryData = async (date?: string, destination?: string) => {
+    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, lineType?: FreightLineType) => {
         setLoading(true);
         setError(null);
         try {
             const token = localStorage.getItem('token');
             const headers = { 'Authorization': `Bearer ${token}` } as any;
             
-            // ساخت query string برای فیلترها
+            // ساخت query string برای فیلترها - فقط اگر مقدار داشته باشند
             const params = new URLSearchParams();
-            if (date) params.append('date', date);
-            if (destination) params.append('destination', destination);
+            if (date && date.trim()) params.append('date', date.trim());
+            if (destination && destination.trim()) params.append('destination', destination.trim());
+            if (billOfLading && billOfLading.trim()) params.append('billOfLading', billOfLading.trim());
+            if (driverName && driverName.trim()) params.append('driverName', driverName.trim());
+            if (lineType) params.append('lineType', lineType);
             
             const historyUrl = `http://localhost:3000/api/v1/freight-announcements/history${params.toString() ? '?' + params.toString() : ''}`;
+            
+            console.log('🔍 [FreightHistoryContainer] Fetching:', historyUrl);
             
             const [historyRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
                 fetch(historyUrl, { headers }),
@@ -38,7 +46,11 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                 fetch('http://localhost:3000/api/v1/personal-vehicles', { headers }),
             ]);
             
-            if (!historyRes.ok) throw new Error('خطا در دریافت تاریخچه اعلام بارها');
+            if (!historyRes.ok) {
+                const errorText = await historyRes.text();
+                console.error('❌ [FreightHistoryContainer] History response error:', errorText);
+                throw new Error('خطا در دریافت تاریخچه اعلام بارها');
+            }
             if (!vRes.ok) throw new Error('خطا در دریافت خودروها');
             if (!dRes.ok) throw new Error('خطا در دریافت رانندگان');
             if (!pdRes.ok) throw new Error('خطا در دریافت رانندگان شخصی');
@@ -51,6 +63,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                 pdRes.json(),
                 pvRes.json()
             ]);
+
+            console.log(`✅ [FreightHistoryContainer] Received ${Array.isArray(historyRaw) ? historyRaw.length : 0} announcements`);
 
             const statusMap: Record<string, FreightAnnouncementStatus> = {
                 Draft: FreightAnnouncementStatus.Draft,
@@ -69,11 +83,11 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                 return {
                     id: a.id,
                     announcementCode: a.announcement_code || a.announcementCode,
-                    createdAt: new Date(a.created_at || a.createdAt || a.loading_date || Date.now()),
-                    // اگر loading_date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، همان را نگه دار و `-` را به `/` تبدیل کن
+                    createdAt: new Date(a.created_at || a.createdAt || Date.now()),
+                    // اگر loading_date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، همان را نگه دار
                     loadingDate: (typeof a.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(a.loading_date)) 
-                        ? (a.loading_date.replace(/-/g, '/') as any)  // تاریخ شمسی به صورت رشته - تبدیل `-` به `/`
-                        : new Date(a.loading_date || a.loadingDate || Date.now()),
+                        ? (a.loading_date.replace(/-/g, '/') as any)
+                        : new Date(a.loading_date || Date.now()),
                     lineType: a.line_type || a.lineType,
                     status: statusMap[a.status] || a.status,
                     cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
@@ -112,25 +126,35 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setPersonalDrivers(personalDriversData);
             setPersonalVehicles(personalVehiclesData);
         } catch (e: any) {
-            console.error('❌ [FreightHistory] Error fetching data:', e);
+            console.error('❌ [FreightHistoryContainer] Error fetching data:', e);
             setError(e.message);
         } finally {
             setLoading(false);
         }
     };
 
+    // جستجو - فقط یک بار در mount برای بارگذاری اولیه
     useEffect(() => {
-        // اگر فیلتر تاریخ خالی است، همه Finalized را نمایش می‌دهیم
-        fetchHistoryData(filterDate || undefined, filterDestination || undefined);
-    }, [filterDate, filterDestination]);
-
+        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine); // بارگذاری اولیه بدون فیلتر اما با activeLine
+    }, [activeLine]); // وقتی activeLine تغییر می‌کند، دوباره fetch کن
+    
+    // جستجو دستی با دکمه - فقط برای تب فعلی
     const handleSearch = () => {
-        fetchHistoryData(filterDate, filterDestination);
+        fetchHistoryData(
+            filterDate || undefined, 
+            filterDestination?.trim() || undefined,
+            filterBillOfLading?.trim() || undefined,
+            filterDriverName?.trim() || undefined,
+            activeLine // فقط برای تب فعلی
+        );
     };
 
     const handleClearFilters = () => {
         setFilterDate('');
         setFilterDestination('');
+        setFilterBillOfLading('');
+        setFilterDriverName('');
+        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine);
     };
 
     if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
@@ -150,6 +174,10 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setFilterDate={setFilterDate}
             filterDestination={filterDestination}
             setFilterDestination={setFilterDestination}
+            filterBillOfLading={filterBillOfLading}
+            setFilterBillOfLading={setFilterBillOfLading}
+            filterDriverName={filterDriverName}
+            setFilterDriverName={setFilterDriverName}
             onSearch={handleSearch}
             onClearFilters={handleClearFilters}
         />

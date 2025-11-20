@@ -23,13 +23,24 @@ interface FreightHistoryProps {
     setFilterDate: (date: string) => void;
     filterDestination: string;
     setFilterDestination: (destination: string) => void;
+    filterBillOfLading: string;
+    setFilterBillOfLading: (billOfLading: string) => void;
+    filterDriverName: string;
+    setFilterDriverName: (driverName: string) => void;
     onSearch: () => void;
     onClearFilters: () => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
-const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')} تومان` : '-';
+const formatCurrency = (amount?: number | string) => {
+    if (!amount) return '-';
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(numAmount)) return '-';
+    // تبدیل به عدد صحیح و جدا کردن 3 رقم 3 رقم
+    const roundedAmount = Math.round(numAmount);
+    return `${roundedAmount.toLocaleString('fa-IR')} ریال`;
+};
 
 const isToday = (someDate: any) => {
     if (!someDate) return false;
@@ -57,7 +68,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, onSearch, onClearFilters, onOpenHistory } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, onSearch, onClearFilters, onOpenHistory } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -66,8 +77,19 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     //     vehiclesCount: vehicles.length,
     //     timestamp: new Date().toISOString()
     // });
-    const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
+    // حفظ viewMode در localStorage تا بعد از سرچ حفظ شود
+    const [viewMode, setViewMode] = useState<'compact' | 'full'>(() => {
+        const saved = localStorage.getItem('freightHistoryViewMode');
+        return (saved === 'compact' || saved === 'full') ? saved : 'compact';
+    });
+    
+    // ذخیره viewMode در localStorage وقتی تغییر می‌کند
+    useEffect(() => {
+        localStorage.setItem('freightHistoryViewMode', viewMode);
+    }, [viewMode]);
     const [isRulesOpen, setIsRulesOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
     // فیلتر ستون‌ها - هر ستونی که در این Set باشد، نمایش داده می‌شود
     const [visibleColumnHeaders, setVisibleColumnHeaders] = useState<Set<string>>(new Set());
     
@@ -195,12 +217,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
             { header: 'ارزش بار', align: 'center', display: () => viewMode === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
             
-            // Operations Column - فقط دکمه تاریخچه برای تاریخچه
-            { header: 'عملیات', display: () => true, render: (ann: FreightAnnouncement) => (
-                <div className="flex gap-1">
-                    {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
-                </div>
-            ) },
+            // حذف ستون عملیات
         ];
 
         return columns;
@@ -222,6 +239,17 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         const filtered = liveAnnouncements.filter(a => a.lineType === activeLine);
         return filtered;
     }, [liveAnnouncements, activeLine]);
+    
+    // محاسبه صفحه‌بندی
+    const totalPages = Math.ceil(filteredAnnouncements.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedAnnouncements = filteredAnnouncements.slice(startIndex, endIndex);
+    
+    // وقتی activeLine تغییر می‌کند، به صفحه اول برگرد
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeLine]);
 
     // Initialize visible columns on mount - همه ستون‌ها به صورت پیش‌فرض نمایش داده می‌شوند
     useEffect(() => {
@@ -254,9 +282,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
         }
@@ -281,9 +308,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
         }
@@ -308,9 +334,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
         }
@@ -324,9 +349,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
         }
@@ -340,9 +364,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-                { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
             return [...base, ...extraCols];
         }
@@ -362,15 +385,15 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />تاریخچه اعلام بار</h2>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-                        {/* فیلتر تاریخ شمسی */}
+                        {/* فیلتر تاریخ شمسی بارگیری */}
                         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
-                            <label className="text-xs whitespace-nowrap">تاریخ شمسی:</label>
+                            <label className="text-xs whitespace-nowrap">تاریخ شمسی بارگیری:</label>
           <input
             type="text"
-                                placeholder="1403/10/15" 
+                                placeholder="1404-05-01" 
                                 value={filterDate}
                                 onChange={e => setFilterDate(e.target.value)}
-                                className="px-2 py-1 text-xs rounded border w-28"
+                                className="px-2 py-1 text-xs rounded border w-32"
           />
         </div>
                         {/* فیلتر مقصد */}
@@ -380,8 +403,55 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 type="text" 
                                 placeholder="جستجوی مقصد..." 
                                 value={filterDestination}
-                                onChange={e => setFilterDestination(e.target.value)}
-                                className="px-2 py-1 text-xs rounded border w-32"
+                                onChange={e => {
+                                    // فوراً state را به‌روز کن - بدون debounce
+                                    setFilterDestination(e.target.value);
+                                }}
+                                onKeyDown={e => {
+                                    // جلوگیری از از دست رفتن focus
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs rounded border w-28"
+                                autoComplete="off"
+          />
+        </div>
+                        {/* فیلتر شماره بارنامه */}
+                        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+                            <label className="text-xs whitespace-nowrap">شماره بارنامه:</label>
+          <input
+                                type="text" 
+                                placeholder="جستجوی بارنامه..." 
+                                value={filterBillOfLading}
+                                onChange={e => setFilterBillOfLading(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs rounded border w-28"
+                                autoComplete="off"
+          />
+        </div>
+                        {/* فیلتر نام راننده */}
+                        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+                            <label className="text-xs whitespace-nowrap">نام راننده:</label>
+          <input
+                                type="text" 
+                                placeholder="جستجوی راننده..." 
+                                value={filterDriverName}
+                                onChange={e => setFilterDriverName(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs rounded border w-28"
+                                autoComplete="off"
           />
         </div>
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
@@ -407,28 +477,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                                 return null;
                                             }
                                             return <th key={col.header} rowSpan={2} className="p-2 text-center">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <span>{col.header}</span>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={visibleColumnHeaders.size === 0 || visibleColumnHeaders.has(col.header)}
-                                                        onChange={e => {
-                                                            const newSet = new Set(visibleColumnHeaders);
-                                                            if (e.target.checked) {
-                                                                newSet.add(col.header);
-                                                            } else {
-                                                                newSet.delete(col.header);
-                                                            }
-                                                            if (newSet.size === commonCols.length || newSet.size === 0) {
-                                                                setVisibleColumnHeaders(new Set());
-                                                            } else {
-                                                                setVisibleColumnHeaders(newSet);
-                                                            }
-                                                        }}
-                                                        className="w-4 h-4"
-                                                        title="فیلتر ستون"
-                                                    />
-                                                </div>
+                                                <span>{col.header}</span>
                                             </th>;
                                         })}
                                         <th colSpan={5} className="p-2 text-center border-x">مقصد اول</th>
@@ -457,37 +506,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                             return null;
                                         }
                                         return <th key={col.header} className="p-2" style={{ textAlign: (col.align || 'right') as any }}>
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span>{col.header}</span>
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={visibleColumnHeaders.size === 0 || visibleColumnHeaders.has(col.header)}
-                                                    onChange={e => {
-                                                        const newSet = new Set(visibleColumnHeaders);
-                                                        if (e.target.checked) {
-                                                            newSet.add(col.header);
-                                                        } else {
-                                                            newSet.delete(col.header);
-                                                        }
-                                                        // اگر همه ستون‌ها انتخاب شوند یا همه غیرفعال شوند، Set را خالی می‌کنیم (یعنی همه نمایش داده شوند)
-                                                        if (newSet.size === visibleColumns.length || newSet.size === 0) {
-                                                            setVisibleColumnHeaders(new Set());
-                                                        } else {
-                                                            setVisibleColumnHeaders(newSet);
-                                                        }
-                                                    }}
-                                                    className="w-4 h-4"
-                                                    title="فیلتر ستون"
-                                                />
-                                            </div>
+                                            <span>{col.header}</span>
                                         </th>;
                                     })}
-                                    <th className="p-2 sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
               </tr>
                              )}
             </thead>
             <tbody>
-                            {filteredAnnouncements.map((ann, idx) => {
+                            {paginatedAnnouncements.map((ann, idx) => {
                                 // برای تاریخچه، همه ردیف‌ها Finalized هستند - رنگ سبز
                                 const rowColorClass = 'bg-teal-50 hover:bg-teal-100';
 
@@ -519,16 +545,51 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                         })
                                     )}
 
-                                    <td className="p-2 sticky -left-px z-10" style={{width: '180px', backgroundColor: 'white'}}>
-                                        <div className="flex gap-1 flex-wrap">
-                                            {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
-                                        </div>
-                  </td>
                 </tr>
                                 );
                             })}
             </tbody>
           </table>
+        </div>
+        
+        {/* صفحه‌بندی */}
+        <div className="flex items-center justify-between mt-4 px-4 py-3 bg-slate-50 rounded-lg">
+            <div className="flex items-center gap-2">
+                <label className="text-sm text-slate-700">تعداد در هر صفحه:</label>
+                <select 
+                    value={itemsPerPage} 
+                    onChange={e => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                    }}
+                    className="px-2 py-1 text-sm border rounded"
+                >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                </select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-700">
+                    صفحه {currentPage} از {totalPages} ({filteredAnnouncements.length} ردیف)
+                </span>
+                <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm bg-white border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    قبلی
+                </button>
+                <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm bg-white border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    بعدی
+                </button>
+            </div>
         </div>
             </div>
              {/* دیالوگ‌های تخصیص و انتقال در تاریخچه نیازی نیست */}

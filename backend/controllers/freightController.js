@@ -1425,45 +1425,59 @@ async function getFreightAnnouncementHistory(req, res) {
  */
 async function getFreightHistory(req, res) {
   try {
-    const { date, destination } = req.query;
+    const { date, destination, billOfLading, driverName, lineType } = req.query;
     
     let query = `
       SELECT 
         fa.*,
         fa.rejection_reason,
-        d.name as assigned_driver_name,
-        d.employee_id as assigned_driver_employee_id,
+        fa.bill_of_lading_number,
+        COALESCE(d.name, pd.name) as assigned_driver_name,
+        COALESCE(d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
         v.model as assigned_vehicle_model,
         v.brand as assigned_vehicle_brand,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
       FROM freight_announcements fa
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+      LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
       WHERE fa.status IN ('Finalized', 'InTransit')
     `;
     const params = [];
     let paramIndex = 1;
     
-    // فیلتر بر اساس تاریخ شمسی
+    // فیلتر بر اساس lineType - فقط برای تب فعلی
+    if (lineType && lineType.trim()) {
+      query += ` AND fa.line_type = $${paramIndex}`;
+      params.push(lineType.trim());
+      paramIndex += 1;
+      console.log(`📦 [getFreightHistory] Filtering by lineType: ${lineType}`);
+    }
+    
+    // فیلتر بر اساس تاریخ شمسی بارگیری
+    // تاریخ در دیتابیس به صورت DATE ذخیره می‌شود اما با سال شمسی (1404)
+    // پس باید مستقیماً با تاریخ شمسی مقایسه کنیم
     if (date && date.trim() !== '') {
-      // انتظار فرمت 1403/10/15
-      const dateMatch = date.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+      // پذیرش فرمت 1404/05/01 یا 1404-05-01
+      const normalizedDate = date.trim().replace(/\//g, '-'); // تبدیل `/` به `-`
+      const dateMatch = normalizedDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (dateMatch) {
         const [, jy, jm, jd] = dateMatch.map(Number);
-        const { jalaliToGregorian } = require('../utils/jalali');
-        const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
         
-        // تبدیل به تاریخ شروع و پایان روز
-        const startDate = new Date(gy, gm - 1, gd, 0, 0, 0, 0);
-        const endDate = new Date(gy, gm - 1, gd, 23, 59, 59, 999);
+        // تبدیل به فرمت YYYY-MM-DD برای مقایسه مستقیم با تاریخ شمسی در دیتابیس
+        const jalaliDateStr = `${jy}-${String(jm).padStart(2, '0')}-${String(jd).padStart(2, '0')}`;
         
-        console.log(`📅 [getFreightHistory] Filtering by date: ${date} -> ${startDate} to ${endDate}`);
+        console.log(`📅 [getFreightHistory] Filtering by loading_date: ${date} (${jy}/${jm}/${jd})`);
+        console.log(`📅 [getFreightHistory] Jalali date string: ${jalaliDateStr}`);
         
-        query += ` AND fa.loading_date >= $${paramIndex} AND fa.loading_date <= $${paramIndex + 1}`;
-        params.push(startDate, endDate);
-        paramIndex += 2;
+        // استفاده از SUBSTRING برای استخراج تاریخ شمسی از loading_date و مقایسه
+        // loading_date در دیتابیس به صورت DATE است اما با سال شمسی (1404)
+        // پس باید مستقیماً با string مقایسه کنیم
+        query += ` AND SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 10) = $${paramIndex}`;
+        params.push(jalaliDateStr);
+        paramIndex += 1;
       } else {
-        console.log(`⚠️ [getFreightHistory] Invalid date format: ${date}`);
+        console.log(`⚠️ [getFreightHistory] Invalid date format: ${date}. Expected: 1404-05-01 or 1404/05/01`);
       }
     } else {
       console.log(`📅 [getFreightHistory] No date filter - showing all Finalized announcements`);
@@ -1479,28 +1493,44 @@ async function getFreightHistory(req, res) {
     console.log(`📊 [getFreightHistory] Found ${rows.length} Finalized/InTransit announcements`);
     
     // Fetch destinations for each announcement and convert dates
+    const filteredRows = [];
     for (let announcement of rows) {
-      let destQuery = 'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1';
-      const destParams = [announcement.id];
-      
-      // فیلتر بر اساس مقصد
-      if (destination) {
-        destQuery += ' AND city ILIKE $2';
-        destParams.push(`%${destination}%`);
-      }
-      
-      const destRows = await pool.query(destQuery, destParams);
-      
-      // اگر فیلتر مقصد داشتیم و نتیجه‌ای پیدا نشد، این ردیف را حذف می‌کنیم
-      if (destination && destRows.rows.length === 0) {
-        const index = rows.indexOf(announcement);
-        if (index > -1) {
-          rows.splice(index, 1);
+      // فیلتر بر اساس شماره بارنامه
+      if (billOfLading && billOfLading.trim()) {
+        const billOfLadingValue = (announcement.bill_of_lading_number || '').toString().toLowerCase();
+        if (!billOfLadingValue.includes(billOfLading.trim().toLowerCase())) {
+          continue; // skip این announcement
         }
-        continue;
       }
       
-      announcement.destinations = destRows.rows;
+      // فیلتر بر اساس نام راننده
+      if (driverName && driverName.trim()) {
+        const driverNameValue = (announcement.assigned_driver_name || '').toString().toLowerCase();
+        if (!driverNameValue.includes(driverName.trim().toLowerCase())) {
+          continue; // skip این announcement
+        }
+      }
+      
+      // همیشه همه destinations را بگیر
+      const allDestRows = await pool.query('SELECT * FROM freight_destinations WHERE freight_announcement_id = $1', [announcement.id]);
+      
+      // اگر فیلتر مقصد داریم، بررسی کن که آیا حداقل یک destination matching دارد
+      if (destination && destination.trim()) {
+        const matchingDests = allDestRows.rows.filter(d => 
+          d.city && d.city.toLowerCase().includes(destination.trim().toLowerCase())
+        );
+        
+        // اگر هیچ destination matching نداشت، این announcement را skip کن
+        if (matchingDests.length === 0) {
+          continue;
+        }
+        
+        // فقط destinations matching را نگه دار
+        announcement.destinations = matchingDests;
+      } else {
+        // اگر فیلتر نداریم، همه destinations را بگیر
+        announcement.destinations = allDestRows.rows;
+      }
       
       // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
       if (announcement.loading_date) {
@@ -1510,11 +1540,14 @@ async function getFreightHistory(req, res) {
           console.log(`📅 [getFreightHistory] ID ${announcement.id}: "${before}" → "${announcement.loading_date}"`);
         }
       }
+      
+      filteredRows.push(announcement);
     }
     
-    res.json(rows);
+    console.log(`✅ [getFreightHistory] Returning ${filteredRows.length} filtered announcements`);
+    res.json(filteredRows);
   } catch (error) {
-    console.error('Failed to get freight history:', error);
+    console.error('❌ [getFreightHistory] Failed to get freight history:', error);
     res.status(500).json({ message: 'Internal server error while fetching freight history.' });
   }
 }
