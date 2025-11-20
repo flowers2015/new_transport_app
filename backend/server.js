@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const pool = require('./db'); // Import the pool
 
 // Import routes
@@ -22,6 +23,7 @@ const roleRoutes = require('./routes/roleRoutes');
 const personalDriverRoutes = require('./routes/personalDriverRoutes');
 const personalVehicleRoutes = require('./routes/personalVehicleRoutes');
 const dispatchRoutes = require('./routes/dispatchRoutes');
+const freightTransactionRoutes = require('./routes/freightTransactionRoutes');
 
 const app = express();
 
@@ -75,6 +77,7 @@ app.use((req, res, next) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/repair-orders', repairOrderRoutes);
 app.use('/api/v1/freight-announcements', freightRoutes);
+app.use('/api/v1/freight-transactions', freightTransactionRoutes);
 app.use('/api/v1/vehicles', vehicleRoutes);
 app.use('/api/v1/alerts', alertRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
@@ -90,6 +93,9 @@ app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/personal-drivers', personalDriverRoutes);
 app.use('/api/v1/personal-vehicles', personalVehicleRoutes);
 app.use('/api/v1/dispatch', dispatchRoutes);
+
+// Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
+app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
 
 // Health check endpoint
 app.get('/', (req, res) => {

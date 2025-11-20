@@ -46,14 +46,14 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
     const isTransportDefault = defaultDashboardView === View.TransportDashboard;
 
     const navItems = [
-      // Freight Management Section
+      // Freight Management Section - مالی حمل اول برای مالی شعب
+      { view: View.FreightFinance, label: 'مالی حمل', roles: [UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
       { view: View.TransportDashboard, label: 'داشبورد ترابری', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },
-      { view: View.TransportLive, label: 'پیگیری اعلام بار-زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance], special: 'blinking' },
+      { view: View.TransportLive, label: 'پیگیری اعلام بار-زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
       { view: View.TransportDispatchQueue, label: 'ثبت نوبت', roles: [UserRole.TransportationUser] },
       { view: View.TransportDispatchBoard, label: 'تابلو اعلام بار', roles: [UserRole.TransportationUser] },
-      { view: View.FreightHistory, label: 'تاریخچه اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance] },
-      { view: View.FreightFinance, label: 'مالی حمل', roles: [UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
+      { view: View.FreightHistory, label: 'تاریخچه اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
       { type: 'divider', roles: Object.values(UserRole) },
       // Workshop & Fleet Management
       { view: View.Branches, label: 'مدیریت شعب', roles: [UserRole.Transportation, UserRole.VehicleAllocationExpert] },
@@ -70,12 +70,12 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
       { view: View.Purchasing, label: 'خرید و تدارکات', roles: [UserRole.Warehouse, UserRole.Merchant] },
       { view: View.Outsourcing, label: 'برون سپاری', roles: [UserRole.Workshop] },
       { type: 'divider', roles: [UserRole.BranchFinance, UserRole.HQFinance, UserRole.Workshop] },
-      { view: View.NewInvoice, label: 'ثبت فاکتور', roles: [UserRole.BranchFinance, UserRole.HQFinance] },
-      { view: View.Invoices, label: 'لیست فاکتور ها', roles: [UserRole.BranchFinance, UserRole.HQFinance] },
+      { view: View.NewInvoice, label: 'ثبت فاکتور', roles: [] },
+      { view: View.Invoices, label: 'لیست فاکتور ها', roles: [] },
       { type: 'divider', roles: [UserRole.Workshop] },
       { view: View.Alerts, label: 'هشدارها', roles: [UserRole.Workshop] },
       { view: View.PartUsageReport, label: 'گزارش مصرف قطعات', roles: [UserRole.Workshop, UserRole.HQFinance] },
-      { view: View.CostReport, label: 'گزارش هزینه‌های شعب', roles: [UserRole.BranchFinance, UserRole.HQFinance] },
+      { view: View.CostReport, label: 'گزارش هزینه‌های شعب', roles: [] },
       { type: 'divider', roles: Object.values(UserRole) },
       { view: View.SupportTickets, label: 'تیکت‌های پشتیبانی', roles: [UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.BranchFinance, UserRole.VehicleAllocationExpert, UserRole.Transportation] },
       { type: 'divider', roles: [UserRole.Admin] },
@@ -99,7 +99,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                     </div>
                     <div className="flex items-center">
                         <nav className="hidden md:flex items-center flex-wrap gap-x-2 gap-y-1">
-                            {!isTransportDefault && (
+                            {!isTransportDefault && currentUser?.role !== UserRole.BranchFinance && (
                                 <button onClick={() => onNavigate(defaultDashboardView)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
                             )}
                             

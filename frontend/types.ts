@@ -686,11 +686,20 @@ export interface FreightTransaction {
     announcementId: string;
     amount: number;
     transactionDate: Date;
+    billOfLadingNumber?: string;
     notes?: string;
     isPaid: boolean;
-    invoiceImage?: string; // file name
-    receiptImage?: string; // file name
-    extraDocumentImage?: string; // file name
+    invoiceImage?: string; // file path (deprecated, use invoiceImagePath)
+    receiptImage?: string; // file path (deprecated, use receiptImagePath)
+    extraDocumentImage?: string; // file path (deprecated, use extraDocumentImagePath)
+    invoiceImagePath?: string | null; // file path
+    receiptImagePath?: string | null; // file path
+    extraDocumentImagePath?: string | null; // file path
+    referralStatus?: 'pending' | 'referred' | 'approved' | 'rejected'; // وضعیت ارجاع
+    referralNotes?: string; // توضیحات ارجاع/اصلاح
+    referredAt?: Date; // تاریخ ارجاع
+    referredBy?: string; // کاربری که ارجاع داده
+    announcement?: FreightAnnouncement; // برای دسترسی به اطلاعات announcement
 }
 
 export interface DispatchRouteSuggestion {

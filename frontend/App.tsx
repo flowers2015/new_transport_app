@@ -27,7 +27,7 @@ import DispatchBoardView from './components/DispatchBoardView';
 import FreightHistoryContainer from './components/FreightHistoryContainer';
 import TransportDashboardContainer from './components/TransportDashboardContainer';
 import FreightDashboard from './components/FreightDashboard';
-import FreightFinanceDashboard from './components/FreightFinanceDashboard';
+import FreightFinanceContainer from './components/FreightFinanceContainer';
 import FreightPlanningContainer from './components/FreightPlanningContainer';
 import AuditTrailView from './components/AuditTrailView';
 import CustomerManagement from './components/CustomerManagement';
@@ -38,6 +38,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
         case UserRole.TransportationUser:
         case UserRole.Transportation_Personal_Vehicle_User:
             return View.TransportDashboard;
+        case UserRole.BranchFinance:
+            return View.FreightFinance;
         default:
             return View.Dashboard;
     }
@@ -472,15 +474,7 @@ const App: React.FC = () => {
                 );
             case View.FreightFinance:
                 console.log('[App] Render view:', View.FreightFinance);
-                return (
-                    <FreightFinanceDashboard
-                        announcements={[]}
-                        branches={[]}
-                        transactions={[]}
-                        onAddTransaction={() => {}}
-                        currentUser={currentUser}
-                    />
-                );
+                return <FreightFinanceContainer currentUser={currentUser} />;
             case View.FreightHistory:
                 console.log('[App] Render view:', View.FreightHistory);
                 return <FreightHistoryContainer currentUser={currentUser} />;

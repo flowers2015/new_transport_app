@@ -142,29 +142,45 @@ async function getFreightAnnouncements(req, res) {
   try {
     // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
     // ChangeRequested باید نمایش داده شود تا planner بتواند آن را ببیند و تأیید/رد کند
-    const { includeLeftover } = req.query;
+    // اگر includeFinalized=true باشد، Finalized و InTransit را هم شامل می‌کند (برای Freight Finance)
+    const { includeLeftover, includeFinalized } = req.query;
     
-    let whereClause = "WHERE fa.status NOT IN ('Finalized', 'Reannounced', 'Archived', 'Cancelled'";
+    let whereClause = "WHERE fa.status NOT IN (";
+    if (includeFinalized === 'true') {
+      // برای Freight Finance: فقط Reannounced, Archived, Cancelled را فیلتر کن
+      whereClause += "'Reannounced', 'Archived', 'Cancelled'";
+    } else {
+      // برای Transport Live: Finalized را هم فیلتر کن
+      whereClause += "'Finalized', 'Reannounced', 'Archived', 'Cancelled'";
+    }
     if (includeLeftover !== 'true') {
       whereClause += ", 'Leftover'";
     }
     whereClause += ")";
     
-    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, whereClause=${whereClause}`);
+    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, includeFinalized=${includeFinalized}, whereClause=${whereClause}`);
     
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (fa.id)
         fa.*,
         fa.rejection_reason,
-        d.name as assigned_driver_name,
-        d.employee_id as assigned_driver_employee_id,
+        COALESCE(d.name, pd.name) as assigned_driver_name,
+        COALESCE(d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
         v.model as assigned_vehicle_model,
         v.brand as assigned_vehicle_brand,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-        da.assignment_finalized_at
+        da.assignment_finalized_at,
+        -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
+        CASE 
+          WHEN pd.id IS NOT NULL THEN 'personal'
+          WHEN fa.assignment_type IS NOT NULL THEN fa.assignment_type
+          WHEN d.id IS NOT NULL THEN 'company'
+          ELSE NULL
+        END as detected_assignment_type
       FROM freight_announcements fa
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
       LEFT JOIN LATERAL (
         SELECT assignment_finalized_at
         FROM dispatch_assignments
@@ -177,7 +193,10 @@ async function getFreightAnnouncements(req, res) {
       ORDER BY fa.id, fa.created_at DESC
     `);
     
-    console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Leftover count: ${rows.filter(r => r.status === 'Leftover').length}`);
+    const finalizedCount = rows.filter(r => r.status === 'Finalized').length;
+    const inTransitCount = rows.filter(r => r.status === 'InTransit').length;
+    const leftoverCount = rows.filter(r => r.status === 'Leftover').length;
+    console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Leftover: ${leftoverCount}, Finalized: ${finalizedCount}, InTransit: ${inTransitCount}`);
     
     // Fetch destinations for each announcement and convert dates
     for (let announcement of rows) {
@@ -186,6 +205,11 @@ async function getFreightAnnouncements(req, res) {
         [announcement.id]
       );
       announcement.destinations = destRows.rows;
+      
+      // اگر assignment_type null است اما detected_assignment_type داریم، از آن استفاده کن
+      if (!announcement.assignment_type && announcement.detected_assignment_type) {
+        announcement.assignment_type = announcement.detected_assignment_type;
+      }
       
       // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
       if (announcement.loading_date) {
@@ -4292,3 +4316,354 @@ async function changeVehicleType(req, res) {
 
 module.exports.getVehicleTypes = getVehicleTypes;
 module.exports.changeVehicleType = changeVehicleType;
+
+/**
+ * دریافت لیست تراکنش‌های مالی حمل
+ * GET /api/v1/freight-transactions
+ */
+async function getFreightTransactions(req, res) {
+  try {
+    // بررسی وجود فیلد bill_of_lading_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'bill_of_lading_number'
+    `);
+    const hasBillOfLadingNumber = columnCheck.rows.length > 0;
+
+    const billOfLadingColumn = hasBillOfLadingNumber ? 'ft.bill_of_lading_number,' : 'NULL as bill_of_lading_number,';
+    
+    // بررسی وجود فیلدهای referral
+    const referralCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'referral_status'
+    `);
+    const hasReferralFields = referralCheck.rows.length > 0;
+    
+    const referralColumns = hasReferralFields 
+      ? 'ft.referral_status, ft.referral_notes, ft.referred_at, ft.referred_by,'
+      : 'NULL as referral_status, NULL as referral_notes, NULL as referred_at, NULL as referred_by,';
+    
+    const { rows } = await pool.query(`
+      SELECT 
+        ft.id,
+        ft.announcement_id,
+        ft.amount,
+        ft.transaction_date,
+        ${billOfLadingColumn}
+        ${referralColumns}
+        ft.is_paid,
+        ft.notes,
+        ft.invoice_image_path,
+        ft.receipt_image_path,
+        ft.extra_document_image_path,
+        ft.created_at,
+        ft.updated_at,
+        fa.announcement_code,
+        fa.loading_date,
+        fa.assignment_type,
+        fa.assigned_driver_id,
+        fa.assigned_vehicle_id
+      FROM freight_transactions ft
+      LEFT JOIN freight_announcements fa ON ft.announcement_id = fa.id
+      ORDER BY ft.created_at DESC
+    `);
+
+    // تبدیل تاریخ‌ها و normalize کردن
+    const transactions = rows.map(row => ({
+      id: row.id,
+      announcementId: row.announcement_id,
+      amount: parseFloat(row.amount) || 0,
+      transactionDate: row.transaction_date ? new Date(row.transaction_date) : new Date(),
+      billOfLadingNumber: row.bill_of_lading_number || null,
+      referralStatus: row.referral_status || null,
+      referralNotes: row.referral_notes || null,
+      referredAt: row.referred_at ? new Date(row.referred_at) : null,
+      referredBy: row.referred_by || null,
+      isPaid: row.is_paid || false,
+      notes: row.notes || null,
+      invoiceImage: row.invoice_image_path || null,
+      receiptImage: row.receipt_image_path || null,
+      extraDocumentImage: row.extra_document_image_path || null,
+    }));
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('❌ [getFreightTransactions] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت تراکنش‌های مالی حمل', details: error.message });
+  }
+}
+
+/**
+ * ایجاد تراکنش مالی جدید
+ * POST /api/v1/freight-transactions
+ * Body: { announcementId, amount, transactionDate, notes?, isPaid?, invoiceImage?, receiptImage?, extraDocumentImage? }
+ */
+async function createFreightTransaction(req, res) {
+  try {
+    const { announcementId, amount, transactionDate, billOfLadingNumber, notes, isPaid, invoiceImage, receiptImage, extraDocumentImage } = req.body;
+    
+    // تبدیل isPaid به boolean - اگر undefined یا null باشد، false می‌شود
+    const finalIsPaid = isPaid === true || isPaid === 'true' || isPaid === 1;
+    const { id: userId } = req.user || {};
+
+    if (!announcementId || !amount || !transactionDate) {
+      return res.status(400).json({ message: 'پارامترهای announcementId، amount و transactionDate الزامی است.' });
+    }
+
+    // بررسی وجود اعلام بار
+    const annCheck = await pool.query('SELECT id FROM freight_announcements WHERE id = $1', [announcementId]);
+    if (annCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+
+    // ایجاد ID منحصر به فرد
+    const transactionId = `FT-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+
+    // تبدیل transactionDate به Date object اگر string است
+    let transDate;
+    if (typeof transactionDate === 'string') {
+      transDate = new Date(transactionDate);
+    } else {
+      transDate = transactionDate;
+    }
+
+    // ذخیره فایل‌ها - مسیر فایل‌ها در دیتابیس ذخیره می‌شود
+    // invoiceImage, receiptImage, extraDocumentImage باید مسیر فایل‌های آپلود شده باشند
+
+    // بررسی وجود transaction موجود برای این announcement
+    const existingTransactionCheck = await pool.query(
+      'SELECT id FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [announcementId]
+    );
+    const hasExistingTransaction = existingTransactionCheck.rows.length > 0;
+    const existingTransactionId = hasExistingTransaction ? existingTransactionCheck.rows[0].id : null;
+
+    // بررسی وجود فیلد bill_of_lading_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'bill_of_lading_number'
+    `);
+    const hasBillOfLadingNumber = columnCheck.rows.length > 0;
+
+    // اگر فیلد در دیتابیس وجود دارد، billOfLadingNumber هم الزامی است
+    if (hasBillOfLadingNumber && !billOfLadingNumber) {
+      return res.status(400).json({ message: 'پارامتر billOfLadingNumber الزامی است.' });
+    }
+
+    let insertQuery, insertValues, updateQuery, updateValues;
+    if (hasBillOfLadingNumber) {
+      // اگر فیلد وجود دارد، از آن استفاده کن
+      insertQuery = `
+        INSERT INTO freight_transactions (
+          id,
+          announcement_id,
+          amount,
+          transaction_date,
+          bill_of_lading_number,
+          is_paid,
+          notes,
+          invoice_image_path,
+          receipt_image_path,
+          extra_document_image_path,
+          created_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        RETURNING *
+      `;
+      insertValues = [
+        transactionId,
+        announcementId,
+        parseFloat(amount),
+        transDate,
+        billOfLadingNumber.trim(),
+        finalIsPaid,
+        notes || null,
+        invoiceImage || null,
+        receiptImage || null,
+        extraDocumentImage || null
+      ];
+    } else {
+      // اگر فیلد وجود ندارد، بدون آن insert کن
+      insertQuery = `
+        INSERT INTO freight_transactions (
+          id,
+          announcement_id,
+          amount,
+          transaction_date,
+          is_paid,
+          notes,
+          invoice_image_path,
+          receipt_image_path,
+          extra_document_image_path,
+          created_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        RETURNING *
+      `;
+      insertValues = [
+        transactionId,
+        announcementId,
+        parseFloat(amount),
+        transDate,
+        finalIsPaid,
+        notes || null,
+        invoiceImage || null,
+        receiptImage || null,
+        extraDocumentImage || null
+      ];
+    }
+
+    let rows;
+    if (hasExistingTransaction && existingTransactionId) {
+      // Update transaction موجود
+      if (hasBillOfLadingNumber) {
+        updateQuery = `
+          UPDATE freight_transactions 
+          SET amount = $1,
+              transaction_date = $2,
+              bill_of_lading_number = $3,
+              is_paid = $4,
+              notes = $5,
+              invoice_image_path = COALESCE($6, invoice_image_path),
+              receipt_image_path = COALESCE($7, receipt_image_path),
+              extra_document_image_path = COALESCE($8, extra_document_image_path),
+              updated_at = NOW()
+          WHERE id = $9
+          RETURNING *
+        `;
+        updateValues = [
+          parseFloat(amount),
+          transDate,
+          billOfLadingNumber.trim(),
+          finalIsPaid,
+          notes || null,
+          invoiceImage || null,
+          receiptImage || null,
+          extraDocumentImage || null,
+          existingTransactionId
+        ];
+      } else {
+        updateQuery = `
+          UPDATE freight_transactions 
+          SET amount = $1,
+              transaction_date = $2,
+              is_paid = $3,
+              notes = $4,
+              invoice_image_path = COALESCE($5, invoice_image_path),
+              receipt_image_path = COALESCE($6, receipt_image_path),
+              extra_document_image_path = COALESCE($7, extra_document_image_path),
+              updated_at = NOW()
+          WHERE id = $8
+          RETURNING *
+        `;
+        updateValues = [
+          parseFloat(amount),
+          transDate,
+          finalIsPaid,
+          notes || null,
+          invoiceImage || null,
+          receiptImage || null,
+          extraDocumentImage || null,
+          existingTransactionId
+        ];
+      }
+      const updateResult = await pool.query(updateQuery, updateValues);
+      rows = updateResult.rows;
+      console.log('✅ [createFreightTransaction] Transaction updated:', existingTransactionId);
+    } else {
+      // ایجاد transaction جدید
+      const insertResult = await pool.query(insertQuery, insertValues);
+      rows = insertResult.rows;
+      console.log('✅ [createFreightTransaction] Transaction created:', transactionId);
+    }
+
+    const transaction = {
+      ...rows[0],
+      transactionDate: rows[0].transaction_date,
+      announcementId: rows[0].announcement_id,
+      billOfLadingNumber: rows[0].bill_of_lading_number || null,
+      isPaid: rows[0].is_paid || false,
+      invoiceImage: rows[0].invoice_image_path || null,
+      receiptImage: rows[0].receipt_image_path || null,
+      extraDocumentImage: rows[0].extra_document_image_path || null,
+    };
+
+    res.status(hasExistingTransaction ? 200 : 201).json(transaction);
+  } catch (error) {
+    console.error('❌ [createFreightTransaction] Error:', error);
+    res.status(500).json({ message: 'خطا در ایجاد تراکنش مالی', details: error.message });
+  }
+}
+
+/**
+ * ارجاع تراکنش به ستاد مالی
+ * POST /api/v1/freight-transactions/:announcementId/refer
+ */
+async function referTransactionToHeadquarters(req, res) {
+  try {
+    const { announcementId } = req.params;
+    const { notes } = req.body;
+    const { id: userId } = req.user || {};
+
+    if (!announcementId) {
+      return res.status(400).json({ message: 'شناسه اعلام بار الزامی است.' });
+    }
+
+    // پیدا کردن تراکنش مربوط به این announcement
+    const transactionResult = await pool.query(
+      'SELECT id FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [announcementId]
+    );
+
+    if (transactionResult.rows.length === 0) {
+      return res.status(404).json({ message: 'تراکنش یافت نشد. ابتدا تراکنش را ثبت کنید.' });
+    }
+
+    const transactionId = transactionResult.rows[0].id;
+
+    // بررسی وجود فیلد referral_status
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'referral_status'
+    `);
+    const hasReferralFields = columnCheck.rows.length > 0;
+
+    if (hasReferralFields) {
+      // آپدیت وضعیت ارجاع
+      await pool.query(`
+        UPDATE freight_transactions 
+        SET referral_status = 'referred',
+            referral_notes = $1,
+            referred_at = NOW(),
+            referred_by = $2,
+            updated_at = NOW()
+        WHERE id = $3
+      `, [notes || 'ارجاع به ستاد مالی', userId, transactionId]);
+    } else {
+      // اگر فیلد وجود ندارد، فقط لاگ کن
+      console.log('⚠️ [referTransactionToHeadquarters] Referral fields not found in database. Please run migration.');
+    }
+
+    console.log('✅ [referTransactionToHeadquarters] Transaction referred:', transactionId);
+    res.json({ 
+      success: true, 
+      message: 'تراکنش با موفقیت به ستاد مالی ارجاع شد',
+      transactionId 
+    });
+  } catch (error) {
+    console.error('❌ [referTransactionToHeadquarters] Error:', error);
+    res.status(500).json({ message: 'خطا در ارجاع تراکنش', details: error.message });
+  }
+}
+
+module.exports.getFreightTransactions = getFreightTransactions;
+module.exports.createFreightTransaction = createFreightTransaction;
+module.exports.referTransactionToHeadquarters = referTransactionToHeadquarters;

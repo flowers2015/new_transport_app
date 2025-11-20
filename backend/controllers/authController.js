@@ -41,7 +41,8 @@ async function login(req, res) {
         role: user.role,
         employeeId: user.branch_id,
         fullName: user.full_name,
-        email: user.email
+        email: user.email,
+        branchCity: user.branch_city || null
       }
     });
 

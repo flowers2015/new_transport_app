@@ -315,8 +315,16 @@ CREATE TABLE freight_transactions (
     announcement_id VARCHAR(255) NOT NULL REFERENCES freight_announcements(id),
     amount DECIMAL(15, 2) NOT NULL,
     transaction_date DATE NOT NULL,
+    bill_of_lading_number VARCHAR(255) NOT NULL,
     is_paid BOOLEAN DEFAULT FALSE,
     notes TEXT,
+    invoice_image_path VARCHAR(500),
+    receipt_image_path VARCHAR(500),
+    extra_document_image_path VARCHAR(500),
+    referral_status VARCHAR(50) DEFAULT 'pending', -- pending, referred, approved, rejected
+    referral_notes TEXT, -- توضیحات ارجاع/اصلاح
+    referred_at TIMESTAMPTZ, -- تاریخ ارجاع
+    referred_by VARCHAR(255) REFERENCES users(id), -- کاربری که ارجاع داده
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
