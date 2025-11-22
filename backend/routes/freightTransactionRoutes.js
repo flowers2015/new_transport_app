@@ -5,6 +5,8 @@ const {
   getFreightTransactions,
   createFreightTransaction,
   referTransactionToHeadquarters,
+  approveTransaction,
+  rejectTransaction,
 } = require('../controllers/freightController');
 const { uploadFile, getFile } = require('../controllers/fileUploadController');
 
@@ -44,6 +46,22 @@ router.post(
   authenticateToken,
   authorizeRole(['finance', 'transport_finance', 'admin']),
   referTransactionToHeadquarters
+);
+
+// POST /api/v1/freight-transactions/:announcementId/approve - تأیید تراکنش توسط ستاد مالی
+router.post(
+  '/:announcementId/approve',
+  authenticateToken,
+  authorizeRole(['central_finance', 'admin']),
+  approveTransaction
+);
+
+// POST /api/v1/freight-transactions/:announcementId/reject - رد تراکنش توسط ستاد مالی
+router.post(
+  '/:announcementId/reject',
+  authenticateToken,
+  authorizeRole(['central_finance', 'admin']),
+  rejectTransaction
 );
 
 module.exports = router;

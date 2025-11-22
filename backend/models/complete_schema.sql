@@ -313,6 +313,7 @@ CREATE TABLE freight_announcement_history (
 CREATE TABLE freight_transactions (
     id VARCHAR(255) PRIMARY KEY,
     announcement_id VARCHAR(255) NOT NULL REFERENCES freight_announcements(id),
+    destination_id VARCHAR(255) REFERENCES freight_destinations(id), -- مقصد مربوطه برای ارجاع جداگانه
     amount DECIMAL(15, 2) NOT NULL,
     transaction_date DATE NOT NULL,
     bill_of_lading_number VARCHAR(255) NOT NULL,
@@ -323,6 +324,7 @@ CREATE TABLE freight_transactions (
     extra_document_image_path VARCHAR(500),
     referral_status VARCHAR(50) DEFAULT 'pending', -- pending, referred, approved, rejected
     referral_notes TEXT, -- توضیحات ارجاع/اصلاح
+    central_finance_rejection_notes TEXT, -- توضیحات رد ستاد مالی
     referred_at TIMESTAMPTZ, -- تاریخ ارجاع
     referred_by VARCHAR(255) REFERENCES users(id), -- کاربری که ارجاع داده
     created_at TIMESTAMPTZ DEFAULT NOW(),

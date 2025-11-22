@@ -28,6 +28,7 @@ import FreightHistoryContainer from './components/FreightHistoryContainer';
 import TransportDashboardContainer from './components/TransportDashboardContainer';
 import FreightDashboard from './components/FreightDashboard';
 import FreightFinanceContainer from './components/FreightFinanceContainer';
+import CentralFinanceContainer from './components/CentralFinanceContainer';
 import FreightPlanningContainer from './components/FreightPlanningContainer';
 import AuditTrailView from './components/AuditTrailView';
 import CustomerManagement from './components/CustomerManagement';
@@ -37,9 +38,11 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
         case UserRole.TransportationUser:
         case UserRole.Transportation_Personal_Vehicle_User:
-            return View.TransportDashboard;
+            return View.TransportLive; // پیگیری اعلام بار زنده
         case UserRole.BranchFinance:
-            return View.FreightFinance;
+            return View.FreightFinance; // مالی حمل
+        case UserRole.CentralFinance:
+            return View.CentralFinance; // کارتابل مالی ستاد
         default:
             return View.Dashboard;
     }
@@ -475,6 +478,9 @@ const App: React.FC = () => {
             case View.FreightFinance:
                 console.log('[App] Render view:', View.FreightFinance);
                 return <FreightFinanceContainer currentUser={currentUser} />;
+            case View.CentralFinance:
+                console.log('[App] Render view:', View.CentralFinance);
+                return <CentralFinanceContainer currentUser={currentUser} />;
             case View.FreightHistory:
                 console.log('[App] Render view:', View.FreightHistory);
                 return <FreightHistoryContainer currentUser={currentUser} />;

@@ -12,6 +12,7 @@ interface FreightFinanceDashboardProps {
     transactions: FreightTransaction[];
     onAddTransaction: (transaction: Omit<FreightTransaction, 'id'>) => void;
     currentUser: User;
+    onRefresh?: () => void;
 }
 
 const isToday = (someDate: Date | string) => {
@@ -88,7 +89,13 @@ const dateInputToJalali = (dateInput: string): string => {
 };
 
 const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) => {
-    const { announcements, currentUser, onAddTransaction, transactions } = props;
+    const { announcements, currentUser, onAddTransaction, transactions, onRefresh } = props;
+    
+    console.log('🚀 [FreightFinance] Component rendered', {
+        announcementsCount: announcements?.length || 0,
+        transactionsCount: transactions?.length || 0,
+        currentUser: currentUser?.username || 'N/A'
+    });
     
     // بازه پیش‌فرض: سه ماه گذشته تا امروز
     const defaultStartDate = getThreeMonthsAgoJalali();
@@ -99,6 +106,7 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
     const [filters, setFilters] = useState({ 
         city: '', 
         paymentStatus: '', 
+        representativeType: '', // '' = همه, 'پخش' = فقط پخش, 'نماینده' = فقط نماینده
         startDate: defaultStartDate, // حالا مستقیماً شمسی است
         endDate: defaultEndDate // حالا مستقیماً شمسی است
     });
@@ -123,17 +131,99 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
     
     // تبدیل announcements به ردیف‌های جداگانه برای هر مقصد (فقط پخش)
     const destinationRows = useMemo(() => {
-        console.log('🔍 [FreightFinance] Filtering announcements:', {
-            totalAnnouncements: announcements.length,
+        console.log('🔍 [FreightFinance] useMemo triggered - Filtering announcements:', {
+            totalAnnouncements: announcements?.length || 0,
+            announcements: announcements ? announcements.map(a => ({
+                id: a.id,
+                code: a.announcementCode,
+                assignmentType: a.assignmentType,
+                status: a.status,
+                destinationsCount: (a.destinations || []).length
+            })) : [],
             dateView,
             filters: {
                 city: filters.city,
                 paymentStatus: filters.paymentStatus,
+                representativeType: filters.representativeType,
                 startDate: filters.startDate,
                 endDate: filters.endDate
             },
             enforcedCity,
-            transactionsCount: transactions.length
+            transactionsCount: transactions?.length || 0
+        });
+        
+        // آمار نماینده‌ها و پخش‌ها قبل از فیلتر
+        const allDestinations: Array<{repName: string, city: string, annCode: string, annId: string, assignmentType: string}> = [];
+        const namayandeAnnouncements: Array<any> = [];
+        
+        announcements.forEach(ann => {
+            const hasNamayande = (ann.destinations || []).some((d: any) => {
+                const repName = d.representative_name || d.representativeName || '';
+                const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+                return normalizedRepName !== 'پخش' && normalizedRepName !== '';
+            });
+            
+            if (hasNamayande) {
+                const driverName = ann.assignedDriverName || (ann as any).assigned_driver_name || '';
+                const driverId = ann.assignedDriverId || (ann as any).assigned_driver_id;
+                const hasDriverAssigned = (driverId && driverId !== '-') || (driverName && driverName !== '-');
+                const isAssigned = 
+                    hasDriverAssigned ||
+                    ann.status === FreightAnnouncementStatus.Assigned ||
+                    ann.status === FreightAnnouncementStatus.InTransit ||
+                    ann.status === FreightAnnouncementStatus.Finalized ||
+                    ann.assignmentFinalizedAt ||
+                    (ann as any).assignment_finalized_at;
+                
+                namayandeAnnouncements.push({
+                    annCode: ann.announcementCode,
+                    annId: ann.id,
+                    assignmentType: ann.assignmentType,
+                    isPersonal: ann.assignmentType === 'personal',
+                    isAssigned: isAssigned,
+                    hasDriverAssigned: hasDriverAssigned,
+                    status: ann.status,
+                    loadingDate: ann.loadingDate,
+                    destinations: (ann.destinations || []).map((d: any) => ({
+                        city: d.city,
+                        repName: d.representative_name || d.representativeName || '',
+                        normalizedRepName: (d.representative_name || d.representativeName || '') === 'NULL' || (d.representative_name || d.representativeName || '') === null || (d.representative_name || d.representativeName || '') === '' ? '' : (d.representative_name || d.representativeName || '')
+                    }))
+                });
+            }
+            
+            if (ann.assignmentType === 'personal') {
+                (ann.destinations || []).forEach((d: any) => {
+                    const repName = d.representative_name || d.representativeName || '';
+                    const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+                    allDestinations.push({
+                        repName: normalizedRepName || '(خالی - پخش)',
+                        city: d.city || '',
+                        annCode: ann.announcementCode || '',
+                        annId: ann.id || '',
+                        assignmentType: ann.assignmentType || ''
+                    });
+                });
+            }
+        });
+        
+        const pakhshCount = allDestinations.filter(d => d.repName === 'پخش' || d.repName === '(خالی - پخش)').length;
+        const namayandeCount = allDestinations.filter(d => d.repName !== 'پخش' && d.repName !== '(خالی - پخش)' && d.repName !== '').length;
+        const uniqueNamayandeNames = [...new Set(allDestinations.filter(d => d.repName !== 'پخش' && d.repName !== '(خالی - پخش)' && d.repName !== '').map(d => d.repName))];
+        
+        console.log('📊 [FreightFinance] آمار نماینده‌ها و پخش‌ها:', {
+            totalDestinations: allDestinations.length,
+            pakhshCount: pakhshCount,
+            namayandeCount: namayandeCount,
+            uniqueNamayandeNames: uniqueNamayandeNames,
+            allNamayandeDestinations: allDestinations.filter(d => d.repName !== 'پخش' && d.repName !== '(خالی - پخش)' && d.repName !== '').map(d => ({
+                repName: d.repName,
+                city: d.city,
+                annCode: d.annCode,
+                annId: d.annId,
+                assignmentType: d.assignmentType
+            })),
+            namayandeAnnouncements: namayandeAnnouncements
         });
         
         // لاگ جزئیات هر announcement
@@ -172,6 +262,13 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
             // فقط خودروهای شخصی
             if (ann.assignmentType !== 'personal') {
                 filteredByAssignmentType++;
+                // لاگ برای announcement نماینده
+                if (ann.announcementCode === 'ANN-1762947572815' || (ann.destinations || []).some((d: any) => {
+                    const repName = d.representative_name || d.representativeName || '';
+                    return repName !== 'پخش' && repName !== '' && repName !== 'NULL' && repName !== null;
+                })) {
+                    console.log(`🚫 [FreightFinance] Announcement ${ann.announcementCode} filtered: assignmentType = ${ann.assignmentType} (not personal)`);
+                }
                 return;
             }
             
@@ -192,6 +289,19 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
             
             if (!isAssigned) {
                 filteredByAssignmentType++;
+                // لاگ برای announcement نماینده
+                if (ann.announcementCode === 'ANN-1762947572815' || (ann.destinations || []).some((d: any) => {
+                    const repName = d.representative_name || d.representativeName || '';
+                    return repName !== 'پخش' && repName !== '' && repName !== 'NULL' && repName !== null;
+                })) {
+                    console.log(`🚫 [FreightFinance] Announcement ${ann.announcementCode} filtered: not assigned`, {
+                        hasDriverAssigned,
+                        driverId,
+                        driverName,
+                        status: ann.status,
+                        assignmentFinalizedAt: ann.assignmentFinalizedAt || (ann as any).assignment_finalized_at
+                    });
+                }
                 return;
             }
 
@@ -241,31 +351,83 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                 }
             }
 
-            // فیلتر مقاصد: فقط پخش (representative_name = 'پخش' یا NULL)
+            // فیلتر مقاصد بر اساس نماینده/پخش
             ann.destinations.forEach(dest => {
                 const repName = dest.representativeName || dest.representative_name || '';
                 // "NULL" (رشته) یا null یا خالی را به عنوان پخش در نظر می‌گیریم
                 const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
                 const isPakhsh = normalizedRepName === 'پخش' || normalizedRepName === '';
+                const isNamayande = !isPakhsh && normalizedRepName !== '';
                 
-                if (!isPakhsh) {
-                    filteredByRepresentative++;
-                    return; // فقط پخش
+                // لاگ برای مقصد نماینده
+                if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                    console.log(`🔍 [FreightFinance] Processing namayande destination:`, {
+                        annCode: ann.announcementCode,
+                        city: dest.city,
+                        repName: normalizedRepName,
+                        isPakhsh,
+                        isNamayande,
+                        currentFilter: filters.representativeType || '(همه)',
+                        willPassFilter: filters.representativeType === '' || (filters.representativeType === 'نماینده' && isNamayande)
+                    });
                 }
+                
+                // اعمال فیلتر نماینده/پخش
+                if (filters.representativeType === 'پخش' && !isPakhsh) {
+                    filteredByRepresentative++;
+                    if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                        console.log(`🚫 [FreightFinance] Namayande destination filtered: filter is 'پخش' but this is namayande`);
+                    }
+                    return; // فقط پخش می‌خواهیم
+                }
+                if (filters.representativeType === 'نماینده' && !isNamayande) {
+                    filteredByRepresentative++;
+                    if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                        console.log(`🚫 [FreightFinance] Namayande destination filtered: filter is 'نماینده' but isNamayande = ${isNamayande}`, {
+                            repName,
+                            normalizedRepName,
+                            isPakhsh
+                        });
+                    }
+                    return; // فقط نماینده می‌خواهیم
+                }
+                // اگر filters.representativeType خالی است، همه را نشان می‌دهیم
 
                 // فیلتر شهر
                 if (enforcedCity && dest.city !== enforcedCity) {
                     console.log(`🚫 [FreightFinance] City filter: ${dest.city} !== ${enforcedCity} (enforcedCity)`);
+                    if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                        console.log(`🚫 [FreightFinance] Namayande destination filtered by city:`, {
+                            destCity: dest.city,
+                            enforcedCity,
+                            annCode: ann.announcementCode
+                        });
+                    }
                     filteredByCity++;
                     return;
                 }
                 if (filters.city && !dest.city.includes(filters.city)) {
+                    if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                        console.log(`🚫 [FreightFinance] Namayande destination filtered by city filter:`, {
+                            destCity: dest.city,
+                            filterCity: filters.city,
+                            annCode: ann.announcementCode
+                        });
+                    }
                     filteredByCity++;
                     return;
                 }
 
-                // محاسبه paymentStatus برای این مقصد خاص
-                const annTransactions = transactions.filter(t => t.announcementId === ann.id);
+                // محاسبه paymentStatus برای این مقصد خاص - فقط تراکنش‌هایی که destination_id مطابقت دارد
+                const annTransactions = transactions.filter(t => {
+                    if (t.announcementId !== ann.id) return false;
+                    // اگر destination_id وجود دارد، فقط آن را در نظر بگیر
+                    if (t.destinationId) {
+                        return t.destinationId === dest.id;
+                    }
+                    // اگر destination_id وجود ندارد (برای backward compatibility)، همه را در نظر بگیر
+                    return true;
+                });
                 let destPaymentStatus = FreightPaymentStatus.Unpaid;
                 if (annTransactions.length > 0) {
                     const hasPaid = annTransactions.some(t => t.isPaid);
@@ -275,7 +437,23 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                 // فیلتر وضعیت پرداخت
                 if (filters.paymentStatus && destPaymentStatus !== filters.paymentStatus) {
                     filteredByPaymentStatus++;
+                    if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                        console.log(`🚫 [FreightFinance] Namayande destination filtered: paymentStatus mismatch`, {
+                            destPaymentStatus,
+                            filterPaymentStatus: filters.paymentStatus
+                        });
+                    }
                     return;
+                }
+
+                // لاگ برای اضافه شدن نماینده به rows
+                if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
+                    console.log(`✅ [FreightFinance] Namayande destination ADDED to rows:`, {
+                        annCode: ann.announcementCode,
+                        city: dest.city,
+                        repName: normalizedRepName,
+                        paymentStatus: destPaymentStatus
+                    });
                 }
 
                 rows.push({
@@ -294,11 +472,54 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
         //     return 0;
         // });
 
+        // آمار نماینده‌ها و پخش‌ها بعد از فیلتر
+        const finalPakhshCount = rows.filter(r => {
+            const repName = r.destination.representativeName || r.destination.representative_name || '';
+            const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+            return normalizedRepName === 'پخش' || normalizedRepName === '';
+        }).length;
+        const finalNamayandeCount = rows.filter(r => {
+            const repName = r.destination.representativeName || r.destination.representative_name || '';
+            const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+            return normalizedRepName !== 'پخش' && normalizedRepName !== '';
+        }).length;
+        const finalNamayandeNames = [...new Set(rows
+            .filter(r => {
+                const repName = r.destination.representativeName || r.destination.representative_name || '';
+                const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+                return normalizedRepName !== 'پخش' && normalizedRepName !== '';
+            })
+            .map(r => {
+                const repName = r.destination.representativeName || r.destination.representative_name || '';
+                return repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+            })
+        )];
+        
+        console.log('📊 [FreightFinance] آمار بعد از فیلتر:', {
+            totalRows: rows.length,
+            finalPakhshCount: finalPakhshCount,
+            finalNamayandeCount: finalNamayandeCount,
+            finalNamayandeNames: finalNamayandeNames,
+            currentFilter: filters.representativeType || '(همه)',
+            sampleNamayandeRows: rows
+                .filter(r => {
+                    const repName = r.destination.representativeName || r.destination.representative_name || '';
+                    const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? '' : repName;
+                    return normalizedRepName !== 'پخش' && normalizedRepName !== '';
+                })
+                .slice(0, 5)
+                .map(r => ({
+                    annCode: r.announcement.announcementCode,
+                    city: r.destination.city,
+                    repName: r.destination.representativeName || r.destination.representative_name || '(خالی)'
+                }))
+        });
+        
         const resultsInfo = {
             totalRows: rows.length,
             filteredByAssignmentType: `${filteredByAssignmentType} announcements filtered (not personal)`,
             filteredByDate: `${filteredByDate} announcements filtered (date range)`,
-            filteredByRepresentative: `${filteredByRepresentative} destinations filtered (not پخش)`,
+            filteredByRepresentative: `${filteredByRepresentative} destinations filtered (representative type filter)`,
             filteredByCity: `${filteredByCity} destinations filtered (city mismatch)`,
             filteredByPaymentStatus: `${filteredByPaymentStatus} destinations filtered (payment status)`
         };
@@ -397,10 +618,18 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><CreditCardIcon className="w-6 h-6 mr-2 text-sky-600" />جستجوی مالی حمل</h2>
                     <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border rounded-lg bg-slate-50">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 border rounded-lg bg-slate-50">
                     <div>
                         <label className="text-xs text-slate-600 mb-1 block">شهر</label>
                         <input placeholder="شهر..." value={enforcedCity || filters.city} onChange={e => setFilters(s => ({...s, city: e.target.value}))} className="input-style" disabled={!!enforcedCity} title={enforcedCity ? `فیلتر شده برای شعبه ${enforcedCity}` : ''}/>
+                    </div>
+                    <div>
+                        <label className="text-xs text-slate-600 mb-1 block">نوع</label>
+                        <select value={filters.representativeType} onChange={e => setFilters(s => ({...s, representativeType: e.target.value}))} className="input-style">
+                            <option value="">همه (پخش و نماینده)</option>
+                            <option value="پخش">پخش</option>
+                            <option value="نماینده">نماینده</option>
+                        </select>
                     </div>
                     <div>
                         <label className="text-xs text-slate-600 mb-1 block">وضعیت پرداخت</label>
@@ -463,6 +692,7 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                                  <th className="p-2">راننده</th>
                                  <th className="p-2">شماره پلاک</th>
                                  <th className="p-2">وضعیت پرداخت</th>
+                                 <th className="p-2">توضیحات ارجاع ستاد</th>
                                  <th className="p-2">عملیات</th>
                              </tr>
                          </thead>
@@ -513,20 +743,33 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                                                 {row.paymentStatus === FreightPaymentStatus.Paid ? 'پرداخت شده' : 'پرداخت نشده'}
                                             </span>
                                         </td>
+                                        <td className="p-2 text-xs">
+                                            {(() => {
+                                                const existingTransaction = transactions.find(t => t.announcementId === ann.id);
+                                                // نمایش توضیحات رد ستاد مالی
+                                                const rejectionNotes = existingTransaction?.centralFinanceRejectionNotes || existingTransaction?.referralNotes || '-';
+                                                return rejectionNotes !== '-' && existingTransaction?.referralStatus === 'rejected' ? rejectionNotes : '-';
+                                            })()}
+                                        </td>
                                         <td className="p-2">
                                             {(() => {
                                                 // بررسی وضعیت تراکنش
                                                 const existingTransaction = transactions.find(t => t.announcementId === ann.id);
-                                                const isReferred = existingTransaction && (existingTransaction.referralStatus === 'referred' || existingTransaction.referralStatus === 'approved' || existingTransaction.referralStatus === 'rejected');
+                                                // اگر rejected است، دکمه‌ها باید فعال شوند (برای اصلاح)
+                                                const isReferred = existingTransaction && existingTransaction.referralStatus === 'referred';
+                                                const isApproved = existingTransaction && existingTransaction.referralStatus === 'approved';
+                                                const isRejected = existingTransaction && existingTransaction.referralStatus === 'rejected';
+                                                // اگر rejected است، دکمه‌ها فعال می‌شوند
+                                                const shouldDisableButtons = isReferred || isApproved;
                                                 const hasTransaction = !!existingTransaction;
                                                 
                                                 return (
                                                     <div className="flex gap-2">
                                                         <button 
                                                             onClick={() => handleOpenDialog(ann, dest)} 
-                                                            disabled={isReferred}
+                                                            disabled={shouldDisableButtons}
                                                             className={`px-3 py-1 rounded-md text-xs ${
-                                                                isReferred 
+                                                                shouldDisableButtons 
                                                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                                                                     : 'bg-green-500 text-white hover:bg-green-600'
                                                             }`}
@@ -540,12 +783,12 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                                                                     return;
                                                                 }
                                                                 
-                                                                if (isReferred) {
+                                                                if (shouldDisableButtons) {
                                                                     alert('این تراکنش قبلاً ارجاع شده است');
                                                                     return;
                                                                 }
                                                                 
-                                                                if (!confirm('آیا مطمئن هستید که می‌خواهید این تراکنش را به ستاد مالی ارجاع دهید؟')) {
+                                                                if (!confirm('آیا مطمئن هستید که می‌خواهید این تراکنش را به مالی ستاد ارجاع دهید؟')) {
                                                                     return;
                                                                 }
                                                                 
@@ -558,31 +801,36 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                                                                             'Authorization': `Bearer ${token}`
                                                                         },
                                                                         body: JSON.stringify({
-                                                                            notes: 'ارجاع به ستاد مالی'
+                                                                            destinationId: dest.id, // ارسال destination_id برای ارجاع جداگانه
+                                                                            notes: 'ارجاع به مالی ستاد'
                                                                         })
                                                                     });
                                                                     
                                                                     if (!response.ok) {
-                                                                        const errorData = await response.json().catch(() => ({ message: 'خطا در ارجاع به ستاد مالی' }));
-                                                                        throw new Error(errorData.message || 'خطا در ارجاع به ستاد مالی');
+                                                                        const errorData = await response.json().catch(() => ({ message: 'خطا در ارجاع به مالی ستاد' }));
+                                                                        throw new Error(errorData.message || 'خطا در ارجاع به مالی ستاد');
                                                                     }
                                                                     
-                                                                    alert('تراکنش با موفقیت به ستاد مالی ارجاع شد');
+                                                                    alert('تراکنش با موفقیت به مالی ستاد ارجاع شد');
                                                                     // Refresh transactions
-                                                                    window.location.reload();
+                                                                    if (onRefresh) {
+                                                                        onRefresh();
+                                                                    } else {
+                                                                        window.location.reload();
+                                                                    }
                                                                 } catch (error: any) {
                                                                     console.error('❌ [FreightFinance] Error referring:', error);
-                                                                    alert(`خطا: ${error.message || 'خطا در ارجاع به ستاد مالی'}`);
+                                                                    alert(`خطا: ${error.message || 'خطا در ارجاع به مالی ستاد'}`);
                                                                 }
                                                             }}
-                                                            disabled={!hasTransaction || isReferred}
+                                                            disabled={!hasTransaction || shouldDisableButtons}
                                                             className={`px-3 py-1 rounded-md text-xs ${
-                                                                !hasTransaction || isReferred
+                                                                !hasTransaction || shouldDisableButtons
                                                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                                                                     : 'bg-orange-500 text-white hover:bg-orange-600'
                                                             }`}
                                                         >
-                                                            ارجاع به ستاد مالی
+                                                            ارجاع به مالی ستاد
                                                         </button>
                                                         {hasTransaction && (
                                                             <button 
@@ -691,8 +939,16 @@ const TransactionDialog: React.FC<{
     const [jyToday, jmToday, jdToday] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
     const todayJalali = `${jyToday}/${String(jmToday).padStart(2, '0')}/${String(jdToday).padStart(2, '0')}`;
 
-    // پیدا کردن transaction موجود
-    const existingTransaction = transactions.find(t => t.announcementId === announcement.id);
+    // پیدا کردن transaction موجود برای این مقصد خاص
+    const existingTransaction = transactions.find(t => {
+        if (t.announcementId !== announcement.id) return false;
+        // اگر destination_id وجود دارد، فقط آن را در نظر بگیر
+        if (t.destinationId) {
+            return t.destinationId === destination.id;
+        }
+        // اگر destination_id وجود ندارد (برای backward compatibility)، همه را در نظر بگیر
+        return true;
+    });
     
     // تبدیل تاریخ تراکنش موجود به شمسی
     const getTransactionDateJalali = () => {
@@ -899,6 +1155,7 @@ const TransactionDialog: React.FC<{
             
             onSave({
                 announcementId: announcement.id,
+                destinationId: destination.id, // اضافه کردن destination_id
                 amount: Number(state.amount),
                 transactionDate: transactionDate,
                 billOfLadingNumber: state.billOfLadingNumber.trim(),
@@ -1025,7 +1282,7 @@ const TransactionDialog: React.FC<{
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <FileInput 
-                            label="فاکتور" 
+                            label="تصویر بارنامه" 
                             name="invoiceImage" 
                             fileName={state.invoiceImage} 
                             existingFilePath={state.existingInvoicePath}
@@ -1169,7 +1426,7 @@ const ViewDocumentsDialog: React.FC<{
                 </div>
                 <div className="p-6 space-y-6">
                     <div>
-                        <h4 className="font-semibold mb-2">فاکتور</h4>
+                        <h4 className="font-semibold mb-2">تصویر بارنامه</h4>
                         {invoiceUrl ? (
                             <div className="flex gap-2 items-center">
                                 <a 
@@ -1178,7 +1435,7 @@ const ViewDocumentsDialog: React.FC<{
                                     rel="noopener noreferrer"
                                     className="text-blue-600 hover:underline"
                                 >
-                                    مشاهده فاکتور
+                                    مشاهده تصویر بارنامه
                                 </a>
                                 <button
                                     onClick={() => downloadFile(invoiceUrl, `invoice-${transaction.announcementId}.pdf`)}
@@ -1188,7 +1445,7 @@ const ViewDocumentsDialog: React.FC<{
                                 </button>
                             </div>
                         ) : (
-                            <p className="text-gray-500 text-sm">فاکتوری ثبت نشده است</p>
+                            <p className="text-gray-500 text-sm">تصویر بارنامه ثبت نشده است</p>
                         )}
                     </div>
                     <div>

@@ -199,12 +199,44 @@ async function getFreightAnnouncements(req, res) {
     console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Leftover: ${leftoverCount}, Finalized: ${finalizedCount}, InTransit: ${inTransitCount}`);
     
     // Fetch destinations for each announcement and convert dates
+    const allDestinationsStats = {
+      total: 0,
+      pakhsh: 0,
+      namayande: 0,
+      namayandeNames: new Set(),
+      sampleDestinations: []
+    };
+    
     for (let announcement of rows) {
       const destRows = await pool.query(
         'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
         [announcement.id]
       );
       announcement.destinations = destRows.rows;
+      
+      // آمار representative_name
+      destRows.rows.forEach(dest => {
+        allDestinationsStats.total++;
+        const repName = dest.representative_name || '';
+        const normalizedRepName = repName === null || repName === '' ? '' : repName;
+        const isPakhsh = normalizedRepName === 'پخش' || normalizedRepName === '';
+        
+        if (isPakhsh) {
+          allDestinationsStats.pakhsh++;
+        } else {
+          allDestinationsStats.namayande++;
+          allDestinationsStats.namayandeNames.add(normalizedRepName);
+          if (allDestinationsStats.sampleDestinations.length < 10) {
+            allDestinationsStats.sampleDestinations.push({
+              annId: announcement.id,
+              annCode: announcement.announcement_code || 'N/A',
+              city: dest.city || '',
+              repName: normalizedRepName,
+              destId: dest.id
+            });
+          }
+        }
+      });
       
       // اگر assignment_type null است اما detected_assignment_type داریم، از آن استفاده کن
       if (!announcement.assignment_type && announcement.detected_assignment_type) {
@@ -220,6 +252,15 @@ async function getFreightAnnouncements(req, res) {
         }
       }
     }
+    
+    // لاگ آمار نماینده‌ها و پخش‌ها
+    console.log('📊 [getFreightAnnouncements] آمار نماینده‌ها و پخش‌ها:', {
+      totalDestinations: allDestinationsStats.total,
+      pakhshCount: allDestinationsStats.pakhsh,
+      namayandeCount: allDestinationsStats.namayande,
+      uniqueNamayandeNames: Array.from(allDestinationsStats.namayandeNames),
+      sampleNamayandeDestinations: allDestinationsStats.sampleDestinations
+    });
     
     // لاگ نمونه برای بررسی
     if (rows.length > 0) {
@@ -4376,14 +4417,26 @@ async function getFreightTransactions(req, res) {
     `);
     const hasReferralFields = referralCheck.rows.length > 0;
     
+    // بررسی وجود فیلد central_finance_rejection_notes و destination_id
+    const rejectionNotesCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name IN ('central_finance_rejection_notes', 'destination_id')
+    `);
+    const hasRejectionNotesField = rejectionNotesCheck.rows.some(r => r.column_name === 'central_finance_rejection_notes');
+    const hasDestinationId = rejectionNotesCheck.rows.some(r => r.column_name === 'destination_id');
+    
+    const destinationIdColumn = hasDestinationId ? 'ft.destination_id,' : 'NULL as destination_id,';
     const referralColumns = hasReferralFields 
-      ? 'ft.referral_status, ft.referral_notes, ft.referred_at, ft.referred_by,'
-      : 'NULL as referral_status, NULL as referral_notes, NULL as referred_at, NULL as referred_by,';
+      ? `ft.referral_status, ft.referral_notes, ft.referred_at, ft.referred_by,${hasRejectionNotesField ? ' ft.central_finance_rejection_notes,' : ' NULL as central_finance_rejection_notes,'}`
+      : 'NULL as referral_status, NULL as referral_notes, NULL as referred_at, NULL as referred_by, NULL as central_finance_rejection_notes,';
     
     const { rows } = await pool.query(`
       SELECT 
         ft.id,
         ft.announcement_id,
+        ${destinationIdColumn}
         ft.amount,
         ft.transaction_date,
         ${billOfLadingColumn}
@@ -4409,11 +4462,13 @@ async function getFreightTransactions(req, res) {
     const transactions = rows.map(row => ({
       id: row.id,
       announcementId: row.announcement_id,
+      destinationId: row.destination_id || null,
       amount: parseFloat(row.amount) || 0,
       transactionDate: row.transaction_date ? new Date(row.transaction_date) : new Date(),
       billOfLadingNumber: row.bill_of_lading_number || null,
       referralStatus: row.referral_status || null,
       referralNotes: row.referral_notes || null,
+      centralFinanceRejectionNotes: row.central_finance_rejection_notes || null,
       referredAt: row.referred_at ? new Date(row.referred_at) : null,
       referredBy: row.referred_by || null,
       isPaid: row.is_paid || false,
@@ -4437,7 +4492,7 @@ async function getFreightTransactions(req, res) {
  */
 async function createFreightTransaction(req, res) {
   try {
-    const { announcementId, amount, transactionDate, billOfLadingNumber, notes, isPaid, invoiceImage, receiptImage, extraDocumentImage } = req.body;
+    const { announcementId, destinationId, amount, transactionDate, billOfLadingNumber, notes, isPaid, invoiceImage, receiptImage, extraDocumentImage } = req.body;
     
     // تبدیل isPaid به boolean - اگر undefined یا null باشد، false می‌شود
     const finalIsPaid = isPaid === true || isPaid === 'true' || isPaid === 1;
@@ -4467,22 +4522,39 @@ async function createFreightTransaction(req, res) {
     // ذخیره فایل‌ها - مسیر فایل‌ها در دیتابیس ذخیره می‌شود
     // invoiceImage, receiptImage, extraDocumentImage باید مسیر فایل‌های آپلود شده باشند
 
-    // بررسی وجود transaction موجود برای این announcement
-    const existingTransactionCheck = await pool.query(
-      'SELECT id FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [announcementId]
-    );
-    const hasExistingTransaction = existingTransactionCheck.rows.length > 0;
-    const existingTransactionId = hasExistingTransaction ? existingTransactionCheck.rows[0].id : null;
-
-    // بررسی وجود فیلد bill_of_lading_number
+    // بررسی وجود فیلدهای bill_of_lading_number و destination_id
     const columnCheck = await pool.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'freight_transactions' 
-      AND column_name = 'bill_of_lading_number'
+      AND column_name IN ('bill_of_lading_number', 'destination_id')
     `);
-    const hasBillOfLadingNumber = columnCheck.rows.length > 0;
+    const hasBillOfLadingNumber = columnCheck.rows.some(r => r.column_name === 'bill_of_lading_number');
+    const hasDestinationId = columnCheck.rows.some(r => r.column_name === 'destination_id');
+
+    // بررسی وجود transaction موجود برای این announcement و destination
+    // اگر destinationId وجود دارد و فیلد در دیتابیس هم وجود دارد، بر اساس آن جستجو کن
+    let existingTransactionCheck;
+    if (destinationId && hasDestinationId) {
+      existingTransactionCheck = await pool.query(
+        'SELECT id FROM freight_transactions WHERE announcement_id = $1 AND destination_id = $2 ORDER BY created_at DESC LIMIT 1',
+        [announcementId, destinationId]
+      );
+    } else if (hasDestinationId) {
+      // اگر فیلد وجود دارد اما destinationId نداریم
+      existingTransactionCheck = await pool.query(
+        'SELECT id FROM freight_transactions WHERE announcement_id = $1 AND destination_id IS NULL ORDER BY created_at DESC LIMIT 1',
+        [announcementId]
+      );
+    } else {
+      // اگر فیلد destination_id وجود ندارد، فقط بر اساس announcement_id جستجو کن
+      existingTransactionCheck = await pool.query(
+        'SELECT id FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [announcementId]
+      );
+    }
+    const hasExistingTransaction = existingTransactionCheck.rows.length > 0;
+    const existingTransactionId = hasExistingTransaction ? existingTransactionCheck.rows[0].id : null;
 
     // اگر فیلد در دیتابیس وجود دارد، billOfLadingNumber هم الزامی است
     if (hasBillOfLadingNumber && !billOfLadingNumber) {
@@ -4490,8 +4562,41 @@ async function createFreightTransaction(req, res) {
     }
 
     let insertQuery, insertValues, updateQuery, updateValues;
-    if (hasBillOfLadingNumber) {
-      // اگر فیلد وجود دارد، از آن استفاده کن
+    if (hasBillOfLadingNumber && hasDestinationId) {
+      // اگر هر دو فیلد وجود دارند
+      insertQuery = `
+        INSERT INTO freight_transactions (
+          id,
+          announcement_id,
+          destination_id,
+          amount,
+          transaction_date,
+          bill_of_lading_number,
+          is_paid,
+          notes,
+          invoice_image_path,
+          receipt_image_path,
+          extra_document_image_path,
+          created_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        RETURNING *
+      `;
+      insertValues = [
+        transactionId,
+        announcementId,
+        destinationId || null,
+        parseFloat(amount),
+        transDate,
+        billOfLadingNumber.trim(),
+        finalIsPaid,
+        notes || null,
+        invoiceImage || null,
+        receiptImage || null,
+        extraDocumentImage || null
+      ];
+    } else if (hasBillOfLadingNumber && !hasDestinationId) {
+      // اگر فقط bill_of_lading_number وجود دارد
       insertQuery = `
         INSERT INTO freight_transactions (
           id,
@@ -4555,7 +4660,35 @@ async function createFreightTransaction(req, res) {
     let rows;
     if (hasExistingTransaction && existingTransactionId) {
       // Update transaction موجود
-      if (hasBillOfLadingNumber) {
+      if (hasBillOfLadingNumber && hasDestinationId) {
+        updateQuery = `
+          UPDATE freight_transactions 
+          SET amount = $1,
+              transaction_date = $2,
+              destination_id = $3,
+              bill_of_lading_number = $4,
+              is_paid = $5,
+              notes = $6,
+              invoice_image_path = COALESCE($7, invoice_image_path),
+              receipt_image_path = COALESCE($8, receipt_image_path),
+              extra_document_image_path = COALESCE($9, extra_document_image_path),
+              updated_at = NOW()
+          WHERE id = $10
+          RETURNING *
+        `;
+        updateValues = [
+          parseFloat(amount),
+          transDate,
+          destinationId || null,
+          billOfLadingNumber.trim(),
+          finalIsPaid,
+          notes || null,
+          invoiceImage || null,
+          receiptImage || null,
+          extraDocumentImage || null,
+          existingTransactionId
+        ];
+      } else if (hasBillOfLadingNumber) {
         updateQuery = `
           UPDATE freight_transactions 
           SET amount = $1,
@@ -4620,6 +4753,7 @@ async function createFreightTransaction(req, res) {
       ...rows[0],
       transactionDate: rows[0].transaction_date,
       announcementId: rows[0].announcement_id,
+      destinationId: rows[0].destination_id || null,
       billOfLadingNumber: rows[0].bill_of_lading_number || null,
       isPaid: rows[0].is_paid || false,
       invoiceImage: rows[0].invoice_image_path || null,
@@ -4641,18 +4775,43 @@ async function createFreightTransaction(req, res) {
 async function referTransactionToHeadquarters(req, res) {
   try {
     const { announcementId } = req.params;
-    const { notes } = req.body;
+    const { destinationId, notes } = req.body;
     const { id: userId } = req.user || {};
 
     if (!announcementId) {
       return res.status(400).json({ message: 'شناسه اعلام بار الزامی است.' });
     }
 
-    // پیدا کردن تراکنش مربوط به این announcement
-    const transactionResult = await pool.query(
-      'SELECT id FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [announcementId]
-    );
+    // بررسی وجود فیلد destination_id
+    const destinationIdCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'destination_id'
+    `);
+    const hasDestinationId = destinationIdCheck.rows.length > 0;
+
+    // پیدا کردن تراکنش مربوط به این announcement و destination
+    // اگر destinationId وجود دارد و فیلد در دیتابیس هم وجود دارد، بر اساس آن جستجو کن
+    let transactionResult;
+    if (destinationId && hasDestinationId) {
+      transactionResult = await pool.query(
+        'SELECT id, referred_by FROM freight_transactions WHERE announcement_id = $1 AND destination_id = $2 ORDER BY created_at DESC LIMIT 1',
+        [announcementId, destinationId]
+      );
+    } else if (hasDestinationId) {
+      // اگر فیلد وجود دارد اما destinationId نداریم
+      transactionResult = await pool.query(
+        'SELECT id, referred_by FROM freight_transactions WHERE announcement_id = $1 AND (destination_id IS NULL OR destination_id = \'\') ORDER BY created_at DESC LIMIT 1',
+        [announcementId]
+      );
+    } else {
+      // اگر فیلد destination_id وجود ندارد، فقط بر اساس announcement_id جستجو کن
+      transactionResult = await pool.query(
+        'SELECT id, referred_by FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [announcementId]
+      );
+    }
 
     if (transactionResult.rows.length === 0) {
       return res.status(404).json({ message: 'تراکنش یافت نشد. ابتدا تراکنش را ثبت کنید.' });
@@ -4697,6 +4856,167 @@ async function referTransactionToHeadquarters(req, res) {
   }
 }
 
+/**
+ * تأیید تراکنش توسط ستاد مالی
+ * POST /api/v1/freight-transactions/:announcementId/approve
+ */
+async function approveTransaction(req, res) {
+  try {
+    const { announcementId } = req.params;
+    const { id: userId } = req.user || {};
+
+    if (!announcementId) {
+      return res.status(400).json({ message: 'شناسه اعلام بار الزامی است.' });
+    }
+
+    // پیدا کردن تراکنش مربوط به این announcement
+    const transactionResult = await pool.query(
+      'SELECT id FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [announcementId]
+    );
+
+    if (transactionResult.rows.length === 0) {
+      return res.status(404).json({ message: 'تراکنش یافت نشد.' });
+    }
+
+    const transactionId = transactionResult.rows[0].id;
+
+    // بررسی وجود فیلد referral_status
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'referral_status'
+    `);
+    const hasReferralFields = columnCheck.rows.length > 0;
+
+    if (hasReferralFields) {
+      // آپدیت وضعیت به approved
+      await pool.query(`
+        UPDATE freight_transactions 
+        SET referral_status = 'approved',
+            updated_at = NOW()
+        WHERE id = $1
+      `, [transactionId]);
+    }
+
+    console.log('✅ [approveTransaction] Transaction approved:', transactionId);
+    res.json({ 
+      success: true, 
+      message: 'تراکنش با موفقیت تأیید شد.'
+    });
+  } catch (error) {
+    console.error('❌ [approveTransaction] Error:', error);
+    res.status(500).json({ message: 'خطا در تأیید تراکنش', details: error.message });
+  }
+}
+
+/**
+ * رد تراکنش توسط ستاد مالی و ارجاع به شعبه
+ * POST /api/v1/freight-transactions/:announcementId/reject
+ */
+async function rejectTransaction(req, res) {
+  try {
+    const { announcementId } = req.params;
+    const { destinationId, notes } = req.body;
+    const { id: userId } = req.user || {};
+
+    if (!announcementId) {
+      return res.status(400).json({ message: 'شناسه اعلام بار الزامی است.' });
+    }
+
+    if (!notes || !notes.trim()) {
+      return res.status(400).json({ message: 'توضیحات رد الزامی است.' });
+    }
+
+    // بررسی وجود فیلد destination_id
+    const destinationIdCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'destination_id'
+    `);
+    const hasDestinationId = destinationIdCheck.rows.length > 0;
+
+    // پیدا کردن تراکنش مربوط به این announcement و destination
+    let transactionResult;
+    if (destinationId && hasDestinationId) {
+      transactionResult = await pool.query(
+        'SELECT id, referred_by FROM freight_transactions WHERE announcement_id = $1 AND destination_id = $2 ORDER BY created_at DESC LIMIT 1',
+        [announcementId, destinationId]
+      );
+    } else if (hasDestinationId) {
+      transactionResult = await pool.query(
+        'SELECT id, referred_by FROM freight_transactions WHERE announcement_id = $1 AND (destination_id IS NULL OR destination_id = \'\') ORDER BY created_at DESC LIMIT 1',
+        [announcementId]
+      );
+    } else {
+      transactionResult = await pool.query(
+        'SELECT id, referred_by FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [announcementId]
+      );
+    }
+
+    if (transactionResult.rows.length === 0) {
+      return res.status(404).json({ message: 'تراکنش یافت نشد.' });
+    }
+
+    const transactionId = transactionResult.rows[0].id;
+    const referredBy = transactionResult.rows[0].referred_by; // کاربری که ارجاع داده
+
+    // بررسی وجود فیلد referral_status
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'freight_transactions' 
+      AND column_name = 'referral_status'
+    `);
+    const hasReferralFields = columnCheck.rows.length > 0;
+
+    if (hasReferralFields) {
+      // بررسی وجود فیلد central_finance_rejection_notes
+      const rejectionNotesCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'freight_transactions' 
+        AND column_name = 'central_finance_rejection_notes'
+      `);
+      const hasRejectionNotesField = rejectionNotesCheck.rows.length > 0;
+
+      if (hasRejectionNotesField) {
+        // آپدیت وضعیت به rejected و ذخیره توضیحات رد
+        await pool.query(`
+          UPDATE freight_transactions 
+          SET referral_status = 'rejected',
+              central_finance_rejection_notes = $1,
+              updated_at = NOW()
+          WHERE id = $2
+        `, [notes.trim(), transactionId]);
+      } else {
+        // اگر فیلد وجود ندارد، از referral_notes استفاده کن
+        await pool.query(`
+          UPDATE freight_transactions 
+          SET referral_status = 'rejected',
+              referral_notes = $1,
+              updated_at = NOW()
+          WHERE id = $2
+        `, [notes.trim(), transactionId]);
+      }
+    }
+
+    console.log('✅ [rejectTransaction] Transaction rejected:', transactionId, 'Referred by:', referredBy);
+    res.json({ 
+      success: true, 
+      message: 'تراکنش رد شد و به شعبه ارجاع داده شد.'
+    });
+  } catch (error) {
+    console.error('❌ [rejectTransaction] Error:', error);
+    res.status(500).json({ message: 'خطا در رد تراکنش', details: error.message });
+  }
+}
+
 module.exports.getFreightTransactions = getFreightTransactions;
 module.exports.createFreightTransaction = createFreightTransaction;
 module.exports.referTransactionToHeadquarters = referTransactionToHeadquarters;
+module.exports.approveTransaction = approveTransaction;
+module.exports.rejectTransaction = rejectTransaction;

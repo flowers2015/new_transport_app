@@ -31,6 +31,7 @@ export enum View {
     TransportDispatchQueue = 'transport-dispatch-queue',
     TransportDispatchAssignment = 'transport-dispatch-assignment',
     TransportDispatchBoard = 'transport-dispatch-board',
+    CentralFinance = 'central-finance',
 }
 
 export enum UserRole {
@@ -684,6 +685,7 @@ export interface FreightAnnouncement {
 export interface FreightTransaction {
     id: string;
     announcementId: string;
+    destinationId?: string | null; // شناسه مقصد برای ارجاع جداگانه
     amount: number;
     transactionDate: Date;
     billOfLadingNumber?: string;
@@ -697,6 +699,7 @@ export interface FreightTransaction {
     extraDocumentImagePath?: string | null; // file path
     referralStatus?: 'pending' | 'referred' | 'approved' | 'rejected'; // وضعیت ارجاع
     referralNotes?: string; // توضیحات ارجاع/اصلاح
+    centralFinanceRejectionNotes?: string; // توضیحات رد ستاد مالی
     referredAt?: Date; // تاریخ ارجاع
     referredBy?: string; // کاربری که ارجاع داده
     announcement?: FreightAnnouncement; // برای دسترسی به اطلاعات announcement
