@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DispatchBoardEntry } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
 
 type BoardResponse = Record<string, DispatchBoardEntry[]>;
 
@@ -19,7 +20,7 @@ const DispatchBoardView: React.FC = () => {
     const loadBoard = async () => {
         try {
             setLoading(true);
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/board', { headers });
+            const res = await fetch(getApiUrl('dispatch/board'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as BoardResponse;
             setBoard(data || {});

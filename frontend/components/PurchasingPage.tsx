@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import SupplierManagement from './SupplierManagement';
 import { Supplier } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
 
 const PurchasingPage: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -13,7 +14,7 @@ const PurchasingPage: React.FC = () => {
             setError(null);
             try {
                 const token = localStorage.getItem('token');
-                const res = await fetch('http://localhost:3000/api/v1/suppliers', {
+                const res = await fetch(getApiUrl('suppliers'), {
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
                 if (!res.ok) throw new Error('خطا در دریافت تامین‌کنندگان');

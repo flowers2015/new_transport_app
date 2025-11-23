@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, FreightLineType } from '../types';
 import TransportDashboard from './TransportDashboard';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface TransportDashboardContainerProps {
     currentUser: User;
@@ -169,7 +170,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         params.append('timeRange', timeRange);
 
         console.log(`📊 [fetchStatisticsForLine] Final URL params: ${params.toString()}`);
-        const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/statistics?${params.toString()}`, { headers });
+        const res = await fetch(getApiUrl(`freight-announcements/statistics?${params.toString()}`), { headers });
         
         if (!res.ok) {
             throw new Error('خطا در دریافت آمار');
@@ -222,7 +223,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             if (selectedDay) params.append('day', selectedDay.toString());
             params.append('timeRange', timeRange);
 
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/representative-statistics?${params.toString()}`, { headers });
+            const res = await fetch(getApiUrl(`freight-announcements/representative-statistics?${params.toString()}`), { headers });
             
             if (!res.ok) {
                 throw new Error('خطا در دریافت آمار نمایندگان');
@@ -255,7 +256,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             if (selectedDay) params.append('day', selectedDay.toString());
             params.append('timeRange', timeRange);
 
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/representative-details?${params.toString()}`, { headers });
+            const res = await fetch(getApiUrl(`freight-announcements/representative-details?${params.toString()}`), { headers });
             
             if (!res.ok) {
                 throw new Error('خطا در دریافت جزئیات نماینده');
@@ -292,7 +293,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             params.append('month', selectedMonth.toString());
             params.append('timeRange', 'month');
 
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/line-analytics?${params.toString()}`, { headers });
+            const res = await fetch(getApiUrl(`freight-announcements/line-analytics?${params.toString()}`), { headers });
 
             if (!res.ok) {
                 throw new Error('خطا در دریافت آنالیز لاین');

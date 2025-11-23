@@ -4,6 +4,7 @@ import {
     RepairStatus, Supplier, OutsourcingRequest
 } from '../types';
 import { formatJalaliDateTime, formatPlateNumber } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { CogIcon } from './icons/CogIcon';
@@ -56,20 +57,20 @@ const RepairOrderView: React.FC<RepairOrderViewProps> = ({ orderId, onBack, curr
                     'Authorization': `Bearer ${token}`,
                 };
 
-                const orderRes = await fetch(`http://localhost:3000/api/v1/repair-orders/${orderId}`, { headers });
+                const orderRes = await fetch(getApiUrl(`repair-orders/${orderId}`), { headers });
                 if (!orderRes.ok) throw new Error('Failed to fetch repair order.');
                 const orderData = await orderRes.json();
                 setOrder(orderData);
 
                 // Fetch related data in parallel
                 const [partsRes, techniciansRes, inventoryRes, branchesRes, vehiclesRes, driversRes, suppliersRes] = await Promise.all([
-                    fetch(`http://localhost:3000/api/v1/repair-orders/${orderId}/part-usages`, { headers }),
-                    fetch('http://localhost:3000/api/v1/technicians', { headers }),
-                    fetch('http://localhost:3000/api/v1/parts', { headers }),
-                    fetch('http://localhost:3000/api/v1/branches', { headers }),
-                    fetch('http://localhost:3000/api/v1/vehicles', { headers }),
-                    fetch('http://localhost:3000/api/v1/drivers', { headers }),
-                    fetch('http://localhost:3000/api/v1/suppliers', { headers })
+                    fetch(getApiUrl(`repair-orders/${orderId}/part-usages`), { headers }),
+                    fetch(getApiUrl('technicians'), { headers }),
+                    fetch(getApiUrl('parts'), { headers }),
+                    fetch(getApiUrl('branches'), { headers }),
+                    fetch(getApiUrl('vehicles'), { headers }),
+                    fetch(getApiUrl('drivers'), { headers }),
+                    fetch(getApiUrl('suppliers'), { headers })
                 ]);
 
                 if (partsRes.ok) {
@@ -117,7 +118,7 @@ const RepairOrderView: React.FC<RepairOrderViewProps> = ({ orderId, onBack, curr
         
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/repair-orders/${order.id}/part-usages`, {
+            const response = await fetch(getApiUrl(`repair-orders/${order.id}/part-usages`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -151,7 +152,7 @@ const RepairOrderView: React.FC<RepairOrderViewProps> = ({ orderId, onBack, curr
         }
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/repair-orders/${order.id}/outsourcing-requests`, {
+            const response = await fetch(getApiUrl(`repair-orders/${order.id}/outsourcing-requests`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -180,7 +181,7 @@ const RepairOrderView: React.FC<RepairOrderViewProps> = ({ orderId, onBack, curr
         if (!order) return;
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/repair-orders/${order.id}/assign-technician`, {
+            const response = await fetch(getApiUrl(`repair-orders/${order.id}/assign-technician`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -207,7 +208,7 @@ const RepairOrderView: React.FC<RepairOrderViewProps> = ({ orderId, onBack, curr
         if (!order) return;
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/repair-orders/${order.id}/status`, {
+            const response = await fetch(getApiUrl(`repair-orders/${order.id}/status`), {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { WrenchScrewdriverIcon } from './icons/WrenchScrewdriverIcon';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface LoginProps {
     onLogin: (user: User, token: string) => void;
@@ -15,7 +16,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         e.preventDefault();
         setError('');
         try {
-            const response = await fetch('http://localhost:3000/api/v1/auth/login', {
+            const response = await fetch(getApiUrl('auth/login'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

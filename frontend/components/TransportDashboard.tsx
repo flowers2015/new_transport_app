@@ -4,6 +4,7 @@ import { FreightLineType } from '../types';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface StatisticsData {
     timePeriod: string;
@@ -1088,7 +1089,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
             // Fetch each line separately with individual error handling
             const fetchLineStats = async (lineType: string, lineName: string) => {
                 try {
-                    const response = await fetch(`http://localhost:3000/api/v1/freight-announcements/statistics?${params(lineType)}`, { headers });
+                    const response = await fetch(getApiUrl(`freight-announcements/statistics?${params(lineType)}`), { headers });
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }

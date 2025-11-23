@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { FreightAnnouncement, Branch, FreightTransaction, User, FreightPaymentStatus } from '../types';
 import FreightFinanceDashboard from './FreightFinanceDashboard';
 import { gregorianToJalali, jalaliToGregorian } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface FreightFinanceContainerProps {
     currentUser: User;
@@ -49,17 +50,17 @@ const FreightFinanceContainer: React.FC<FreightFinanceContainerProps> = ({ curre
             
             // برای Freight Finance، باید announcement‌های finalized را هم شامل کنیم
             // Fetch announcements - شامل finalized و InTransit برای Freight Finance
-            const annRes = await fetch('http://localhost:3000/api/v1/freight-announcements?includeLeftover=false&includeFinalized=true', { headers });
+            const annRes = await fetch(getApiUrl('freight-announcements?includeLeftover=false&includeFinalized=true'), { headers });
             if (!annRes.ok) throw new Error('Failed to fetch freight announcements');
             const annData = await annRes.json();
 
             // Fetch branches
-            const branchesRes = await fetch('http://localhost:3000/api/v1/branches', { headers });
+            const branchesRes = await fetch(getApiUrl('branches'), { headers });
             if (!branchesRes.ok) throw new Error('Failed to fetch branches');
             const branchesData = await branchesRes.json();
 
             // Fetch transactions
-            const transactionsRes = await fetch('http://localhost:3000/api/v1/freight-transactions', { headers });
+            const transactionsRes = await fetch(getApiUrl('freight-transactions'), { headers });
             let transactionsData: FreightTransaction[] = [];
             if (transactionsRes.ok) {
                 const rawTransactions = await transactionsRes.json();
@@ -197,7 +198,7 @@ const FreightFinanceContainer: React.FC<FreightFinanceContainerProps> = ({ curre
                 'Content-Type': 'application/json',
             };
 
-            const res = await fetch('http://localhost:3000/api/v1/freight-transactions', {
+            const res = await fetch(getApiUrl('freight-transactions'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(transaction),

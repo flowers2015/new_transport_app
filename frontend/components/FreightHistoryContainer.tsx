@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import FreightHistory from './FreightHistory';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import { gregorianToJalali } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 
 const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -34,16 +35,16 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             if (driverName && driverName.trim()) params.append('driverName', driverName.trim());
             if (lineType) params.append('lineType', lineType);
             
-            const historyUrl = `http://localhost:3000/api/v1/freight-announcements/history${params.toString() ? '?' + params.toString() : ''}`;
+            const historyUrl = getApiUrl(`freight-announcements/history${params.toString() ? '?' + params.toString() : ''}`);
             
             console.log('🔍 [FreightHistoryContainer] Fetching:', historyUrl);
             
             const [historyRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
                 fetch(historyUrl, { headers }),
-                fetch('http://localhost:3000/api/v1/vehicles', { headers }),
-                fetch('http://localhost:3000/api/v1/drivers', { headers }),
-                fetch('http://localhost:3000/api/v1/personal-drivers', { headers }),
-                fetch('http://localhost:3000/api/v1/personal-vehicles', { headers }),
+                fetch(getApiUrl('vehicles'), { headers }),
+                fetch(getApiUrl('drivers'), { headers }),
+                fetch(getApiUrl('personal-drivers'), { headers }),
+                fetch(getApiUrl('personal-vehicles'), { headers }),
             ]);
             
             if (!historyRes.ok) {

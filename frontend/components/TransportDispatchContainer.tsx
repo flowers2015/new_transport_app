@@ -5,6 +5,7 @@ import {
     DispatchQueueEntry,
     DispatchQueueType,
 } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
 
 type QueueGroup = Record<string, {
     near: DispatchQueueEntry[];
@@ -72,7 +73,7 @@ const TransportDispatchContainer: React.FC = () => {
     const fetchQueue = async () => {
         try {
             setLoadingQueue(true);
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/queue', { headers });
+            const res = await fetch(getApiUrl('dispatch/queue'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             setQueueData(data || {});
@@ -86,7 +87,7 @@ const TransportDispatchContainer: React.FC = () => {
 
     const fetchVehicles = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/v1/vehicles', { headers });
+            const res = await fetch(getApiUrl('vehicles'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             setVehicles(Array.isArray(data) ? data : []);
@@ -98,7 +99,7 @@ const TransportDispatchContainer: React.FC = () => {
 
     const fetchDrivers = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/v1/drivers', { headers });
+            const res = await fetch(getApiUrl('drivers'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             setDrivers(Array.isArray(data) ? data : []);
@@ -111,7 +112,7 @@ const TransportDispatchContainer: React.FC = () => {
     const fetchStageCandidates = async (currentStage: 'stage1' | 'stage2') => {
         try {
             setLoadingCandidates(true);
-            const res = await fetch(`http://localhost:3000/api/v1/dispatch/assignments/candidates?stage=${currentStage}`, { headers });
+            const res = await fetch(getApiUrl(`dispatch/assignments/candidates?stage=${currentStage}`), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             setStageCandidates(data);
@@ -128,7 +129,7 @@ const TransportDispatchContainer: React.FC = () => {
     const fetchBoard = async () => {
         try {
             setBoardLoading(true);
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/board', { headers });
+            const res = await fetch(getApiUrl('dispatch/board'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
             setBoardData(data || {});
@@ -160,7 +161,7 @@ const TransportDispatchContainer: React.FC = () => {
         }
         try {
             setCreating(true);
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/queue', {
+            const res = await fetch('dispatch/queue', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(newEntry),
@@ -187,7 +188,7 @@ const TransportDispatchContainer: React.FC = () => {
     const handleDeleteQueueEntry = async (id: string) => {
         if (!window.confirm('آیا از حذف این نوبت مطمئن هستید؟')) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/dispatch/queue/${id}`, {
+            const res = await fetch(getApiUrl(`dispatch/queue/${id}`), {
                 method: 'DELETE',
                 headers,
             });
@@ -216,7 +217,7 @@ const TransportDispatchContainer: React.FC = () => {
         }
 
         try {
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/assignments', {
+            const res = await fetch(getApiUrl('dispatch/assignments'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({

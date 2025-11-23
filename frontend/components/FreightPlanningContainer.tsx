@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import FreightDashboard from './FreightDashboard';
 import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
 import { useCallback } from 'react';
+import { getApiUrl } from '../utils/apiConfig';
 
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -16,7 +17,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         try {
             setLoading(true);
             // includeLeftover=true برای نمایش بارهای مانده در برنامه ریزی
-            const res = await fetch('http://localhost:3000/api/v1/freight-announcements?includeLeftover=true', { headers });
+            const res = await fetch(getApiUrl('freight-announcements?includeLeftover=true'), { headers });
             if (!res.ok) throw new Error('Failed to fetch freight announcements');
             const raw = await res.json();
             console.log('📦 [FreightPlanning] Fetched raw announcements count:', Array.isArray(raw)? raw.length : -1);
@@ -111,7 +112,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             return [];
         }
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/routes/search?q=${encodeURIComponent(trimmed)}`, { headers });
+            const res = await fetch(getApiUrl(`freight-announcements/routes/search?q=${encodeURIComponent(trimmed)}`), { headers });
             if (!res.ok) {
                 throw new Error(`Failed to search routes: ${res.status}`);
             }
@@ -139,7 +140,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 alert('تاریخ بارگیری، نوع خودرو و نوع لاین الزامی است.');
                 return;
             }
-            const res = await fetch('http://localhost:3000/api/v1/freight-announcements', {
+            const res = await fetch(getApiUrl('freight-announcements'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ ...announcement, isDraft }),
@@ -185,7 +186,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     destinations: updated.destinations,
                     isDraft: updated.status === FreightAnnouncementStatus.Draft,
                 } as any;
-                const resCreate = await fetch('http://localhost:3000/api/v1/freight-announcements', {
+                const resCreate = await fetch(getApiUrl('freight-announcements'), {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(createBody),
@@ -194,7 +195,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 await fetchAnnouncements();
                 return;
             }
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${updated.id}` ,{
+            const res = await fetch(getApiUrl(`freight-announcements/${updated.id}`) ,{
                 method: 'PUT',
                 headers,
                 body: JSON.stringify({
@@ -220,7 +221,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleApprove = async (id: string) => {
         try {
             console.log('✅ [FreightPlanning] Approve request:', id);
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}/approve`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${id}/approve`), {
                 method: 'POST',
                 headers,
             });
@@ -235,7 +236,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleReject = async (id: string, reason: string) => {
         try {
             console.log('⛔ [FreightPlanning] Reject request:', { id, reason });
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}/reject`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${id}/reject`), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ reason }),
@@ -251,7 +252,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     // Switch assignment queue (manager or transport can re-route)
     const handleSwitchQueue = async (id: string, nextQueue: 'company' | 'personal') => {
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}/assignment-queue`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${id}/assignment-queue`), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ nextQueue })
@@ -267,7 +268,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleDelete = async (id: string) => {
         try {
             console.log('🗑️ [FreightPlanning] Delete announcement:', id);
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${id}`), {
                 method: 'DELETE',
                 headers,
             });
@@ -292,7 +293,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
             // اعلام مجدد: باید اول به مدیر برنامه‌ریزی برود برای تایید مجدد
             // سپس مدیر می‌تواند تایید کند و بعد بر اساس lineType به ترابری مناسب ارسال شود
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${id}`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${id}`), {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify({
@@ -329,7 +330,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleSendForApproval = async (announcement: FreightAnnouncement, showNotification: boolean = true) => {
         try {
             console.log('📤 [FreightPlanning] Send for approval:', announcement.id);
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcement.id}`, {
+            const res = await fetch(`freight-announcements/${announcement.id}`, {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify({
@@ -374,7 +375,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const fetchChangeRequests = async () => {
         try {
             setLoadingChangeRequests(true);
-            const res = await fetch('http://localhost:3000/api/v1/freight-announcements/change-requests?status=requested', { headers });
+            const res = await fetch(getApiUrl('freight-announcements/change-requests?status=requested'), { headers });
             if (!res.ok) throw new Error('Failed to fetch change requests');
             const data = await res.json();
             setChangeRequests(Array.isArray(data) ? data : []);
@@ -392,7 +393,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
     const handleApproveChangeRequest = async (requestId: string, newAnnouncements?: any[]) => {
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/change-requests/${requestId}/approve`, {
+            const res = await fetch(getApiUrl(`freight-announcements/change-requests/${requestId}/approve`), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ newAnnouncements }),
@@ -409,7 +410,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
     const handleRejectChangeRequest = async (requestId: string, reviewNote?: string) => {
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/change-requests/${requestId}/reject`, {
+            const res = await fetch(getApiUrl(`freight-announcements/change-requests/${requestId}/reject`), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ reviewNote }),
@@ -426,7 +427,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
     const handleArchiveChangeRequest = async (requestId: string) => {
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/change-requests/${requestId}/archive`, {
+            const res = await fetch(getApiUrl(`freight-announcements/change-requests/${requestId}/archive`), {
                 method: 'POST',
                 headers,
             });

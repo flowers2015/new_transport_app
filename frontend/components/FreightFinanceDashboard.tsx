@@ -5,6 +5,7 @@ import { formatJalaliDateTime, formatJalali, gregorianToJalali, jalaliToGregoria
 import { CreditCardIcon } from './icons/CreditCardIcon'; // Reusing icon
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { getApiUrl, getFileUrl } from '../utils/apiConfig';
 
 interface FreightFinanceDashboardProps {
     announcements: FreightAnnouncement[];
@@ -794,7 +795,7 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                                                                 
                                                                 try {
                                                                     const token = localStorage.getItem('token');
-                                                                    const response = await fetch(`http://localhost:3000/api/v1/freight-transactions/${ann.id}/refer`, {
+                                                                    const response = await fetch(getApiUrl(`freight-transactions/${ann.id}/refer`), {
                                                                         method: 'POST',
                                                                         headers: {
                                                                             'Content-Type': 'application/json',
@@ -1062,7 +1063,7 @@ const TransactionDialog: React.FC<{
         
         const token = localStorage.getItem('token');
         try {
-            const response = await fetch('http://localhost:3000/api/v1/freight-transactions/upload', {
+            const response = await fetch(getApiUrl('freight-transactions/upload'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -1353,7 +1354,7 @@ const FileInput: React.FC<{
             <div className="mt-1 flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded text-xs">
                 <div className="flex items-center gap-2">
                     <span className="text-green-700">فایل موجود: </span>
-                    <a href={`http://localhost:3000/${existingFilePath}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    <a href={getFileUrl(existingFilePath)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                         مشاهده
                     </a>
                 </div>
@@ -1396,11 +1397,11 @@ const ViewDocumentsDialog: React.FC<{
     transaction: FreightTransaction;
     onClose: () => void;
 }> = ({ transaction, onClose }) => {
-    const getFileUrl = (filePath: string | null | undefined) => {
+    const getFileUrlLocal = (filePath: string | null | undefined) => {
         if (!filePath) return null;
-        // اگر مسیر کامل است، همان را برگردان، وگرنه با base URL ترکیب کن
+        // اگر مسیر کامل است، همان را برگردان، وگرنه از تابع getFileUrl استفاده کن
         if (filePath.startsWith('http')) return filePath;
-        return `http://localhost:3000/${filePath}`;
+        return getFileUrl(filePath);
     };
 
     const downloadFile = (url: string, filename: string) => {
@@ -1413,9 +1414,9 @@ const ViewDocumentsDialog: React.FC<{
         document.body.removeChild(link);
     };
 
-    const invoiceUrl = getFileUrl(transaction.invoiceImagePath || transaction.invoiceImage);
-    const receiptUrl = getFileUrl(transaction.receiptImagePath || transaction.receiptImage);
-    const extraDocUrl = getFileUrl(transaction.extraDocumentImagePath || transaction.extraDocumentImage);
+    const invoiceUrl = getFileUrlLocal(transaction.invoiceImagePath || transaction.invoiceImage);
+    const receiptUrl = getFileUrlLocal(transaction.receiptImagePath || transaction.receiptImage);
+    const extraDocUrl = getFileUrlLocal(transaction.extraDocumentImagePath || transaction.extraDocumentImage);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>

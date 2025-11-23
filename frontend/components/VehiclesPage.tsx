@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import VehicleManagement from './dashboards/VehicleDashboard';
 import { Branch, Vehicle } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
 
 const VehiclesPage: React.FC = () => {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -16,8 +17,8 @@ const VehiclesPage: React.FC = () => {
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` } as any;
                 const [vehRes, brRes] = await Promise.all([
-                    fetch('http://localhost:3000/api/v1/vehicles', { headers }),
-                    fetch('http://localhost:3000/api/v1/branches', { headers }),
+                    fetch(getApiUrl('vehicles'), { headers }),
+                    fetch(getApiUrl('branches'), { headers }),
                 ]);
                 if (!vehRes.ok) throw new Error('خطا در دریافت خودروها');
                 if (!brRes.ok) throw new Error('خطا در دریافت شعب');
@@ -35,7 +36,7 @@ const VehiclesPage: React.FC = () => {
     const handleAddVehicle = async (vehicle: Omit<Vehicle, 'id'>) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:3000/api/v1/vehicles', {
+            const res = await fetch(getApiUrl('vehicles'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -58,7 +59,7 @@ const VehiclesPage: React.FC = () => {
     const handleUpdateVehicle = async (id: string, vehicle: Omit<Vehicle, 'id'>) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`http://localhost:3000/api/v1/vehicles/${id}`, {
+            const res = await fetch(getApiUrl(`vehicles/${id}`), {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,

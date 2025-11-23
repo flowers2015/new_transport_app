@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, UserRole, User, Branch, Driver } from './types';
+import { getApiUrl } from './utils/apiConfig';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -142,7 +143,7 @@ const App: React.FC = () => {
     const fetchBranches = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:3000/api/v1/branches', {
+            const response = await fetch(getApiUrl('branches'), {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
@@ -160,7 +161,7 @@ const App: React.FC = () => {
     const handleAddBranch = async (branch: Omit<Branch, 'id'>) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:3000/api/v1/branches', {
+            const response = await fetch(getApiUrl('branches'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -182,7 +183,7 @@ const App: React.FC = () => {
     const handleUpdateBranch = async (id: string, branch: Omit<Branch, 'id'>) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/branches/${id}`, {
+            const response = await fetch(getApiUrl(`branches/${id}`), {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -204,7 +205,7 @@ const App: React.FC = () => {
     const handleDeleteBranch = async (id: string) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/branches/${id}`, {
+            const response = await fetch(getApiUrl(`branches/${id}`), {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -226,7 +227,7 @@ const App: React.FC = () => {
     const fetchDrivers = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:3000/api/v1/drivers', {
+            const response = await fetch(getApiUrl('drivers'), {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
@@ -244,7 +245,7 @@ const App: React.FC = () => {
     const handleAddDriver = async (driver: Omit<Driver, 'id'>) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:3000/api/v1/drivers', {
+            const response = await fetch(getApiUrl('drivers'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -266,7 +267,7 @@ const App: React.FC = () => {
     const handleUpdateDriver = async (id: string, driver: Omit<Driver, 'id'>) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/drivers/${id}`, {
+            const response = await fetch(getApiUrl(`drivers/${id}`), {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -288,7 +289,7 @@ const App: React.FC = () => {
     const handleDeleteDriver = async (id: string) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/drivers/${id}`, {
+            const response = await fetch(getApiUrl(`drivers/${id}`), {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,

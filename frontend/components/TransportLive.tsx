@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -1443,7 +1444,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // console.log('🔍 [handlePersonalDriverLookup] Token:', token ? 'exists' : 'missing');
             // console.log('🔍 [handlePersonalDriverLookup] Searching for nationalId:', nationalId);
             
-            const response = await fetch(`http://localhost:3000/api/v1/personal-drivers/search?query=${nationalId}`, {
+            const response = await fetch(getApiUrl(`personal-drivers/search?query=${nationalId}`), {
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             
@@ -1514,7 +1515,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // console.log('🔍 [handlePersonalVehicleLookup] Token:', token ? 'exists' : 'missing');
             // console.log('🔍 [handlePersonalVehicleLookup] Searching for truckSmartId:', personalVehicleDetails.truckSmartId);
             
-            const response = await fetch(`http://localhost:3000/api/v1/personal-vehicles/search?query=${personalVehicleDetails.truckSmartId}`, {
+            const response = await fetch(getApiUrl(`personal-vehicles/search?query=${personalVehicleDetails.truckSmartId}`), {
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             
@@ -2040,7 +2041,7 @@ const VehicleTypeChangeDialog: React.FC<{ announcement: FreightAnnouncement, onC
         const fetchVehicleTypes = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const res = await fetch('http://localhost:3000/api/v1/freight-announcements/vehicle-types', {
+                const res = await fetch(getApiUrl('freight-announcements/vehicle-types'), {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {

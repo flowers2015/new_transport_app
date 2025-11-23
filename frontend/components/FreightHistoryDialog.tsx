@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatJalaliDateTime } from '../utils/jalali';
 import { FreightAnnouncementStatus } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface HistoryEntry {
   id: string;
@@ -319,7 +320,7 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
         'Content-Type': 'application/json',
       };
       
-      const response = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/history`, { headers });
+      const response = await fetch(getApiUrl(`freight-announcements/${announcementId}/history`), { headers });
       
       if (!response.ok) {
         throw new Error('خطا در دریافت تاریخچه');
@@ -347,7 +348,7 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
       // دریافت اطلاعات رانندگان
       if (driverIds.size > 0) {
         try {
-          const driversRes = await fetch('http://localhost:3000/api/v1/drivers', { headers });
+          const driversRes = await fetch(getApiUrl('drivers'), { headers });
           if (driversRes.ok) {
             const drivers: any[] = await driversRes.json();
             const driverMapData: { [key: string]: { name: string; employeeId: string } } = {};
@@ -366,7 +367,7 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
       // دریافت اطلاعات خودروها
       if (vehicleIds.size > 0) {
         try {
-          const vehiclesRes = await fetch('http://localhost:3000/api/v1/vehicles', { headers });
+          const vehiclesRes = await fetch(getApiUrl('vehicles'), { headers });
           if (vehiclesRes.ok) {
             const vehicles: any[] = await vehiclesRes.json();
             const vehicleMapData: { [key: string]: { plate: string; model?: string } } = {};

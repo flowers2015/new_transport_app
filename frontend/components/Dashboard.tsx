@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { RepairOrder, Vehicle, RepairStatus, UserRole, View, Alert, User, FreightAnnouncement, FreightAnnouncementStatus, Invoice, InvoiceStatus } from '../types';
 import { formatJalali, formatPlateNumber, formatJalaliDateTime, gregorianToJalali } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 import { ChartBarIcon } from './icons/ChartBarIcon';
 import { CogIcon } from './icons/CogIcon';
 import { ClockIcon } from './icons/ClockIcon';
@@ -71,11 +72,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectOrder, onSelectInvoice, o
 
                 // Fetch all data in parallel
                 const [repairOrdersRes, vehiclesRes, alertsRes, freightAnnouncementsRes, invoicesRes] = await Promise.all([
-                    fetch('http://localhost:3000/api/v1/repair-orders', { headers }),
-                    fetch('http://localhost:3000/api/v1/vehicles', { headers }), // Assuming this endpoint exists
-                    fetch('http://localhost:3000/api/v1/alerts', { headers }), // Assuming this endpoint exists
-                    fetch('http://localhost:3000/api/v1/freight-announcements', { headers }),
-                    fetch('http://localhost:3000/api/v1/invoices', { headers }) // Assuming this endpoint exists
+                    fetch(getApiUrl('repair-orders'), { headers }),
+                    fetch(getApiUrl('vehicles'), { headers }), // Assuming this endpoint exists
+                    fetch(getApiUrl('alerts'), { headers }), // Assuming this endpoint exists
+                    fetch(getApiUrl('freight-announcements'), { headers }),
+                    fetch(getApiUrl('invoices'), { headers }) // Assuming this endpoint exists
                 ]);
 
                 if (!repairOrdersRes.ok) throw new Error('Failed to fetch repair orders');

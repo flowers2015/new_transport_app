@@ -5,6 +5,7 @@ import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import { CreditCardIcon } from './icons/CreditCardIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { getApiUrl, getFileUrl } from '../utils/apiConfig';
 
 // تابع برای نرمال‌سازی تاریخ شمسی (تبدیل - به / و اطمینان از فرمت YYYY/MM/DD)
 const normalizeJalaliDateString = (dateStr: string): string => {
@@ -355,7 +356,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
         try {
             const token = localStorage.getItem('token');
             const destinationId = selectedDestinationIdForReject || selectedTransactionForReject.destinationId || null;
-            const response = await fetch(`http://localhost:3000/api/v1/freight-transactions/${selectedTransactionForReject.announcementId}/reject`, {
+            const response = await fetch(getApiUrl(`freight-transactions/${selectedTransactionForReject.announcementId}/reject`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -391,7 +392,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
 
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/api/v1/freight-transactions/${transaction.announcementId}/approve`, {
+            const response = await fetch(getApiUrl(`freight-transactions/${transaction.announcementId}/approve`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -745,7 +746,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                                 <div>
                                     <label className="block text-sm font-medium mb-2">فاکتور:</label>
                                     <a 
-                                        href={`http://localhost:3000/${selectedTransactionForView.invoiceImagePath}`} 
+                                        href={getFileUrl(selectedTransactionForView.invoiceImagePath)} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
                                         className="text-blue-600 hover:underline"
@@ -758,7 +759,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                                 <div>
                                     <label className="block text-sm font-medium mb-2">رسید:</label>
                                     <a 
-                                        href={`http://localhost:3000/${selectedTransactionForView.receiptImagePath}`} 
+                                        href={getFileUrl(selectedTransactionForView.receiptImagePath)} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
                                         className="text-blue-600 hover:underline"
@@ -771,7 +772,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                                 <div>
                                     <label className="block text-sm font-medium mb-2">سند اضافی:</label>
                                     <a 
-                                        href={`http://localhost:3000/${selectedTransactionForView.extraDocumentImagePath}`} 
+                                        href={getFileUrl(selectedTransactionForView.extraDocumentImagePath)} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
                                         className="text-blue-600 hover:underline"

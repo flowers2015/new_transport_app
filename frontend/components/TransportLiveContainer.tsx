@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import TransportLive from './TransportLive';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
+import { getApiUrl } from '../utils/apiConfig';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -29,11 +30,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 // });
                 
                 const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
-                    fetch('http://localhost:3000/api/v1/freight-announcements', { headers }),
-                    fetch('http://localhost:3000/api/v1/vehicles', { headers }),
-                    fetch('http://localhost:3000/api/v1/drivers', { headers }),
-                    fetch('http://localhost:3000/api/v1/personal-drivers', { headers }),
-                    fetch('http://localhost:3000/api/v1/personal-vehicles', { headers }),
+                    fetch(getApiUrl('freight-announcements'), { headers }),
+                    fetch(getApiUrl('vehicles'), { headers }),
+                    fetch(getApiUrl('drivers'), { headers }),
+                    fetch(getApiUrl('personal-drivers'), { headers }),
+                    fetch(getApiUrl('personal-vehicles'), { headers }),
                 ]);
                 
                 // console.log('📊 [TransportLive] API Response Status:', {
@@ -173,7 +174,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         // });
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/assignment`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/assignment`), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify(assignment),
@@ -256,7 +257,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:3000/api/v1/freight-announcements/finalize-assignments', {
+            const response = await fetch(getApiUrl('freight-announcements/finalize-assignments'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -336,7 +337,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 expectedFinalPosition: newPosition
             });
             
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${sourceAnnouncementId}/transfer-destination`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${sourceAnnouncementId}/transfer-destination`), {
                 method: 'PUT',
                 headers: { 
                     'Content-Type': 'application/json', 
@@ -421,7 +422,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 announcementCode: current.announcementCode
             });
             
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/assignment-queue`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/assignment-queue`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ nextQueue })
@@ -457,7 +458,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 timestamp: new Date().toISOString()
             });
             const token = localStorage.getItem('token');
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${encodeURIComponent(announcementId)}/cancel`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${encodeURIComponent(announcementId)}/cancel`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -494,7 +495,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 return;
             }
             
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${announcementId}/vehicle-type`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/vehicle-type`), {
                 method: 'PUT',
                 headers: { 
                     'Content-Type': 'application/json', 
@@ -535,7 +536,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const onChangeRequest = async (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`http://localhost:3000/api/v1/freight-announcements/${encodeURIComponent(announcementId)}/change-request`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${encodeURIComponent(announcementId)}/change-request`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

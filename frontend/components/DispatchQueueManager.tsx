@@ -11,6 +11,7 @@ import {
     DriverPreferencePeerAssignment,
 } from '../types';
 import { gregorianToJalali } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 
 type QueueBuckets = Record<DispatchQueueType | 'other', DispatchQueueEntry[]>;
 type QueueGroup = Record<string, QueueBuckets>;
@@ -439,7 +440,7 @@ const useDriverSearch = (headers: Record<string, string>) => {
             setError(null);
             try {
                 const res = await fetch(
-                    `http://localhost:3000/api/v1/dispatch/search/drivers?q=${encodeURIComponent(query)}`,
+                    getApiUrl(`dispatch/search/drivers?q=${encodeURIComponent(query)}`),
                     { headers }
                 );
                 if (!res.ok) throw new Error(await res.text());
@@ -758,7 +759,7 @@ const DispatchQueueManager: React.FC = () => {
             if (toDate) params.append('to', toDate);
             if (options?.category) params.append('category', options.category);
             const res = await fetch(
-                `http://localhost:3000/api/v1/dispatch/drivers/${driverId}/preferences?${params.toString()}`,
+                getApiUrl(`dispatch/drivers/${driverId}/preferences?${params.toString()}`),
                 { headers }
             );
             if (!res.ok) throw new Error(await res.text());
@@ -874,7 +875,7 @@ const DispatchQueueManager: React.FC = () => {
     const fetchQueue = async () => {
         try {
             setLoadingQueue(true);
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/queue', { headers });
+            const res = await fetch(getApiUrl('dispatch/queue'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as QueueGroup;
             setQueueData(data || {});
@@ -950,7 +951,7 @@ const DispatchQueueManager: React.FC = () => {
         updateRow(rowId, row => ({ ...row, vehicleSearching: true }));
         try {
             const res = await fetch(
-                `http://localhost:3000/api/v1/dispatch/search/vehicles?q=${encodeURIComponent(query)}`,
+                getApiUrl(`dispatch/search/vehicles?q=${encodeURIComponent(query)}`),
                 { headers }
             );
             if (!res.ok) throw new Error(await res.text());
@@ -971,7 +972,7 @@ const DispatchQueueManager: React.FC = () => {
         updateRow(rowId, row => ({ ...row, driverSearching: true }));
         try {
             const res = await fetch(
-                `http://localhost:3000/api/v1/dispatch/search/drivers?q=${encodeURIComponent(query)}`,
+                getApiUrl(`dispatch/search/drivers?q=${encodeURIComponent(query)}`),
                 { headers }
             );
             if (!res.ok) throw new Error(await res.text());
@@ -992,7 +993,7 @@ const DispatchQueueManager: React.FC = () => {
         }
         updateRow(rowId, { submitting: true });
         try {
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/queue', {
+            const res = await fetch(getApiUrl('dispatch/queue'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
@@ -1018,7 +1019,7 @@ const DispatchQueueManager: React.FC = () => {
     const handleDeleteQueueEntry = async (id: string) => {
         if (!window.confirm('آیا از حذف این نوبت مطمئن هستید؟')) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/dispatch/queue/${id}`, {
+            const res = await fetch(getApiUrl(`dispatch/queue/${id}`), {
                 method: 'DELETE',
                 headers,
             });
@@ -1064,7 +1065,7 @@ const DispatchQueueManager: React.FC = () => {
                 params.append('forceStage2', 'true');
             }
             const res = await fetch(
-                `http://localhost:3000/api/v1/dispatch/assignments/candidates?${params.toString()}`,
+                getApiUrl(`dispatch/assignments/candidates?${params.toString()}`),
                 { headers }
             );
             if (!res.ok) throw new Error(await res.text());
@@ -1184,7 +1185,7 @@ const DispatchQueueManager: React.FC = () => {
         }));
 
         try {
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/assignments', {
+            const res = await fetch(getApiUrl('dispatch/assignments'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
@@ -1427,7 +1428,7 @@ const DispatchQueueManager: React.FC = () => {
         }));
 
         try {
-            const res = await fetch(`http://localhost:3000/api/v1/dispatch/queue/${entry.id}/position`, {
+            const res = await fetch(getApiUrl(`dispatch/queue/${entry.id}/position`), {
                 method: 'PATCH',
                 headers,
                 body: JSON.stringify({ position: targetPosition }),

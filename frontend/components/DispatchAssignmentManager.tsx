@@ -3,6 +3,7 @@ import {
     DispatchAnnouncementCandidate,
     DispatchQueueEntry,
 } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
 
 type StageKey = 'stage1' | 'stage2';
 
@@ -39,7 +40,7 @@ const DispatchAssignmentManager: React.FC = () => {
         try {
             setLoading(true);
             const res = await fetch(
-                `http://localhost:3000/api/v1/dispatch/assignments/candidates?stage=${targetStage}`,
+                getApiUrl(`dispatch/assignments/candidates?stage=${targetStage}`),
                 { headers }
             );
             if (!res.ok) throw new Error(await res.text());
@@ -76,7 +77,7 @@ const DispatchAssignmentManager: React.FC = () => {
 
         setAssigning(true);
         try {
-            const res = await fetch('http://localhost:3000/api/v1/dispatch/assignments', {
+            const res = await fetch(getApiUrl('dispatch/assignments'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({

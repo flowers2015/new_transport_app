@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FreightAnnouncement, FreightTransaction, User } from '../types';
 import CentralFinanceDashboard from './CentralFinanceDashboard';
 import { gregorianToJalali } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface CentralFinanceContainerProps {
     currentUser: User;
@@ -26,8 +27,8 @@ const CentralFinanceContainer: React.FC<CentralFinanceContainerProps> = ({ curre
             // دریافت همه اعلام‌بارها (مالی ستاد باید همه را ببیند)
             // شامل finalized و InTransit برای نمایش همه بارنامه‌ها
             const [announcementsRes, transactionsRes] = await Promise.all([
-                fetch('http://localhost:3000/api/v1/freight-announcements?includeLeftover=false&includeFinalized=true', { headers }),
-                fetch('http://localhost:3000/api/v1/freight-transactions', { headers }),
+                fetch(getApiUrl('freight-announcements?includeLeftover=false&includeFinalized=true'), { headers }),
+                fetch(getApiUrl('freight-transactions'), { headers }),
             ]);
 
             if (!announcementsRes.ok) throw new Error('Failed to fetch announcements');

@@ -4,6 +4,7 @@ import { formatJalaliDateTime } from '../../utils/jalali';
 import { WrenchScrewdriverIcon } from '../icons/WrenchScrewdriverIcon';
 import { ClockIcon } from '../icons/ClockIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
+import { getApiUrl } from '../../utils/apiConfig';
 
 interface TechnicianDashboardProps {
     onSelectOrder: (orderId: string) => void;
@@ -24,7 +25,7 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ onSelectOrder
                     throw new Error('Authentication token not found.');
                 }
 
-                const response = await fetch('http://localhost:3000/api/v1/repair-orders/my-orders', {
+                const response = await fetch(getApiUrl('repair-orders/my-orders'), {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                     },

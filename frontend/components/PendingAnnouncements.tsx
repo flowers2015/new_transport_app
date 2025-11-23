@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FreightAnnouncement, User } from '../types';
 import { formatJalali } from '../utils/jalali';
 import { formatCurrency } from '../utils/currency';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface PendingAnnouncementsProps {
   currentUser: User;
@@ -22,7 +23,7 @@ const PendingAnnouncements: React.FC<PendingAnnouncementsProps> = ({ currentUser
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/v1/planning/pending-announcements', {
+      const response = await fetch(getApiUrl('planning/pending-announcements'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -49,7 +50,7 @@ const PendingAnnouncements: React.FC<PendingAnnouncementsProps> = ({ currentUser
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/v1/announcements/bulk-operations', {
+      const response = await fetch(getApiUrl('announcements/bulk-operations'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -82,7 +83,7 @@ const PendingAnnouncements: React.FC<PendingAnnouncementsProps> = ({ currentUser
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/v1/announcements/bulk-operations', {
+      const response = await fetch(getApiUrl('announcements/bulk-operations'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

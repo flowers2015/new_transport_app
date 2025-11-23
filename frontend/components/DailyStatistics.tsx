@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { formatJalali } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface DailyStatisticsProps {
   currentUser: User;
@@ -30,7 +31,7 @@ const DailyStatistics: React.FC<DailyStatisticsProps> = ({ currentUser }) => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/api/v1/statistics/daily?date=${selectedDate}`, {
+      const response = await fetch(getApiUrl(`statistics/daily?date=${selectedDate}`), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
