@@ -330,7 +330,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleSendForApproval = async (announcement: FreightAnnouncement, showNotification: boolean = true) => {
         try {
             console.log('📤 [FreightPlanning] Send for approval:', announcement.id);
-            const res = await fetch(`freight-announcements/${announcement.id}`, {
+            const res = await fetch(getApiUrl(`freight-announcements/${announcement.id}`), {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify({
