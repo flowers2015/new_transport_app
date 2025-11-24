@@ -6,7 +6,16 @@
  * در محیط پروداکشن: VITE_API_BASE_URL=/api/v1
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+// خواندن متغیر محیطی - در صورت عدم وجود، از مقدار پیش‌فرض استفاده می‌شود
+// در production: باید /api/v1 باشد (آدرس نسبی)
+// در development: باید http://localhost:3000/api/v1 باشد (آدرس کامل)
+const envUrl = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = envUrl || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:3000/api/v1');
+
+// لاگ برای دیباگ (در همه محیط‌ها برای troubleshooting)
+console.log('🔧 [API Config] Mode:', import.meta.env.MODE);
+console.log('🔧 [API Config] VITE_API_BASE_URL from env:', envUrl || '(not set)');
+console.log('🔧 [API Config] Final API_BASE_URL:', API_BASE_URL);
 
 /**
  * تابع کمکی برای ساخت URL کامل API
