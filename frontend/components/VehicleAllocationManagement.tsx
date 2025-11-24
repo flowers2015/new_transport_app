@@ -4,6 +4,7 @@ import { Vehicle, Driver, Branch, VehicleAllocation, VehicleAllocationItem, Vehi
 import { formatJalali, formatPlateNumber } from '../utils/jalali';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { generateUUID } from '../utils/uuid';
 
 interface VehicleAllocationManagementProps {
     vehicles: Vehicle[];
@@ -193,7 +194,7 @@ const VehicleAllocationManagement: React.FC<VehicleAllocationManagementProps> = 
                 const checklist = category ? checklists[category as keyof typeof checklists] : undefined;
                 if (checklist) {
                     const initialItems = checklist.map(item => ({
-                        id: crypto.randomUUID(),
+                        id: generateUUID(),
                         code: item.code,
                         description: item.description,
                         value: item.type === 'quantity' ? (item.defaultValue || '1') : (item.options[0] || ''),
@@ -201,7 +202,7 @@ const VehicleAllocationManagement: React.FC<VehicleAllocationManagementProps> = 
                     }));
                     setItems(initialItems);
                 } else {
-                    setItems([{ id: crypto.randomUUID(), description: '', value: '1', remarks: '', code: '' }]);
+                    setItems([{ id: generateUUID(), description: '', value: '1', remarks: '', code: '' }]);
                 }
             }
         } else {
@@ -258,7 +259,7 @@ const VehicleAllocationManagement: React.FC<VehicleAllocationManagementProps> = 
         );
     };
 
-    const addItemRow = () => setItems([...items, { id: crypto.randomUUID(), code: '', description: '', value: '1', remarks: '' }]);
+    const addItemRow = () => setItems([...items, { id: generateUUID(), code: '', description: '', value: '1', remarks: '' }]);
     const removeItemRow = (id: string) => setItems(items.filter((item) => item.id !== id));
 
     const handleSubmit = (e: React.FormEvent) => {

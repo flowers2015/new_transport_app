@@ -10,6 +10,7 @@ import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
+import { generateUUID } from '../utils/uuid';
 
 // --- Constants from user request ---
 const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پانلا', 'آلینوس'];
@@ -1213,7 +1214,7 @@ const AnnouncementPanel: React.FC<{
     const initialCommonState = { loadingDate: '', cargoValue: '', vehicleType: '', notes: '' };
     const initialIceCreamState = { originCity: '', destinationCity: '', brand: 'میهن', representativeType: 'agent', representativeName: '', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
-    const initialDestinations = [{ id: crypto.randomUUID(), city: '', representativeName: '' }];
+    const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '' }];
 
     const [lineType, setLineType] = useState<FreightLineType>(FreightLineType.IceCream);
     const [commonState, setCommonState] = useState(initialCommonState);
@@ -1307,7 +1308,7 @@ const AnnouncementPanel: React.FC<{
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
 
-    const addDestination = () => { if(destinations.length < 4) setDestinations([...destinations, { id: crypto.randomUUID(), city: '', representativeName: '' }]); };
+    const addDestination = () => { if(destinations.length < 4) setDestinations([...destinations, { id: generateUUID(), city: '', representativeName: '' }]); };
     const removeDestination = (id: string) => setDestinations(destinations.filter(d => d.id !== id));
     const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
         if (field === 'city' && typeof value === 'string') {
@@ -1339,7 +1340,7 @@ const AnnouncementPanel: React.FC<{
         }
         console.log(`📅 [FreightDashboard] Submitting with loadingDate:`, jalaliDate);
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
-            ? { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: crypto.randomUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
+            ? { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: generateUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
             : { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, platformArrivalTime: multiDestState.platformArrivalTime, destinations: destinations as Destination[] };
         
         if (isEditMode) {
