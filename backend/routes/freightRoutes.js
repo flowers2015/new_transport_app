@@ -57,7 +57,7 @@ router.get('/line-analytics', authenticateToken, getLineAnalytics);
 router.get(
   '/routes/search',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'transport_user', 'personal_transport_user', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'transport_user', 'personal_transport_user', 'transport_finance', 'finance', 'admin']),
   searchDispatchRoutes
 );
 

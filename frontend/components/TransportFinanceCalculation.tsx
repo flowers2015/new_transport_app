@@ -1,0 +1,2395 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { User, Driver, Vehicle, FreightAnnouncement, DriverAllowanceCalculation, DriverTourDetail } from '../types';
+import { getApiUrl } from '../utils/apiConfig';
+import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali } from '../utils/jalali';
+
+// Helper function for padding
+const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
+import { generateUUID } from '../utils/uuid';
+import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
+import * as XLSX from 'xlsx';
+
+interface TransportFinanceCalculationProps {
+    currentUser: User;
+}
+
+// Types برای این component
+interface DriverCalculationRow {
+    id: string;
+    driverId: string;
+    employeeId: string;
+    driverName: string;
+    queueType: 'porsant' | 'fixed_allowance' | 'helper';
+    tourCount: number;
+    totalKilometers: number;
+    tourCost: number;
+    tours: DriverTourDetailWithCalculation[];
+    isExpanded?: boolean;
+}
+
+interface DriverTourDetailWithCalculation extends DriverTourDetail {
+    // اطلاعات ثبت شده برای این تور
+    billOfLadingNumber?: string; // شماره بارنامه
+    billOfLadingDate?: Date | string; // تاریخ صدور بارنامه
+    calculationDate?: string; // تاریخ محاسبه (شمسی YYYY/MM/DD)
+    announcementDate?: Date; // تاریخ اعلام بار
+    approvedKilometers?: number;
+    excessKilometers?: number;
+    approvedMissionDays?: number;
+    excessMissionDays?: number;
+    foodCost?: number;
+    fuelCost?: number;
+    tollCost?: number;
+    loadingCost?: number;
+    totalCost?: number;
+    notes?: string;
+    isDataRecorded?: boolean;
+}
+
+interface AllowanceInputDialogData {
+    tourId: string; // شناسه تور (announcementId)
+    driverId: string;
+    billOfLadingNumber: string;
+    billOfLadingDate: string; // تاریخ صدور بارنامه (شمسی YYYY/MM/DD)
+    billOfLadingCost: number; // هزینه بارنامه (ریال)
+    approvedKilometers: number;
+    excessKilometers: number;
+    approvedMissionDays: number;
+    excessMissionDays: number;
+    tollCost: number;
+    loadingCost: number; // هزینه بارگیری اصلی
+    returnCargoCost: number; // هزینه بار برگشتی (ریال)
+    multiUnloadCost: number; // هزینه چندجا تخلیه (ریال)
+    excessMissionCost: number; // هزینه ماموریت مازاد (ریال)
+    helperDriverCost: number; // هزینه راننده کمکی (ریال)
+    fixedAllowance: number; // اجرت ثابت (در صورتی که صف اجرت ثابت باشد)
+    calculationDate: string; // تاریخ محاسبه (شمسی YYYY/MM/DD)
+    notes: string;
+    // فیلدهای راننده کمکی
+    helperDriverId?: string; // شناسه راننده کمکی
+    helperDriverEmployeeId?: string; // کد پرسنلی راننده کمکی
+    helperDriverName?: string; // نام و نام خانوادگی راننده کمکی
+    helperDriverAllowance?: number; // اجرت راننده کمکی
+    helperDriverFoodCost?: number; // هزینه غذا راننده کمکی
+    helperDriverExcessMissionDays?: number; // ماموریت مازاد راننده کمکی
+    helperDriverExcessMissionCost?: number; // هزینه ماموریت مازاد راننده کمکی
+}
+
+const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = ({ currentUser }) => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
+    const [calculations, setCalculations] = useState<DriverCalculationRow[]>([]);
+    
+    // فیلتر تاریخ (تاریخ صدور بارنامه)
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
+    
+    // فیلتر تاریخ برای خروجی اکسل (پیش‌فرض: 26 ماه قبل تا 25 ماه جاری)
+    const getDefaultExcelDateRange = (): { start: string; end: string } => {
+        const now = new Date();
+        const [jy, jm, jd] = gregorianToJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
+        
+        // همیشه از 26 ماه قبل تا 25 ماه جاری
+        let startYear = jy;
+        let startMonth = jm - 1;
+        let startDay = 26;
+        let endYear = jy;
+        let endMonth = jm;
+        let endDay = 25;
+        
+        // اگر ماه قبل کمتر از 1 باشد، به سال قبل برو
+        if (startMonth < 1) {
+            startMonth = 12;
+            startYear = jy - 1;
+        }
+        
+        return {
+            start: `${startYear}/${pad2(startMonth)}/${pad2(startDay)}`,
+            end: `${endYear}/${pad2(endMonth)}/${pad2(endDay)}`
+        };
+    };
+    
+    const defaultExcelDates = useMemo(() => getDefaultExcelDateRange(), []);
+    const [excelStartDate, setExcelStartDate] = useState<string>(defaultExcelDates.start);
+    const [excelEndDate, setExcelEndDate] = useState<string>(defaultExcelDates.end);
+    
+    // جستجو
+    const [searchTerm, setSearchTerm] = useState<string>(''); // جستجو بر اساس کد پرسنلی و نام
+    
+    // مرتب‌سازی
+    type SortField = 'employeeId' | 'driverName' | 'tourCount' | 'totalKilometers' | 'tourCost' | 'billOfLadingDate';
+    type SortDirection = 'asc' | 'desc';
+    const [sortField, setSortField] = useState<SortField>('employeeId');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    
+    // صفحه‌بندی
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const [itemsPerPage, setItemsPerPage] = useState<number>(30);
+    
+    // دیالوگ ثبت اطلاعات
+    const [showInputDialog, setShowInputDialog] = useState(false);
+    const [inputDialogData, setInputDialogData] = useState<AllowanceInputDialogData | null>(null);
+    const [inputDialogTab, setInputDialogTab] = useState<'basic' | 'costs' | 'notes'>('basic');
+    const [helperDriverSearchResults, setHelperDriverSearchResults] = useState<Driver[]>([]);
+    
+    // دیالوگ نمایش جزئیات تور
+    const [showTourDetailsDialog, setShowTourDetailsDialog] = useState(false);
+    const [selectedTourDetails, setSelectedTourDetails] = useState<DriverTourDetailWithCalculation[] | null>(null);
+    const [selectedDriverName, setSelectedDriverName] = useState<string>('');
+    
+    // بزرگنمایی صفحه
+    const [zoomLevel, setZoomLevel] = useState(100);
+    
+    // بخشنامه‌ها
+    const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
+    const [fixedAllowance, setFixedAllowance] = useState<number>(0);
+    const [foodCostPerDay, setFoodCostPerDay] = useState<number>(0);
+    const [fuelConsumptionRates, setFuelConsumptionRates] = useState<{ [key: string]: number }>({});
+    const [excessMissionCostPerDay, setExcessMissionCostPerDay] = useState<number>(0);
+    const [multiUnloadCostPerUnit, setMultiUnloadCostPerUnit] = useState<number>(0);
+    const [helperAllowancePerKm, setHelperAllowancePerKm] = useState<number>(0);
+
+    useEffect(() => {
+        fetchData();
+        fetchRegulations();
+    }, []);
+
+    // Fetch بخشنامه‌ها
+    const fetchRegulations = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            // Fetch همه بخشنامه‌ها
+            const [foodRes, excessMissionRes, multiUnloadRes, helperRes] = await Promise.all([
+                fetch(getApiUrl('allowance-regulations/food'), { headers }),
+                fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
+                fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
+                fetch(getApiUrl('allowance-regulations/helper'), { headers }),
+            ]);
+
+            if (foodRes.ok) {
+                const foodData = await foodRes.json();
+                if (foodData && foodData.length > 0) {
+                    // استفاده از آخرین بخشنامه فعال
+                    const latestFood = foodData[0];
+                    setFoodCostPerDay(Number(latestFood.foodCost) || 0);
+                }
+            }
+
+            if (excessMissionRes.ok) {
+                const excessMissionData = await excessMissionRes.json();
+                if (excessMissionData && excessMissionData.length > 0) {
+                    const latestExcessMission = excessMissionData[0];
+                    setExcessMissionCostPerDay(Number(latestExcessMission.excessMissionCost) || 0);
+                }
+            }
+
+            if (multiUnloadRes.ok) {
+                const multiUnloadData = await multiUnloadRes.json();
+                if (multiUnloadData && multiUnloadData.length > 0) {
+                    const latestMultiUnload = multiUnloadData[0];
+                    setMultiUnloadCostPerUnit(Number(latestMultiUnload.multiUnloadCost) || 0);
+                }
+            }
+
+            if (helperRes.ok) {
+                const helperData = await helperRes.json();
+                if (helperData && helperData.length > 0) {
+                    const latestHelper = helperData[0];
+                    setHelperAllowancePerKm(Number(latestHelper.helperAllowance) || 0);
+                }
+            }
+        } catch (err) {
+            console.error('❌ [fetchRegulations] خطا در دریافت بخشنامه‌ها:', err);
+        }
+    };
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            // Fetch drivers, vehicles, and announcements
+            const [driversRes, vehiclesRes, announcementsRes] = await Promise.all([
+                fetch(getApiUrl('drivers'), { headers }),
+                fetch(getApiUrl('vehicles'), { headers }),
+                fetch(getApiUrl('freight-announcements?includeFinalized=true'), { headers }),
+            ]);
+
+            if (!driversRes.ok) throw new Error('خطا در دریافت رانندگان');
+            if (!vehiclesRes.ok) throw new Error('خطا در دریافت خودروها');
+            if (!announcementsRes.ok) throw new Error('خطا در دریافت اعلام بارها');
+
+            const [driversData, vehiclesData, announcementsData] = await Promise.all([
+                driversRes.json(),
+                vehiclesRes.json(),
+                announcementsRes.json(),
+            ]);
+
+            setDrivers(Array.isArray(driversData) ? driversData : []);
+            setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+            
+            // فیلتر کردن فقط بارهای تخصیص داده شده به رانندگان و خودروهای شرکت
+            const companyAnnouncements = (Array.isArray(announcementsData) ? announcementsData : []).filter(
+                (ann: any) => 
+                    ann.assignment_type === 'company' && 
+                    ann.assigned_driver_id && 
+                    ann.assigned_vehicle_id &&
+                    (ann.status === 'Finalized' || ann.status === 'InTransit')
+            );
+            
+            setAnnouncements(companyAnnouncements);
+            
+        } catch (err: any) {
+            console.error('❌ [TransportFinanceCalculation] Failed to fetch data:', err);
+            setError(err.message || 'خطا در بارگذاری داده‌ها');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // محاسبه داده‌های رانندگان بر اساس اعلام بارها
+    const calculateDriverData = useMemo(() => {
+        if (!announcements.length || !drivers.length || !vehicles.length) return [];
+
+        const driverMap = new Map<string, DriverCalculationRow>();
+
+        announcements.forEach((ann: any) => {
+            if (!ann.assigned_driver_id || ann.assignment_type !== 'company') return;
+
+            const driver = drivers.find(d => d.id === ann.assigned_driver_id);
+            const vehicle = vehicles.find(v => v.id === ann.assigned_vehicle_id);
+            
+            if (!driver || !vehicle) return;
+
+            const driverId = driver.id;
+            const existing = driverMap.get(driverId);
+
+            // محاسبه roundTripKm از route (باید از API گرفته شود)
+            const roundTripKm = ann.route?.round_trip_km || 0;
+
+            const tourDetail: DriverTourDetailWithCalculation = {
+                announcementId: ann.id,
+                announcementCode: ann.announcement_code || '',
+                vehicleType: ann.vehicle_type || '',
+                vehicleId: vehicle.id,
+                vehicleCode: vehicle.vehicleCode,
+                plateNumber: vehicle.plateNumber ? 
+                    `${vehicle.plateNumber.part1}${vehicle.plateNumber.letter}${vehicle.plateNumber.part2}-${vehicle.plateNumber.cityCode}` : 
+                    '',
+                lineType: ann.line_type || '',
+                destinations: (ann.destinations || []).map((d: any) => d.city || '').filter(Boolean),
+                roundTripKm,
+                billOfLadingNumber: ann.bill_of_lading_number || '',
+                billOfLadingDate: ann.bill_of_lading_date ? (typeof ann.bill_of_lading_date === 'string' ? new Date(ann.bill_of_lading_date) : ann.bill_of_lading_date) : undefined,
+                announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
+            };
+
+            if (existing) {
+                existing.tourCount += 1;
+                existing.totalKilometers += roundTripKm;
+                existing.tours.push(tourDetail);
+            } else {
+                driverMap.set(driverId, {
+                    id: generateUUID(),
+                    driverId: driver.id,
+                    employeeId: driver.employeeId,
+                    driverName: driver.name,
+                    queueType: 'porsant', // پیش‌فرض
+                    tourCount: 1,
+                    totalKilometers: roundTripKm,
+                    tourCost: 0, // بعداً محاسبه می‌شود
+                    tours: [tourDetail],
+                });
+            }
+        });
+
+        return Array.from(driverMap.values());
+    }, [announcements, drivers, vehicles]);
+
+    useEffect(() => {
+        setCalculations(calculateDriverData);
+    }, [calculateDriverData]);
+
+    // بارگذاری داده‌های ذخیره شده از دیتابیس - بعد از fetchData
+    useEffect(() => {
+        const loadSavedCalculations = async () => {
+            // صبر کن تا announcements بارگذاری شوند
+            if (!announcements.length) return;
+            
+            // صبر کن تا calculateDriverData تنظیم شود
+            if (calculateDriverData.length === 0) return;
+            
+            try {
+                const token = localStorage.getItem('token');
+                const headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                };
+                
+                // دریافت همه محاسبات ذخیره شده
+                const savedRes = await fetch(getApiUrl('driver-calculations'), { headers });
+                if (savedRes.ok) {
+                    const savedData = await savedRes.json();
+                    console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده:', savedData.length, 'رکورد');
+                    
+                    // Merge کردن داده‌های ذخیره شده با calculateDriverData
+                    const updated = calculateDriverData.map(calc => {
+                            const updatedTours = calc.tours.map(tour => {
+                                const saved = savedData.find((s: any) => 
+                                    s.driver_id === calc.driverId && s.announcement_id === tour.announcementId
+                                );
+                                
+                                if (saved) {
+                                    console.log('✅ [loadSavedCalculations] پیدا شد:', {
+                                        driverId: calc.driverId,
+                                        announcementId: tour.announcementId,
+                                        saved
+                                    });
+                                    return {
+                                        ...tour,
+                                        billOfLadingNumber: saved.bill_of_lading_number || saved.billOfLadingNumber || '',
+                                        billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                                        calculationDate: saved.calculation_date || saved.calculationDate || '',
+                                        approvedKilometers: saved.approved_kilometers || saved.approvedKilometers || 0,
+                                        excessKilometers: saved.excess_kilometers || saved.excessKilometers || 0,
+                                        approvedMissionDays: saved.approved_mission_days || saved.approvedMissionDays || 1,
+                                        excessMissionDays: saved.excess_mission_days || saved.excessMissionDays || 0,
+                                        tollCost: saved.toll_cost || saved.tollCost || 0,
+                                        loadingCost: saved.loading_cost || saved.loadingCost || 0,
+                                        billOfLadingCost: saved.bill_of_lading_cost || saved.billOfLadingCost || 0,
+                                        returnCargoCost: saved.return_cargo_cost || saved.returnCargoCost || 0,
+                                        multiUnloadCost: saved.multi_unload_cost || saved.multiUnloadCost || 0,
+                                        excessMissionCost: saved.excess_mission_cost || saved.excessMissionCost || 0,
+                                        helperDriverCost: saved.helper_driver_cost || saved.helperDriverCost || 0,
+                                        fixedAllowance: saved.fixed_allowance || saved.fixedAllowance || 0,
+                                        foodCost: saved.food_cost || saved.foodCost || 0,
+                                        fuelCost: saved.fuel_cost || saved.fuelCost || 0,
+                                        tourCost: saved.tour_cost || saved.tourCost || 0,
+                                        totalCost: saved.total_cost || saved.totalCost || 0,
+                                        notes: saved.notes || '',
+                                        isDataRecorded: true,
+                                        // فیلدهای راننده کمکی
+                                        helperDriverId: saved.helper_driver_id || saved.helperDriverId || '',
+                                        helperDriverEmployeeId: saved.helper_driver_employee_id || saved.helperDriverEmployeeId || '',
+                                        helperDriverName: saved.helper_driver_name || saved.helperDriverName || '',
+                                        helperDriverAllowance: saved.helper_driver_allowance || saved.helperDriverAllowance || 0,
+                                        helperDriverFoodCost: saved.helper_driver_food_cost || saved.helperDriverFoodCost || 0,
+                                        helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || saved.helperDriverExcessMissionDays || 0,
+                                        helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || saved.helperDriverExcessMissionCost || 0,
+                                        isPaid: saved.is_paid || saved.isPaid || false,
+                                    } as any;
+                                }
+                                return tour;
+                            });
+                            
+                            // محاسبه مجموع هزینه کل و پیمایش کل (از مجموع مصوب + مازاد)
+                            const totalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+                            const totalKm = updatedTours.reduce((sum, tour) => {
+                                const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                                return sum + tourTotalKm;
+                            }, 0);
+                            
+                            return {
+                                ...calc,
+                                tours: updatedTours,
+                                tourCost: totalCost,
+                                totalKilometers: totalKm,
+                            };
+                    });
+                    
+                    // تنظیم calculations با داده‌های merge شده
+                    setCalculations(updated);
+                } else {
+                    console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText);
+                }
+            } catch (err) {
+                console.error('❌ [loadSavedCalculations] خطا در بارگذاری داده‌های ذخیره شده:', err);
+            }
+        };
+        
+        loadSavedCalculations();
+    }, [announcements.length, calculateDriverData]);
+
+    // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
+    useEffect(() => {
+        if (calculations.length === 0) return;
+        
+        setCalculations(prev => {
+            const updated = prev.map(calc => {
+                // محاسبه هزینه کل از مجموع totalCost تورها
+                const totalCost = calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+                // محاسبه پیمایش کل از مجموع مصوب + مازاد
+                const totalKm = calc.tours.reduce((sum, tour) => {
+                    const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                    return sum + tourTotalKm;
+                }, 0);
+                return {
+                    ...calc,
+                    tourCost: totalCost,
+                    totalKilometers: totalKm,
+                };
+            });
+            return updated;
+        });
+    }, [calculations.map(c => `${c.driverId}-${c.tours.map(t => `${t.announcementId}-${t.totalCost || 0}-${t.approvedKilometers || 0}-${t.excessKilometers || 0}`).join('|')}`).join('||')]);
+
+    const handleExpandRow = (driverId: string) => {
+        const calc = calculations.find(c => c.driverId === driverId);
+        if (calc) {
+            setSelectedTourDetails(calc.tours);
+            setSelectedDriverName(calc.driverName);
+            setShowTourDetailsDialog(true);
+        }
+    };
+    
+    const handleZoomIn = () => {
+        setZoomLevel(prev => Math.min(prev + 10, 150));
+    };
+    
+    const handleZoomOut = () => {
+        setZoomLevel(prev => Math.max(prev - 10, 75));
+    };
+    
+    const handleResetZoom = () => {
+        setZoomLevel(100);
+    };
+
+    // فیلتر و جستجو
+    const filteredAndSortedCalculations = useMemo(() => {
+        let filtered = [...calculations];
+
+        // فیلتر بر اساس جستجو (کد پرسنلی و نام)
+        if (searchTerm.trim()) {
+            const searchLower = searchTerm.toLowerCase();
+            filtered = filtered.filter(calc => 
+                calc.employeeId?.toLowerCase().includes(searchLower) ||
+                calc.driverName?.toLowerCase().includes(searchLower)
+            );
+        }
+
+        // فیلتر بر اساس تاریخ صدور بارنامه
+        if (startDate || endDate) {
+            filtered = filtered.filter(calc => {
+                // پیدا کردن اولین تاریخ صدور بارنامه از تورها
+                const billOfLadingDates = calc.tours
+                    .map(t => t.billOfLadingDate)
+                    .filter(Boolean)
+                    .map(d => {
+                        if (typeof d === 'string') return parseJalaliDateString(d);
+                        return d instanceof Date ? d : null;
+                    })
+                    .filter(Boolean) as Date[];
+                
+                if (billOfLadingDates.length === 0) return false;
+                
+                const firstDate = billOfLadingDates[0];
+                if (!firstDate) return false;
+                
+                const jalaliDate = formatJalali(firstDate);
+                
+                if (startDate && jalaliDate < startDate) return false;
+                if (endDate && jalaliDate > endDate) return false;
+                
+                return true;
+            });
+        }
+
+        // مرتب‌سازی
+        filtered.sort((a, b) => {
+            let aValue: any;
+            let bValue: any;
+
+            switch (sortField) {
+                case 'employeeId':
+                    aValue = a.employeeId || '';
+                    bValue = b.employeeId || '';
+                    break;
+                case 'driverName':
+                    aValue = a.driverName || '';
+                    bValue = b.driverName || '';
+                    break;
+                case 'tourCount':
+                    aValue = a.tourCount || 0;
+                    bValue = b.tourCount || 0;
+                    break;
+                case 'totalKilometers':
+                    aValue = a.totalKilometers || 0;
+                    bValue = b.totalKilometers || 0;
+                    break;
+                case 'tourCost':
+                    aValue = a.tourCost || 0;
+                    bValue = b.tourCost || 0;
+                    break;
+                case 'billOfLadingDate':
+                    const aDates = a.tours.map(t => t.billOfLadingDate).filter(Boolean).map(d => {
+                        if (typeof d === 'string') return parseJalaliDateString(d);
+                        return d instanceof Date ? d : null;
+                    }).filter(Boolean) as Date[];
+                    const bDates = b.tours.map(t => t.billOfLadingDate).filter(Boolean).map(d => {
+                        if (typeof d === 'string') return parseJalaliDateString(d);
+                        return d instanceof Date ? d : null;
+                    }).filter(Boolean) as Date[];
+                    aValue = aDates.length > 0 ? aDates[0].getTime() : 0;
+                    bValue = bDates.length > 0 ? bDates[0].getTime() : 0;
+                    break;
+                default:
+                    aValue = a.employeeId || '';
+                    bValue = b.employeeId || '';
+            }
+
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                return sortDirection === 'asc' 
+                    ? aValue.localeCompare(bValue, 'fa')
+                    : bValue.localeCompare(aValue, 'fa');
+            } else {
+                return sortDirection === 'asc' 
+                    ? (aValue as number) - (bValue as number)
+                    : (bValue as number) - (aValue as number);
+            }
+        });
+
+        return filtered;
+    }, [calculations, searchTerm, startDate, endDate, sortField, sortDirection]);
+
+    // محاسبه صفحه‌بندی
+    const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
+    const paginatedCalculations = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredAndSortedCalculations.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredAndSortedCalculations, currentPage, itemsPerPage]);
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+        setCurrentPage(1); // بازگشت به صفحه اول
+    };
+
+    // فیلتر داده‌ها بر اساس تاریخ خروجی اکسل
+    const getExcelFilteredData = () => {
+        if (!excelStartDate && !excelEndDate) return filteredAndSortedCalculations;
+        
+        return filteredAndSortedCalculations.filter(calc => {
+            const billOfLadingDates = calc.tours
+                .map(t => t.billOfLadingDate)
+                .filter(Boolean)
+                .map(d => {
+                    if (typeof d === 'string') return parseJalaliDateString(d);
+                    return d instanceof Date ? d : null;
+                })
+                .filter(Boolean) as Date[];
+            
+            if (billOfLadingDates.length === 0) return false;
+            
+            const firstDate = billOfLadingDates[0];
+            if (!firstDate) return false;
+            
+            const jalaliDate = formatJalali(firstDate);
+            
+            if (excelStartDate && jalaliDate < excelStartDate) return false;
+            if (excelEndDate && jalaliDate > excelEndDate) return false;
+            
+            return true;
+        });
+    };
+
+    // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
+    const exportToExcelMainRows = () => {
+        const excelData = getExcelFilteredData();
+        
+        const wsData = [
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'صف', 'تعداد تور', 'تور ثبت شده', 'تور ثبت نشده', 'پیمایش کل (کیلومتر)', 'هزینه کل تور (ریال)', 'تاریخ صدور بارنامه']
+        ];
+
+        excelData.forEach((calc, index) => {
+            const recordedTours = calc.tours.filter(t => t.isDataRecorded).length;
+            const unrecordedTours = calc.tours.length - recordedTours;
+            const totalKm = calc.tours.reduce((sum, tour) => {
+                const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                return sum + tourTotalKm;
+            }, 0);
+            const totalCost = calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+            
+            // پیدا کردن اولین تاریخ صدور بارنامه
+            const firstBillDate = calc.tours
+                .map(t => t.billOfLadingDate)
+                .filter(Boolean)[0];
+            const billDateStr = firstBillDate 
+                ? (typeof firstBillDate === 'string' ? firstBillDate : formatJalali(firstBillDate))
+                : '';
+
+            const queueTypeStr = calc.queueType === 'porsant' ? 'صف پورسانت' : 
+                                calc.queueType === 'fixed_allowance' ? 'صف اجرت ثابت' : 
+                                'راننده کمکی';
+
+            wsData.push([
+                index + 1,
+                calc.employeeId || '',
+                calc.driverName || '',
+                queueTypeStr,
+                calc.tourCount || 0,
+                recordedTours,
+                unrecordedTours,
+                totalKm,
+                totalCost,
+                billDateStr
+            ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // تنظیم راست‌چین برای تمام ستون‌ها
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[cellAddress]) continue;
+                
+                if (!ws[cellAddress].s) ws[cellAddress].s = {};
+                if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
+                ws[cellAddress].s.alignment.horizontal = 'right';
+                ws[cellAddress].s.alignment.vertical = 'center';
+                
+                // فرمت اعداد برای ستون‌های عددی (ردیف 0 = هدر)
+                if (R > 0) {
+                    const colIndex = C;
+                    // ستون‌های عددی: ردیف (0), تعداد تور (4), تور ثبت شده (5), تور ثبت نشده (6), پیمایش (7), هزینه (8)
+                    if ([0, 4, 5, 6, 7, 8].includes(colIndex)) {
+                        if (typeof wsData[R][colIndex] === 'number') {
+                            ws[cellAddress].z = '#,##0';
+                        }
+                    }
+                }
+            }
+        }
+        
+        // تنظیم عرض ستون‌ها
+        ws['!cols'] = [
+            { wch: 8 },  // ردیف
+            { wch: 12 }, // کد پرسنلی
+            { wch: 20 }, // نام
+            { wch: 15 }, // صف
+            { wch: 12 }, // تعداد تور
+            { wch: 12 }, // تور ثبت شده
+            { wch: 14 }, // تور ثبت نشده
+            { wch: 18 }, // پیمایش کل
+            { wch: 18 }, // هزینه کل
+            { wch: 18 }  // تاریخ
+        ];
+        
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'محاسبه هزینه تور');
+        XLSX.writeFile(wb, `محاسبات_اجرت_پیمایش_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    // خروجی اکسل - نوع دوم: ریز ردیف‌ها با تمام جزئیات
+    const exportToExcelDetailRows = () => {
+        const excelData = getExcelFilteredData();
+        
+        const wsData = [
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره تور', 'نوع خودرو', 'کد * پلاک', 'لاین', 'مقاصد', 'شماره بارنامه', 'تاریخ صدور بارنامه', 'پیمایش مصوب (کیلومتر)', 'پیمایش مازاد (کیلومتر)', 'ماموریت مصوب (روز)', 'ماموریت مازاد (روز)', 'هزینه عوارض (ریال)', 'هزینه بارگیری (ریال)', 'هزینه غذا (ریال)', 'هزینه سوخت (ریال)', 'هزینه تور (ریال)', 'هزینه کل (ریال)', 'توضیحات']
+        ];
+
+        let rowIndex = 1;
+        excelData.forEach((calc) => {
+            calc.tours.forEach((tour) => {
+                const billDateStr = tour.billOfLadingDate 
+                    ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                    : '';
+
+                wsData.push([
+                    rowIndex++,
+                    calc.employeeId || '',
+                    calc.driverName || '',
+                    tour.announcementCode || '',
+                    tour.vehicleType || '',
+                    `${tour.vehicleCode || '-'} * ${tour.plateNumber || '-'}`,
+                    tour.lineType || '',
+                    tour.destinations.join('، ') || '',
+                    tour.billOfLadingNumber || '',
+                    billDateStr,
+                    tour.approvedKilometers || 0,
+                    tour.excessKilometers || 0,
+                    tour.approvedMissionDays || 0,
+                    tour.excessMissionDays || 0,
+                    tour.tollCost || 0,
+                    tour.loadingCost || 0,
+                    tour.foodCost || 0,
+                    tour.fuelCost || 0,
+                    tour.tourCost || 0,
+                    tour.totalCost || 0,
+                    tour.notes || ''
+                ]);
+            });
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // تنظیم راست‌چین برای تمام ستون‌ها
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[cellAddress]) continue;
+                
+                if (!ws[cellAddress].s) ws[cellAddress].s = {};
+                if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
+                ws[cellAddress].s.alignment.horizontal = 'right';
+                ws[cellAddress].s.alignment.vertical = 'center';
+                
+                // فرمت اعداد برای ستون‌های عددی (ردیف 0 = هدر)
+                if (R > 0) {
+                    const colIndex = C;
+                    // ستون‌های عددی: ردیف (0), پیمایش مصوب (10), پیمایش مازاد (11), ماموریت مصوب (12), ماموریت مازاد (13), هزینه‌ها (14-19)
+                    if ([0, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(colIndex)) {
+                        if (typeof wsData[R][colIndex] === 'number') {
+                            ws[cellAddress].z = '#,##0';
+                        }
+                    }
+                }
+            }
+        }
+        
+        // تنظیم عرض ستون‌ها
+        ws['!cols'] = [
+            { wch: 8 },  // ردیف
+            { wch: 12 }, // کد پرسنلی
+            { wch: 20 }, // نام
+            { wch: 15 }, // شماره تور
+            { wch: 12 }, // نوع خودرو
+            { wch: 15 }, // کد * پلاک
+            { wch: 12 }, // لاین
+            { wch: 20 }, // مقاصد
+            { wch: 15 }, // شماره بارنامه
+            { wch: 18 }, // تاریخ
+            { wch: 18 }, // پیمایش مصوب
+            { wch: 18 }, // پیمایش مازاد
+            { wch: 15 }, // ماموریت مصوب
+            { wch: 15 }, // ماموریت مازاد
+            { wch: 18 }, // هزینه عوارض
+            { wch: 18 }, // هزینه بارگیری
+            { wch: 18 }, // هزینه غذا
+            { wch: 18 }, // هزینه سوخت
+            { wch: 18 }, // هزینه تور
+            { wch: 18 }, // هزینه کل
+            { wch: 30 }  // توضیحات
+        ];
+        
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'جزئیات محاسبات');
+        XLSX.writeFile(wb, `جزئیات_محاسبات_اجرت_پیمایش_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    const handleEditData = async (driverId: string, tourId: string) => {
+        const calc = calculations.find(c => c.driverId === driverId);
+        if (!calc) return;
+        
+        const tour = calc.tours.find(t => t.announcementId === tourId);
+        if (!tour) return;
+
+        // اگر داده‌ای ثبت شده، آن را نمایش بده
+        if (tour.isDataRecorded) {
+            // تاریخ محاسبه پیش‌فرض: امروز
+            const today = new Date();
+            const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+            const defaultCalculationDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
+            
+            // تاریخ صدور بارنامه
+            const billDateStr = tour.billOfLadingDate 
+                ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                : '';
+            
+            setInputDialogData({
+                tourId: tour.announcementId,
+                driverId: calc.driverId,
+                billOfLadingNumber: tour.billOfLadingNumber || '',
+                billOfLadingDate: billDateStr,
+                billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                approvedKilometers: tour.approvedKilometers || 0,
+                excessKilometers: tour.excessKilometers || 0,
+                approvedMissionDays: tour.approvedMissionDays || 1,
+                excessMissionDays: tour.excessMissionDays || 0,
+                tollCost: tour.tollCost || 0,
+                loadingCost: tour.loadingCost || 0,
+                returnCargoCost: (tour as any).returnCargoCost || 0,
+                multiUnloadCost: (tour as any).multiUnloadCost || 0,
+                excessMissionCost: (tour as any).excessMissionCost || 0,
+                helperDriverCost: (tour as any).helperDriverCost || 0,
+                fixedAllowance: (tour as any).fixedAllowance || 0,
+                calculationDate: tour.calculationDate || defaultCalculationDate,
+                notes: tour.notes || '',
+                helperDriverId: (tour as any).helperDriverId || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
+                helperDriverName: (tour as any).helperDriverName || '',
+                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+            });
+            setShowInputDialog(true);
+        }
+    };
+
+    const handleRecordData = async (driverId: string, tourId: string) => {
+        const calc = calculations.find(c => c.driverId === driverId);
+        if (!calc) return;
+        
+        const tour = calc.tours.find(t => t.announcementId === tourId);
+        if (!tour) return;
+
+        // دریافت اطلاعات مصوب از API بر اساس مسیر و شهر
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+            
+            // دریافت اطلاعات اعلام بار
+            const announcementRes = await fetch(getApiUrl(`freight-announcements/${tourId}`), { headers });
+            let approvedKm = tour.roundTripKm || 0;
+            let approvedDays = 1;
+            let billOfLading = '';
+            let announcementData: any = null;
+            
+            if (announcementRes.ok) {
+                announcementData = await announcementRes.json();
+                console.log('📦 [handleRecordData] اطلاعات اعلام بار:', {
+                    bill_of_lading_number: announcementData.bill_of_lading_number,
+                    billOfLadingNumber: announcementData.billOfLadingNumber,
+                    approved_kilometers: announcementData.approved_kilometers,
+                    approved_mission_days: announcementData.approved_mission_days
+                });
+                
+                // دریافت شماره بارنامه
+                billOfLading = announcementData.bill_of_lading_number || announcementData.billOfLadingNumber || '';
+                
+                // دریافت اطلاعات مصوب از dispatch_routes بر اساس آخرین شهر مقصد (برای مسیرهای چندمقصدی)
+                if (tour.destinations && tour.destinations.length > 0) {
+                    // استفاده از آخرین شهر مقصد (آخرین مقصد)
+                    const lastCity = tour.destinations[tour.destinations.length - 1];
+                    try {
+                        const routeRes = await fetch(
+                            getApiUrl(`freight-announcements/routes/search?city=${encodeURIComponent(lastCity)}`), 
+                            { headers }
+                        );
+                        
+                        if (routeRes.ok) {
+                            const routeData = await routeRes.json();
+                            console.log('🛣️ [handleRecordData] داده‌های مسیر دریافت شده:', {
+                                lastCity,
+                                routeDataCount: routeData?.length || 0,
+                                routeData
+                            });
+                            
+                            if (routeData && routeData.length > 0) {
+                                // استفاده از اولین route پیدا شده (بزرگترین round_trip_km)
+                                const route = routeData[0];
+                                approvedKm = route.roundTripKm || route.round_trip_km || tour.roundTripKm || 0;
+                                // استفاده از approved_allowance از dispatch_routes برای مدت ماموریت مصوب (بر حسب روز)
+                                // approved_allowance در dispatch_routes به معنای مدت ماموریت مصوب بر حسب روز است
+                                if (route.approvedAllowance !== undefined && route.approvedAllowance !== null) {
+                                    approvedDays = Number(route.approvedAllowance);
+                                } else if (route.approved_allowance !== undefined && route.approved_allowance !== null) {
+                                    approvedDays = Number(route.approved_allowance);
+                                } else if (route.expectedDays !== undefined && route.expectedDays !== null) {
+                                    approvedDays = Number(route.expectedDays);
+                                } else if (route.expected_days !== undefined && route.expected_days !== null) {
+                                    approvedDays = Number(route.expected_days);
+                                } else {
+                                    approvedDays = announcementData.approved_mission_days || 1;
+                                }
+                                console.log('✅ [handleRecordData] اطلاعات مصوب از dispatch_routes:', {
+                                    lastCity,
+                                    allDestinations: tour.destinations,
+                                    approvedKm,
+                                    approvedDays,
+                                    routeExpectedDays: route.expectedDays,
+                                    routeExpected_days: route.expected_days,
+                                    routeApprovedAllowance: route.approvedAllowance,
+                                    routeApproved_allowance: route.approved_allowance,
+                                    announcementApprovedDays: announcementData.approved_mission_days,
+                                    route
+                                });
+                            } else {
+                                console.warn('⚠️ [handleRecordData] هیچ مسیری برای شهر پیدا نشد:', lastCity);
+                            }
+                        } else {
+                            console.warn('⚠️ [handleRecordData] خطا در دریافت route:', routeRes.status, routeRes.statusText);
+                        }
+                    } catch (routeErr) {
+                        console.warn('⚠️ [handleRecordData] خطا در دریافت اطلاعات مسیر:', routeErr);
+                    }
+                }
+                
+                // اگر از API اطلاعات مصوب نیامد، از announcementData استفاده کن
+                if (announcementData.approved_kilometers && approvedKm === 0) {
+                    approvedKm = announcementData.approved_kilometers;
+                }
+                if (announcementData.approved_mission_days && approvedDays === 1) {
+                    approvedDays = announcementData.approved_mission_days;
+                }
+            } else {
+                console.warn('⚠️ [handleRecordData] خطا در دریافت اعلام بار:', announcementRes.status, announcementRes.statusText);
+            }
+            
+            // تاریخ محاسبه پیش‌فرض: امروز
+            const today = new Date();
+            const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+            const defaultCalculationDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
+            
+            // دریافت تاریخ صدور بارنامه از announcementData (که قبلاً خوانده شده)
+            let billOfLadingDateStr = '';
+            if (announcementRes.ok && announcementData) {
+                if (announcementData.bill_of_lading_date) {
+                    billOfLadingDateStr = typeof announcementData.bill_of_lading_date === 'string' 
+                        ? announcementData.bill_of_lading_date 
+                        : formatJalali(announcementData.bill_of_lading_date);
+                } else if (tour.billOfLadingDate) {
+                    billOfLadingDateStr = typeof tour.billOfLadingDate === 'string' 
+                        ? tour.billOfLadingDate 
+                        : formatJalali(tour.billOfLadingDate);
+                }
+            } else if (tour.billOfLadingDate) {
+                billOfLadingDateStr = typeof tour.billOfLadingDate === 'string' 
+                    ? tour.billOfLadingDate 
+                    : formatJalali(tour.billOfLadingDate);
+            }
+            
+            setInputDialogData({
+                tourId: tour.announcementId,
+                driverId: calc.driverId,
+                billOfLadingNumber: billOfLading,
+                billOfLadingDate: billOfLadingDateStr,
+                billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                approvedKilometers: approvedKm,
+                excessKilometers: tour.excessKilometers || 0,
+                approvedMissionDays: approvedDays,
+                excessMissionDays: tour.excessMissionDays || 0,
+                tollCost: tour.tollCost || 0,
+                loadingCost: (tour as any).loadingCost || 0,
+                returnCargoCost: (tour as any).returnCargoCost || 0,
+                multiUnloadCost: (tour as any).multiUnloadCost || 0,
+                excessMissionCost: (tour as any).excessMissionCost || 0,
+                helperDriverCost: (tour as any).helperDriverCost || 0,
+                fixedAllowance: (tour as any).fixedAllowance || 0,
+                calculationDate: tour.calculationDate || defaultCalculationDate,
+                notes: tour.notes || '',
+                helperDriverId: (tour as any).helperDriverId || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
+                helperDriverName: (tour as any).helperDriverName || '',
+                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
+            });
+        } catch (err) {
+            console.error('خطا در دریافت اطلاعات مصوب:', err);
+            // تاریخ محاسبه پیش‌فرض: امروز
+            const today = new Date();
+            const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+            const defaultCalculationDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
+            
+            // تاریخ صدور بارنامه
+            const billDateStr = tour.billOfLadingDate 
+                ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                : '';
+            
+            // در صورت خطا، از مقادیر موجود در tour استفاده کن
+            setInputDialogData({
+                tourId: tour.announcementId,
+                driverId: calc.driverId,
+                billOfLadingNumber: tour.billOfLadingNumber || '',
+                billOfLadingDate: billDateStr,
+                billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                approvedKilometers: tour.approvedKilometers || tour.roundTripKm || 0,
+                excessKilometers: tour.excessKilometers || 0,
+                approvedMissionDays: tour.approvedMissionDays || 1,
+                excessMissionDays: tour.excessMissionDays || 0,
+                tollCost: tour.tollCost || 0,
+                loadingCost: (tour as any).loadingCost || 0,
+                returnCargoCost: (tour as any).returnCargoCost || 0,
+                multiUnloadCost: (tour as any).multiUnloadCost || 0,
+                excessMissionCost: (tour as any).excessMissionCost || 0,
+                helperDriverCost: (tour as any).helperDriverCost || 0,
+                fixedAllowance: (tour as any).fixedAllowance || 0,
+                calculationDate: tour.calculationDate || defaultCalculationDate,
+                notes: tour.notes || '',
+                helperDriverId: (tour as any).helperDriverId || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
+                helperDriverName: (tour as any).helperDriverName || '',
+                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
+            });
+        }
+        
+        setShowInputDialog(true);
+    };
+
+    const handleSaveInputData = async () => {
+        if (!inputDialogData) return;
+
+        const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+        if (!calc) return;
+
+        const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+        if (!tour) return;
+
+        // محاسبات خودکار برای این تور خاص
+        
+        // 1. هزینه غذا راننده اصلی = ماموریت مصوب × بخشنامه غذا
+        const approvedMissionDays = Number(inputDialogData.approvedMissionDays) || 0;
+        const foodCost = Math.round(approvedMissionDays * (Number(foodCostPerDay) || 0)) || 0;
+        
+        // 2. هزینه ماموریت مازاد = ماموریت مازاد × بخشنامه ماموریت مازاد
+        const excessMissionDays = Number(inputDialogData.excessMissionDays) || 0;
+        const calculatedExcessMissionCost = Math.round(excessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+        
+        // 3. هزینه چندجا تخلیه = (تعداد مقاصد - 1) × بخشنامه چندجا تخلیه
+        const destinationsCount = tour.destinations?.length || 0;
+        const multiUnloadUnits = Math.max(0, destinationsCount - 1);
+        const calculatedMultiUnloadCost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
+        
+        // 4. اجرت راننده کمکی = بخشنامه اجرت راننده کمکی × (کیلومتر مصوب + کیلومتر مازاد)
+        const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+        const calculatedHelperDriverAllowance = Math.round(totalKm * (Number(helperAllowancePerKm) || 0)) || 0;
+        
+        // 5. هزینه غذا راننده کمکی = ماموریت مصوب × بخشنامه غذا
+        const calculatedHelperDriverFoodCost = Math.round(approvedMissionDays * (Number(foodCostPerDay) || 0)) || 0;
+        
+        // 6. هزینه ماموریت مازاد راننده کمکی = ماموریت مازاد × بخشنامه ماموریت مازاد
+        const calculatedHelperDriverExcessMissionCost = Math.round(excessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+        
+        // محاسبه هزینه سوخت بر اساس نوع خودرو
+        const vehicleType = tour.vehicleType || '';
+        const isTrailer = vehicleType.includes('تریلی');
+        const isTenWheeler = vehicleType.includes('ده چرخ');
+        const fuelConsumptionRate = isTrailer ? (Number(fuelConsumptionRates['تریلی']) || 0) : 
+                                   isTenWheeler ? (Number(fuelConsumptionRates['ده چرخ']) || 0) : 0;
+        // استفاده از totalKm که قبلاً محاسبه شده است
+        const fuelCost = Math.round((totalKm / 100) * fuelConsumptionRate * 50000) || 0; // فرض: قیمت هر لیتر 50000 ریال
+        
+        // دریافت token و headers برای API calls
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        };
+        
+        // محاسبه اجرت بر اساس صف
+        let tourCost = 0;
+        if (calc.queueType === 'porsant') {
+            // اجرت بر اساس بخشنامه (بازه‌ای)
+            try {
+                const vehicleType = tour.vehicleType || '';
+                const isTrailer = vehicleType.includes('تریلی');
+                const isTenWheeler = vehicleType.includes('ده چرخ');
+                
+                if (isTrailer || isTenWheeler) {
+                    const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                    const totalKm = inputDialogData.approvedKilometers + inputDialogData.excessKilometers;
+                    
+                    const allowanceRes = await fetch(
+                        getApiUrl(`allowance-regulations/calculate?vehicleType=${encodeURIComponent(vehicleTypeForApi)}&kilometers=${totalKm}`),
+                        { headers }
+                    );
+                    
+                    if (allowanceRes.ok) {
+                        const allowanceData = await allowanceRes.json();
+                        tourCost = Math.round(allowanceData.allowance || 0) || 0;
+                        console.log('✅ [handleSaveInputData] اجرت از بخشنامه:', {
+                            vehicleType: vehicleTypeForApi,
+                            totalKm,
+                            tourCost
+                        });
+                    } else {
+                        console.warn('⚠️ [handleSaveInputData] خطا در دریافت اجرت از بخشنامه:', allowanceRes.status);
+                    }
+                }
+            } catch (allowanceErr) {
+                console.warn('⚠️ [handleSaveInputData] خطا در محاسبه اجرت:', allowanceErr);
+            }
+        } else if (calc.queueType === 'fixed_allowance' || calc.queueType === 'helper') {
+            // اجرت ثابت - از فیلد اجرت ثابت در دیالوگ استفاده می‌کنیم
+            tourCost = Math.round(Number(inputDialogData.fixedAllowance) || 0) || 0;
+        }
+        
+        const tollCostNum = Math.round(Number(inputDialogData.tollCost) || 0) || 0;
+        const billOfLadingCostNum = Math.round(Number(inputDialogData.billOfLadingCost) || 0) || 0;
+        const loadingCostNum = Math.round(Number(inputDialogData.loadingCost) || 0) || 0;
+        const returnCargoCostNum = Math.round(Number(inputDialogData.returnCargoCost) || 0) || 0;
+        
+        // استفاده از مقادیر محاسبه شده خودکار
+        const multiUnloadCostNum = calculatedMultiUnloadCost;
+        const excessMissionCostNum = calculatedExcessMissionCost;
+        
+        // هزینه راننده کمکی = اجرت راننده کمکی + هزینه غذا راننده کمکی + هزینه ماموریت مازاد راننده کمکی
+        // فقط در صورتی که اطلاعات راننده کمکی ثبت شده باشد
+        const hasHelperDriver = inputDialogData.helperDriverId && inputDialogData.helperDriverId.trim() !== '';
+        const helperDriverTotalCost = hasHelperDriver 
+            ? (calculatedHelperDriverAllowance + calculatedHelperDriverFoodCost + calculatedHelperDriverExcessMissionCost)
+            : 0;
+        
+        // هزینه بارگیری کل = هزینه بارگیری اصلی + هزینه بار برگشتی + هزینه چندجا تخلیه + هزینه ماموریت مازاد + هزینه راننده کمکی
+        const totalLoadingCost = loadingCostNum + returnCargoCostNum + multiUnloadCostNum + excessMissionCostNum + helperDriverTotalCost;
+        
+        // هزینه سفر = مجموع همه هزینه‌ها
+        const totalCost = Math.round(foodCost + fuelCost + tollCostNum + billOfLadingCostNum + totalLoadingCost + tourCost) || 0;
+        
+        // ذخیره در دیتابیس
+        try {
+            
+            // دریافت userId از currentUser
+            const userId = currentUser?.id || currentUser?.userId || '';
+            
+            const saveRes = await fetch(getApiUrl('driver-calculations'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    driverId: inputDialogData.driverId,
+                    announcementId: inputDialogData.tourId,
+                    billOfLadingNumber: inputDialogData.billOfLadingNumber,
+                    billOfLadingCost: billOfLadingCostNum,
+                    approvedKilometers: Number(inputDialogData.approvedKilometers) || 0,
+                    excessKilometers: Number(inputDialogData.excessKilometers) || 0,
+                    approvedMissionDays: Number(inputDialogData.approvedMissionDays) || 0,
+                    excessMissionDays: Number(inputDialogData.excessMissionDays) || 0,
+                    tollCost: tollCostNum,
+                    loadingCost: totalLoadingCost, // هزینه بارگیری کل
+                    returnCargoCost: returnCargoCostNum,
+                    multiUnloadCost: multiUnloadCostNum,
+                    excessMissionCost: excessMissionCostNum,
+                    fixedAllowance: calc.queueType === 'fixed_allowance' || calc.queueType === 'helper' ? tourCost : 0,
+                    foodCost: foodCost,
+                    fuelCost: fuelCost,
+                    tourCost: tourCost,
+                    totalCost: totalCost,
+                    notes: inputDialogData.notes,
+                    queueType: calc.queueType,
+                    billOfLadingDate: inputDialogData.billOfLadingDate,
+                    calculationDate: inputDialogData.calculationDate,
+                    userId, // اضافه کردن userId
+                    // فیلدهای راننده کمکی
+                    helperDriverId: inputDialogData.helperDriverId || null,
+                    helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || null,
+                    helperDriverName: inputDialogData.helperDriverName || null,
+                    helperDriverAllowance: calculatedHelperDriverAllowance,
+                    helperDriverFoodCost: calculatedHelperDriverFoodCost,
+                    helperDriverExcessMissionDays: excessMissionDays, // استفاده از ماموریت مازاد راننده اصلی
+                    helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
+                }),
+            });
+            
+            if (!saveRes.ok) {
+                const errorText = await saveRes.text();
+                console.error('❌ [handleSaveInputData] خطا در ذخیره:', saveRes.status, errorText);
+                throw new Error(`خطا در ذخیره اطلاعات: ${saveRes.status} - ${errorText}`);
+            }
+            
+            const saveResult = await saveRes.json();
+            console.log('✅ [handleSaveInputData] اطلاعات با موفقیت ذخیره شد:', saveResult);
+        } catch (err: any) {
+            console.error('❌ [handleSaveInputData] خطا در ذخیره اطلاعات:', err);
+            alert(`خطا در ذخیره اطلاعات: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+            return;
+        }
+        
+        // به‌روزرسانی اطلاعات این تور خاص
+        setCalculations(prev => {
+            const updated = prev.map(c => {
+                if (c.driverId === inputDialogData.driverId) {
+                    const updatedTours = c.tours.map(t => 
+                        t.announcementId === inputDialogData.tourId
+                            ? {
+                                ...t,
+                                billOfLadingNumber: inputDialogData.billOfLadingNumber,
+                                approvedKilometers: inputDialogData.approvedKilometers,
+                                excessKilometers: inputDialogData.excessKilometers,
+                                approvedMissionDays: inputDialogData.approvedMissionDays,
+                                excessMissionDays: inputDialogData.excessMissionDays,
+                                tollCost: inputDialogData.tollCost,
+                                loadingCost: totalLoadingCost, // هزینه بارگیری کل
+                                billOfLadingDate: inputDialogData.billOfLadingDate ? parseJalaliDateString(inputDialogData.billOfLadingDate) : tour.billOfLadingDate,
+                                calculationDate: inputDialogData.calculationDate,
+                                notes: inputDialogData.notes,
+                                foodCost,
+                                fuelCost,
+                                tourCost,
+                                totalCost,
+                                isDataRecorded: true,
+                                billOfLadingCost: billOfLadingCostNum,
+                                returnCargoCost: returnCargoCostNum,
+                                multiUnloadCost: multiUnloadCostNum,
+                                excessMissionCost: excessMissionCostNum,
+                                fixedAllowance: calc.queueType === 'fixed_allowance' || calc.queueType === 'helper' ? tourCost : 0,
+                            } as any
+                            : t
+                    );
+                    
+                    // محاسبه مجموع هزینه کل و پیمایش کل برای این راننده
+                    const driverTotalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+                    const driverTotalKm = updatedTours.reduce((sum, tour) => {
+                        const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                        return sum + tourTotalKm;
+                    }, 0);
+                    
+                    return {
+                        ...c,
+                        tours: updatedTours,
+                        tourCost: driverTotalCost,
+                        totalKilometers: driverTotalKm,
+                    };
+                }
+                return c;
+            });
+            
+            // به‌روزرسانی دیالوگ جزئیات اگر باز است
+            if (showTourDetailsDialog && selectedDriverName) {
+                const updatedCalc = updated.find(c => c.driverName === selectedDriverName);
+                if (updatedCalc) {
+                    setSelectedTourDetails(updatedCalc.tours);
+                }
+            }
+            
+            return updated;
+        });
+        
+        setShowInputDialog(false);
+        setInputDialogData(null);
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-slate-500">در حال بارگذاری...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-red-500">{error}</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-7xl mx-auto p-6 space-y-6" style={{ zoom: `${zoomLevel}%` }}>
+            {/* دکمه‌های بزرگنمایی */}
+            <div className="fixed bottom-6 left-6 z-40 flex flex-col gap-2 bg-white rounded-lg shadow-lg p-2 border border-slate-300">
+                <button
+                    onClick={handleZoomIn}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors"
+                    title="بزرگنمایی"
+                >
+                    +
+                </button>
+                <button
+                    onClick={handleResetZoom}
+                    className="px-3 py-2 bg-slate-600 text-white rounded-md text-sm hover:bg-slate-700 transition-colors"
+                    title="بازنشانی"
+                >
+                    {zoomLevel}%
+                </button>
+                <button
+                    onClick={handleZoomOut}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors"
+                    title="کوچکنمایی"
+                >
+                    −
+                </button>
+            </div>
+            <div className="bg-white rounded-xl shadow-lg p-6">
+                <h1 className="text-2xl font-bold text-slate-800 mb-6">
+                    محاسبه هزینه تور
+                </h1>
+
+                {/* فیلتر و جستجو */}
+                <div className="mb-6 space-y-4">
+                    <div className="flex gap-4 items-end flex-wrap">
+                        <div className="flex-1 min-w-[200px]">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                جستجو (کد پرسنلی / نام)
+                            </label>
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => {
+                                    setSearchTerm(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                placeholder="جستجو بر اساس کد پرسنلی یا نام..."
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                از تاریخ (صدور بارنامه)
+                            </label>
+                            <input
+                                type="text"
+                                value={startDate}
+                                onChange={(e) => {
+                                    setStartDate(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                placeholder="1403/01/01"
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                تا تاریخ (صدور بارنامه)
+                            </label>
+                            <input
+                                type="text"
+                                value={endDate}
+                                onChange={(e) => {
+                                    setEndDate(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                placeholder="1403/12/29"
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-4 items-end flex-wrap bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div className="text-sm font-semibold text-slate-700">بازه زمانی خروجی اکسل:</div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                از تاریخ
+                            </label>
+                            <input
+                                type="text"
+                                value={excelStartDate}
+                                onChange={(e) => setExcelStartDate(e.target.value)}
+                                placeholder="1403/01/26"
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                تا تاریخ
+                            </label>
+                            <input
+                                type="text"
+                                value={excelEndDate}
+                                onChange={(e) => setExcelEndDate(e.target.value)}
+                                placeholder="1403/02/25"
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                        <div className="flex gap-2 items-end">
+                            <button
+                                onClick={exportToExcelMainRows}
+                                className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+                            >
+                                خروجی اکسل (ردیف‌های اصلی)
+                            </button>
+                            <button
+                                onClick={exportToExcelDetailRows}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                            >
+                                خروجی اکسل (جزئیات)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* صفحه‌بندی */}
+                <div className="mb-4 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm text-slate-700">تعداد ردیف در هر صفحه:</label>
+                        <select
+                            value={itemsPerPage}
+                            onChange={(e) => {
+                                setItemsPerPage(Number(e.target.value));
+                                setCurrentPage(1);
+                            }}
+                            className="px-3 py-1 border border-slate-300 rounded-md text-sm"
+                        >
+                            <option value={10}>10</option>
+                            <option value={30}>30</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                        </select>
+                    </div>
+                    <div className="text-sm text-slate-600">
+                        نمایش {((currentPage - 1) * itemsPerPage) + 1} تا {Math.min(currentPage * itemsPerPage, filteredAndSortedCalculations.length)} از {filteredAndSortedCalculations.length} ردیف
+                    </div>
+                </div>
+
+                {/* جدول اصلی */}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-right border-collapse">
+                        <thead>
+                            <tr className="bg-slate-700 text-white border-b">
+                                <th className="p-3 text-right border-l border-slate-600">ردیف</th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('employeeId')}
+                                >
+                                    کد پرسنلی {sortField === 'employeeId' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('driverName')}
+                                >
+                                    نام و نام خانوادگی {sortField === 'driverName' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th className="p-3 text-right border-l border-slate-600">صف</th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('tourCount')}
+                                >
+                                    تعداد تور {sortField === 'tourCount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th className="p-3 text-right border-l border-slate-600">تور ثبت شده</th>
+                                <th className="p-3 text-right border-l border-slate-600">تور ثبت نشده</th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('totalKilometers')}
+                                >
+                                    پیمایش کل (کیلومتر) {sortField === 'totalKilometers' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('tourCost')}
+                                >
+                                    هزینه کل تور (ریال) {sortField === 'tourCost' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('billOfLadingDate')}
+                                >
+                                    تاریخ صدور بارنامه {sortField === 'billOfLadingDate' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th className="p-3 text-right">عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {paginatedCalculations.map((calc, index) => {
+                                const recordedTours = calc.tours.filter(t => t.isDataRecorded).length;
+                                const unrecordedTours = calc.tours.length - recordedTours;
+                                
+                                // پیدا کردن اولین تاریخ صدور بارنامه
+                                const firstBillDate = calc.tours
+                                    .map(t => t.billOfLadingDate)
+                                    .filter(Boolean)[0];
+                                const billDateStr = firstBillDate 
+                                    ? (typeof firstBillDate === 'string' ? firstBillDate : formatJalali(firstBillDate))
+                                    : '-';
+
+                                return (
+                                    <React.Fragment key={calc.id}>
+                                        <tr className="border-b border-slate-300 bg-white hover:bg-slate-50">
+                                            <td className="p-3 border-l border-slate-200 text-center font-medium">
+                                                {((currentPage - 1) * itemsPerPage) + index + 1}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 font-medium">{calc.employeeId}</td>
+                                            <td className="p-3 border-l border-slate-200 font-semibold text-slate-800">{calc.driverName}</td>
+                                            <td className="p-3 border-l border-slate-200">
+                                                <select
+                                                    value={calc.queueType}
+                                                    onChange={(e) => {
+                                                        setCalculations(prev => prev.map(c => 
+                                                            c.id === calc.id 
+                                                                ? { ...c, queueType: e.target.value as any }
+                                                                : c
+                                                        ));
+                                                    }}
+                                                    className="input-style text-sm w-full"
+                                                >
+                                                    <option value="porsant">صف پورسانت</option>
+                                                    <option value="fixed_allowance">صف اجرت ثابت</option>
+                                                    <option value="helper">راننده کمکی</option>
+                                                </select>
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-center font-medium">{calc.tourCount}</td>
+                                            <td className="p-3 border-l border-slate-200 text-center">
+                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                                    {recordedTours}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-center">
+                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
+                                                    {unrecordedTours}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-left font-medium">
+                                                {calc.tours.reduce((sum, tour) => {
+                                                    const totalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                                                    return sum + totalKm;
+                                                }, 0).toLocaleString('fa-IR')}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
+                                                {calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0).toLocaleString('fa-IR')}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-xs">
+                                                {billDateStr}
+                                            </td>
+                                            <td className="p-3">
+                                                <button
+                                                    onClick={() => handleExpandRow(calc.driverId)}
+                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                >
+                                                    جزئیات
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </React.Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* کنترل‌های صفحه‌بندی */}
+                {totalPages > 1 && (
+                    <div className="mt-4 flex justify-center items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            قبلی
+                        </button>
+                        <span className="text-sm text-slate-700">
+                            صفحه {currentPage} از {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            بعدی
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* دیالوگ ثبت اطلاعات */}
+            {showInputDialog && inputDialogData && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 z-[60] flex items-center justify-center">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <h2 className="text-xl font-bold text-slate-800 mb-4">
+                            {inputDialogData && calculations.find(c => c.driverId === inputDialogData.driverId)?.tours.find(t => t.announcementId === inputDialogData.tourId)?.isDataRecorded ? 'ویرایش اطلاعات محاسباتی' : 'ثبت اطلاعات محاسباتی'}
+                        </h2>
+                        
+                        {/* تب‌ها */}
+                        <div className="flex border-b border-slate-300 mb-4">
+                            <button
+                                onClick={() => setInputDialogTab('basic')}
+                                className={`px-4 py-2 font-medium text-sm ${
+                                    inputDialogTab === 'basic'
+                                        ? 'border-b-2 border-sky-600 text-sky-600'
+                                        : 'text-slate-600 hover:text-slate-800'
+                                }`}
+                            >
+                                اطلاعات اصلی
+                            </button>
+                            <button
+                                onClick={() => setInputDialogTab('costs')}
+                                className={`px-4 py-2 font-medium text-sm ${
+                                    inputDialogTab === 'costs'
+                                        ? 'border-b-2 border-sky-600 text-sky-600'
+                                        : 'text-slate-600 hover:text-slate-800'
+                                }`}
+                            >
+                                هزینه بارگیری
+                            </button>
+                            <button
+                                onClick={() => setInputDialogTab('notes')}
+                                className={`px-4 py-2 font-medium text-sm ${
+                                    inputDialogTab === 'notes'
+                                        ? 'border-b-2 border-sky-600 text-sky-600'
+                                        : 'text-slate-600 hover:text-slate-800'
+                                }`}
+                            >
+                                توضیحات
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto" style={{ minHeight: '400px' }}>
+                        {inputDialogTab === 'basic' && (
+                        <div className="space-y-4">
+                            {/* ردیف اول: تاریخ محاسبه، شماره بارنامه، تاریخ صدور بارنامه */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ محاسبه *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.calculationDate || ''}
+                                        onChange={(e) => setInputDialogData({
+                                            ...inputDialogData,
+                                            calculationDate: e.target.value
+                                        })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/01/01"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        شماره بارنامه
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.billOfLadingNumber}
+                                        onChange={(e) => setInputDialogData({
+                                            ...inputDialogData,
+                                            billOfLadingNumber: e.target.value
+                                        })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="شماره بارنامه"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ صدور بارنامه
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.billOfLadingDate || ''}
+                                        onChange={(e) => setInputDialogData({
+                                            ...inputDialogData,
+                                            billOfLadingDate: e.target.value
+                                        })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/01/01"
+                                    />
+                                </div>
+                            </div>
+                            {/* بقیه فیلدها */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه بارنامه (ریال) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.billOfLadingCost ? String(inputDialogData.billOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                billOfLadingCost: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        پیمایش مصوب (کیلومتر)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.approvedKilometers ? String(inputDialogData.approvedKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                approvedKilometers: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        پیمایش مازاد (کیلومتر) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.excessKilometers ? String(inputDialogData.excessKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                excessKilometers: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        ماموریت مصوب (روز)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.approvedMissionDays ? String(inputDialogData.approvedMissionDays) : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value;
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                approvedMissionDays: numValue
+                                            });
+                                        }}
+                                        onBlur={(e) => {
+                                            const numValue = parseNumberFromFormatted(e.target.value);
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                approvedMissionDays: numValue || 0
+                                            });
+                                            // فرمت با جداکننده 3 رقمی
+                                            if (numValue > 0) {
+                                                e.target.value = numValue.toLocaleString('fa-IR');
+                                            }
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        ماموریت مازاد (روز) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value;
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                excessMissionDays: numValue
+                                            });
+                                        }}
+                                        onBlur={(e) => {
+                                            const numValue = parseNumberFromFormatted(e.target.value);
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                excessMissionDays: numValue || 0
+                                            });
+                                            // فرمت با جداکننده 3 رقمی
+                                            if (numValue > 0) {
+                                                e.target.value = numValue.toLocaleString('fa-IR');
+                                            }
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه عوارض (ریال) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.tollCost ? String(inputDialogData.tollCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                tollCost: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه غذا (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={(() => {
+                                            const approvedDays = Number(inputDialogData.approvedMissionDays) || 0;
+                                            const cost = Math.round(approvedDays * (Number(foodCostPerDay) || 0)) || 0;
+                                            return cost.toLocaleString('fa-IR');
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
+                                </div>
+                            </div>
+                        </div>
+                        )}
+                        {inputDialogTab === 'costs' && (
+                        <div className="space-y-4" style={{ minHeight: '400px' }}>
+                            {/* بخش اول: هزینه‌های بارگیری */}
+                            <div className="mb-6">
+                                <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه‌های بارگیری</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه بار برگشتی (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.returnCargoCost ? String(inputDialogData.returnCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                returnCargoCost: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه چندجا تخلیه (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={(() => {
+                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+                                            if (!calc) return '0';
+                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+                                            if (!tour) return '0';
+                                            const destinationsCount = tour.destinations?.length || 0;
+                                            const multiUnloadUnits = Math.max(0, destinationsCount - 1);
+                                            const cost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
+                                            return cost.toLocaleString('fa-IR');
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (تعداد مقاصد - 1) × بخشنامه</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه ماموریت مازاد (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={(() => {
+                                            const excessDays = Number(inputDialogData.excessMissionDays) || 0;
+                                            const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+                                            return cost.toLocaleString('fa-IR');
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
+                                </div>
+                                {(() => {
+                                    const currentCalc = calculations.find(c => c.driverId === inputDialogData.driverId);
+                                    return currentCalc && (currentCalc.queueType === 'fixed_allowance' || currentCalc.queueType === 'helper') ? (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                اجرت ثابت (ریال) *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={inputDialogData.fixedAllowance ? String(inputDialogData.fixedAllowance).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                onChange={(e) => {
+                                                    const inputValue = e.target.value.replace(/,/g, '');
+                                                    const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                    const numValue = cleaned ? Number(cleaned) : 0;
+                                                    setInputDialogData({
+                                                        ...inputDialogData,
+                                                        fixedAllowance: numValue
+                                                    });
+                                                }}
+                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    ) : null;
+                                })()}
+                                </div>
+                            </div>
+                            
+                            {/* بخش دوم: راننده کمکی */}
+                            <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-300">
+                                <h3 className="text-sm font-semibold text-slate-700 mb-3">راننده کمکی</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            کد پرسنلی راننده کمکی
+                                        </label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={inputDialogData.helperDriverEmployeeId || ''}
+                                            onChange={(e) => {
+                                                const searchTerm = e.target.value.replace(/[^\d]/g, ''); // فقط عدد
+                                                setInputDialogData({
+                                                    ...inputDialogData,
+                                                    helperDriverEmployeeId: searchTerm
+                                                });
+                                                
+                                                // جستجوی راننده بر اساس کد پرسنلی
+                                                if (searchTerm.trim()) {
+                                                    const foundDriver = drivers.find(d => 
+                                                        d.employeeId?.toLowerCase() === searchTerm.toLowerCase()
+                                                    );
+                                                    if (foundDriver) {
+                                                        setInputDialogData(prev => ({
+                                                            ...prev!,
+                                                            helperDriverId: foundDriver.id,
+                                                            helperDriverEmployeeId: foundDriver.employeeId || '',
+                                                            helperDriverName: foundDriver.name || ''
+                                                        }));
+                                                    } else {
+                                                        // اگر راننده پیدا نشد، فقط نام را پاک کن
+                                                        setInputDialogData(prev => ({
+                                                            ...prev!,
+                                                            helperDriverId: '',
+                                                            helperDriverName: ''
+                                                        }));
+                                                    }
+                                                } else {
+                                                    // اگر فیلد خالی شد، همه اطلاعات را پاک کن
+                                                    setInputDialogData(prev => ({
+                                                        ...prev!,
+                                                        helperDriverId: '',
+                                                        helperDriverEmployeeId: '',
+                                                        helperDriverName: ''
+                                                    }));
+                                                }
+                                            }}
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                            placeholder="کد پرسنلی"
+                                        />
+                                    </div>
+                                    <div className="relative">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            نام و نام خانوادگی (جستجو)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={inputDialogData.helperDriverName || ''}
+                                            onChange={(e) => {
+                                                const searchTerm = e.target.value;
+                                                setInputDialogData({
+                                                    ...inputDialogData,
+                                                    helperDriverName: searchTerm
+                                                });
+                                                
+                                                // نمایش نتایج جستجو
+                                                if (searchTerm.trim()) {
+                                                    const results = drivers.filter(d => 
+                                                        d.name?.toLowerCase().includes(searchTerm.toLowerCase())
+                                                    ).slice(0, 5);
+                                                    setHelperDriverSearchResults(results);
+                                                } else {
+                                                    setHelperDriverSearchResults([]);
+                                                }
+                                            }}
+                                            onFocus={() => {
+                                                // وقتی فیلد focus می‌شود، لیست را نمایش بده
+                                                const searchTerm = inputDialogData?.helperDriverName || '';
+                                                if (searchTerm.trim()) {
+                                                    const results = drivers.filter(d => 
+                                                        d.name?.toLowerCase().includes(searchTerm.toLowerCase())
+                                                    ).slice(0, 5);
+                                                    setHelperDriverSearchResults(results);
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                // با تاخیر بستن لیست تا کلیک روی آیتم کار کند
+                                                setTimeout(() => {
+                                                    setHelperDriverSearchResults([]);
+                                                }, 200);
+                                            }}
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                            placeholder="جستجو با نام"
+                                        />
+                                        {helperDriverSearchResults.length > 0 && (
+                                            <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                                {helperDriverSearchResults.map((driver) => (
+                                                    <div
+                                                        key={driver.id}
+                                                        onClick={() => {
+                                                            setInputDialogData(prev => ({
+                                                                ...prev!,
+                                                                helperDriverId: driver.id,
+                                                                helperDriverEmployeeId: driver.employeeId || '',
+                                                                helperDriverName: driver.name || ''
+                                                            }));
+                                                            setHelperDriverSearchResults([]);
+                                                        }}
+                                                        className="px-3 py-2 hover:bg-slate-100 cursor-pointer border-b border-slate-200 last:border-b-0"
+                                                    >
+                                                        <div className="font-medium text-slate-800">{driver.name}</div>
+                                                        <div className="text-xs text-slate-500">کد پرسنلی: {driver.employeeId}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            اجرت راننده کمکی (ریال)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={(() => {
+                                                const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                                                const cost = Math.round(totalKm * (Number(helperAllowancePerKm) || 0)) || 0;
+                                                return cost.toLocaleString('fa-IR');
+                                            })()}
+                                            readOnly
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                            placeholder="0"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کیلومتر مصوب + مازاد) × بخشنامه</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            هزینه غذا راننده کمکی (ریال)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={(() => {
+                                                const approvedDays = Number(inputDialogData.approvedMissionDays) || 0;
+                                                const cost = Math.round(approvedDays * (Number(foodCostPerDay) || 0)) || 0;
+                                                return cost.toLocaleString('fa-IR');
+                                            })()}
+                                            readOnly
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                            placeholder="0"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            ماموریت مازاد راننده کمکی (روز)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
+                                            readOnly
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                            placeholder="0"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">برابر با ماموریت مازاد راننده اصلی</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            هزینه ماموریت مازاد راننده کمکی (ریال)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={(() => {
+                                                const excessDays = Number(inputDialogData.excessMissionDays) || 0;
+                                                const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+                                                return cost.toLocaleString('fa-IR');
+                                            })()}
+                                            readOnly
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                            placeholder="0"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        )}
+                        {inputDialogTab === 'notes' && (
+                        <div className="space-y-4" style={{ minHeight: '400px' }}>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    توضیحات
+                                </label>
+                                <textarea
+                                    value={inputDialogData.notes}
+                                    onChange={(e) => setInputDialogData({
+                                        ...inputDialogData,
+                                        notes: e.target.value
+                                    })}
+                                    className="input-style w-full"
+                                    rows={15}
+                                />
+                            </div>
+                        </div>
+                        )}
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    setShowInputDialog(false);
+                                    setInputDialogData(null);
+                                }}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300"
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                onClick={handleSaveInputData}
+                                className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
+                            >
+                                ثبت و محاسبه
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* صفحه نمایش جزئیات تور - تمام صفحه */}
+            {showTourDetailsDialog && selectedTourDetails && (
+                <div className="fixed inset-0 bg-white z-50 overflow-hidden flex flex-col" style={{ zoom: `${zoomLevel}%` }}>
+                    <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
+                        <h2 className="text-xl font-bold text-slate-800">
+                            جزئیات تورهای {selectedDriverName}
+                        </h2>
+                        <button
+                            onClick={() => {
+                                setShowTourDetailsDialog(false);
+                                setSelectedTourDetails(null);
+                                setSelectedDriverName('');
+                            }}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                        >
+                            بستن
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-700 text-white border-b">
+                                            <th className="p-3 text-right border-l border-slate-600">شماره تور</th>
+                                            <th className="p-3 text-right border-l border-slate-600">نوع خودرو</th>
+                                            <th className="p-3 text-right border-l border-slate-600">کد * پلاک</th>
+                                            <th className="p-3 text-right border-l border-slate-600">لاین</th>
+                                            <th className="p-3 text-right border-l border-slate-600">مقاصد</th>
+                                            <th className="p-3 text-right border-l border-slate-600">شماره بارنامه</th>
+                                            <th className="p-3 text-right border-l border-slate-600">تاریخ صدور بارنامه</th>
+                                            <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
+                                            <th className="p-3 text-right border-l border-slate-600">پیمایش (کیلومتر)</th>
+                                            <th className="p-3 text-right border-l border-slate-600">هزینه تور (ریال)</th>
+                                            <th className="p-3 text-right border-l border-slate-600">تاریخ اعلام بار</th>
+                                            <th className="p-3 text-right border-l border-slate-600">وضعیت</th>
+                                            <th className="p-3 text-right">عملیات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {selectedTourDetails.map((tour, tourIdx) => (
+                                            <React.Fragment key={tour.announcementId}>
+                                                <tr className={`border-b border-slate-200 ${
+                                                    (tour as any).isPaid 
+                                                        ? 'bg-purple-50' 
+                                                        : tour.isDataRecorded 
+                                                            ? 'bg-green-50' 
+                                                            : 'bg-orange-50'
+                                                }`}>
+                                                    <td className="p-3 border-l border-slate-200 text-center">
+                                                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm ${
+                                                            (tour as any).isPaid
+                                                                ? 'bg-purple-600 text-white'
+                                                                : tour.isDataRecorded 
+                                                                    ? 'bg-green-600 text-white' 
+                                                                    : 'bg-orange-500 text-white'
+                                                        }`}>
+                                                            {tourIdx + 1}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3 border-l border-slate-200">{tour.vehicleType}</td>
+                                                    <td className="p-3 border-l border-slate-200">{tour.vehicleCode || '-'} * {tour.plateNumber || '-'}</td>
+                                                    <td className="p-3 border-l border-slate-200">{tour.lineType}</td>
+                                                    <td className="p-3 border-l border-slate-200">{tour.destinations.join('، ')}</td>
+                                                    <td className="p-3 border-l border-slate-200">
+                                                        {tour.billOfLadingNumber || '-'}
+                                                    </td>
+                                                    <td className="p-3 border-l border-slate-200 text-xs">
+                                                        {tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '-'}
+                                                    </td>
+                                                    <td className="p-3 border-l border-slate-200 text-xs">
+                                                        {tour.calculationDate || '-'}
+                                                    </td>
+                                                    <td className="p-3 border-l border-slate-200 text-left">{tour.roundTripKm.toLocaleString('fa-IR')}</td>
+                                                    <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
+                                                        {tour.tourCost?.toLocaleString('fa-IR') || 0}
+                                                    </td>
+                                                    <td className="p-3 border-l border-slate-200 text-xs">
+                                                        {tour.announcementDate ? formatJalali(tour.announcementDate) : '-'}
+                                                    </td>
+                                                    <td className="p-3 border-l border-slate-200">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+                                                            (tour as any).isPaid
+                                                                ? 'bg-purple-600 text-white'
+                                                                : tour.isDataRecorded 
+                                                                    ? 'bg-green-600 text-white' 
+                                                                    : 'bg-orange-500 text-white'
+                                                        }`}>
+                                                            {(tour as any).isPaid ? 'پرداخت شد' : (tour.isDataRecorded ? 'ثبت شده' : 'ثبت نشده')}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        {(tour as any).isPaid ? (
+                                                            <div className="flex gap-2">
+                                                                <span className="text-xs text-purple-600 font-semibold">✓ پرداخت شد</span>
+                                                            </div>
+                                                        ) : !tour.isDataRecorded ? (
+                                                            <button
+                                                                onClick={() => {
+                                                                    // دیالوگ را باز نگه داریم و فقط دیالوگ ثبت اطلاعات را باز کنیم
+                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                    if (calc) {
+                                                                        handleRecordData(calc.driverId, tour.announcementId);
+                                                                    }
+                                                                }}
+                                                                className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                                            >
+                                                                ثبت اطلاعات
+                                                            </button>
+                                                        ) : (
+                                                            <div className="flex gap-2">
+                                                                <span className="text-xs text-green-600 font-semibold">✓ ثبت شده</span>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                        if (calc) {
+                                                                            handleEditData(calc.driverId, tour.announcementId);
+                                                                        }
+                                                                    }}
+                                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                                >
+                                                                    ویرایش
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                                {/* ردیف اطلاعات محاسباتی */}
+                                                <tr className={`border-b border-slate-200 ${
+                                                    (tour as any).isPaid 
+                                                        ? 'bg-purple-50' 
+                                                        : tour.isDataRecorded 
+                                                            ? 'bg-green-50' 
+                                                            : 'bg-orange-50'
+                                                }`}>
+                                                    <td className="p-2 border-l border-slate-200"></td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">پیمایش مصوب (کیلومتر)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-blue-700' : 'text-slate-400'}`}>
+                                                            {tour.approvedKilometers?.toLocaleString('fa-IR') || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">پیمایش مازاد (کیلومتر)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}`}>
+                                                            {tour.excessKilometers?.toLocaleString('fa-IR') || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">ماموریت مصوب (روز)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-blue-700' : 'text-slate-400'}`}>
+                                                            {tour.approvedMissionDays || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">ماموریت مازاد (روز)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}`}>
+                                                            {tour.excessMissionDays || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه عوارض (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {tour.tollCost?.toLocaleString('fa-IR') || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه بارگیری (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {tour.loadingCost?.toLocaleString('fa-IR') || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200" colSpan={4}>
+                                                        {tour.notes && (
+                                                            <div>
+                                                                <div className="text-xs text-slate-600 mb-1">توضیحات</div>
+                                                                <div className="text-xs text-slate-800">{tour.notes}</div>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            </React.Fragment>
+                                        ))}
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            <style>{`
+                .input-style {
+                    display: block;
+                    width: 100%;
+                    padding: 0.5rem 0.75rem;
+                    background-color: white;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 0.375rem;
+                    font-size: 0.875rem;
+                    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+                }
+                .input-style:focus {
+                    outline: none;
+                    border-color: #0ea5e9;
+                    box-shadow: 0 0 0 1px #0ea5e9;
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default TransportFinanceCalculation;
+

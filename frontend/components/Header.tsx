@@ -46,8 +46,14 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
     const isTransportDefault = defaultDashboardView === View.TransportDashboard;
 
     const navItems = [
-      // Freight Management Section - مالی حمل اول برای مالی شعب
-      { view: View.FreightFinance, label: 'مالی حمل', roles: [UserRole.BranchFinance, UserRole.HQFinance, UserRole.TransportationFinance] },
+      // Transport Finance Section - منوهای مالی ترابری (اولویت اول)
+      { view: View.TransportFinanceCalculation, label: 'محاسبه هزینه تور', roles: [UserRole.TransportationFinance] },
+      { view: View.AllowanceRegulation, label: 'بخشنامه', roles: [UserRole.TransportationFinance] },
+      { view: View.TransportFinancePaymentList, label: 'لیست پرداخت', roles: [UserRole.TransportationFinance] },
+      { view: View.TransportFinancePaidInvoices, label: 'صورتحساب‌های پرداخت شده', roles: [UserRole.TransportationFinance] },
+      { type: 'divider', roles: [UserRole.TransportationFinance] },
+      // Freight Management Section - مالی حمل برای مالی شعب (بدون transport_finance)
+      { view: View.FreightFinance, label: 'مالی حمل', roles: [UserRole.BranchFinance, UserRole.HQFinance] },
       { view: View.CentralFinance, label: 'کارتابل مالی ستاد', roles: [UserRole.CentralFinance] },
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
       { view: View.TransportDashboard, label: 'داشبورد ترابری', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },

@@ -31,6 +31,7 @@ import FreightDashboard from './components/FreightDashboard';
 import FreightFinanceContainer from './components/FreightFinanceContainer';
 import CentralFinanceContainer from './components/CentralFinanceContainer';
 import FreightPlanningContainer from './components/FreightPlanningContainer';
+import TransportFinanceContainer from './components/TransportFinanceContainer';
 import AuditTrailView from './components/AuditTrailView';
 import CustomerManagement from './components/CustomerManagement';
 // Import other components as needed...
@@ -44,6 +45,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
             return View.FreightFinance; // مالی حمل
         case UserRole.CentralFinance:
             return View.CentralFinance; // کارتابل مالی ستاد
+        case UserRole.TransportationFinance:
+            return View.TransportFinance; // داشبورد مالی ترابری
         default:
             return View.Dashboard;
     }
@@ -482,6 +485,21 @@ const App: React.FC = () => {
             case View.CentralFinance:
                 console.log('[App] Render view:', View.CentralFinance);
                 return <CentralFinanceContainer currentUser={currentUser} />;
+            case View.TransportFinance:
+                console.log('[App] Render view:', View.TransportFinance);
+                return <TransportFinanceContainer currentUser={currentUser} onNavigate={handleNavigate} />;
+            case View.TransportFinanceCalculation:
+                console.log('[App] Render view:', View.TransportFinanceCalculation);
+                return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinanceCalculation} onNavigate={handleNavigate} />;
+            case View.AllowanceRegulation:
+                console.log('[App] Render view:', View.AllowanceRegulation);
+                return <TransportFinanceContainer currentUser={currentUser} currentView={View.AllowanceRegulation} onNavigate={handleNavigate} />;
+            case View.TransportFinancePaymentList:
+                console.log('[App] Render view:', View.TransportFinancePaymentList);
+                return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinancePaymentList} onNavigate={handleNavigate} />;
+            case View.TransportFinancePaidInvoices:
+                console.log('[App] Render view:', View.TransportFinancePaidInvoices);
+                return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinancePaidInvoices} onNavigate={handleNavigate} />;
             case View.FreightHistory:
                 console.log('[App] Render view:', View.FreightHistory);
                 return <FreightHistoryContainer currentUser={currentUser} />;

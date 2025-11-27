@@ -1,0 +1,423 @@
+const pool = require('../db');
+const crypto = require('crypto');
+
+/**
+ * ذخیره محاسبات اجرت پیمایش برای یک تور
+ */
+async function saveDriverCalculation(req, res) {
+  try {
+    const {
+      driverId,
+      announcementId,
+      billOfLadingNumber,
+      billOfLadingDate,
+      billOfLadingCost,
+      approvedKilometers,
+      excessKilometers,
+      approvedMissionDays,
+      excessMissionDays,
+      tollCost,
+      loadingCost,
+      returnCargoCost,
+      multiUnloadCost,
+      excessMissionCost,
+      helperDriverCost,
+      fixedAllowance,
+      foodCost,
+      fuelCost,
+      tourCost,
+      totalCost,
+      notes,
+      queueType,
+      calculationDate,
+      userId,
+      helperDriverId,
+      helperDriverEmployeeId,
+      helperDriverName,
+      helperDriverAllowance,
+      helperDriverFoodCost,
+      helperDriverExcessMissionDays,
+      helperDriverExcessMissionCost,
+    } = req.body;
+
+    // تبدیل و اعتبارسنجی مقادیر عددی
+    const parseNumber = (value, defaultValue = 0) => {
+      if (value === null || value === undefined || value === '') return defaultValue;
+      // اگر string است، ابتدا آن را به number تبدیل کن
+      if (typeof value === 'string') {
+        // حذف کاراکترهای غیر عددی (به جز نقطه و منفی)
+        const cleaned = value.replace(/[^\d.-]/g, '');
+        if (cleaned === '' || cleaned === '-' || cleaned === '.') return defaultValue;
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? defaultValue : num;
+      }
+      const num = Number(value);
+      return isNaN(num) ? defaultValue : num;
+    };
+
+    console.log('🔍 [saveDriverCalculation] مقادیر خام دریافت شده:', {
+      foodCost: foodCost,
+      fuelCost: fuelCost,
+      tourCost: tourCost,
+      totalCost: totalCost,
+      tollCost: tollCost,
+      loadingCost: loadingCost,
+      foodCostType: typeof foodCost,
+      fuelCostType: typeof fuelCost,
+      tourCostType: typeof tourCost,
+      totalCostType: typeof totalCost,
+    });
+
+    const validatedFoodCost = parseNumber(foodCost, 0);
+    const validatedFuelCost = parseNumber(fuelCost, 0);
+    const validatedTourCost = parseNumber(tourCost, 0);
+    const validatedTotalCost = parseNumber(totalCost, 0);
+    const validatedTollCost = parseNumber(tollCost, 0);
+    const validatedLoadingCost = parseNumber(loadingCost, 0);
+
+    console.log('✅ [saveDriverCalculation] مقادیر اعتبارسنجی شده:', {
+      validatedFoodCost,
+      validatedFuelCost,
+      validatedTourCost,
+      validatedTotalCost,
+      validatedTollCost,
+      validatedLoadingCost,
+    });
+
+    if (!driverId || !announcementId) {
+      return res.status(400).json({ message: 'driverId و announcementId الزامی است.' });
+    }
+
+    console.log('💾 [saveDriverCalculation] دریافت درخواست:', {
+      driverId,
+      announcementId,
+      approvedKilometers,
+      approvedMissionDays,
+      excessKilometers,
+      excessMissionDays,
+    });
+
+    // بررسی وجود جدول driver_calculations
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'driver_calculations'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      // ایجاد جدول اگر وجود ندارد
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS driver_calculations (
+          id VARCHAR(255) PRIMARY KEY,
+          driver_id VARCHAR(255) NOT NULL,
+          announcement_id VARCHAR(255) NOT NULL REFERENCES freight_announcements(id),
+          bill_of_lading_number VARCHAR(255),
+          bill_of_lading_date VARCHAR(10), -- تاریخ شمسی صدور بارنامه YYYY/MM/DD
+          bill_of_lading_cost INTEGER DEFAULT 0, -- هزینه بارنامه (ریال)
+          approved_kilometers INTEGER,
+          excess_kilometers INTEGER DEFAULT 0,
+          approved_mission_days INTEGER,
+          excess_mission_days INTEGER DEFAULT 0,
+          toll_cost INTEGER DEFAULT 0,
+          loading_cost INTEGER DEFAULT 0, -- هزینه بارگیری اصلی
+          return_cargo_cost INTEGER DEFAULT 0, -- هزینه بار برگشتی
+          multi_unload_cost INTEGER DEFAULT 0, -- هزینه چندجا تخلیه
+          excess_mission_cost INTEGER DEFAULT 0, -- هزینه ماموریت مازاد
+          helper_driver_cost INTEGER DEFAULT 0, -- هزینه راننده کمکی
+          fixed_allowance INTEGER DEFAULT 0, -- اجرت ثابت
+          helper_driver_id VARCHAR(255), -- شناسه راننده کمکی
+          helper_driver_employee_id VARCHAR(255), -- کد پرسنلی راننده کمکی
+          helper_driver_name VARCHAR(255), -- نام و نام خانوادگی راننده کمکی
+          helper_driver_allowance INTEGER DEFAULT 0, -- اجرت راننده کمکی
+          helper_driver_food_cost INTEGER DEFAULT 0, -- هزینه غذا راننده کمکی
+          helper_driver_excess_mission_days INTEGER DEFAULT 0, -- ماموریت مازاد راننده کمکی
+          helper_driver_excess_mission_cost INTEGER DEFAULT 0, -- هزینه ماموریت مازاد راننده کمکی
+          food_cost INTEGER DEFAULT 0,
+          fuel_cost INTEGER DEFAULT 0,
+          tour_cost INTEGER DEFAULT 0,
+          total_cost INTEGER DEFAULT 0,
+          notes TEXT,
+          queue_type VARCHAR(50),
+          calculation_date VARCHAR(10), -- تاریخ شمسی محاسبه YYYY/MM/DD
+          created_by VARCHAR(255),
+          updated_by VARCHAR(255),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(driver_id, announcement_id)
+        )
+      `);
+    } else {
+      // اضافه کردن ستون‌های جدید اگر وجود ندارند
+      try {
+        await pool.query(`
+          ALTER TABLE driver_calculations 
+          ADD COLUMN IF NOT EXISTS created_by VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS calculation_date VARCHAR(10),
+          ADD COLUMN IF NOT EXISTS bill_of_lading_date VARCHAR(10),
+          ADD COLUMN IF NOT EXISTS bill_of_lading_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS return_cargo_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS multi_unload_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS excess_mission_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS helper_driver_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS fixed_allowance INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS helper_driver_id VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS helper_driver_employee_id VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS helper_driver_name VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS helper_driver_allowance INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS helper_driver_food_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_days INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE
+        `);
+        // تبدیل ستون‌های DECIMAL به INTEGER برای هزینه‌ها
+        try {
+          await pool.query(`ALTER TABLE driver_calculations ALTER COLUMN toll_cost TYPE INTEGER USING COALESCE(toll_cost::INTEGER, 0)`);
+          await pool.query(`ALTER TABLE driver_calculations ALTER COLUMN loading_cost TYPE INTEGER USING COALESCE(loading_cost::INTEGER, 0)`);
+          await pool.query(`ALTER TABLE driver_calculations ALTER COLUMN food_cost TYPE INTEGER USING COALESCE(food_cost::INTEGER, 0)`);
+          await pool.query(`ALTER TABLE driver_calculations ALTER COLUMN fuel_cost TYPE INTEGER USING COALESCE(fuel_cost::INTEGER, 0)`);
+          await pool.query(`ALTER TABLE driver_calculations ALTER COLUMN tour_cost TYPE INTEGER USING COALESCE(tour_cost::INTEGER, 0)`);
+          await pool.query(`ALTER TABLE driver_calculations ALTER COLUMN total_cost TYPE INTEGER USING COALESCE(total_cost::INTEGER, 0)`);
+        } catch (typeError) {
+          console.log('ℹ️ [saveDriverCalculation] ستون‌ها از قبل INTEGER هستند یا خطا در تبدیل:', typeError.message);
+        }
+      } catch (alterError) {
+        // اگر ستون‌ها از قبل وجود دارند، خطا نادیده گرفته می‌شود
+        console.log('ℹ️ [saveDriverCalculation] ستون‌های جدید از قبل وجود دارند');
+      }
+    }
+
+    const id = crypto.randomUUID();
+
+    // بررسی وجود رکورد قبلی
+    const existingCheck = await pool.query(
+      'SELECT id FROM driver_calculations WHERE driver_id = $1 AND announcement_id = $2',
+      [driverId, announcementId]
+    );
+
+    if (existingCheck.rows.length > 0) {
+      // آپدیت رکورد موجود
+      await pool.query(`
+        UPDATE driver_calculations SET
+          bill_of_lading_number = $1,
+          bill_of_lading_date = $2,
+          bill_of_lading_cost = $3,
+          approved_kilometers = $4,
+          excess_kilometers = $5,
+          approved_mission_days = $6,
+          excess_mission_days = $7,
+          toll_cost = $8,
+          loading_cost = $9,
+          return_cargo_cost = $10,
+          multi_unload_cost = $11,
+          excess_mission_cost = $12,
+          helper_driver_cost = $13,
+          fixed_allowance = $14,
+          helper_driver_id = $15,
+          helper_driver_employee_id = $16,
+          helper_driver_name = $17,
+          helper_driver_allowance = $18,
+          helper_driver_food_cost = $19,
+          helper_driver_excess_mission_days = $20,
+          helper_driver_excess_mission_cost = $21,
+          food_cost = $22,
+          fuel_cost = $23,
+          tour_cost = $24,
+          total_cost = $25,
+          notes = $26,
+          queue_type = $27,
+          calculation_date = $28,
+          updated_by = $29,
+          updated_at = NOW()
+        WHERE driver_id = $30 AND announcement_id = $31
+      `, [
+        billOfLadingNumber || null,
+        billOfLadingDate || null,
+        parseNumber(billOfLadingCost, 0),
+        approvedKilometers || null,
+        excessKilometers || 0,
+        approvedMissionDays || null,
+        excessMissionDays || 0,
+        validatedTollCost,
+        validatedLoadingCost,
+        parseNumber(returnCargoCost, 0),
+        parseNumber(multiUnloadCost, 0),
+        parseNumber(excessMissionCost, 0),
+        parseNumber(helperDriverCost, 0),
+        parseNumber(fixedAllowance, 0),
+        helperDriverId || null,
+        helperDriverEmployeeId || null,
+        helperDriverName || null,
+        parseNumber(helperDriverAllowance, 0),
+        parseNumber(helperDriverFoodCost, 0),
+        parseNumber(helperDriverExcessMissionDays, 0),
+        parseNumber(helperDriverExcessMissionCost, 0),
+        validatedFoodCost,
+        validatedFuelCost,
+        validatedTourCost,
+        validatedTotalCost,
+        notes || null,
+        queueType || null,
+        calculationDate || null,
+        userId || null,
+        driverId,
+        announcementId,
+      ]);
+
+      console.log('✅ [saveDriverCalculation] اطلاعات به‌روزرسانی شد:', existingCheck.rows[0].id);
+      return res.json({ 
+        message: 'اطلاعات محاسباتی به‌روزرسانی شد.',
+        id: existingCheck.rows[0].id 
+      });
+    } else {
+      // ایجاد رکورد جدید
+      await pool.query(`
+        INSERT INTO driver_calculations (
+          id, driver_id, announcement_id, bill_of_lading_number, bill_of_lading_date, bill_of_lading_cost,
+          approved_kilometers, excess_kilometers, approved_mission_days, excess_mission_days,
+          toll_cost, loading_cost, return_cargo_cost, multi_unload_cost, excess_mission_cost, helper_driver_cost, fixed_allowance,
+          helper_driver_id, helper_driver_employee_id, helper_driver_name, helper_driver_allowance, helper_driver_food_cost, helper_driver_excess_mission_days, helper_driver_excess_mission_cost,
+          food_cost, fuel_cost, tour_cost, total_cost,
+          notes, queue_type, calculation_date, created_by, updated_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+      `, [
+        id,
+        driverId,
+        announcementId,
+        billOfLadingNumber || null,
+        billOfLadingDate || null,
+        parseNumber(billOfLadingCost, 0),
+        approvedKilometers || null,
+        excessKilometers || 0,
+        approvedMissionDays || null,
+        excessMissionDays || 0,
+        validatedTollCost,
+        validatedLoadingCost,
+        parseNumber(returnCargoCost, 0),
+        parseNumber(multiUnloadCost, 0),
+        parseNumber(excessMissionCost, 0),
+        parseNumber(helperDriverCost, 0),
+        parseNumber(fixedAllowance, 0),
+        helperDriverId || null,
+        helperDriverEmployeeId || null,
+        helperDriverName || null,
+        parseNumber(helperDriverAllowance, 0),
+        parseNumber(helperDriverFoodCost, 0),
+        parseNumber(helperDriverExcessMissionDays, 0),
+        parseNumber(helperDriverExcessMissionCost, 0),
+        validatedFoodCost,
+        validatedFuelCost,
+        validatedTourCost,
+        validatedTotalCost,
+        notes || null,
+        queueType || null,
+        calculationDate || null,
+        userId || null,
+        userId || null,
+      ]);
+
+      console.log('✅ [saveDriverCalculation] اطلاعات جدید ثبت شد:', id);
+      return res.status(201).json({ 
+        message: 'اطلاعات محاسباتی ثبت شد.',
+        id 
+      });
+    }
+  } catch (error) {
+    console.error('❌ [saveDriverCalculation] Error:', error);
+    console.error('❌ [saveDriverCalculation] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      detail: error.detail,
+      constraint: error.constraint
+    });
+    res.status(500).json({ 
+      message: 'خطا در ذخیره اطلاعات محاسباتی.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}
+
+/**
+ * دریافت محاسبات یک راننده
+ */
+async function getDriverCalculations(req, res) {
+  try {
+    // بررسی و اضافه کردن ستون‌های مورد نیاز اگر وجود ندارند
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'driver_calculations' 
+        AND column_name IN ('bill_of_lading_date', 'is_paid')
+      `);
+      
+      const existingColumns = columnCheck.rows.map(r => r.column_name);
+      
+      if (!existingColumns.includes('bill_of_lading_date')) {
+        await pool.query(`ALTER TABLE driver_calculations ADD COLUMN bill_of_lading_date VARCHAR(10)`);
+        console.log('✅ [getDriverCalculations] ستون bill_of_lading_date اضافه شد');
+      }
+      
+      if (!existingColumns.includes('is_paid')) {
+        await pool.query(`ALTER TABLE driver_calculations ADD COLUMN is_paid BOOLEAN DEFAULT FALSE`);
+        console.log('✅ [getDriverCalculations] ستون is_paid اضافه شد');
+      }
+    } catch (alterError) {
+      console.error('⚠️ [getDriverCalculations] خطا در بررسی/اضافه کردن ستون‌ها:', alterError);
+    }
+
+    const { driverId, startDate, endDate } = req.query;
+
+    let query = `
+      SELECT dc.*, 
+             fa.announcement_code,
+             fa.loading_date,
+             fa.line_type,
+             fa.vehicle_type,
+             COALESCE(
+               NULLIF(dc.bill_of_lading_date, ''),
+               (SELECT TO_CHAR(transaction_date, 'YYYY/MM/DD') FROM freight_transactions WHERE announcement_id = dc.announcement_id ORDER BY created_at DESC LIMIT 1)
+             ) as bill_of_lading_date,
+             d.employee_id,
+             d.name as driver_name
+      FROM driver_calculations dc
+      LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+      LEFT JOIN drivers d ON dc.driver_id = d.id
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramIndex = 1;
+
+    if (driverId) {
+      query += ` AND dc.driver_id = $${paramIndex++}`;
+      params.push(driverId);
+    }
+
+    if (startDate) {
+      query += ` AND fa.loading_date >= $${paramIndex++}`;
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      query += ` AND fa.loading_date <= $${paramIndex++}`;
+      params.push(endDate);
+    }
+
+    query += ` ORDER BY dc.created_at DESC`;
+
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (error) {
+    console.error('❌ [getDriverCalculations] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت اطلاعات محاسباتی.' });
+  }
+}
+
+module.exports = {
+  saveDriverCalculation,
+  getDriverCalculations,
+};
+

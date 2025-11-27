@@ -305,6 +305,48 @@ async function getFreightAnnouncementById(req, res) {
       });
     }
     
+    // دریافت مقاصد برای گرفتن اطلاعات مصوب از dispatch_routes
+    const destRows = await pool.query(
+      'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 1',
+      [id]
+    );
+    
+    if (destRows.rows.length > 0) {
+      const mainCity = destRows.rows[0].city;
+      // دریافت اطلاعات مصوب از dispatch_routes
+      const routeRows = await pool.query(
+        `SELECT round_trip_km, expected_days 
+         FROM dispatch_routes 
+         WHERE city = $1 
+         ORDER BY round_trip_km DESC 
+         LIMIT 1`,
+        [mainCity]
+      );
+      
+      if (routeRows.rows.length > 0) {
+        announcement.approved_kilometers = routeRows.rows[0].round_trip_km || null;
+        announcement.approved_mission_days = routeRows.rows[0].expected_days || null;
+      }
+    }
+    
+    // دریافت شماره بارنامه و تاریخ صدور بارنامه از freight_transactions اگر وجود دارد
+    const transactionRows = await pool.query(
+      'SELECT bill_of_lading_number, transaction_date FROM freight_transactions WHERE announcement_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [id]
+    );
+    
+    if (transactionRows.rows.length > 0) {
+      announcement.bill_of_lading_number = transactionRows.rows[0].bill_of_lading_number || null;
+      announcement.bill_of_lading_date = transactionRows.rows[0].transaction_date || null;
+    }
+    
+    // دریافت تمام مقاصد
+    const allDestRows = await pool.query(
+      'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    announcement.destinations = allDestRows.rows;
+    
     res.json(announcement);
   } catch (error) {
     console.error(`Failed to get freight announcement ${id}:`, error);
@@ -3338,18 +3380,39 @@ async function getLineAnalytics(req, res) {
 
 async function searchDispatchRoutes(req, res) {
   try {
-    const { q, limit } = req.query;
+    const { q, city, limit } = req.query;
     const trimmed = typeof q === 'string' ? q.trim() : '';
+    const cityParam = typeof city === 'string' ? city.trim() : '';
     const maxLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
 
     let rows;
-    if (trimmed) {
+    if (cityParam) {
+      // جستجو بر اساس شهر (برای دریافت اطلاعات مصوب)
+      const query = `
+        SELECT id,
+               province,
+               city,
+               round_trip_km,
+               expected_days,
+               approved_allowance,
+               route_category,
+               distance_category
+        FROM dispatch_routes
+        WHERE is_active = TRUE
+          AND city ILIKE $1
+        ORDER BY round_trip_km DESC
+        LIMIT $2
+      `;
+      const { rows: result } = await pool.query(query, [`%${cityParam}%`, maxLimit]);
+      rows = result;
+    } else if (trimmed) {
       const normalized = `%${trimmed.replace(/\s+/g, '%')}%`;
       const query = `
         SELECT id,
                province,
                city,
                round_trip_km,
+               expected_days,
                approved_allowance,
                route_category,
                distance_category
@@ -3368,6 +3431,7 @@ async function searchDispatchRoutes(req, res) {
                province,
                city,
                round_trip_km,
+               expected_days,
                approved_allowance,
                route_category,
                distance_category
@@ -3385,6 +3449,7 @@ async function searchDispatchRoutes(req, res) {
       province: row.province,
       city: row.city,
       roundTripKm: row.round_trip_km,
+      expectedDays: row.expected_days,
       approvedAllowance: row.approved_allowance,
       routeCategory: row.route_category,
       distanceCategory: row.distance_category,

@@ -24,6 +24,9 @@ const personalDriverRoutes = require('./routes/personalDriverRoutes');
 const personalVehicleRoutes = require('./routes/personalVehicleRoutes');
 const dispatchRoutes = require('./routes/dispatchRoutes');
 const freightTransactionRoutes = require('./routes/freightTransactionRoutes');
+const driverCalculationRoutes = require('./routes/driverCalculationRoutes');
+const allowanceRegulationRoutes = require('./routes/allowanceRegulationRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 
@@ -93,9 +96,13 @@ app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/personal-drivers', personalDriverRoutes);
 app.use('/api/v1/personal-vehicles', personalVehicleRoutes);
 app.use('/api/v1/dispatch', dispatchRoutes);
+app.use('/api/v1/driver-calculations', driverCalculationRoutes);
+app.use('/api/v1/allowance-regulations', allowanceRegulationRoutes);
+app.use('/api/v1/payments', paymentRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
+app.use('/uploads/regulations', express.static(path.join(__dirname, 'uploads', 'regulations')));
 
 // Health check endpoint
 app.get('/', (req, res) => {

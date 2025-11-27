@@ -1,3 +1,7 @@
+// ============================================
+// Enums
+// ============================================
+
 export enum View {
     Login = 'login',
     Dashboard = 'dashboard',
@@ -32,6 +36,11 @@ export enum View {
     TransportDispatchAssignment = 'transport-dispatch-assignment',
     TransportDispatchBoard = 'transport-dispatch-board',
     CentralFinance = 'central-finance',
+    TransportFinance = 'transport-finance',
+    TransportFinanceCalculation = 'transport-finance-calculation',
+    TransportFinancePaymentList = 'transport-finance-payment-list',
+    TransportFinancePaidInvoices = 'transport-finance-paid-invoices',
+    AllowanceRegulation = 'allowance-regulation',
 }
 
 export enum UserRole {
@@ -53,16 +62,6 @@ export enum UserRole {
     Transportation_Personal_Vehicle_User = 'کاربر ترابری (خودرو شخصی)',
     CentralFinance = 'مالی مرکزی',
     TransportationFinance = 'مالی ترابری',
-}
-
-export interface User {
-    id: string;
-    username: string;
-    password?: string; // Should not be stored in frontend state in a real app
-    name: string;
-    role: UserRole;
-    employeeId?: string;
-    branchCity?: string; // For Branch_Finance role
 }
 
 export enum RepairStatus {
@@ -173,7 +172,6 @@ export enum FreightAnnouncementStatus {
     Archived = 'بایگانی شده',
 }
 
-
 export enum FreightLineType {
     IceCream = 'بستنی',
     Dairy = 'پاستوریزه',
@@ -185,8 +183,50 @@ export enum FreightPaymentStatus {
     Paid = 'پرداخت شده',
 }
 
+export enum VehicleAllocationStatus {
+    Draft = 'پیش‌نویس',
+    PendingGiverConfirm = 'در انتظار تایید تحویل‌دهنده',
+    PendingReceiverConfirm = 'در انتظار تایید تحویل‌گیرنده',
+    Completed = 'تکمیل شده',
+}
 
-// --- New Branch-Centric Entities ---
+export enum AccidentFileType {
+    ThirdParty = 'ثالث',
+    Body = 'بدنه',
+    ThirdPartyBody = 'ثالث-بدنه',
+}
+
+export enum ReconstructionLocation {
+    Mammut = 'ماموت',
+    AryaDiesel = 'آریا دیزل',
+    Organization = 'تعمیرگاه سازمان',
+    Personal = 'شخصی',
+}
+
+export enum FileProgressStatus {
+    AwaitingVisit = 'در انتظار بازدید',
+    AwaitingInvoice = 'در انتظار فاکتور',
+    AwaitingVoucher = 'در انتظار دریافت حواله از بیمه',
+    AwaitingFinancialApproval = 'در انتظار تایید مالی',
+    NotPaid = 'عدم واریز خسارت',
+    Paid = 'خسارت واریز شده',
+}
+
+export type DispatchQueueType = 'near' | 'far' | 'workshop' | 'external' | 'leave' | 'other';
+
+// ============================================
+// Interfaces
+// ============================================
+
+export interface User {
+    id: string;
+    username: string;
+    password?: string;
+    name: string;
+    role: UserRole;
+    employeeId?: string;
+    branchCity?: string;
+}
 
 export interface Branch {
     id: string;
@@ -195,10 +235,10 @@ export interface Branch {
 }
 
 export interface PlateNumber {
-    part1: string; // 2 digits
+    part1: string;
     letter: string;
-    part2: string; // 3 digits
-    cityCode: string; // 2 digits
+    part2: string;
+    cityCode: string;
 }
 
 export interface OwnerHistory {
@@ -211,11 +251,10 @@ export interface OwnerHistory {
 export interface Vehicle {
     id: string;
     plateNumber?: PlateNumber;
-    serialNumber?: string; // For forklifts, etc.
+    serialNumber?: string;
     model: string;
-    type?: string; // e.g., 'Truck', 'Crane', 'Loader'
+    type?: string;
     branchId: string;
-    // New fields
     holdingCompany?: 'mihan' | 'other';
     mihanCompany?: 'پخش سراسری میهن' | 'شهرنوشیدنی' | 'پاندا' | 'کارخانه میهن' | string;
     vehicleCategory?: VehicleCategory;
@@ -227,18 +266,17 @@ export interface Vehicle {
     usageType?: string;
     province?: string;
     engineNumber?: string;
-    vehicleTip?: string; // "Tip" is "تیپ" in Persian
+    vehicleTip?: string;
     chassisNumber?: string;
     capacity?: string;
     year?: number;
     wheelCount?: number;
     axleCount?: number;
     cylinderCount?: number;
-    domainName?: string; // "حوزه"
+    domainName?: string;
     fuelType?: string;
-    vehicleCode?: string; // کد خودرو برای سنگین/نیمه یدک
+    vehicleCode?: string;
     status?: VehicleStatus;
-    // Detailed specs from user request
     enginePower?: number;
     torque?: number;
     emissionStandard?: string;
@@ -259,30 +297,29 @@ export interface Vehicle {
 }
 
 export interface Driver {
-    id:string;
-    employeeId: string; // کد پرسنلی
-    name: string; // نام و نام خانوادگی
-    fatherName?: string; // نام پدر
-    nationalId: string; // کدملی
-    birthDate?: Date; // تاریخ تولد
-    idNumber?: string; // شماره شناسنامه
-    birthPlace?: string; // محل تولد
-    issuePlace?: string; // محل صدور شناسنامه
-    homePhone?: string; // تلفن منزل
-    workPhone?: string; // تلفن محل کار
-    mobile: string; // همراه
-    postalCode?: string; // کد پستی
-    homeAddress?: string; // آدرس منزل
-    workLocation?: string; // محل خدمت
-    jobTitle?: string; // شغل
-    hireDate?: Date; // تاریخ استخدام
-    terminationDate?: Date; // تاریخ تسویه حساب
-    licenseNumber?: string; // شماره گواهینامه
-    licenseType?: LicenseType; // نوع گواهینامه
-    licenseIssueDate?: Date; // تاریخ صدور گواهینامه
-    licenseIssuePlace?: string; // محل صدور گواهینامه
-    licenseExpiryDate?: Date; // مدت اعتبار گواهینامه
-    // For personal transport
+    id: string;
+    employeeId: string;
+    name: string;
+    fatherName?: string;
+    nationalId: string;
+    birthDate?: Date;
+    idNumber?: string;
+    birthPlace?: string;
+    issuePlace?: string;
+    homePhone?: string;
+    workPhone?: string;
+    mobile: string;
+    postalCode?: string;
+    homeAddress?: string;
+    workLocation?: string;
+    jobTitle?: string;
+    hireDate?: Date;
+    terminationDate?: Date;
+    licenseNumber?: string;
+    licenseType?: LicenseType;
+    licenseIssueDate?: Date;
+    licenseIssuePlace?: string;
+    licenseExpiryDate?: Date;
     currentVehicleType?: string;
     currentVehiclePlate?: string;
 }
@@ -318,13 +355,11 @@ export interface Technician {
     skills: string[];
 }
 
-// --- Core Entities ---
-
 export interface RepairOrder {
     id: string;
     vehicleId: string;
     driverId: string;
-    branchId: string; // Denormalized for easier access
+    branchId: string;
     description: string;
     status: RepairStatus;
     priority: 'High' | 'Normal' | 'Low';
@@ -363,7 +398,6 @@ export interface PartUsage {
     partId: string;
     quantityUsed: number;
     usageDate: Date;
-    // For reporting
     branchId: string;
     vehicleId: string;
 }
@@ -393,8 +427,6 @@ export interface Alert {
     partId: string;
 }
 
-// --- Purchasing & Inventory Workflow ---
-
 export interface Supplier {
     id: string;
     name: string;
@@ -413,13 +445,12 @@ export interface PurchaseOrder {
 export interface StockMovement {
     id: string;
     partId: string;
-    quantity: number; // Positive for incoming, negative for outgoing
+    quantity: number;
     type: 'reception' | 'usage';
-    referenceId: string; // PO id or RepairOrder id
+    referenceId: string;
     date: Date;
 }
 
-// --- Outsourcing ---
 export interface OutsourcingRequest {
     id: string;
     repairOrderId: string;
@@ -430,7 +461,6 @@ export interface OutsourcingRequest {
     returnDate?: Date;
 }
 
-// --- Support ---
 export interface SupportTicket {
     id: string;
     subject: string;
@@ -440,8 +470,6 @@ export interface SupportTicket {
     createdByUserId: string;
     createdByUserName: string;
 }
-
-// --- BI & Auditing ---
 
 export interface AuditLog {
     id: string;
@@ -459,8 +487,6 @@ export type DrillDownInfo = {
     endDate: string;
 } | null;
 
-// --- Vehicle Documents ---
-
 export interface FuelCardRequest {
     id: string;
     vehicleId: string;
@@ -473,7 +499,7 @@ export interface TrafficFine {
     id: string;
     vehicleId: string;
     branchId: string;
-    amount: number; // In Rials
+    amount: number;
     fineDate: Date;
 }
 
@@ -491,8 +517,6 @@ export interface VehiclePermit {
     inspectionExpiryDate: Date;
 }
 
-// --- Insurance Module ---
-
 export interface InsurancePolicy {
     id: string;
     vehicleId: string;
@@ -501,36 +525,12 @@ export interface InsurancePolicy {
     insuranceCompany: string;
     startDate: Date;
     endDate: Date;
-    // Specific fields
-    vehicleValue?: number; // بدنه
-    franchisePercentage?: number; // بدنه
+    vehicleValue?: number;
+    franchisePercentage?: number;
     policyImageName?: string;
-    // New fields
     discountYears?: number;
     discountPercentage?: number;
     policyAmount?: number;
-}
-
-export enum AccidentFileType {
-    ThirdParty = 'ثالث',
-    Body = 'بدنه',
-    ThirdPartyBody = 'ثالث-بدنه',
-}
-
-export enum ReconstructionLocation {
-    Mammut = 'ماموت',
-    AryaDiesel = 'آریا دیزل',
-    Organization = 'تعمیرگاه سازمان',
-    Personal = 'شخصی',
-}
-
-export enum FileProgressStatus {
-    AwaitingVisit = 'در انتظار بازدید',
-    AwaitingInvoice = 'در انتظار فاکتور',
-    AwaitingVoucher = 'در انتظار دریافت حواله از بیمه',
-    AwaitingFinancialApproval = 'در انتظار تایید مالی',
-    NotPaid = 'عدم واریز خسارت',
-    Paid = 'خسارت واریز شده',
 }
 
 export interface AccidentReport {
@@ -539,8 +539,6 @@ export interface AccidentReport {
     driverId: string;
     branchId: string;
     status: AccidentStatus;
-
-    // Accident Details
     accidentDate: Date;
     accidentTime: string;
     accidentLocation: string;
@@ -548,28 +546,21 @@ export interface AccidentReport {
     wasInjury: boolean;
     atFaultParty: FaultParty;
     vehiclePostAccidentLocation: string;
-    
-    // Uploaded Documents (just storing names for mock)
     accidentSketchImageName?: string;
     companyDriverLicenseImageName?: string;
     thirdPartyDriverLicenseImageName?: string;
     damagedVehicleImageName?: string;
-    
-    // Expert Review fields
     fileCompletionDate?: Date;
     fileCompletionDelayReason?: string;
     claimFileNumber?: string;
     referralToWorkshopDate?: Date;
     paymentVoucherImageName?: string;
-
-    // New fields for Insurance Expert
     fileType?: AccidentFileType;
     reconstructionLocation?: ReconstructionLocation;
     personalReconstructionLocation?: string;
     fileProgressStatus?: FileProgressStatus;
     claimAmountReceived?: number;
     franchiseAmount?: number;
-    // New fields for workshop and finance
     repairInvoiceAmount?: number;
     depreciationAmount?: number;
     franchiseProcessNumber?: string;
@@ -578,43 +569,32 @@ export interface AccidentReport {
     repairCompletedDate?: Date;
 }
 
-// --- Vehicle Allocation ---
 export interface VehicleAllocationItem {
     id: string;
     code?: string;
     description: string;
-    value: string; // Can be a status string ('سالم') or a numeric string ('1')
+    value: string;
     remarks: string;
-}
-
-export enum VehicleAllocationStatus {
-    Draft = 'پیش‌نویس',
-    PendingGiverConfirm = 'در انتظار تایید تحویل‌دهنده',
-    PendingReceiverConfirm = 'در انتظار تایید تحویل‌گیرنده',
-    Completed = 'تکمیل شده',
 }
 
 export interface VehicleAllocation {
     id: string;
     vehicleId: string;
-    giverEmployeeId: string; // Person handing over (expert or driver)
-    receiverEmployeeId: string; // Person receiving (driver or expert)
+    giverEmployeeId: string;
+    receiverEmployeeId: string;
     oldLocation: string;
     newLocation: string;
     allocationDate: Date;
     items: VehicleAllocationItem[];
     status: VehicleAllocationStatus;
-    
-    // New detailed fields for delivery/return process
     processType: 'delivery' | 'return';
-    deliveryType?: 'temporary' | 'permanent'; // Only for delivery
+    deliveryType?: 'temporary' | 'permanent';
     mileage: number;
     isSigned: boolean;
     expertName: string;
-    transactionTime?: string;      // For return time
-    returnDuration?: string; // e.g., "5 days, 3 hours"
+    transactionTime?: string;
+    returnDuration?: string;
 }
-
 
 // --- Freight Management Interfaces ---
 
@@ -642,67 +622,56 @@ export interface FreightAnnouncement {
     id: string;
     announcementCode: string;
     createdAt: Date;
-    loadingDate: Date; // New field for loading date
+    loadingDate: Date;
     lineType: FreightLineType;
     status: FreightAnnouncementStatus;
     paymentStatus?: FreightPaymentStatus;
-    cargoValue: number; // In Rials
+    cargoValue: number;
     vehicleType: string;
     notes?: string;
     rejectionReason?: string;
-    
-    // Assignment fields
     assignmentType?: 'company' | 'personal';
     assignedDriverId?: string;
     assignedVehicleId?: string;
     totalFreightCost?: number;
     billOfLadingNumber?: string;
-    // DEPRECATED for personal, use assignedDriverId and look up Driver object
     assignedDriverName?: string;
     assignedDriverContact?: string;
     assignedVehiclePlate?: string;
-    assignmentFinalizedAt?: string | Date; // زمان نهایی‌سازی تخصیص
-
-
-    // Line-specific fields
-    // Ice Cream (Line 1)
+    assignmentFinalizedAt?: string | Date;
     originCity?: string;
     brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
     representativeType?: 'agent' | 'distributor';
     representativeName?: string;
     cartonCount?: number;
     priority?: 'low' | 'normal' | 'high';
-    products?: string[]; // e.g., ['کره', 'کترینگ']
-    
-    // Dairy & Ambient (Lines 2 & 3)
+    products?: string[];
     platformArrivalTime?: string;
     destinations: Destination[];
-
-    // History
     history: AnnouncementHistory[];
 }
 
 export interface FreightTransaction {
     id: string;
     announcementId: string;
-    destinationId?: string | null; // شناسه مقصد برای ارجاع جداگانه
+    destinationId?: string | null;
     amount: number;
     transactionDate: Date;
     billOfLadingNumber?: string;
     notes?: string;
     isPaid: boolean;
-    invoiceImage?: string; // file path (deprecated, use invoiceImagePath)
-    receiptImage?: string; // file path (deprecated, use receiptImagePath)
-    extraDocumentImage?: string; // file path (deprecated, use extraDocumentImagePath)
-    invoiceImagePath?: string | null; // file path
-    receiptImagePath?: string | null; // file path
-    extraDocumentImagePath?: string | null; // file path
-    referralStatus?: 'pending' | 'referred' | 'approved' | 'rejected'; // وضعیت ارجاع
-    referralNotes?: string; // توضیحات ارجاع/اصلاح
-    centralFinanceRejectionNotes?: string; // توضیحات رد ستاد مالی
-    referredAt?: Date; // تاریخ ارجاع
-    referredBy?: string; // کاربری که ارجاع داده
-    announcement?: FreightAnnouncement; // برای دسترسی به اطلاعات announcement
+    invoiceImage?: string;
+    receiptImage?: string;
+    extraDocumentImage?: string;
+    invoiceImagePath?: string | null;
+    receiptImagePath?: string | null;
+    extraDocumentImagePath?: string | null;
+    referralStatus?: 'pending' | 'referred' | 'approved' | 'rejected';
+    referralNotes?: string;
+    centralFinanceRejectionNotes?: string;
+    referredAt?: Date;
+    referredBy?: string;
+    announcement?: FreightAnnouncement;
 }
 
 export interface DispatchRouteSuggestion {
@@ -714,8 +683,6 @@ export interface DispatchRouteSuggestion {
     routeCategory?: string | null;
     distanceCategory?: string | null;
 }
-
-export type DispatchQueueType = 'near' | 'far' | 'workshop' | 'external' | 'leave' | 'other';
 
 export interface DispatchQueueDriver {
     id: string;
@@ -730,6 +697,16 @@ export interface DispatchQueueVehicle {
     brand?: string;
     vehicleCode?: string;
     vehicleCategory?: string | null;
+}
+
+export interface DispatchAssignmentHistory {
+    id: string;
+    created_at: string;
+    stage: string;
+    city?: string;
+    route_category?: string;
+    round_trip_km?: number;
+    announcement_code?: string;
 }
 
 export interface DispatchQueueEntry {
@@ -748,16 +725,6 @@ export interface DispatchQueueEntry {
     vehicle: DispatchQueueVehicle;
     longRouteHistory?: DispatchAssignmentHistory[];
     blockedStage1?: boolean;
-}
-
-export interface DispatchAssignmentHistory {
-    id: string;
-    created_at: string;
-    stage: string;
-    city?: string;
-    route_category?: string;
-    round_trip_km?: number;
-    announcement_code?: string;
 }
 
 export interface DispatchAnnouncementCandidate {
@@ -907,3 +874,71 @@ export interface DriverPreferencesResponse {
     peerAssignments?: DriverPreferencePeerAssignment[];
 }
 
+// --- Transport Finance Types ---
+export interface DriverAllowanceCalculation {
+    id: string;
+    driverId: string;
+    employeeId: string;
+    driverName: string;
+    queueType: 'porsant' | 'fixed_allowance' | 'helper';
+    tourCount: number;
+    totalKilometers: number;
+    tourCost: number;
+    tours: DriverTourDetail[];
+    approvedKilometers?: number;
+    excessKilometers?: number;
+    approvedMissionDays?: number;
+    excessMissionDays?: number;
+    foodCost?: number;
+    fuelCost?: number;
+    tollCost?: number;
+    loadingCost?: number;
+    totalCost?: number;
+    notes?: string;
+    recordedAt?: Date;
+    recordedBy?: string;
+}
+
+export interface DriverTourDetail {
+    announcementId: string;
+    announcementCode: string;
+    vehicleType: string;
+    vehicleId: string;
+    vehicleCode?: string;
+    plateNumber?: string;
+    lineType: string;
+    destinations: string[];
+    roundTripKm: number;
+}
+
+export interface AllowanceRegulation {
+    id: string;
+    vehicleType: 'تریلی' | 'ده چرخ';
+    minKm: number;
+    maxKm: number;
+    allowancePerKm: number;
+    effectiveDate: string;
+    recordedBy: string;
+    recordedAt: Date;
+}
+
+export interface FixedAllowanceRegulation {
+    id: string;
+    amount: number;
+    effectiveDate: string;
+    recordedBy: string;
+    recordedAt: Date;
+}
+
+export interface FoodCostRegulation {
+    id: string;
+    dailyCost: number;
+    effectiveDate: string;
+    recordedBy: string;
+    recordedAt: Date;
+}
+
+export interface FuelConsumptionRate {
+    vehicleType: 'تریلی' | 'ده چرخ';
+    consumptionRate: number;
+}
