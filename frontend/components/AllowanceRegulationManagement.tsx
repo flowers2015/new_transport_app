@@ -86,6 +86,24 @@ interface MultiUnloadRegulation {
     updatedByName?: string;
 }
 
+interface FuelConsumptionRegulation {
+    id?: string;
+    vehicleType: string; // نوع خودرو (تریلی، ده چرخ، و غیره)
+    consumptionPercentage: number; // درصد مصرف در هر 100 کیلومتر
+    fuelPrice: number; // قیمت هر لیتر سوخت (ریال)
+    approvalDate: string;
+    documentPath?: string;
+    startDate: string;
+    endDate: string;
+    isActive?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+    createdBy?: string;
+    createdByName?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+}
+
 interface AllowanceRegulationManagementProps {
     currentUser: User;
 }
@@ -117,7 +135,7 @@ const jalaliToGregorianDateInput = (jalaliStr: string): string => {
 };
 
 const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps> = ({ currentUser }) => {
-    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'mileage' | 'excess-mission' | 'multi-unload'>('food');
+    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption'>('food');
     
     // Food Regulations
     const [foodRegulations, setFoodRegulations] = useState<FoodRegulation[]>([]);
@@ -187,6 +205,21 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         isActive: true,
     });
     
+    // Fuel Consumption Regulations
+    const [fuelConsumptionRegulations, setFuelConsumptionRegulations] = useState<FuelConsumptionRegulation[]>([]);
+    const [showFuelConsumptionDialog, setShowFuelConsumptionDialog] = useState(false);
+    const [editingFuelConsumption, setEditingFuelConsumption] = useState<FuelConsumptionRegulation | null>(null);
+    const [fuelConsumptionFormData, setFuelConsumptionFormData] = useState<FuelConsumptionRegulation>({
+        vehicleType: 'تریلی',
+        consumptionPercentage: 0,
+        fuelPrice: 0,
+        approvalDate: getTodayJalali(),
+        documentPath: '',
+        startDate: getTodayJalali(),
+        endDate: getTodayJalali(),
+        isActive: true,
+    });
+    
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [uploadingFile, setUploadingFile] = useState(false);
@@ -205,26 +238,29 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 'Content-Type': 'application/json',
             };
             
-            const [foodRes, helperRes, mileageRes, excessMissionRes, multiUnloadRes] = await Promise.all([
+            const [foodRes, helperRes, mileageRes, excessMissionRes, multiUnloadRes, fuelConsumptionRes] = await Promise.all([
                 fetch(getApiUrl('allowance-regulations/food'), { headers }),
                 fetch(getApiUrl('allowance-regulations/helper'), { headers }),
                 fetch(getApiUrl('allowance-regulations/mileage'), { headers }),
                 fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
                 fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
+                fetch(getApiUrl('allowance-regulations/fuel-consumption'), { headers }),
             ]);
             
-            if (foodRes.ok && helperRes.ok && mileageRes.ok && excessMissionRes.ok && multiUnloadRes.ok) {
+            if (foodRes.ok && helperRes.ok && mileageRes.ok && excessMissionRes.ok && multiUnloadRes.ok && fuelConsumptionRes.ok) {
                 const foodData = await foodRes.json();
                 const helperData = await helperRes.json();
                 const mileageData = await mileageRes.json();
                 const excessMissionData = await excessMissionRes.json();
                 const multiUnloadData = await multiUnloadRes.json();
+                const fuelConsumptionData = await fuelConsumptionRes.json();
                 
                 setFoodRegulations(foodData);
                 setHelperRegulations(helperData);
                 setMileageRegulations(mileageData);
                 setExcessMissionRegulations(excessMissionData);
                 setMultiUnloadRegulations(multiUnloadData);
+                setFuelConsumptionRegulations(fuelConsumptionData);
             } else {
                 throw new Error('خطا در دریافت بخشنامه‌ها');
             }
@@ -747,6 +783,105 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         }
     };
 
+    // Fuel Consumption Regulation Handlers
+    const handleAddFuelConsumption = () => {
+        setEditingFuelConsumption(null);
+        setFuelConsumptionFormData({
+            vehicleType: 'تریلی',
+            consumptionPercentage: 0,
+            fuelPrice: 0,
+            approvalDate: getTodayJalali(),
+            documentPath: '',
+            startDate: getTodayJalali(),
+            endDate: getTodayJalali(),
+            isActive: true,
+        });
+        setShowFuelConsumptionDialog(true);
+    };
+
+    const handleEditFuelConsumption = (regulation: FuelConsumptionRegulation) => {
+        setEditingFuelConsumption(regulation);
+        setFuelConsumptionFormData(regulation);
+        setShowFuelConsumptionDialog(true);
+    };
+
+    const handleDeleteFuelConsumption = async (id: string) => {
+        if (!confirm('آیا از حذف این بخشنامه اطمینان دارید؟')) return;
+        
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const response = await fetch(getApiUrl(`allowance-regulations/fuel-consumption/${id}`), {
+                method: 'DELETE',
+                headers,
+            });
+
+            if (!response.ok) throw new Error('خطا در حذف بخشنامه');
+            
+            await fetchAllRegulations();
+            alert('بخشنامه با موفقیت حذف شد.');
+        } catch (err: any) {
+            alert(`خطا در حذف بخشنامه: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    const handleSaveFuelConsumption = async () => {
+        if (!fuelConsumptionFormData.vehicleType || !fuelConsumptionFormData.consumptionPercentage || !fuelConsumptionFormData.fuelPrice || !fuelConsumptionFormData.approvalDate || !fuelConsumptionFormData.startDate || !fuelConsumptionFormData.endDate) {
+            alert('لطفاً تمام فیلدهای الزامی را پر کنید.');
+            return;
+        }
+
+        if (fuelConsumptionFormData.startDate > fuelConsumptionFormData.endDate) {
+            alert('تاریخ شروع باید قبل از تاریخ پایان باشد.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const userId = currentUser?.id || currentUser?.userId || '';
+            const payload = {
+                ...(editingFuelConsumption?.id && { id: editingFuelConsumption.id }),
+                vehicleType: fuelConsumptionFormData.vehicleType,
+                consumptionPercentage: Number(fuelConsumptionFormData.consumptionPercentage),
+                fuelPrice: Number(fuelConsumptionFormData.fuelPrice),
+                approvalDate: fuelConsumptionFormData.approvalDate,
+                documentPath: fuelConsumptionFormData.documentPath || null,
+                startDate: fuelConsumptionFormData.startDate,
+                endDate: fuelConsumptionFormData.endDate,
+                isActive: fuelConsumptionFormData.isActive !== false,
+                userId,
+            };
+
+            const response = await fetch(getApiUrl('allowance-regulations/fuel-consumption'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'خطا در ذخیره بخشنامه');
+            }
+
+            await fetchAllRegulations();
+            setShowFuelConsumptionDialog(false);
+            setEditingFuelConsumption(null);
+            alert(editingFuelConsumption ? 'بخشنامه با موفقیت به‌روزرسانی شد.' : 'بخشنامه با موفقیت ثبت شد.');
+        } catch (err: any) {
+            console.error('❌ [handleSaveFuelConsumption] Error:', err);
+            alert(`خطا در ذخیره بخشنامه: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -824,6 +959,16 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                             }`}
                         >
                             بخشنامه هزینه چندجا تخلیه
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('fuel-consumption')}
+                            className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+                                activeTab === 'fuel-consumption'
+                                    ? 'bg-sky-600 text-white'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                        >
+                            بخشنامه مصرف سوخت
                         </button>
                     </div>
                 </div>
@@ -1266,6 +1411,102 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                                         </button>
                                                         <button
                                                             onClick={() => regulation.id && handleDeleteMultiUnload(regulation.id)}
+                                                            className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700 transition-colors"
+                                                        >
+                                                            حذف
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'fuel-consumption' && (
+                    <div>
+                        <div className="flex justify-end mb-4">
+                            <button
+                                onClick={handleAddFuelConsumption}
+                                className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors"
+                            >
+                                + افزودن بخشنامه مصرف سوخت
+                            </button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-700 text-white border-b">
+                                        <th className="p-3 text-right border-l border-slate-600">ردیف</th>
+                                        <th className="p-3 text-right border-l border-slate-600">نوع خودرو</th>
+                                        <th className="p-3 text-right border-l border-slate-600">درصد مصرف (در هر 100 کیلومتر)</th>
+                                        <th className="p-3 text-right border-l border-slate-600">قیمت هر لیتر (ریال)</th>
+                                        <th className="p-3 text-right border-l border-slate-600">تاریخ مصوبه</th>
+                                        <th className="p-3 text-right border-l border-slate-600">تاریخ شروع</th>
+                                        <th className="p-3 text-right border-l border-slate-600">تاریخ پایان</th>
+                                        <th className="p-3 text-right border-l border-slate-600">وضعیت</th>
+                                        <th className="p-3 text-right border-l border-slate-600">ایجاد شده توسط</th>
+                                        <th className="p-3 text-right border-l border-slate-600">تاریخ ایجاد</th>
+                                        <th className="p-3 text-right">عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {fuelConsumptionRegulations.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={11} className="p-6 text-center text-slate-500">
+                                                هیچ بخشنامه‌ای ثبت نشده است.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        fuelConsumptionRegulations.map((regulation, index) => (
+                                            <tr key={regulation.id || index} className="border-b border-slate-200 bg-white hover:bg-slate-50">
+                                                <td className="p-3 border-l border-slate-200 text-center">{index + 1}</td>
+                                                <td className="p-3 border-l border-slate-200 font-medium">
+                                                    {regulation.vehicleType}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-left">
+                                                    {regulation.consumptionPercentage.toLocaleString('fa-IR')}%
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
+                                                    {regulation.fuelPrice.toLocaleString('fa-IR')}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-xs">
+                                                    {regulation.approvalDate || '-'}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-xs">
+                                                    {regulation.startDate || '-'}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-xs">
+                                                    {regulation.endDate || '-'}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200">
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+                                                        regulation.isActive !== false 
+                                                            ? 'bg-green-100 text-green-800' 
+                                                            : 'bg-red-100 text-red-800'
+                                                    }`}>
+                                                        {regulation.isActive !== false ? 'فعال' : 'غیرفعال'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-xs">
+                                                    {regulation.createdByName || '-'}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-xs">
+                                                    {regulation.createdAt ? formatJalali(new Date(regulation.createdAt)) : '-'}
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleEditFuelConsumption(regulation)}
+                                                            className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                        >
+                                                            ویرایش
+                                                        </button>
+                                                        <button
+                                                            onClick={() => regulation.id && handleDeleteFuelConsumption(regulation.id)}
                                                             className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700 transition-colors"
                                                         >
                                                             حذف
@@ -1963,6 +2204,169 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
                             >
                                 {editingMultiUnload ? 'به‌روزرسانی' : 'ثبت'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* دیالوگ بخشنامه مصرف سوخت */}
+            {showFuelConsumptionDialog && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-xl font-bold text-slate-800 mb-4">
+                            {editingFuelConsumption ? 'ویرایش بخشنامه مصرف سوخت' : 'افزودن بخشنامه مصرف سوخت'}
+                        </h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    نوع خودرو *
+                                </label>
+                                <select
+                                    value={fuelConsumptionFormData.vehicleType}
+                                    onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, vehicleType: e.target.value })}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                >
+                                    <option value="تریلی">تریلی</option>
+                                    <option value="ده چرخ">ده چرخ</option>
+                                    <option value="کامیون">کامیون</option>
+                                    <option value="وانت">وانت</option>
+                                    <option value="سایر">سایر</option>
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        درصد مصرف (در هر 100 کیلومتر) *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={fuelConsumptionFormData.consumptionPercentage}
+                                        onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, consumptionPercentage: Number(e.target.value) })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                        min="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">مثال: 35 به معنای 35 لیتر در هر 100 کیلومتر</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        قیمت هر لیتر سوخت (ریال) *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={fuelConsumptionFormData.fuelPrice}
+                                        onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, fuelPrice: Number(e.target.value) })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                        min="0"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ مصوبه (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={fuelConsumptionFormData.approvalDate}
+                                        onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, approvalDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/01/01"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ شروع (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={fuelConsumptionFormData.startDate}
+                                        onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, startDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/01/01"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ پایان (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={fuelConsumptionFormData.endDate}
+                                        onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, endDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/12/29"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    آپلود بخشنامه
+                                </label>
+                                <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const filePath = await handleFileUpload(file);
+                                            if (filePath) {
+                                                setFuelConsumptionFormData(prev => ({ ...prev, documentPath: filePath }));
+                                            }
+                                        }
+                                    }}
+                                    disabled={uploadingFile}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                />
+                                {uploadingFile && (
+                                    <p className="text-xs text-slate-500 mt-1">در حال آپلود...</p>
+                                )}
+                                {fuelConsumptionFormData.documentPath && (
+                                    <p className="text-xs text-green-600 mt-1">✓ فایل آپلود شد</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={fuelConsumptionFormData.isActive !== false}
+                                        onChange={(e) => setFuelConsumptionFormData({ ...fuelConsumptionFormData, isActive: e.target.checked })}
+                                        className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                    />
+                                    <span className="text-sm font-medium text-slate-700">فعال</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    setShowFuelConsumptionDialog(false);
+                                    setEditingFuelConsumption(null);
+                                }}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300"
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                onClick={handleSaveFuelConsumption}
+                                className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
+                            >
+                                {editingFuelConsumption ? 'به‌روزرسانی' : 'ثبت'}
                             </button>
                         </div>
                     </div>

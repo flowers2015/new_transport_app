@@ -57,6 +57,7 @@ interface AllowanceInputDialogData {
     approvedMissionDays: number;
     excessMissionDays: number;
     tollCost: number;
+    fuelCost: number; // هزینه سوخت (ریال) - محاسبه خودکار
     loadingCost: number; // هزینه بارگیری اصلی
     returnCargoCost: number; // هزینه بار برگشتی (ریال)
     multiUnloadCost: number; // هزینه چندجا تخلیه (ریال)
@@ -120,7 +121,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [searchTerm, setSearchTerm] = useState<string>(''); // جستجو بر اساس کد پرسنلی و نام
     
     // مرتب‌سازی
-    type SortField = 'employeeId' | 'driverName' | 'tourCount' | 'totalKilometers' | 'tourCost' | 'billOfLadingDate';
+    type SortField = 'employeeId' | 'driverName' | 'queueType' | 'tourCount' | 'recordedTours' | 'unrecordedTours' | 'totalKilometers' | 'tourCost' | 'billOfLadingDate' | 'trailerCount' | 'miniTrailerCount' | 'tenWheelerCount' | 'commissionBase';
     type SortDirection = 'asc' | 'desc';
     const [sortField, setSortField] = useState<SortField>('employeeId');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -140,14 +141,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [selectedTourDetails, setSelectedTourDetails] = useState<DriverTourDetailWithCalculation[] | null>(null);
     const [selectedDriverName, setSelectedDriverName] = useState<string>('');
     
-    // بزرگنمایی صفحه
-    const [zoomLevel, setZoomLevel] = useState(100);
-    
     // بخشنامه‌ها
     const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
     const [fixedAllowance, setFixedAllowance] = useState<number>(0);
     const [foodCostPerDay, setFoodCostPerDay] = useState<number>(0);
-    const [fuelConsumptionRates, setFuelConsumptionRates] = useState<{ [key: string]: number }>({});
+    const [fuelConsumptionRegulations, setFuelConsumptionRegulations] = useState<{ [key: string]: { consumptionPercentage: number; fuelPrice: number } }>({});
     const [excessMissionCostPerDay, setExcessMissionCostPerDay] = useState<number>(0);
     const [multiUnloadCostPerUnit, setMultiUnloadCostPerUnit] = useState<number>(0);
     const [helperAllowancePerKm, setHelperAllowancePerKm] = useState<number>(0);
@@ -167,11 +165,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             };
 
             // Fetch همه بخشنامه‌ها
-            const [foodRes, excessMissionRes, multiUnloadRes, helperRes] = await Promise.all([
+            const [foodRes, excessMissionRes, multiUnloadRes, helperRes, fuelConsumptionRes] = await Promise.all([
                 fetch(getApiUrl('allowance-regulations/food'), { headers }),
                 fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
                 fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
                 fetch(getApiUrl('allowance-regulations/helper'), { headers }),
+                fetch(getApiUrl('allowance-regulations/fuel-consumption'), { headers }),
             ]);
 
             if (foodRes.ok) {
@@ -204,6 +203,23 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 if (helperData && helperData.length > 0) {
                     const latestHelper = helperData[0];
                     setHelperAllowancePerKm(Number(latestHelper.helperAllowance) || 0);
+                }
+            }
+
+            if (fuelConsumptionRes.ok) {
+                const fuelConsumptionData = await fuelConsumptionRes.json();
+                if (fuelConsumptionData && fuelConsumptionData.length > 0) {
+                    // تبدیل به map بر اساس نوع خودرو
+                    const fuelMap: { [key: string]: { consumptionPercentage: number; fuelPrice: number } } = {};
+                    fuelConsumptionData.forEach((reg: any) => {
+                        if (reg.isActive !== false) {
+                            fuelMap[reg.vehicleType] = {
+                                consumptionPercentage: Number(reg.consumptionPercentage) || 0,
+                                fuelPrice: Number(reg.fuelPrice) || 0,
+                            };
+                        }
+                    });
+                    setFuelConsumptionRegulations(fuelMap);
                 }
             }
         } catch (err) {
@@ -456,17 +472,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
     };
     
-    const handleZoomIn = () => {
-        setZoomLevel(prev => Math.min(prev + 10, 150));
-    };
-    
-    const handleZoomOut = () => {
-        setZoomLevel(prev => Math.max(prev - 10, 75));
-    };
-    
-    const handleResetZoom = () => {
-        setZoomLevel(100);
-    };
 
     // فیلتر و جستجو
     const filteredAndSortedCalculations = useMemo(() => {
@@ -546,6 +551,74 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     aValue = aDates.length > 0 ? aDates[0].getTime() : 0;
                     bValue = bDates.length > 0 ? bDates[0].getTime() : 0;
                     break;
+                case 'queueType':
+                    const queueTypeMap: { [key: string]: number } = { 'porsant': 1, 'fixed_allowance': 2, 'helper': 3 };
+                    aValue = queueTypeMap[a.queueType] || 0;
+                    bValue = queueTypeMap[b.queueType] || 0;
+                    break;
+                case 'recordedTours':
+                    aValue = a.tours.filter(t => t.isDataRecorded).length;
+                    bValue = b.tours.filter(t => t.isDataRecorded).length;
+                    break;
+                case 'unrecordedTours':
+                    aValue = a.tours.filter(t => !t.isDataRecorded).length;
+                    bValue = b.tours.filter(t => !t.isDataRecorded).length;
+                    break;
+                case 'trailerCount':
+                    aValue = a.tours.filter(t => {
+                        const vehicleType = t.vehicleType || '';
+                        return vehicleType.includes('تریلی') && !vehicleType.includes('مینی');
+                    }).length;
+                    bValue = b.tours.filter(t => {
+                        const vehicleType = t.vehicleType || '';
+                        return vehicleType.includes('تریلی') && !vehicleType.includes('مینی');
+                    }).length;
+                    break;
+                case 'miniTrailerCount':
+                    aValue = a.tours.filter(t => {
+                        const vehicleType = t.vehicleType || '';
+                        return vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
+                    }).length;
+                    bValue = b.tours.filter(t => {
+                        const vehicleType = t.vehicleType || '';
+                        return vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
+                    }).length;
+                    break;
+                case 'tenWheelerCount':
+                    aValue = a.tours.filter(t => {
+                        const vehicleType = t.vehicleType || '';
+                        return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
+                    }).length;
+                    bValue = b.tours.filter(t => {
+                        const vehicleType = t.vehicleType || '';
+                        return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
+                    }).length;
+                    break;
+                case 'commissionBase':
+                    const getCommissionBase = (calc: DriverCalculationRow): string => {
+                        const trailerCount = calc.tours.filter(t => {
+                            const vehicleType = t.vehicleType || '';
+                            return vehicleType.includes('تریلی') && !vehicleType.includes('مینی');
+                        }).length;
+                        const miniTrailerCount = calc.tours.filter(t => {
+                            const vehicleType = t.vehicleType || '';
+                            return vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
+                        }).length;
+                        const totalTours = calc.tours.length;
+                        const trailerAndMiniTrailerCount = trailerCount + miniTrailerCount;
+                        const trailerAndMiniTrailerPercent = totalTours > 0 ? Math.round((trailerAndMiniTrailerCount / totalTours) * 100) : 0;
+                        
+                        if (trailerAndMiniTrailerPercent > 50) {
+                            return 'تریلی';
+                        } else if (trailerAndMiniTrailerPercent < 50) {
+                            return 'ده چرخ';
+                        } else {
+                            return 'تریلی';
+                        }
+                    };
+                    aValue = getCommissionBase(a);
+                    bValue = getCommissionBase(b);
+                    break;
                 default:
                     aValue = a.employeeId || '';
                     bValue = b.employeeId || '';
@@ -555,6 +628,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 return sortDirection === 'asc' 
                     ? aValue.localeCompare(bValue, 'fa')
                     : bValue.localeCompare(aValue, 'fa');
+            } else if (sortField === 'commissionBase') {
+                // برای commissionBase، مقایسه string انجام می‌شود
+                const aStr = String(aValue);
+                const bStr = String(bValue);
+                return sortDirection === 'asc' 
+                    ? aStr.localeCompare(bStr, 'fa')
+                    : bStr.localeCompare(aStr, 'fa');
             } else {
                 return sortDirection === 'asc' 
                     ? (aValue as number) - (bValue as number)
@@ -816,6 +896,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
                 : '';
             
+            // محاسبه هزینه سوخت برای نمایش در دیالوگ
+            const vehicleTypeForFuel = tour.vehicleType || '';
+            let initialFuelCost = tour.fuelCost || 0;
+            const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+            if (fuelReg && !initialFuelCost) {
+                const totalKmForFuel = (tour.approvedKilometers || 0) + (tour.excessKilometers || 0);
+                initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            }
+            
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
@@ -827,6 +916,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 approvedMissionDays: tour.approvedMissionDays || 1,
                 excessMissionDays: tour.excessMissionDays || 0,
                 tollCost: tour.tollCost || 0,
+                fuelCost: initialFuelCost,
                 loadingCost: tour.loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
@@ -841,6 +931,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
             });
             setShowInputDialog(true);
         }
@@ -972,6 +1063,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     : formatJalali(tour.billOfLadingDate);
             }
             
+            // محاسبه هزینه سوخت برای نمایش در دیالوگ
+            const vehicleTypeForFuel = tour.vehicleType || '';
+            let initialFuelCost = 0;
+            const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+            if (fuelReg) {
+                const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
+                initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            }
+            
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
@@ -983,6 +1083,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 approvedMissionDays: approvedDays,
                 excessMissionDays: tour.excessMissionDays || 0,
                 tollCost: tour.tollCost || 0,
+                fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
@@ -1011,6 +1112,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
                 : '';
             
+            // محاسبه هزینه سوخت برای نمایش در دیالوگ (در صورت خطا)
+            const vehicleTypeForFuel = tour.vehicleType || '';
+            let initialFuelCost = 0;
+            const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+            if (fuelReg) {
+                const totalKmForFuel = (tour.approvedKilometers || tour.roundTripKm || 0) + (tour.excessKilometers || 0);
+                initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            }
+            
             // در صورت خطا، از مقادیر موجود در tour استفاده کن
             setInputDialogData({
                 tourId: tour.announcementId,
@@ -1023,6 +1133,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 approvedMissionDays: tour.approvedMissionDays || 1,
                 excessMissionDays: tour.excessMissionDays || 0,
                 tollCost: tour.tollCost || 0,
+                fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
@@ -1078,14 +1189,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         // 6. هزینه ماموریت مازاد راننده کمکی = ماموریت مازاد × بخشنامه ماموریت مازاد
         const calculatedHelperDriverExcessMissionCost = Math.round(excessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
         
-        // محاسبه هزینه سوخت بر اساس نوع خودرو
+        // محاسبه هزینه سوخت بر اساس نوع خودرو و بخشنامه مصرف سوخت
         const vehicleType = tour.vehicleType || '';
-        const isTrailer = vehicleType.includes('تریلی');
-        const isTenWheeler = vehicleType.includes('ده چرخ');
-        const fuelConsumptionRate = isTrailer ? (Number(fuelConsumptionRates['تریلی']) || 0) : 
-                                   isTenWheeler ? (Number(fuelConsumptionRates['ده چرخ']) || 0) : 0;
-        // استفاده از totalKm که قبلاً محاسبه شده است
-        const fuelCost = Math.round((totalKm / 100) * fuelConsumptionRate * 50000) || 0; // فرض: قیمت هر لیتر 50000 ریال
+        let fuelCost = 0;
+        const fuelReg = fuelConsumptionRegulations[vehicleType];
+        if (fuelReg) {
+            // هزینه سوخت = (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر
+            fuelCost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+        } else {
+            // اگر بخشنامه مصرف سوخت برای این نوع خودرو وجود نداشت، از مقدار موجود در inputDialogData استفاده کن
+            fuelCost = Math.round(Number(inputDialogData.fuelCost) || 0) || 0;
+        }
         
         // دریافت token و headers برای API calls
         const token = localStorage.getItem('token');
@@ -1293,41 +1407,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     }
 
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6" style={{ zoom: `${zoomLevel}%` }}>
-            {/* دکمه‌های بزرگنمایی */}
-            <div className="fixed bottom-6 left-6 z-40 flex flex-col gap-2 bg-white rounded-lg shadow-lg p-2 border border-slate-300">
-                <button
-                    onClick={handleZoomIn}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors"
-                    title="بزرگنمایی"
-                >
-                    +
-                </button>
-                <button
-                    onClick={handleResetZoom}
-                    className="px-3 py-2 bg-slate-600 text-white rounded-md text-sm hover:bg-slate-700 transition-colors"
-                    title="بازنشانی"
-                >
-                    {zoomLevel}%
-                </button>
-                <button
-                    onClick={handleZoomOut}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors"
-                    title="کوچکنمایی"
-                >
-                    −
-                </button>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-6">
-                <h1 className="text-2xl font-bold text-slate-800 mb-6">
-                    محاسبه هزینه تور
-                </h1>
+        <div className="h-screen flex flex-col bg-white">
+            {/* هدر ثابت */}
+            <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm p-4">
+                    <h1 className="text-2xl font-bold text-slate-800 mb-4">
+                        محاسبه هزینه تور
+                    </h1>
 
-                {/* فیلتر و جستجو */}
-                <div className="mb-6 space-y-4">
-                    <div className="flex gap-4 items-end flex-wrap">
-                        <div className="flex-1 min-w-[200px]">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                    {/* فیلتر و جستجو - در یک ردیف */}
+                    <div className="flex gap-3 items-end flex-wrap">
+                        {/* بخش جستجو بر اساس کد پرسنلی و نام */}
+                        <div className="flex-1 min-w-[200px] bg-blue-50 p-3 rounded-lg border border-blue-200">
+                            <label className="block text-xs font-semibold text-blue-800 mb-1">
                                 جستجو (کد پرسنلی / نام)
                             </label>
                             <input
@@ -1338,85 +1429,94 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     setCurrentPage(1);
                                 }}
                                 placeholder="جستجو بر اساس کد پرسنلی یا نام..."
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                className="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                از تاریخ (صدور بارنامه)
-                            </label>
-                            <input
-                                type="text"
-                                value={startDate}
-                                onChange={(e) => {
-                                    setStartDate(e.target.value);
-                                    setCurrentPage(1);
-                                }}
-                                placeholder="1403/01/01"
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            />
+                        
+                        {/* بخش فیلتر تاریخ صدور بارنامه */}
+                        <div className="flex gap-2 items-end bg-green-50 p-3 rounded-lg border border-green-200">
+                            <div>
+                                <label className="block text-xs font-semibold text-green-800 mb-1">
+                                    از تاریخ (صدور بارنامه)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={startDate}
+                                    onChange={(e) => {
+                                        setStartDate(e.target.value);
+                                        setCurrentPage(1);
+                                    }}
+                                    placeholder="1403/01/01"
+                                    className="block w-full px-2 py-1.5 border border-green-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-green-800 mb-1">
+                                    تا تاریخ (صدور بارنامه)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={endDate}
+                                    onChange={(e) => {
+                                        setEndDate(e.target.value);
+                                        setCurrentPage(1);
+                                    }}
+                                    placeholder="1403/12/29"
+                                    className="block w-full px-2 py-1.5 border border-green-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                تا تاریخ (صدور بارنامه)
-                            </label>
-                            <input
-                                type="text"
-                                value={endDate}
-                                onChange={(e) => {
-                                    setEndDate(e.target.value);
-                                    setCurrentPage(1);
-                                }}
-                                placeholder="1403/12/29"
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            />
+                        
+                        {/* بخش بازه زمانی خروجی اکسل */}
+                        <div className="flex gap-2 items-end bg-purple-50 p-3 rounded-lg border border-purple-200">
+                            <div>
+                                <label className="block text-xs font-semibold text-purple-800 mb-1">
+                                    از تاریخ (تاریخ محاسبه)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={excelStartDate}
+                                    onChange={(e) => setExcelStartDate(e.target.value)}
+                                    placeholder="1403/01/26"
+                                    className="block w-full px-2 py-1.5 border border-purple-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-purple-800 mb-1">
+                                    تا تاریخ (تاریخ محاسبه)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={excelEndDate}
+                                    onChange={(e) => setExcelEndDate(e.target.value)}
+                                    placeholder="1403/02/25"
+                                    className="block w-full px-2 py-1.5 border border-purple-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm"
+                                />
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex gap-4 items-end flex-wrap bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <div className="text-sm font-semibold text-slate-700">بازه زمانی خروجی اکسل:</div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                از تاریخ
-                            </label>
-                            <input
-                                type="text"
-                                value={excelStartDate}
-                                onChange={(e) => setExcelStartDate(e.target.value)}
-                                placeholder="1403/01/26"
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                تا تاریخ
-                            </label>
-                            <input
-                                type="text"
-                                value={excelEndDate}
-                                onChange={(e) => setExcelEndDate(e.target.value)}
-                                placeholder="1403/02/25"
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            />
-                        </div>
+                        
+                        {/* دکمه‌های خروجی اکسل */}
                         <div className="flex gap-2 items-end">
                             <button
                                 onClick={exportToExcelMainRows}
-                                className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+                                className="px-3 py-2 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 font-medium"
                             >
                                 خروجی اکسل (ردیف‌های اصلی)
                             </button>
                             <button
                                 onClick={exportToExcelDetailRows}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                                className="px-3 py-2 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 font-medium"
                             >
                                 خروجی اکسل (جزئیات)
                             </button>
                         </div>
                     </div>
-                </div>
+            </div>
 
+            {/* محتوای اصلی با اسکرول */}
+            <div className="flex-1 overflow-hidden flex flex-col">
                 {/* صفحه‌بندی */}
-                <div className="mb-4 flex justify-between items-center">
+                <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex justify-between items-center shadow-sm">
                     <div className="flex items-center gap-2">
                         <label className="text-sm text-slate-700">تعداد ردیف در هر صفحه:</label>
                         <select
@@ -1439,9 +1539,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 </div>
 
                 {/* جدول اصلی */}
-                <div className="overflow-x-auto">
+                <div className="flex-1 overflow-auto">
                     <table className="w-full text-sm text-right border-collapse">
-                        <thead>
+                        <thead className="sticky top-0 z-10">
                             <tr className="bg-slate-700 text-white border-b">
                                 <th className="p-3 text-right border-l border-slate-600">ردیف</th>
                                 <th 
@@ -1456,15 +1556,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 >
                                     نام و نام خانوادگی {sortField === 'driverName' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="p-3 text-right border-l border-slate-600">صف</th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('queueType')}
+                                >
+                                    صف {sortField === 'queueType' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
                                 <th 
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
                                     onClick={() => handleSort('tourCount')}
                                 >
                                     تعداد تور {sortField === 'tourCount' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="p-3 text-right border-l border-slate-600">تور ثبت شده</th>
-                                <th className="p-3 text-right border-l border-slate-600">تور ثبت نشده</th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('recordedTours')}
+                                >
+                                    تور ثبت شده {sortField === 'recordedTours' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('unrecordedTours')}
+                                >
+                                    تور ثبت نشده {sortField === 'unrecordedTours' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
                                 <th 
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
                                     onClick={() => handleSort('totalKilometers')}
@@ -1483,6 +1598,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 >
                                     تاریخ صدور بارنامه {sortField === 'billOfLadingDate' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('trailerCount')}
+                                >
+                                    تعداد بار تریلی {sortField === 'trailerCount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('miniTrailerCount')}
+                                >
+                                    تعداد بار مینی تریلی {sortField === 'miniTrailerCount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('tenWheelerCount')}
+                                >
+                                    تعداد بار ده چرخ {sortField === 'tenWheelerCount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('commissionBase')}
+                                >
+                                    مبنای محاسبه پورسانت {sortField === 'commissionBase' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
                                 <th className="p-3 text-right">عملیات</th>
                             </tr>
                         </thead>
@@ -1498,6 +1637,45 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 const billDateStr = firstBillDate 
                                     ? (typeof firstBillDate === 'string' ? firstBillDate : formatJalali(firstBillDate))
                                     : '-';
+
+                                // محاسبه تعداد بارها بر اساس نوع خودرو
+                                // ابتدا مینی تریلی را چک می‌کنیم تا با تریلی اشتباه نشود
+                                const miniTrailerCount = calc.tours.filter(t => {
+                                    const vehicleType = t.vehicleType || '';
+                                    return vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
+                                }).length;
+                                
+                                const trailerCount = calc.tours.filter(t => {
+                                    const vehicleType = t.vehicleType || '';
+                                    return vehicleType.includes('تریلی') && !vehicleType.includes('مینی');
+                                }).length;
+                                
+                                const tenWheelerCount = calc.tours.filter(t => {
+                                    const vehicleType = t.vehicleType || '';
+                                    return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
+                                }).length;
+                                
+                                const totalTours = calc.tours.length;
+                                
+                                // محاسبه درصدها
+                                const trailerPercent = totalTours > 0 ? Math.round((trailerCount / totalTours) * 100) : 0;
+                                const miniTrailerPercent = totalTours > 0 ? Math.round((miniTrailerCount / totalTours) * 100) : 0;
+                                const tenWheelerPercent = totalTours > 0 ? Math.round((tenWheelerCount / totalTours) * 100) : 0;
+                                
+                                // تعیین مبنای محاسبه پورسانت
+                                // تریلی + مینی تریلی = یک دسته
+                                const trailerAndMiniTrailerCount = trailerCount + miniTrailerCount;
+                                const trailerAndMiniTrailerPercent = totalTours > 0 ? Math.round((trailerAndMiniTrailerCount / totalTours) * 100) : 0;
+                                
+                                let commissionBase = '';
+                                if (trailerAndMiniTrailerPercent > 50) {
+                                    commissionBase = 'تریلی';
+                                } else if (trailerAndMiniTrailerPercent < 50) {
+                                    commissionBase = 'ده چرخ';
+                                } else {
+                                    // اگر برابر 50% باشد، تریلی حساب کن
+                                    commissionBase = 'تریلی';
+                                }
 
                                 return (
                                     <React.Fragment key={calc.id}>
@@ -1546,6 +1724,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-xs">
                                                 {billDateStr}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-center">
+                                                {trailerCount > 0 ? (
+                                                    <span className="text-xs font-medium">
+                                                        {trailerCount} ({trailerPercent}٪)
+                                                    </span>
+                                                ) : '-'}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-center">
+                                                {miniTrailerCount > 0 ? (
+                                                    <span className="text-xs font-medium">
+                                                        {miniTrailerCount} ({miniTrailerPercent}٪)
+                                                    </span>
+                                                ) : '-'}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-center">
+                                                {tenWheelerCount > 0 ? (
+                                                    <span className="text-xs font-medium">
+                                                        {tenWheelerCount} ({tenWheelerPercent}٪)
+                                                    </span>
+                                                ) : '-'}
+                                            </td>
+                                            <td className="p-3 border-l border-slate-200 text-center font-semibold">
+                                                {commissionBase || '-'}
                                             </td>
                                             <td className="p-3">
                                                 <button
@@ -1847,6 +2049,33 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                     <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه سوخت (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={(() => {
+                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+                                            if (!calc) return '0';
+                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+                                            if (!tour) return '0';
+                                            const vehicleType = tour.vehicleType || '';
+                                            const fuelReg = fuelConsumptionRegulations[vehicleType];
+                                            if (fuelReg) {
+                                                const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                                                const cost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+                                                return cost.toLocaleString('fa-IR');
+                                            }
+                                            return '0';
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر</p>
                                 </div>
                             </div>
                         </div>
@@ -2182,7 +2411,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             
             {/* صفحه نمایش جزئیات تور - تمام صفحه */}
             {showTourDetailsDialog && selectedTourDetails && (
-                <div className="fixed inset-0 bg-white z-50 overflow-hidden flex flex-col" style={{ zoom: `${zoomLevel}%` }}>
+                <div className="fixed inset-0 bg-white z-50 overflow-hidden flex flex-col">
                     <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
                         <h2 className="text-xl font-bold text-slate-800">
                             جزئیات تورهای {selectedDriverName}

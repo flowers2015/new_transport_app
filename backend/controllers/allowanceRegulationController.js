@@ -126,6 +126,25 @@ async function createAllowanceRegulationTables() {
       )
     `);
 
+    // جدول بخشنامه مصرف سوخت
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS allowance_regulations_fuel_consumption (
+        id VARCHAR(255) PRIMARY KEY,
+        vehicle_type VARCHAR(100) NOT NULL, -- نوع خودرو (تریلی، ده چرخ، و غیره)
+        consumption_percentage DECIMAL(5, 2) NOT NULL, -- درصد مصرف در هر 100 کیلومتر
+        fuel_price DECIMAL(15, 2) NOT NULL, -- قیمت هر لیتر سوخت (ریال)
+        approval_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        document_path VARCHAR(500),
+        start_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        end_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by VARCHAR(255),
+        updated_by VARCHAR(255)
+      )
+    `);
+
     // اضافه کردن ستون‌های جدید به جداول موجود (اگر وجود دارند)
     try {
       // بررسی و اضافه کردن ستون‌های جدید به جدول mileage
@@ -1110,6 +1129,191 @@ async function deleteMultiUnloadRegulation(req, res) {
 }
 
 /**
+ * دریافت بخشنامه مصرف سوخت
+ */
+async function getFuelConsumptionRegulations(req, res) {
+  try {
+    await createAllowanceRegulationTables();
+
+    // بررسی وجود جدول users
+    let query = `
+      SELECT arfc.*
+      FROM allowance_regulations_fuel_consumption arfc
+      WHERE (arfc.is_active IS NULL OR arfc.is_active = TRUE)
+      ORDER BY arfc.created_at DESC
+    `;
+    
+    try {
+      // اگر جدول users وجود دارد، JOIN را اضافه کن
+      const usersTableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'users'
+        )
+      `);
+      
+      if (usersTableCheck.rows[0]?.exists) {
+        query = `
+          SELECT 
+            arfc.*,
+            u1.name as created_by_name,
+            u2.name as updated_by_name
+          FROM allowance_regulations_fuel_consumption arfc
+          LEFT JOIN users u1 ON arfc.created_by = u1.id
+          LEFT JOIN users u2 ON arfc.updated_by = u2.id
+          WHERE (arfc.is_active IS NULL OR arfc.is_active = TRUE)
+          ORDER BY arfc.created_at DESC
+        `;
+      }
+    } catch (joinError) {
+      console.warn('⚠️ [getFuelConsumptionRegulations] جدول users وجود ندارد، بدون JOIN ادامه می‌دهیم:', joinError.message);
+    }
+
+    const result = await pool.query(query);
+    console.log('✅ [getFuelConsumptionRegulations] تعداد رکوردها:', result.rows.length);
+    
+    const regulations = result.rows.map(row => ({
+      id: row.id,
+      vehicleType: row.vehicle_type || null,
+      consumptionPercentage: parseFloat(row.consumption_percentage || 0),
+      fuelPrice: parseFloat(row.fuel_price || 0),
+      approvalDate: row.approval_date || null,
+      documentPath: row.document_path || null,
+      startDate: row.start_date || null,
+      endDate: row.end_date || null,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      createdBy: row.created_by || null,
+      createdByName: row.created_by_name || null,
+      updatedBy: row.updated_by || null,
+      updatedByName: row.updated_by_name || null,
+    }));
+
+    res.json(regulations);
+  } catch (error) {
+    console.error('❌ [getFuelConsumptionRegulations] Error:', error);
+    console.error('❌ [getFuelConsumptionRegulations] Error Stack:', error.stack);
+    res.status(500).json({ message: 'خطا در دریافت بخشنامه مصرف سوخت: ' + error.message });
+  }
+}
+
+/**
+ * ذخیره بخشنامه مصرف سوخت
+ */
+async function saveFuelConsumptionRegulation(req, res) {
+  try {
+    await createAllowanceRegulationTables();
+
+    const {
+      id,
+      vehicleType,
+      consumptionPercentage,
+      fuelPrice,
+      approvalDate,
+      documentPath,
+      startDate,
+      endDate,
+      isActive,
+      userId,
+    } = req.body;
+
+    if (!vehicleType || !consumptionPercentage || !fuelPrice || !approvalDate || !startDate || !endDate) {
+      return res.status(400).json({ message: 'تمام فیلدهای الزامی را پر کنید.' });
+    }
+
+    if (startDate > endDate) {
+      return res.status(400).json({ message: 'تاریخ شروع باید قبل از تاریخ پایان باشد.' });
+    }
+
+    const consumption = parseFloat(consumptionPercentage);
+    const price = parseFloat(fuelPrice);
+    if (isNaN(consumption) || consumption < 0 || isNaN(price) || price < 0) {
+      return res.status(400).json({ message: 'درصد مصرف و قیمت سوخت باید عدد مثبت باشند.' });
+    }
+
+    if (id) {
+      // به‌روزرسانی
+      await pool.query(`
+        UPDATE allowance_regulations_fuel_consumption SET
+          vehicle_type = $1,
+          consumption_percentage = $2,
+          fuel_price = $3,
+          approval_date = $4,
+          document_path = $5,
+          start_date = $6,
+          end_date = $7,
+          is_active = $8,
+          updated_by = $9,
+          updated_at = NOW()
+        WHERE id = $10
+      `, [
+        vehicleType,
+        consumption,
+        price,
+        approvalDate || null,
+        documentPath || null,
+        startDate || null,
+        endDate || null,
+        isActive !== false,
+        userId || null,
+        id,
+      ]);
+
+      res.json({ message: 'بخشنامه مصرف سوخت به‌روزرسانی شد.', id });
+    } else {
+      // ایجاد جدید
+      const newId = crypto.randomUUID();
+      await pool.query(`
+        INSERT INTO allowance_regulations_fuel_consumption (
+          id, vehicle_type, consumption_percentage, fuel_price, approval_date, document_path,
+          start_date, end_date, is_active, created_by, updated_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        newId,
+        vehicleType,
+        consumption,
+        price,
+        approvalDate || null,
+        documentPath || null,
+        startDate || null,
+        endDate || null,
+        isActive !== false,
+        userId || null,
+        userId || null,
+      ]);
+
+      res.json({ message: 'بخشنامه مصرف سوخت ایجاد شد.', id: newId });
+    }
+  } catch (error) {
+    console.error('❌ [saveFuelConsumptionRegulation] Error:', error);
+    res.status(500).json({ message: 'خطا در ذخیره بخشنامه مصرف سوخت.' });
+  }
+}
+
+/**
+ * حذف بخشنامه مصرف سوخت
+ */
+async function deleteFuelConsumptionRegulation(req, res) {
+  try {
+    const { id } = req.params;
+    await createAllowanceRegulationTables();
+
+    await pool.query(`
+      UPDATE allowance_regulations_fuel_consumption 
+      SET is_active = FALSE, updated_at = NOW()
+      WHERE id = $1
+    `, [id]);
+
+    res.json({ message: 'بخشنامه مصرف سوخت حذف شد.' });
+  } catch (error) {
+    console.error('❌ [deleteFuelConsumptionRegulation] Error:', error);
+    res.status(500).json({ message: 'خطا در حذف بخشنامه مصرف سوخت.' });
+  }
+}
+
+/**
  * محاسبه اجرت بر اساس بخشنامه
  */
 async function calculateAllowance(req, res) {
@@ -1225,16 +1429,19 @@ module.exports = {
   getMileageRegulations,
   getExcessMissionRegulations,
   getMultiUnloadRegulations,
+  getFuelConsumptionRegulations,
   saveFoodRegulation,
   saveHelperRegulation,
   saveMileageRegulation,
   saveExcessMissionRegulation,
   saveMultiUnloadRegulation,
+  saveFuelConsumptionRegulation,
   deleteFoodRegulation,
   deleteHelperRegulation,
   deleteMileageRegulation,
   deleteExcessMissionRegulation,
   deleteMultiUnloadRegulation,
+  deleteFuelConsumptionRegulation,
   calculateAllowance,
   uploadRegulationDocument,
   createAllowanceRegulationTables,
