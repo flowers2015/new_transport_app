@@ -4,6 +4,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Cache flag برای جلوگیری از اجرای مکرر createAllowanceRegulationTables
+let tablesCreated = false;
+
 // تنظیمات multer برای آپلود فایل
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -37,6 +40,11 @@ const upload = multer({
  * ایجاد جداول بخشنامه (جداگانه برای غذا، اجرت راننده کمکی و اجرت پیمایش)
  */
 async function createAllowanceRegulationTables() {
+  // اگر قبلاً اجرا شده، skip کن
+  if (tablesCreated) {
+    return;
+  }
+  
   try {
     // جدول بخشنامه هزینه غذا
     await pool.query(`
@@ -195,6 +203,7 @@ async function createAllowanceRegulationTables() {
     }
 
     console.log('✅ [createAllowanceRegulationTables] جداول بخشنامه ایجاد شدند');
+    tablesCreated = true; // Mark as created
   } catch (error) {
     console.error('❌ [createAllowanceRegulationTables] خطا:', error);
     throw error;

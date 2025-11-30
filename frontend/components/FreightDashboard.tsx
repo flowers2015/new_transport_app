@@ -242,21 +242,21 @@ const columnsConfig = (props: {
             const isAssignedToOtherTransport = (isCompanyUser && isPersonalAssigned) || (isPersonalUser && isCompanyAssigned);
             
             // لاگ برای دیباگ - برای همه بارها (نه فقط ترابری)
-            console.log('🔍 [FreightDashboard] Transport assignment check:', {
-                annId: ann.id,
-                annCode: ann.announcementCode,
-                userRole: currentUser?.role,
-                assignmentType: ann.assignmentType,
-                assignmentTypeStr,
-                status: ann.status,
-                statusStr,
-                isCompanyUser,
-                isPersonalUser,
-                isCompanyAssigned,
-                isPersonalAssigned,
-                isAssignedToOtherTransport,
-                assignedDriverId: ann.assignedDriverId
-            });
+            // console.log('🔍 [FreightDashboard] Transport assignment check:', {
+            //     annId: ann.id,
+            //     annCode: ann.announcementCode,
+            //     userRole: currentUser?.role,
+            //     assignmentType: ann.assignmentType,
+            //     assignmentTypeStr,
+            //     status: ann.status,
+            //     statusStr,
+            //     isCompanyUser,
+            //     isPersonalUser,
+            //     isCompanyAssigned,
+            //     isPersonalAssigned,
+            //     isAssignedToOtherTransport,
+            //     assignedDriverId: ann.assignedDriverId
+            // });
             
             // تشخیص اینکه آیا دکمه تاریخچه نمایش داده بشه - همه پرسنل می‌تونن ببینن
             const showHistory = [
