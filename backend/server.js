@@ -32,12 +32,13 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: true, // Allow all origins in development
+  origin: ['http://51.178.41.12', 'http://localhost'], // پوشش IP سرور و آدرس داخلی
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 })); // Enable CORS for all routes
-app.use(express.json());
+
+app.use(express.json()); // [مهم] این خط باید جدا و تمیز باشد
 
 // Set security headers (only in production, relaxed for development)
 app.use((req, res, next) => {
