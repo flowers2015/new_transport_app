@@ -143,8 +143,8 @@ const columnsConfig = (props: {
             return ann.rejectionReason || '-';
         }},
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && !(vm === 'compact' && lt === FreightLineType.Dairy), render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-        { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && !(vm === 'compact' && lt === FreightLineType.Dairy), render: (ann: FreightAnnouncement) => ann.brand || '-' },
+        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
         { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
 
@@ -165,6 +165,8 @@ const columnsConfig = (props: {
         // Dairy (Compact): exact requested order
         { header: 'ردیف', width: '70px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.vehicleType },
+        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0), width: '150px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
         { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Dairy,
             render: (ann: FreightAnnouncement) => (
@@ -713,6 +715,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             dairyCompactCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
@@ -755,6 +759,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             ambientCompactCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
@@ -797,6 +803,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             dairyFullCommonCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
@@ -828,6 +836,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             ambientFullCommonCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
@@ -1215,11 +1225,15 @@ const AnnouncementPanel: React.FC<{
     const initialIceCreamState = { originCity: '', destinationCity: '', brand: 'میهن', representativeType: 'agent', representativeName: '', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
     const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '' }];
+    const initialLoadingLocationState = { loadingType: 'single' as 'single' | 'double', originCity1: '', originCity2: '' };
+    const initialBrandState = { brandType: 'single' as 'single' | 'double', brand1: 'میهن', brand2: '' };
 
     const [lineType, setLineType] = useState<FreightLineType>(FreightLineType.IceCream);
     const [commonState, setCommonState] = useState(initialCommonState);
     const [iceCreamState, setIceCreamState] = useState(initialIceCreamState);
     const [multiDestState, setMultiDestState] = useState(initialMultiDestState);
+    const [loadingLocationState, setLoadingLocationState] = useState(initialLoadingLocationState);
+    const [brandState, setBrandState] = useState(initialBrandState);
     const cargoPreview = useMemo(() => {
         const rials = parseFloat(commonState.cargoValue || '');
         if (!isFinite(rials)) return '';
@@ -1237,6 +1251,49 @@ const AnnouncementPanel: React.FC<{
         setIceCreamState(initialIceCreamState);
         setMultiDestState(prev => ({ ...initialMultiDestState, platformArrivalTime: prev.platformArrivalTime }));
         setDestinations(initialDestinations);
+        
+        // بارگذاری آخرین انتخاب‌های کاربر از localStorage بعد از reset
+        const getLastUserChoices = (lineTypeKey: string) => {
+            try {
+                const stored = localStorage.getItem(`lastFreightChoices_${lineTypeKey}`);
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch (e) {
+                console.error('Error loading last user choices:', e);
+            }
+            return null;
+        };
+        
+        const lineTypeKey = lineType === FreightLineType.IceCream ? 'IceCream' 
+            : lineType === FreightLineType.Dairy ? 'Dairy' 
+            : 'Ambient';
+        
+        const lastChoices = getLastUserChoices(lineTypeKey);
+        
+        if (lastChoices) {
+            // اگر آخرین انتخاب‌ها وجود دارد، از آن‌ها استفاده کن
+            setLoadingLocationState({
+                loadingType: lastChoices.loadingType || 'single',
+                originCity1: lastChoices.originCity1 || (lineType === FreightLineType.Dairy ? 'کارخانه شهرلبنیات' : lineType === FreightLineType.Ambient ? 'انبار مرکزی' : ''),
+                originCity2: lastChoices.originCity2 || ''
+            });
+            setBrandState({
+                brandType: lastChoices.brandType || 'single',
+                brand1: lastChoices.brand1 || 'میهن',
+                brand2: lastChoices.brand2 || ''
+            });
+        } else {
+            // اگر آخرین انتخاب‌ها وجود ندارد، از دیفالت‌ها استفاده کن
+            if (lineType === FreightLineType.Dairy) {
+                setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهرلبنیات', originCity2: '' });
+            } else if (lineType === FreightLineType.Ambient) {
+                setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
+            } else {
+                setLoadingLocationState(initialLoadingLocationState);
+            }
+            setBrandState(initialBrandState);
+        }
     };
 
     useEffect(() => {
@@ -1277,9 +1334,79 @@ const AnnouncementPanel: React.FC<{
                 }
                 console.log(`📅 [FreightDashboard] Final loadingDateStr for form:`, loadingDateStr);
                 setCommonState({ loadingDate: loadingDateStr, cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
+                
+                // بارگذاری داده‌های دو جا بارگیری از data (اگر وجود داشته باشد)
+                let loadingLocationData: { loadingType: 'single' | 'double', originCity1: string, originCity2: string };
+                if ((data as any).loadingType) {
+                    loadingLocationData = {
+                        loadingType: (data as any).loadingType || 'single',
+                        originCity1: (data as any).originCity1 || data.originCity || '',
+                        originCity2: (data as any).originCity2 || ''
+                    };
+                } else {
+                    // اگر originCity شامل "و" باشد، احتمالاً دو مبدا است
+                    const originCity = data.originCity || '';
+                    const hasDoubleOrigin = originCity.includes(' و ');
+                    if (hasDoubleOrigin) {
+                        const parts = originCity.split(' و ');
+                        loadingLocationData = {
+                            loadingType: 'double',
+                            originCity1: parts[0]?.trim() || '',
+                            originCity2: parts[1]?.trim() || ''
+                        };
+                    } else {
+                        loadingLocationData = {
+                            loadingType: 'single',
+                            originCity1: originCity,
+                            originCity2: ''
+                        };
+                    }
+                }
+                setLoadingLocationState(loadingLocationData);
+                
+                // بارگذاری داده‌های برند از data
+                let brandData: { brandType: 'single' | 'double', brand1: string, brand2: string };
+                if ((data as any).brandType) {
+                    brandData = {
+                        brandType: (data as any).brandType || 'single',
+                        brand1: (data as any).brand1 || data.brand || 'میهن',
+                        brand2: (data as any).brand2 || ''
+                    };
+                } else {
+                    // اگر brand شامل "و" باشد، احتمالاً دو برند است
+                    const brand = data.brand || 'میهن';
+                    const hasDoubleBrand = brand.includes(' و ');
+                    if (hasDoubleBrand) {
+                        const parts = brand.split(' و ');
+                        brandData = {
+                            brandType: 'double',
+                            brand1: parts[0]?.trim() || 'میهن',
+                            brand2: parts[1]?.trim() || ''
+                        };
+                    } else {
+                        brandData = {
+                            brandType: 'single',
+                            brand1: brand,
+                            brand2: ''
+                        };
+                    }
+                }
+                setBrandState(brandData);
+                
                 if (data.lineType === FreightLineType.IceCream) {
                     setIceCreamState({
-                        originCity: data.originCity || '', destinationCity: data.destinations[0]?.city || '', brand: data.brand || 'میهن', representativeType: data.representativeType || 'agent', representativeName: data.representativeName || '', cartonCount: String(data.cartonCount || ''), priority: data.priority || 'normal', products: data.products || []
+                        originCity: loadingLocationData.loadingType === 'double' 
+                            ? `${loadingLocationData.originCity1} و ${loadingLocationData.originCity2}`
+                            : loadingLocationData.originCity1,
+                        destinationCity: data.destinations[0]?.city || '', 
+                        brand: brandData.brandType === 'double' 
+                            ? `${brandData.brand1} و ${brandData.brand2}`
+                            : brandData.brand1,
+                        representativeType: data.representativeType || 'agent', 
+                        representativeName: data.representativeName || '', 
+                        cartonCount: String(data.cartonCount || ''), 
+                        priority: data.priority || 'normal', 
+                        products: data.products || []
                     });
                 } else {
                     setMultiDestState({ platformArrivalTime: data.platformArrivalTime || '' });
@@ -1299,11 +1426,71 @@ const AnnouncementPanel: React.FC<{
             if (lineType === FreightLineType.IceCream) targetDate.setDate(today.getDate() + 1);
             // Set default as Jalali string
             setCommonState(s => ({ ...s, loadingDate: formatJalali(targetDate) }));
+            
+            // بارگذاری آخرین انتخاب‌های کاربر از localStorage
+            const getLastUserChoices = (lineTypeKey: string) => {
+                try {
+                    const stored = localStorage.getItem(`lastFreightChoices_${lineTypeKey}`);
+                    if (stored) {
+                        return JSON.parse(stored);
+                    }
+                } catch (e) {
+                    console.error('Error loading last user choices:', e);
+                }
+                return null;
+            };
+            
             if (lineType === FreightLineType.IceCream) {
                 setMultiDestState(s => ({ ...s, platformArrivalTime: '07:00' }));
-            } else if (lineType === FreightLineType.Dairy || lineType === FreightLineType.Ambient) {
+                const lastChoices = getLastUserChoices('IceCream');
+                if (lastChoices) {
+                    setLoadingLocationState({
+                        loadingType: lastChoices.loadingType || 'single',
+                        originCity1: lastChoices.originCity1 || '',
+                        originCity2: lastChoices.originCity2 || ''
+                    });
+                    setBrandState({
+                        brandType: lastChoices.brandType || 'single',
+                        brand1: lastChoices.brand1 || 'میهن',
+                        brand2: lastChoices.brand2 || ''
+                    });
+                }
+            } else if (lineType === FreightLineType.Dairy) {
+                // پاستوریزه: مبدا بارگیری پیش‌فرض = کارخانه شهرلبنیات
                 setMultiDestState(s => ({ ...s, platformArrivalTime: '07:00' }));
-                setIceCreamState(s => ({ ...s, originCity: 'شهر لبنیات' } as any));
+                const lastChoices = getLastUserChoices('Dairy');
+                if (lastChoices) {
+                    setLoadingLocationState({
+                        loadingType: lastChoices.loadingType || 'single',
+                        originCity1: lastChoices.originCity1 || 'کارخانه شهرلبنیات',
+                        originCity2: lastChoices.originCity2 || ''
+                    });
+                    setBrandState({
+                        brandType: lastChoices.brandType || 'single',
+                        brand1: lastChoices.brand1 || 'میهن',
+                        brand2: lastChoices.brand2 || ''
+                    });
+                } else {
+                    setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهرلبنیات', originCity2: '' });
+                }
+            } else if (lineType === FreightLineType.Ambient) {
+                // لبنیات-فروتلند: مبدا بارگیری پیش‌فرض = انبار مرکزی
+                setMultiDestState(s => ({ ...s, platformArrivalTime: '07:00' }));
+                const lastChoices = getLastUserChoices('Ambient');
+                if (lastChoices) {
+                    setLoadingLocationState({
+                        loadingType: lastChoices.loadingType || 'single',
+                        originCity1: lastChoices.originCity1 || 'انبار مرکزی',
+                        originCity2: lastChoices.originCity2 || ''
+                    });
+                    setBrandState({
+                        brandType: lastChoices.brandType || 'single',
+                        brand1: lastChoices.brand1 || 'میهن',
+                        brand2: lastChoices.brand2 || ''
+                    });
+                } else {
+                    setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
+                }
             }
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
@@ -1339,9 +1526,66 @@ const AnnouncementPanel: React.FC<{
             return; 
         }
         console.log(`📅 [FreightDashboard] Submitting with loadingDate:`, jalaliDate);
+        // محاسبه originCity بر اساس نوع بارگیری
+        const finalOriginCity = loadingLocationState.loadingType === 'double' 
+            ? `${loadingLocationState.originCity1} و ${loadingLocationState.originCity2}`
+            : loadingLocationState.originCity1;
+        
+        // محاسبه brand بر اساس نوع برند
+        const finalBrand = brandState.brandType === 'double' 
+            ? `${brandState.brand1} و ${brandState.brand2}`
+            : brandState.brand1;
+        
+        // برای Dairy و Ambient: فیلتر کردن مقاصدی که city ندارند
+        const validDestinations = lineType !== FreightLineType.IceCream
+            ? destinations.filter(d => d.city && d.city.trim() !== '')
+            : [];
+        
+        // بررسی اینکه حداقل یک مقصد معتبر وجود دارد (برای Dairy و Ambient)
+        if (lineType !== FreightLineType.IceCream && validDestinations.length === 0) {
+            alert('حداقل یک مقصد با شهر معتبر الزامی است.');
+            return;
+        }
+        
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
-            ? { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, originCity: iceCreamState.originCity, brand: iceCreamState.brand as any, representativeType: iceCreamState.representativeType as any, representativeName: iceCreamState.representativeName, cartonCount: Number(iceCreamState.cartonCount), priority: iceCreamState.priority, products: iceCreamState.products, destinations: [{id: generateUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }] }
-            : { loadingDate: jalaliDate, lineType, cargoValue: cargoValueInRials, vehicleType: commonState.vehicleType, notes: commonState.notes, platformArrivalTime: multiDestState.platformArrivalTime, destinations: destinations as Destination[] };
+            ? { 
+                loadingDate: jalaliDate, 
+                lineType, 
+                cargoValue: cargoValueInRials, 
+                vehicleType: commonState.vehicleType, 
+                notes: commonState.notes, 
+                originCity: finalOriginCity, 
+                brand: finalBrand as any, 
+                representativeType: iceCreamState.representativeType as any, 
+                representativeName: iceCreamState.representativeName, 
+                cartonCount: Number(iceCreamState.cartonCount), 
+                priority: iceCreamState.priority, 
+                products: iceCreamState.products, 
+                destinations: [{id: generateUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }],
+                loadingType: loadingLocationState.loadingType,
+                originCity1: loadingLocationState.originCity1,
+                originCity2: loadingLocationState.originCity2 || null,
+                brandType: brandState.brandType,
+                brand1: brandState.brand1,
+                brand2: brandState.brand2 || null
+            } as any
+            : { 
+                loadingDate: jalaliDate, 
+                lineType, 
+                cargoValue: cargoValueInRials, 
+                vehicleType: commonState.vehicleType, 
+                notes: commonState.notes, 
+                originCity: finalOriginCity,
+                brand: finalBrand as any,
+                platformArrivalTime: multiDestState.platformArrivalTime, 
+                destinations: validDestinations as Destination[],
+                loadingType: loadingLocationState.loadingType,
+                originCity1: loadingLocationState.originCity1,
+                originCity2: loadingLocationState.originCity2 || null,
+                brandType: brandState.brandType,
+                brand1: brandState.brand1,
+                brand2: brandState.brand2 || null
+            } as any;
         
         if (isEditMode) {
             // Extra guard: if somehow id is empty, treat as new to avoid empty PUT
@@ -1370,6 +1614,25 @@ const AnnouncementPanel: React.FC<{
             onClose();
         } else {
             onSaveNew(announcementData, isDraft);
+            
+            // ذخیره آخرین انتخاب‌های کاربر در localStorage
+            try {
+                const lineTypeKey = lineType === FreightLineType.IceCream ? 'IceCream' 
+                    : lineType === FreightLineType.Dairy ? 'Dairy' 
+                    : 'Ambient';
+                const lastChoices = {
+                    loadingType: loadingLocationState.loadingType,
+                    originCity1: loadingLocationState.originCity1,
+                    originCity2: loadingLocationState.originCity2 || '',
+                    brandType: brandState.brandType,
+                    brand1: brandState.brand1,
+                    brand2: brandState.brand2 || ''
+                };
+                localStorage.setItem(`lastFreightChoices_${lineTypeKey}`, JSON.stringify(lastChoices));
+            } catch (e) {
+                console.error('Error saving last user choices:', e);
+            }
+            
             resetForm();
         }
     };
@@ -1424,16 +1687,180 @@ const AnnouncementPanel: React.FC<{
                         <>
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">مسیر و بار</legend>
+                            <div className="mb-3">
+                                <label className="text-xs font-semibold mb-2 block">نوع بارگیری</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="loadingType"
+                                            value="single"
+                                            checked={loadingLocationState.loadingType === 'single'}
+                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'single' as 'single' | 'double', originCity2: '' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">تک مبدا</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="loadingType"
+                                            value="double"
+                                            checked={loadingLocationState.loadingType === 'double'}
+                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'double' as 'single' | 'double' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">دو مبدا بارگیری</span>
+                                    </label>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-3 gap-3">
-                                <div><label className="text-xs">مبدا بارگیری*</label><input value={iceCreamState.originCity} onChange={e=>{const value = e.target.value; onRouteQueryChange(value); setIceCreamState(s=>({...s, originCity: value}));}} className="input-style mt-1" list="cities" required/></div>
+                                {loadingLocationState.loadingType === 'single' ? (
+                                    <div className="col-span-1">
+                                        <label className="text-xs">مبدا بارگیری*</label>
+                                        <input 
+                                            value={loadingLocationState.originCity1} 
+                                            onChange={e=>{
+                                                const value = e.target.value; 
+                                                onRouteQueryChange(value); 
+                                                setLoadingLocationState(s=>({...s, originCity1: value}));
+                                                setIceCreamState(s=>({...s, originCity: value}));
+                                            }} 
+                                            className="input-style mt-1" 
+                                            list="cities" 
+                                            required
+                                        />
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="text-xs">مبدا بارگیری اول*</label>
+                                            <input 
+                                                value={loadingLocationState.originCity1} 
+                                                onChange={e=>{
+                                                    const value = e.target.value; 
+                                                    onRouteQueryChange(value); 
+                                                    setLoadingLocationState(s=>({...s, originCity1: value}));
+                                                    const combined = loadingLocationState.originCity2 
+                                                        ? `${value} و ${loadingLocationState.originCity2}` 
+                                                        : value;
+                                                    setIceCreamState(s=>({...s, originCity: combined}));
+                                                }} 
+                                                className="input-style mt-1" 
+                                                list="cities" 
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs">مبدا بارگیری دوم*</label>
+                                            <input 
+                                                value={loadingLocationState.originCity2} 
+                                                onChange={e=>{
+                                                    const value = e.target.value; 
+                                                    onRouteQueryChange(value); 
+                                                    setLoadingLocationState(s=>({...s, originCity2: value}));
+                                                    const combined = loadingLocationState.originCity1 
+                                                        ? `${loadingLocationState.originCity1} و ${value}` 
+                                                        : value;
+                                                    setIceCreamState(s=>({...s, originCity: combined}));
+                                                }} 
+                                                className="input-style mt-1" 
+                                                list="cities" 
+                                                required
+                                            />
+                                        </div>
+                                    </>
+                                )}
                                 <div><label className="text-xs">شهر مقصد*</label><input value={iceCreamState.destinationCity} onChange={e=>{const value = e.target.value; onRouteQueryChange(value); setIceCreamState(s=>({...s, destinationCity: value}));}} className="input-style mt-1" list="cities" required/></div>
                                 <div><label className="text-xs">تعداد کارتن*</label><input type="number" value={iceCreamState.cartonCount} onChange={e=>setIceCreamState(s=>({...s, cartonCount: e.target.value}))} className="input-style mt-1" required/></div>
                             </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">جزئیات نماینده و محصول</legend>
+                            <div className="mb-3">
+                                <label className="text-xs font-semibold mb-2 block">نوع برند</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="brandType"
+                                            value="single"
+                                            checked={brandState.brandType === 'single'}
+                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'single' as 'single' | 'double', brand2: '' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">تک برند</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="brandType"
+                                            value="double"
+                                            checked={brandState.brandType === 'double'}
+                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'double' as 'single' | 'double' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">دو برند</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                {brandState.brandType === 'single' ? (
+                                    <div>
+                                        <label className="text-xs">برند*</label>
+                                        <select 
+                                            value={brandState.brand1} 
+                                            onChange={e=>{
+                                                setBrandState(s=>({...s, brand1: e.target.value}));
+                                                setIceCreamState(s=>({...s, brand: e.target.value as any}));
+                                            }} 
+                                            className="input-style mt-1"
+                                            required
+                                        >
+                                            {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="text-xs">برند اول*</label>
+                                            <select 
+                                                value={brandState.brand1} 
+                                                onChange={e=>{
+                                                    setBrandState(s=>({...s, brand1: e.target.value}));
+                                                    const combined = brandState.brand2 
+                                                        ? `${e.target.value} و ${brandState.brand2}` 
+                                                        : e.target.value;
+                                                    setIceCreamState(s=>({...s, brand: combined as any}));
+                                                }} 
+                                                className="input-style mt-1"
+                                                required
+                                            >
+                                                {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs">برند دوم*</label>
+                                            <select 
+                                                value={brandState.brand2} 
+                                                onChange={e=>{
+                                                    setBrandState(s=>({...s, brand2: e.target.value}));
+                                                    const combined = brandState.brand1 
+                                                        ? `${brandState.brand1} و ${e.target.value}` 
+                                                        : e.target.value;
+                                                    setIceCreamState(s=>({...s, brand: combined as any}));
+                                                }} 
+                                                className="input-style mt-1"
+                                                required
+                                            >
+                                                <option value="">-- انتخاب کنید --</option>
+                                                {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
+                                            </select>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <div><label className="text-xs">برند*</label><select value={iceCreamState.brand} onChange={e=>setIceCreamState(s=>({...s, brand: e.target.value as any}))} className="input-style mt-1">{BRANDS.map(b=><option key={b} value={b}>{b}</option>)}</select></div>
                                 <div><label className="text-xs">نوع*</label><select value={iceCreamState.representativeType} onChange={e=>setIceCreamState(s=>({...s, representativeType: e.target.value as any}))} className="input-style mt-1"><option value="agent">نماینده</option><option value="distributor">پخش</option></select></div>
                                 <div><label className="text-xs">نام نماینده/پخش</label><input value={iceCreamState.representativeName} onChange={e=>setIceCreamState(s=>({...s, representativeName: e.target.value}))} className="input-style mt-1" /></div>
                                 <div><label className="text-xs">اولویت*</label><select value={iceCreamState.priority} onChange={e=>setIceCreamState(s=>({...s, priority: e.target.value as any}))} className="input-style mt-1">{Object.entries(PRIORITIES).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></div>
@@ -1447,7 +1874,154 @@ const AnnouncementPanel: React.FC<{
                         <>
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">اطلاعات بارگیری</legend>
+                            <div className="mb-3">
+                                <label className="text-xs font-semibold mb-2 block">نوع بارگیری</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="loadingType"
+                                            value="single"
+                                            checked={loadingLocationState.loadingType === 'single'}
+                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'single' as 'single' | 'double', originCity2: '' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">تک مبدا</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="loadingType"
+                                            value="double"
+                                            checked={loadingLocationState.loadingType === 'double'}
+                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'double' as 'single' | 'double' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">دو مبدا بارگیری</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                {loadingLocationState.loadingType === 'single' ? (
+                                    <div>
+                                        <label className="text-xs">مبدا بارگیری*</label>
+                                        <input 
+                                            value={loadingLocationState.originCity1} 
+                                            onChange={e=>{
+                                                const value = e.target.value; 
+                                                onRouteQueryChange(value); 
+                                                setLoadingLocationState(s=>({...s, originCity1: value}));
+                                            }} 
+                                            className="input-style mt-1" 
+                                            list="cities" 
+                                            required
+                                        />
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="text-xs">مبدا بارگیری اول*</label>
+                                            <input 
+                                                value={loadingLocationState.originCity1} 
+                                                onChange={e=>{
+                                                    const value = e.target.value; 
+                                                    onRouteQueryChange(value); 
+                                                    setLoadingLocationState(s=>({...s, originCity1: value}));
+                                                }} 
+                                                className="input-style mt-1" 
+                                                list="cities" 
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs">مبدا بارگیری دوم*</label>
+                                            <input 
+                                                value={loadingLocationState.originCity2} 
+                                                onChange={e=>{
+                                                    const value = e.target.value; 
+                                                    onRouteQueryChange(value); 
+                                                    setLoadingLocationState(s=>({...s, originCity2: value}));
+                                                }} 
+                                                className="input-style mt-1" 
+                                                list="cities" 
+                                                required
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             <div><label className="text-xs">ساعت حضور در سکو</label><input type="time" value={multiDestState.platformArrivalTime} onChange={e=>setMultiDestState(s=>({...s, platformArrivalTime: e.target.value}))} className="input-style mt-1" /></div>
+                        </fieldset>
+                        <fieldset className="p-3 border rounded-lg bg-white">
+                            <legend className="font-semibold px-1 text-sm">برند محصول</legend>
+                            <div className="mb-3">
+                                <label className="text-xs font-semibold mb-2 block">نوع برند</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="brandType"
+                                            value="single"
+                                            checked={brandState.brandType === 'single'}
+                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'single' as 'single' | 'double', brand2: '' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">تک برند</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="brandType"
+                                            value="double"
+                                            checked={brandState.brandType === 'double'}
+                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'double' as 'single' | 'double' }))}
+                                            className="cursor-pointer"
+                                        />
+                                        <span className="text-xs">دو برند</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {brandState.brandType === 'single' ? (
+                                    <div>
+                                        <label className="text-xs">برند*</label>
+                                        <select 
+                                            value={brandState.brand1} 
+                                            onChange={e=>setBrandState(s=>({...s, brand1: e.target.value}))} 
+                                            className="input-style mt-1"
+                                            required
+                                        >
+                                            {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="text-xs">برند اول*</label>
+                                            <select 
+                                                value={brandState.brand1} 
+                                                onChange={e=>setBrandState(s=>({...s, brand1: e.target.value}))} 
+                                                className="input-style mt-1"
+                                                required
+                                            >
+                                                {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs">برند دوم*</label>
+                                            <select 
+                                                value={brandState.brand2} 
+                                                onChange={e=>setBrandState(s=>({...s, brand2: e.target.value}))} 
+                                                className="input-style mt-1"
+                                                required
+                                            >
+                                                <option value="">-- انتخاب کنید --</option>
+                                                {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
+                                            </select>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">مقاصد</legend>

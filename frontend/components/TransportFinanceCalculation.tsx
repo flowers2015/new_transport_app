@@ -63,7 +63,7 @@ interface AllowanceInputDialogData {
     multiUnloadCost: number; // هزینه چندجا تخلیه (ریال)
     excessMissionCost: number; // هزینه ماموریت مازاد (ریال)
     helperDriverCost: number; // هزینه راننده کمکی (ریال)
-    fixedAllowance: number; // اجرت ثابت (در صورتی که صف اجرت ثابت باشد)
+    fixedAllowance: number; // اجرت ثابت (در صورتی که اجرت ثابت باشد)
     calculationDate: string; // تاریخ محاسبه (شمسی YYYY/MM/DD)
     notes: string;
     // فیلدهای راننده کمکی
@@ -123,8 +123,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // مرتب‌سازی
     type SortField = 'employeeId' | 'driverName' | 'queueType' | 'tourCount' | 'recordedTours' | 'unrecordedTours' | 'totalKilometers' | 'tourCost' | 'billOfLadingDate' | 'trailerCount' | 'miniTrailerCount' | 'tenWheelerCount' | 'commissionBase';
     type SortDirection = 'asc' | 'desc';
-    const [sortField, setSortField] = useState<SortField>('employeeId');
-    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    // به‌صورت پیش‌فرض بر اساس «تعداد تور محاسبه‌نشده» از بیشترین به کمترین مرتب شود
+    const [sortField, setSortField] = useState<SortField>('unrecordedTours');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     
     // صفحه‌بندی
     const [currentPage, setCurrentPage] = useState<number>(1);
@@ -690,12 +691,94 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
     };
 
+    // خلاصه تورها در بازه فیلتر شده (بر اساس تاریخ صدور بارنامه)
+    const tourSummary = useMemo(() => {
+        let totalTours = 0;
+        let unrecordedTours = 0;
+        let recordedPaidTours = 0;
+        let recordedUnpaidTours = 0;
+        let recordedPaidCost = 0;
+        let recordedUnpaidCost = 0;
+
+        if (!calculations || calculations.length === 0) {
+            return {
+                totalTours: 0,
+                unrecordedTours: 0,
+                recordedPaidTours: 0,
+                recordedUnpaidTours: 0,
+                recordedPaidCost: 0,
+                recordedUnpaidCost: 0,
+            };
+        }
+
+        calculations.forEach(calc => {
+            if (!calc.tours || calc.tours.length === 0) return;
+            
+            calc.tours.forEach(tour => {
+                // فیلتر بر اساس جستجو راننده
+                if (searchTerm.trim()) {
+                    const searchLower = searchTerm.toLowerCase();
+                    const matchesDriver =
+                        (calc.employeeId || '').toLowerCase().includes(searchLower) ||
+                        (calc.driverName || '').toLowerCase().includes(searchLower);
+                    if (!matchesDriver) return;
+                }
+
+                // برای تورهای محاسبه شده: فقط آن‌هایی که تاریخ صدور بارنامه دارند و در بازه فیلتر هستند
+                if (tour.isDataRecorded) {
+                    // تورهای محاسبه شده باید تاریخ صدور بارنامه داشته باشند
+                    if (!tour.billOfLadingDate) return;
+                    
+                    // فیلتر تاریخ صدور بارنامه
+                    let jalaliDate: string;
+                    if (typeof tour.billOfLadingDate === 'string') {
+                        jalaliDate = tour.billOfLadingDate;
+                    } else {
+                        jalaliDate = formatJalali(tour.billOfLadingDate as Date);
+                    }
+                    
+                    if (startDate || endDate) {
+                        if (startDate && jalaliDate < startDate) return;
+                        if (endDate && jalaliDate > endDate) return;
+                    }
+
+                    // محاسبه هزینه
+                    const tourCost = Number(tour.totalCost) || 0;
+                    
+                    if ((tour as any).isPaid) {
+                        recordedPaidTours += 1;
+                        recordedPaidCost += tourCost;
+                    } else {
+                        recordedUnpaidTours += 1;
+                        recordedUnpaidCost += tourCost;
+                    }
+                    
+                    totalTours += 1;
+                } else {
+                    // تورهای محاسبه نشده: همه را در نظر بگیر (حتی بدون تاریخ)
+                    // فیلتر تاریخ برای تورهای محاسبه نشده اعمال نمی‌شود
+                    unrecordedTours += 1;
+                    totalTours += 1;
+                }
+            });
+        });
+
+        return {
+            totalTours,
+            unrecordedTours,
+            recordedPaidTours,
+            recordedUnpaidTours,
+            recordedPaidCost,
+            recordedUnpaidCost,
+        };
+    }, [calculations, searchTerm, startDate, endDate]);
+
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
         const excelData = getExcelFilteredData();
         
         const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'صف', 'تعداد تور', 'تور ثبت شده', 'تور ثبت نشده', 'پیمایش کل (کیلومتر)', 'هزینه کل تور (ریال)', 'تاریخ صدور بارنامه']
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'صف', 'تعداد تور', 'تور محاسبه نشده', 'تور محاسبه شده', 'پیمایش کل (کیلومتر)', 'هزینه کل تور (ریال)', 'تاریخ صدور بارنامه']
         ];
 
         excelData.forEach((calc, index) => {
@@ -715,8 +798,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 ? (typeof firstBillDate === 'string' ? firstBillDate : formatJalali(firstBillDate))
                 : '';
 
-            const queueTypeStr = calc.queueType === 'porsant' ? 'صف پورسانت' : 
-                                calc.queueType === 'fixed_allowance' ? 'صف اجرت ثابت' : 
+            const queueTypeStr = calc.queueType === 'porsant' ? 'پورسانت' : 
+                                calc.queueType === 'fixed_allowance' ? 'اجرت ثابت' : 
                                 'راننده کمکی';
 
             wsData.push([
@@ -725,8 +808,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 calc.driverName || '',
                 queueTypeStr,
                 calc.tourCount || 0,
-                recordedTours,
                 unrecordedTours,
+                recordedTours,
                 totalKm,
                 totalCost,
                 billDateStr
@@ -750,7 +833,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 // فرمت اعداد برای ستون‌های عددی (ردیف 0 = هدر)
                 if (R > 0) {
                     const colIndex = C;
-                    // ستون‌های عددی: ردیف (0), تعداد تور (4), تور ثبت شده (5), تور ثبت نشده (6), پیمایش (7), هزینه (8)
+                    // ستون‌های عددی: ردیف (0), تعداد تور (4), تور محاسبه‌نشده (5), تور محاسبه‌شده (6), پیمایش (7), هزینه (8)
                     if ([0, 4, 5, 6, 7, 8].includes(colIndex)) {
                         if (typeof wsData[R][colIndex] === 'number') {
                             ws[cellAddress].z = '#,##0';
@@ -767,8 +850,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             { wch: 20 }, // نام
             { wch: 15 }, // صف
             { wch: 12 }, // تعداد تور
-            { wch: 12 }, // تور ثبت شده
-            { wch: 14 }, // تور ثبت نشده
+            { wch: 14 }, // تور محاسبه‌نشده
+            { wch: 14 }, // تور محاسبه‌شده
             { wch: 18 }, // پیمایش کل
             { wch: 18 }, // هزینه کل
             { wch: 18 }  // تاریخ
@@ -1511,6 +1594,50 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </button>
                         </div>
                     </div>
+
+                    {/* کارت خلاصه تورها بر اساس تاریخ صدور بارنامه */}
+                    <div className="mt-3 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                            <h2 className="text-xs font-semibold text-sky-900">
+                                خلاصه تورها در بازه فیلتر شده
+                            </h2>
+                            <span className="text-xs text-sky-700">
+                                مبنا: تاریخ صدور بارنامه و فیلترهای بالا
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
+                            <div className="bg-white rounded-md border border-sky-100 px-2 py-1.5">
+                                <div className="text-xs text-slate-500 mb-1">تعداد کل تورها</div>
+                                <div className="text-base font-bold text-sky-700">
+                                    {tourSummary.totalTours.toLocaleString('fa-IR')}
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-md border border-orange-100 px-2 py-1.5">
+                                <div className="text-xs text-slate-500 mb-1">تورهای محاسبه نشده</div>
+                                <div className="text-base font-bold text-orange-600">
+                                    {tourSummary.unrecordedTours.toLocaleString('fa-IR')}
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-md border border-emerald-100 px-2 py-1.5">
+                                <div className="text-xs text-slate-500 mb-1">تورهای محاسبه شده (پرداخت شده)</div>
+                                <div className="text-sm font-bold text-emerald-600 mb-0.5">
+                                    {tourSummary.recordedPaidTours.toLocaleString('fa-IR')}
+                                </div>
+                                <div className="text-xs font-semibold text-emerald-700">
+                                    {tourSummary.recordedPaidCost.toLocaleString('fa-IR')} ریال
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-md border border-amber-100 px-2 py-1.5">
+                                <div className="text-xs text-slate-500 mb-1">تورهای محاسبه شده (پرداخت نشده)</div>
+                                <div className="text-sm font-bold text-amber-600 mb-0.5">
+                                    {tourSummary.recordedUnpaidTours.toLocaleString('fa-IR')}
+                                </div>
+                                <div className="text-xs font-semibold text-amber-700">
+                                    {tourSummary.recordedUnpaidCost.toLocaleString('fa-IR')} ریال
+                                </div>
+                            </div>
+                        </div>
+                    </div>
             </div>
 
             {/* محتوای اصلی با اسکرول */}
@@ -1570,15 +1697,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </th>
                                 <th 
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
-                                    onClick={() => handleSort('recordedTours')}
+                                    onClick={() => handleSort('unrecordedTours')}
                                 >
-                                    تور ثبت شده {sortField === 'recordedTours' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                    تور محاسبه نشده {sortField === 'unrecordedTours' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
                                 <th 
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
-                                    onClick={() => handleSort('unrecordedTours')}
+                                    onClick={() => handleSort('recordedTours')}
                                 >
-                                    تور ثبت نشده {sortField === 'unrecordedTours' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                    تور محاسبه شده {sortField === 'recordedTours' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
                                 <th 
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
@@ -1679,7 +1806,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
                                 return (
                                     <React.Fragment key={calc.id}>
-                                        <tr className="border-b border-slate-300 bg-white hover:bg-slate-50">
+                                        <tr className={`border-b border-slate-200 hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
                                             <td className="p-3 border-l border-slate-200 text-center font-medium">
                                                 {((currentPage - 1) * itemsPerPage) + index + 1}
                                             </td>
@@ -1697,20 +1824,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     }}
                                                     className="input-style text-sm w-full"
                                                 >
-                                                    <option value="porsant">صف پورسانت</option>
-                                                    <option value="fixed_allowance">صف اجرت ثابت</option>
+                                                    <option value="porsant">پورسانت</option>
+                                                    <option value="fixed_allowance">اجرت ثابت</option>
                                                     <option value="helper">راننده کمکی</option>
                                                 </select>
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-center font-medium">{calc.tourCount}</td>
                                             <td className="p-3 border-l border-slate-200 text-center">
-                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                                                    {recordedTours}
+                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
+                                                    {unrecordedTours}
                                                 </span>
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-center">
-                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
-                                                    {unrecordedTours}
+                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                                    {recordedTours}
                                                 </span>
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-left font-medium">
@@ -2482,7 +2609,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     <td className="p-3 border-l border-slate-200 text-xs">
                                                         {tour.calculationDate || '-'}
                                                     </td>
-                                                    <td className="p-3 border-l border-slate-200 text-left">{tour.roundTripKm.toLocaleString('fa-IR')}</td>
+                                            <td className="p-3 border-l border-slate-200 text-left">
+                                                {(() => {
+                                                    const totalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                                                    const value = totalKm || tour.roundTripKm || 0;
+                                                    return value ? value.toLocaleString('fa-IR') : '-';
+                                                })()}
+                                            </td>
                                                     <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
                                                         {tour.tourCost?.toLocaleString('fa-IR') || 0}
                                                     </td>
@@ -2537,13 +2670,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     </td>
                                                 </tr>
                                                 {/* ردیف اطلاعات محاسباتی */}
-                                                <tr className={`border-b border-slate-200 ${
-                                                    (tour as any).isPaid 
-                                                        ? 'bg-purple-50' 
-                                                        : tour.isDataRecorded 
-                                                            ? 'bg-green-50' 
-                                                            : 'bg-orange-50'
-                                                }`}>
+                                                {/* ردیف اطلاعات محاسباتی - با پس‌زمینه و مرز پررنگ‌تر برای تفکیک بهتر */}
+                                                <tr className="border-t-2 border-b-4 border-slate-300 bg-slate-50">
                                                     <td className="p-2 border-l border-slate-200"></td>
                                                     <td className="p-2 border-l border-slate-200">
                                                         <div className="text-xs text-slate-600 mb-1">پیمایش مصوب (کیلومتر)</div>
@@ -2570,18 +2698,56 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         </div>
                                                     </td>
                                                     <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه بارنامه (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {(tour as any).billOfLadingCost
+                                                                ? (tour as any).billOfLadingCost.toLocaleString('fa-IR')
+                                                                : '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
                                                         <div className="text-xs text-slate-600 mb-1">هزینه عوارض (ریال)</div>
                                                         <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
                                                             {tour.tollCost?.toLocaleString('fa-IR') || '-'}
                                                         </div>
                                                     </td>
                                                     <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه بارگیری (ریال)</div>
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه غذا (ریال)</div>
                                                         <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {tour.loadingCost?.toLocaleString('fa-IR') || '-'}
+                                                            {tour.foodCost?.toLocaleString('fa-IR') || '-'}
                                                         </div>
                                                     </td>
-                                                    <td className="p-2 border-l border-slate-200" colSpan={4}>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه سوخت (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {tour.fuelCost?.toLocaleString('fa-IR') || '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه بار برگشتی (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {(tour as any).returnCargoCost
+                                                                ? (tour as any).returnCargoCost.toLocaleString('fa-IR')
+                                                                : '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه چندجا تخلیه (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {(tour as any).multiUnloadCost
+                                                                ? (tour as any).multiUnloadCost.toLocaleString('fa-IR')
+                                                                : '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه ماموریت مازاد (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {(tour as any).excessMissionCost
+                                                                ? (tour as any).excessMissionCost.toLocaleString('fa-IR')
+                                                                : '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200" colSpan={2}>
                                                         {tour.notes && (
                                                             <div>
                                                                 <div className="text-xs text-slate-600 mb-1">توضیحات</div>

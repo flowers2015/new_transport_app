@@ -682,6 +682,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     }
                     return <span>{ann.vehicleType || '-'}</span>;
                 }},
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => {
                     // بررسی نوع نماینده - ابتدا از announcement
@@ -795,6 +797,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     }
                     return <span>{ann.vehicleType || '-'}</span>;
                 }},
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => {
                     // بررسی نوع نماینده - ابتدا از announcement
@@ -908,6 +912,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     }
                     return <span>{ann.vehicleType || '-'}</span>;
                 }},
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
@@ -970,6 +976,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     }
                     return <span>{ann.vehicleType || '-'}</span>;
                 }},
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
