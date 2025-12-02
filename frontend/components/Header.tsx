@@ -43,6 +43,14 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
     };
 
     const isAdmin = !!currentUser && currentUser.role === UserRole.Admin;
+    
+    // Debug: بررسی نقش کاربر
+    React.useEffect(() => {
+        if (currentUser) {
+            console.log('🔍 [Header] Current user role:', currentUser.role, 'Is Admin?', isAdmin);
+            console.log('🔍 [Header] UserManagement access:', hasAccess([UserRole.Admin]));
+        }
+    }, [currentUser, isAdmin]);
     const isTransportDefault = defaultDashboardView === View.TransportDashboard;
 
     const navItems = [
@@ -86,6 +94,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
       { type: 'divider', roles: Object.values(UserRole) },
       { view: View.SupportTickets, label: 'تیکت‌های پشتیبانی', roles: [UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.BranchFinance, UserRole.VehicleAllocationExpert, UserRole.Transportation] },
       { type: 'divider', roles: [UserRole.Admin] },
+      { view: View.UserManagement, label: 'مدیریت کاربران', roles: [UserRole.Admin] },
+      { view: View.FreightManagement, label: 'مدیریت اعلام بار', roles: [UserRole.Admin] },
       { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', roles: [UserRole.Admin] },
     ];
 
@@ -119,7 +129,18 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                                     {isMgmtDropdownOpen && (
                                         <div className="absolute left-0 z-20 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none py-1">
                                            {navItems.map((item, index) => {
-                                                if (!hasAccess(item.roles)) return null;
+                                                const hasItemAccess = hasAccess(item.roles);
+                                                if (!hasItemAccess) return null;
+                                                // Debug: لاگ برای منوی مدیریت کاربران
+                                                if (item.view === View.UserManagement) {
+                                                    console.log('🔍 [Header] UserManagement menu item:', {
+                                                        view: item.view,
+                                                        label: item.label,
+                                                        roles: item.roles,
+                                                        hasAccess: hasItemAccess,
+                                                        currentUserRole: currentUser?.role
+                                                    });
+                                                }
 
                                                 if (item.type === 'divider') {
                                                     const prevItem = index > 0 ? navItems[index - 1] : null;

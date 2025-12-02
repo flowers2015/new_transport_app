@@ -41,6 +41,8 @@ export enum View {
     TransportFinancePaymentList = 'transport-finance-payment-list',
     TransportFinancePaidInvoices = 'transport-finance-paid-invoices',
     AllowanceRegulation = 'allowance-regulation',
+    UserManagement = 'user-management',
+    FreightManagement = 'freight-management',
 }
 
 export enum UserRole {

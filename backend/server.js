@@ -27,12 +27,27 @@ const freightTransactionRoutes = require('./routes/freightTransactionRoutes');
 const driverCalculationRoutes = require('./routes/driverCalculationRoutes');
 const allowanceRegulationRoutes = require('./routes/allowanceRegulationRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const userManagementRoutes = require('./routes/userManagementRoutes');
 
 const app = express();
 
 // Middleware
+// تنظیمات CORS: 
+// - در development: localhost:5173 (Vite) و سایر پورت‌های localhost
+// - در production: IP سرور و localhost (برای دسترسی داخلی)
+// همیشه localhost:5173 را در لیست قرار می‌دهیم (در production استفاده نمی‌شود)
+const corsOrigins = [
+  'http://localhost:5173',  // Vite dev server (development)
+  'http://localhost:3000',  // Backend
+  'http://localhost',       // بدون پورت
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1',
+  'http://51.178.41.12'     // IP سرور (production)
+];
+
 app.use(cors({
-  origin: ['http://51.178.41.12', 'http://localhost'], // پوشش IP سرور و آدرس داخلی
+  origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -100,6 +115,7 @@ app.use('/api/v1/dispatch', dispatchRoutes);
 app.use('/api/v1/driver-calculations', driverCalculationRoutes);
 app.use('/api/v1/allowance-regulations', allowanceRegulationRoutes);
 app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/admin', userManagementRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
@@ -108,6 +124,12 @@ app.use('/uploads/regulations', express.static(path.join(__dirname, 'uploads', '
 // Health check endpoint
 app.get('/', (req, res) => {
   res.send('Backend is running');
+});
+
+// ایجاد جداول مورد نیاز در startup
+const { createAdminActionsTable } = require('./migrations/create_admin_actions_table');
+createAdminActionsTable().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جدول admin_actions:', err);
 });
 
 const PORT = process.env.PORT || 3000;

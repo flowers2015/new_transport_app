@@ -14,8 +14,37 @@ export const formatJalali = (date: Date | string | null | undefined): string => 
     return '-';
 };
 
-export const formatJalaliDateTime = (date: Date | null | undefined): string => {
+export const formatJalaliDateTime = (date: Date | string | null | undefined): string => {
     if (!date) return '-';
+    
+    // اگر date یک string است (ISO string از backend)، آن را به Date تبدیل کن
+    if (typeof date === 'string') {
+        try {
+            const dateObj = new Date(date);
+            if (isNaN(dateObj.getTime())) {
+                // اگر تبدیل به Date ناموفق بود، سعی کن به عنوان string شمسی در نظر بگیر
+                // اگر فرمت ISO است (مثلاً "2024-01-01T12:00:00.000Z")، دوباره تلاش کن
+                if (date.includes('T')) {
+                    const dateObj2 = new Date(date);
+                    if (!isNaN(dateObj2.getTime())) {
+                        date = dateObj2;
+                    } else {
+                        return date; // اگر نمی‌توان تبدیل کرد، همان string را برگردان
+                    }
+                } else {
+                    return date; // اگر string شمسی است، همان را برگردان
+                }
+            } else {
+                date = dateObj;
+            }
+        } catch (e) {
+            return date; // در صورت خطا، همان string را برگردان
+        }
+    }
+    
+    // حالا date باید Date object باشد
+    if (!(date instanceof Date)) return '-';
+    
     const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const hh = pad2(date.getHours());
     const mm = pad2(date.getMinutes());

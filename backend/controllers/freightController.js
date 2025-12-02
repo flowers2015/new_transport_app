@@ -8,6 +8,7 @@ const {
   generateChangeDescription
 } = require('../services/freightHistoryService');
 const { formatJalali, parseJalaliDateString, jalaliToGregorian, timestampToJalaliDate } = require('../utils/jalali');
+const { logAdminAction } = require('./userManagementController');
 
 /**
  * تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14
@@ -568,6 +569,20 @@ async function updateFreightAnnouncement(req, res) {
           ipAddress: req.ip,
           client: client
         });
+
+        // ثبت در Audit Trail (اگر reason ارسال شده باشد - یعنی تغییر دستی توسط admin)
+        const reason = req.body.reason;
+        if (reason) {
+          await logAdminAction(
+            req,
+            'update',
+            'freight_announcements',
+            id,
+            oldRecord,
+            newRecord,
+            reason
+          );
+        }
       }
 
       await client.query('COMMIT');
@@ -1403,6 +1418,7 @@ async function setAssignmentQueue(req, res) {
 
 async function deleteFreightAnnouncement(req, res) {
   const { id } = req.params;
+  const { reason } = req.body; // دلیل حذف (برای audit trail)
   const { userId, name, username } = req.user;
   const userName = name || username || 'کاربر';
   
@@ -1412,7 +1428,7 @@ async function deleteFreightAnnouncement(req, res) {
     
     // گرفتن اطلاعات قبل از حذف
     const { rows } = await pool.query(
-      'SELECT announcement_code, status FROM freight_announcements WHERE id = $1',
+      'SELECT * FROM freight_announcements WHERE id = $1',
       [id]
     );
     
@@ -1421,7 +1437,8 @@ async function deleteFreightAnnouncement(req, res) {
       return res.status(404).json({ message: 'Freight announcement not found.' });
     }
     
-    const { announcement_code: code, status } = rows[0];
+    const oldRecord = rows[0];
+    const { announcement_code: code, status } = oldRecord;
     
     // ثبت تاریخچه قبل از حذف
     await logFreightHistory({
@@ -1431,10 +1448,23 @@ async function deleteFreightAnnouncement(req, res) {
       action: 'DELETED',
       oldStatus: status,
       newStatus: null,
-      description: `اعلام بار #${code} توسط ${userName} حذف شد`,
+      description: `اعلام بار #${code} توسط ${userName} حذف شد${reason ? ` - دلیل: ${reason}` : ''}`,
       ipAddress: req.ip,
       client
     });
+
+    // ثبت در Audit Trail (اگر reason ارسال شده باشد - یعنی حذف دستی توسط admin)
+    if (reason) {
+      await logAdminAction(
+        req,
+        'delete',
+        'freight_announcements',
+        id,
+        oldRecord,
+        null,
+        reason
+      );
+    }
     
     // حذف مقاصد
     await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);

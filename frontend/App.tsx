@@ -34,6 +34,8 @@ import FreightPlanningContainer from './components/FreightPlanningContainer';
 import TransportFinanceContainer from './components/TransportFinanceContainer';
 import AuditTrailView from './components/AuditTrailView';
 import CustomerManagement from './components/CustomerManagement';
+import UserManagement from './components/UserManagement';
+import FreightManagement from './components/FreightManagement';
 // Import other components as needed...
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
@@ -86,6 +88,11 @@ const App: React.FC = () => {
     const normalizeUser = (raw: any): User | null => {
         if (!raw) return null;
         const mappedRole = mapBackendRoleToUserRole(raw.role || raw.userRole || '');
+        console.log('🔍 [App] normalizeUser:', {
+            rawRole: raw.role || raw.userRole,
+            mappedRole,
+            username: raw.username
+        });
         if (!mappedRole) return null;
         return {
             id: raw.id || raw.userId || '',
@@ -509,6 +516,14 @@ const App: React.FC = () => {
             case View.AuditTrail:
                 console.log('[App] Render view:', View.AuditTrail);
                 return <AuditTrailView />;
+            case View.UserManagement:
+                console.log('[App] Render view:', View.UserManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <UserManagement currentUser={currentUser} />;
+            case View.FreightManagement:
+                console.log('[App] Render view:', View.FreightManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <FreightManagement currentUser={currentUser} />;
             
             // Add cases for other views here as they are implemented
             // e.g., case View.InvoiceDetail: ...
