@@ -132,6 +132,12 @@ createAdminActionsTable().catch(err => {
   console.error('❌ [Server] خطا در ایجاد جدول admin_actions:', err);
 });
 
+// اضافه کردن ستون‌های راننده/خودرو به جدول freight_announcements
+const addDriverVehicleColumnsToFreight = require('./migrations/add_driver_vehicle_columns_to_freight');
+addDriverVehicleColumnsToFreight().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون‌های راننده/خودرو:', err);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

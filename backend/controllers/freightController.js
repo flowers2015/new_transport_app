@@ -165,10 +165,17 @@ async function getFreightAnnouncements(req, res) {
       SELECT DISTINCT ON (fa.id)
         fa.*,
         fa.rejection_reason,
-        COALESCE(d.name, pd.name) as assigned_driver_name,
-        COALESCE(d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
-        v.model as assigned_vehicle_model,
-        v.brand as assigned_vehicle_brand,
+        -- اگر admin مقدار صریح set کرده، از آن استفاده کن، در غیر این صورت از JOIN
+        COALESCE(fa.assigned_driver_name, d.name, pd.name) as assigned_driver_name,
+        COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
+        COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
+        COALESCE(fa.assigned_vehicle_brand, v.brand) as assigned_vehicle_brand,
+        COALESCE(fa.vehicle_plate, 
+          CASE WHEN v.plate_part1 IS NOT NULL 
+            THEN CONCAT(v.plate_part1, v.plate_letter, v.plate_part2, '-', v.plate_city_code)
+            ELSE NULL 
+          END
+        ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
         da.assignment_finalized_at,
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
@@ -379,6 +386,17 @@ async function updateFreightAnnouncement(req, res) {
       priority,
       products,
       platformArrivalTime,
+      // فیلدهای تخصیص و مالی (برای ویرایش توسط admin)
+      totalFreightCost,
+      billOfLadingNumber,
+      assignedDriverId,
+      assignedDriverName,
+      assignedDriverEmployeeId,
+      assignedVehicleId,
+      assignedVehicleModel,
+      assignedVehicleBrand,
+      vehiclePlate,
+      assignmentType,
     } = req.body || {};
 
     const client = await pool.connect();
@@ -438,6 +456,18 @@ async function updateFreightAnnouncement(req, res) {
       // فیلدهای پاستوریزه و لبنیات
       if (platformArrivalTime !== undefined) { fields.push(`platform_arrival_time = $${idx++}`); values.push(platformArrivalTime); }
       
+      // فیلدهای تخصیص و مالی (برای ویرایش توسط admin)
+      if (totalFreightCost !== undefined) { fields.push(`total_freight_cost = $${idx++}`); values.push(totalFreightCost); }
+      if (billOfLadingNumber !== undefined) { fields.push(`bill_of_lading_number = $${idx++}`); values.push(billOfLadingNumber); }
+      if (assignedDriverId !== undefined) { fields.push(`assigned_driver_id = $${idx++}`); values.push(assignedDriverId || null); }
+      if (assignedDriverName !== undefined) { fields.push(`assigned_driver_name = $${idx++}`); values.push(assignedDriverName || null); }
+      if (assignedDriverEmployeeId !== undefined) { fields.push(`assigned_driver_employee_id = $${idx++}`); values.push(assignedDriverEmployeeId || null); }
+      if (assignedVehicleId !== undefined) { fields.push(`assigned_vehicle_id = $${idx++}`); values.push(assignedVehicleId || null); }
+      if (assignedVehicleModel !== undefined) { fields.push(`assigned_vehicle_model = $${idx++}`); values.push(assignedVehicleModel || null); }
+      if (assignedVehicleBrand !== undefined) { fields.push(`assigned_vehicle_brand = $${idx++}`); values.push(assignedVehicleBrand || null); }
+      if (vehiclePlate !== undefined) { fields.push(`vehicle_plate = $${idx++}`); values.push(vehiclePlate || null); }
+      if (assignmentType !== undefined) { fields.push(`assignment_type = $${idx++}`); values.push(assignmentType || null); }
+      
       // یادداشت
       if (notes !== undefined) {
         const notesColumn = await client.query(
@@ -487,12 +517,14 @@ async function updateFreightAnnouncement(req, res) {
           await client.query(insertDestQuery, params);
         }
         
-        // محاسبه و آپدیت کرایه کل
-        const newTotalFreight = calculateTotalFreightCost(destinations);
-        await client.query(
-          'UPDATE freight_announcements SET total_freight_cost = $1 WHERE id = $2',
-          [newTotalFreight, id]
-        );
+        // محاسبه و آپدیت کرایه کل (فقط اگر admin مقدار صریح نداده باشد)
+        if (totalFreightCost === undefined) {
+          const newTotalFreight = calculateTotalFreightCost(destinations);
+          await client.query(
+            'UPDATE freight_announcements SET total_freight_cost = $1 WHERE id = $2',
+            [newTotalFreight, id]
+          );
+        }
         
         newDestinations = destinations;
       }
@@ -505,7 +537,10 @@ async function updateFreightAnnouncement(req, res) {
       const fieldsToTrack = [
         'loading_date', 'line_type', 'cargo_value', 'vehicle_type', 'notes', 'status',
         'origin_city', 'brand', 'representative_type', 'representative_name', 
-        'carton_count', 'priority', 'products', 'platform_arrival_time', 'total_freight_cost'
+        'carton_count', 'priority', 'products', 'platform_arrival_time', 'total_freight_cost',
+        'bill_of_lading_number', 'assigned_driver_id', 'assigned_driver_name', 
+        'assigned_driver_employee_id', 'assigned_vehicle_id', 'assigned_vehicle_model',
+        'assigned_vehicle_brand', 'vehicle_plate', 'assignment_type'
       ];
       
       const fieldChanges = compareObjects(oldRecord, newRecord, fieldsToTrack);
@@ -1545,10 +1580,17 @@ async function getFreightHistory(req, res) {
         fa.*,
         fa.rejection_reason,
         fa.bill_of_lading_number,
-        COALESCE(d.name, pd.name) as assigned_driver_name,
-        COALESCE(d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
-        v.model as assigned_vehicle_model,
-        v.brand as assigned_vehicle_brand,
+        -- اگر admin مقدار صریح set کرده، از آن استفاده کن، در غیر این صورت از JOIN
+        COALESCE(fa.assigned_driver_name, d.name, pd.name) as assigned_driver_name,
+        COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
+        COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
+        COALESCE(fa.assigned_vehicle_brand, v.brand) as assigned_vehicle_brand,
+        COALESCE(fa.vehicle_plate, 
+          CASE WHEN v.plate_part1 IS NOT NULL 
+            THEN CONCAT(v.plate_part1, v.plate_letter, v.plate_part2, '-', v.plate_city_code)
+            ELSE NULL 
+          END
+        ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
       FROM freight_announcements fa
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id

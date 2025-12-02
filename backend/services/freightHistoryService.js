@@ -293,13 +293,6 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
         continue;
       }
       
-      // اگر وضعیت از Draft یا Leftover به PendingManagerApproval تغییر کرده، فقط تغییر وضعیت را نمایش بده
-      // تغییرات کرایه و سایر فیلدها در این مرحله معنی ندارند
-      if (field === 'total_freight_cost' || field === 'totalFreightCost') {
-        // همیشه کرایه کل را نمایش نده (در همه حالات)
-        continue;
-      }
-      
       // تغییرات مقاصد
       if (field.startsWith('destination_')) {
         if (field.endsWith('_added')) {
@@ -321,6 +314,9 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
             descriptions.push(`مقصد ${destNum}: ${subChanges.join('، ')}`);
           }
         }
+      } else if (field === 'total_freight_cost' || field === 'totalFreightCost') {
+        // نمایش تغییرات کرایه کل
+        descriptions.push(`کرایه کل: از ${formatNumber(change.old)} به ${formatNumber(change.new)}`);
       } else if (field === 'assignmentType') {
         // ترجمه صف تخصیص
         const oldQueue = change.old === 'company' ? 'شرکتی' : change.old === 'personal' ? 'شخصی' : change.old;
@@ -329,15 +325,12 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       } else {
         const label = fieldLabels[field] || field;
         
-        // نمایش مقدار قبل و بعد برای فیلدهای مهم (به جز totalFreightCost که در مرحله اول نباید نمایش داده شود)
-        if (['cargoValue', 'cartonCount'].includes(field)) {
+        // نمایش مقدار قبل و بعد برای فیلدهای عددی مهم
+        if (['cargoValue', 'cartonCount', 'cargo_value', 'carton_count'].includes(field)) {
           // اگه هر دو مقدار معتبر باشند
           if ((change.old !== null && change.old !== undefined) || (change.new !== null && change.new !== undefined)) {
             descriptions.push(`${label}: از ${formatNumber(change.old)} به ${formatNumber(change.new)}`);
           }
-        } else if (field === 'totalFreightCost' || field === 'total_freight_cost') {
-          // totalFreightCost رو نمایش نده (حذف شده)
-          continue;
         } else if (field === 'products') {
           descriptions.push(`${label} تغییر کرد`);
         } else if (field === 'status') {
