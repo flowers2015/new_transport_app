@@ -30,7 +30,7 @@ async function login(req, res) {
       employeeId: user.branch_id, 
     };
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }); // 7 روز اعتبار
 
     // Return both token and user data
     res.json({ 

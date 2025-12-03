@@ -1,6 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, UserRole, User, Branch, Driver } from './types';
-import { getApiUrl } from './utils/apiConfig';
+import { getApiUrl, handleAuthError } from './utils/apiConfig';
+
+/**
+ * تابع برای decode کردن توکن JWT و بررسی انقضا
+ */
+const isTokenExpired = (token: string): boolean => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const exp = payload.exp * 1000; // تبدیل به میلی‌ثانیه
+        const now = Date.now();
+        const bufferTime = 5 * 60 * 1000; // 5 دقیقه buffer
+        return now >= (exp - bufferTime);
+    } catch (e) {
+        console.error('❌ [Auth] Failed to decode token:', e);
+        return true; // اگر decode نشد، منقضی فرض کن
+    }
+};
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -105,12 +121,28 @@ const App: React.FC = () => {
         };
     };
 
+    // تابع logout که در چند جا استفاده می‌شود
+    const performLogout = useCallback(() => {
+        setCurrentUser(null);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setCurrentView(View.Login);
+    }, []);
+
     useEffect(() => {
         // On initial load, check for a stored token and user information
         const token = localStorage.getItem('token');
         const userJson = localStorage.getItem('user');
 
         if (token && userJson) {
+            // بررسی انقضای توکن
+            if (isTokenExpired(token)) {
+                console.warn('⚠️ [Auth] Token expired on load. Logging out...');
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                return;
+            }
+
             try {
                 const rawUser = JSON.parse(userJson);
                 const normalized = normalizeUser(rawUser);
@@ -130,6 +162,20 @@ const App: React.FC = () => {
         }
     }, []);
 
+    // بررسی دوره‌ای انقضای توکن (هر 5 دقیقه)
+    useEffect(() => {
+        const checkTokenInterval = setInterval(() => {
+            const token = localStorage.getItem('token');
+            if (token && isTokenExpired(token)) {
+                console.warn('⚠️ [Auth] Token expired. Logging out...');
+                alert('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+                performLogout();
+            }
+        }, 5 * 60 * 1000); // هر 5 دقیقه
+
+        return () => clearInterval(checkTokenInterval);
+    }, [performLogout]);
+
     const handleLogin = (user: any, token: string) => {
         const normalized = normalizeUser(user);
         if (!normalized) {
@@ -144,10 +190,7 @@ const App: React.FC = () => {
     };
 
     const handleLogout = () => {
-        setCurrentUser(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setCurrentView(View.Login);
+        performLogout();
     };
 
     // Branch management functions

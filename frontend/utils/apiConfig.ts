@@ -63,4 +63,44 @@ export const getFileUrl = (filePath: string): string => {
  */
 export default API_BASE_URL;
 
+/**
+ * تابع کمکی برای بررسی و مدیریت خطای توکن منقضی شده
+ * اگر response با کد 401 باشد، کاربر را به صفحه لاگین می‌برد
+ */
+export const handleAuthError = (response: Response): Response => {
+  if (response.status === 401) {
+    console.warn('⚠️ [Auth] Token expired or invalid. Redirecting to login...');
+    // پاک کردن توکن از localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    // نمایش پیام به کاربر
+    alert('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+    // Redirect به صفحه لاگین
+    window.location.href = '/';
+  }
+  return response;
+};
+
+/**
+ * تابع fetch با مدیریت خودکار خطای توکن
+ * از این تابع به جای fetch معمولی استفاده کنید
+ */
+export const apiFetch = async (url: string, options?: RequestInit): Promise<Response> => {
+  const token = localStorage.getItem('token');
+  
+  const defaultHeaders: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options?.headers,
+    },
+  });
+  
+  return handleAuthError(response);
+};
 
