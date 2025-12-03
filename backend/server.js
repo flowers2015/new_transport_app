@@ -28,6 +28,7 @@ const driverCalculationRoutes = require('./routes/driverCalculationRoutes');
 const allowanceRegulationRoutes = require('./routes/allowanceRegulationRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const userManagementRoutes = require('./routes/userManagementRoutes');
+const vehicleSpecsRoutes = require('./routes/vehicleSpecsRoutes');
 
 const app = express();
 
@@ -116,6 +117,7 @@ app.use('/api/v1/driver-calculations', driverCalculationRoutes);
 app.use('/api/v1/allowance-regulations', allowanceRegulationRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/admin', userManagementRoutes);
+app.use('/api/v1/vehicle-specs', vehicleSpecsRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
@@ -136,6 +138,18 @@ createAdminActionsTable().catch(err => {
 const addDriverVehicleColumnsToFreight = require('./migrations/add_driver_vehicle_columns_to_freight');
 addDriverVehicleColumnsToFreight().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون‌های راننده/خودرو:', err);
+});
+
+// ایجاد جدول مشخصات خودرو
+const createVehicleSpecificationsTable = require('./migrations/create_vehicle_specifications_table');
+createVehicleSpecificationsTable().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جدول مشخصات خودرو:', err);
+});
+
+// اضافه کردن ستون‌های تاریخ تحویل و نوع نماینده
+const addDeliveryDateColumns = require('./migrations/add_delivery_date_columns');
+addDeliveryDateColumns().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون‌های تاریخ تحویل:', err);
 });
 
 const PORT = process.env.PORT || 3000;

@@ -127,6 +127,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         priority: a.priority,
                         products: a.products || [],
                         platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+                        deliveryDate: a.delivery_date || a.deliveryDate,
                         destinations: Array.isArray(a.destinations) ? a.destinations.map((d: any) => ({
                             id: d.id,
                             city: d.city,
@@ -134,6 +135,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             tonnage: d.tonnage,
                             unloadTime: d.unload_time || d.unloadTime,
                             freightCost: d.freight_cost ?? d.freightCost,
+                            deliveryDate: d.delivery_date || d.deliveryDate,
+                            representativeType: d.representative_type || d.representativeType,
                         })) : [],
                         history: a.history || [],
                         assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,

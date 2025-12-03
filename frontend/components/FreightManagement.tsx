@@ -843,17 +843,19 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
         <table className="min-w-full divide-y divide-gray-200" key={`table-${tableKey}`}>
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">کد اعلام بار</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">خط</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">وضعیت</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">تاریخ بارگیری</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">مقاصد</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">شماره بارنامه</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">راننده</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">خودرو</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">کرایه (ریال)</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">ایجادکننده</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">عملیات</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کد</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">خط</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">وضعیت</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">تاریخ بارگیری</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">ارزش بار</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">نوع خودرو</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">نوع تخصیص</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">مقاصد (کرایه)</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">بارنامه</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">راننده</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">خودرو</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کرایه کل</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">عملیات</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -887,13 +889,16 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                 data-announcement-id={ann.id}
                 className="hover:bg-gray-50"
               >
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                {/* کد اعلام بار */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
                   {ann.announcementCode || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {/* خط */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                   {lineTypeLabels[ann.lineType] || ann.lineType || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                {/* وضعیت */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs">
                   <span className={`px-2 py-1 rounded text-xs ${
                     ann.status === FreightAnnouncementStatus.Finalized ? 'bg-green-100 text-green-800' :
                     ann.status === FreightAnnouncementStatus.Assigned ? 'bg-blue-100 text-blue-800' :
@@ -904,16 +909,46 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     {statusLabels[ann.status as string] || ann.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {/* تاریخ بارگیری */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                   {ann.loadingDate ? (typeof ann.loadingDate === 'string' ? ann.loadingDate : formatJalali(ann.loadingDate)) : '-'}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  {ann.destinations?.length > 0 ? ann.destinations.map(d => d.city).filter(Boolean).join('، ') : '-'}
+                {/* ارزش بار */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500" dir="ltr">
+                  {ann.cargoValue && Number(ann.cargoValue) > 0 ? formatNumberWithSeparator(ann.cargoValue) : '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {/* نوع خودرو */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {ann.vehicleType || '-'}
+                </td>
+                {/* نوع تخصیص */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {ann.assignmentType === 'company' ? 'شرکتی' : 
+                   ann.assignmentType === 'personal' ? 'شخصی' : '-'}
+                </td>
+                {/* مقاصد با کرایه */}
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {ann.destinations?.length > 0 ? (
+                    <div className="space-y-1">
+                      {ann.destinations.map((d, i) => (
+                        <div key={i}>
+                          <span className="font-medium">{d.city || '-'}</span>
+                          {d.freightCost && Number(d.freightCost) > 0 && (
+                            <span className="text-green-600 mr-1" dir="ltr">
+                              ({formatNumberWithSeparator(d.freightCost)})
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : '-'}
+                </td>
+                {/* شماره بارنامه */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                   {ann.billOfLadingNumber || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {/* راننده */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                   {(ann as any).assignedDriverName ? (
                     <div>
                       <div className="font-medium">{(ann as any).assignedDriverName}</div>
@@ -923,7 +958,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     </div>
                   ) : '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {/* خودرو */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                   {(ann as any).vehiclePlate ? (
                     <div>
                       <div className="font-medium">{(ann as any).vehiclePlate}</div>
@@ -935,13 +971,21 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     </div>
                   ) : '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" dir="ltr">
-                  {ann.totalFreightCost ? formatNumberWithSeparator(ann.totalFreightCost) : '-'}
+                {/* کرایه کل */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700 font-medium" dir="ltr">
+                  {(() => {
+                    // اگر کرایه کل موجود بود نمایش بده
+                    if (ann.totalFreightCost && Number(ann.totalFreightCost) > 0) {
+                      return formatNumberWithSeparator(Number(ann.totalFreightCost));
+                    }
+                    // در غیر این صورت از مجموع کرایه مقاصد محاسبه کن
+                    const sumFromDest = ann.destinations?.reduce((sum, d) => 
+                      sum + (Number(d.freightCost) || 0), 0) || 0;
+                    return sumFromDest > 0 ? formatNumberWithSeparator(sumFromDest) : '-';
+                  })()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {(ann as any).createdByName || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                {/* عملیات */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
                   <div className="flex gap-2">
                     <button
                       onClick={() => openEditDialog(ann)}
@@ -967,7 +1011,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
             );
             }) : (
               <tr>
-                <td colSpan={11} className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={13} className="px-4 py-4 text-center text-sm text-gray-500">
                   هیچ اعلام باری یافت نشد
                 </td>
               </tr>
@@ -1391,12 +1435,12 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       {/* دیالوگ تاریخچه */}
       {showHistoryDialog && selectedAnnouncement && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[85vh] overflow-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">تاریخچه تغییرات: {selectedAnnouncement.announcementCode}</h2>
               <button
                 onClick={() => setShowHistoryDialog(false)}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 text-2xl"
               >
                 ✕
               </button>
@@ -1407,6 +1451,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   <tr>
                     <th className="px-4 py-2 text-right text-xs font-medium">کاربر</th>
                     <th className="px-4 py-2 text-right text-xs font-medium">نوع عملیات</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium">تغییرات</th>
                     <th className="px-4 py-2 text-right text-xs font-medium">دلیل</th>
                     <th className="px-4 py-2 text-right text-xs font-medium">تاریخ</th>
                   </tr>
@@ -1414,15 +1459,98 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {history.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-4 text-center text-sm text-gray-500">
+                      <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
                         هیچ تغییری ثبت نشده است
                       </td>
                     </tr>
                   ) : (
                     history.map(action => {
                       console.log('📋 [FreightManagement] Rendering history action:', action);
+                      
+                      // محاسبه تغییرات از oldValue و newValue
+                      const getChangedFields = () => {
+                        if (!action.oldValue && !action.newValue) return [];
+                        if (action.actionType === 'create') return [{ label: 'ایجاد', value: 'رکورد جدید ایجاد شد' }];
+                        if (action.actionType === 'delete') return [{ label: 'حذف', value: 'رکورد حذف شد' }];
+                        
+                        const changes: { label: string; oldVal: any; newVal: any }[] = [];
+                        const fieldLabels: Record<string, string> = {
+                          loading_date: 'تاریخ بارگیری',
+                          loadingDate: 'تاریخ بارگیری',
+                          line_type: 'نوع خط',
+                          lineType: 'نوع خط',
+                          cargo_value: 'ارزش بار',
+                          cargoValue: 'ارزش بار',
+                          vehicle_type: 'نوع خودرو',
+                          vehicleType: 'نوع خودرو',
+                          status: 'وضعیت',
+                          notes: 'یادداشت',
+                          total_freight_cost: 'کرایه کل',
+                          totalFreightCost: 'کرایه کل',
+                          bill_of_lading_number: 'شماره بارنامه',
+                          billOfLadingNumber: 'شماره بارنامه',
+                          assigned_driver_name: 'نام راننده',
+                          assignedDriverName: 'نام راننده',
+                          assigned_driver_id: 'راننده',
+                          assignedDriverId: 'راننده',
+                          assigned_vehicle_id: 'خودرو',
+                          assignedVehicleId: 'خودرو',
+                          vehicle_plate: 'پلاک خودرو',
+                          vehiclePlate: 'پلاک خودرو',
+                          assignment_type: 'نوع تخصیص',
+                          assignmentType: 'نوع تخصیص',
+                          origin_city: 'مبدا',
+                          originCity: 'مبدا',
+                          brand: 'برند',
+                          carton_count: 'تعداد کارتن',
+                          cartonCount: 'تعداد کارتن',
+                          platform_arrival_time: 'ساعت حضور',
+                          platformArrivalTime: 'ساعت حضور',
+                          destinations: 'مقاصد'
+                        };
+                        
+                        const old = action.oldValue || {};
+                        const newVal = action.newValue || {};
+                        
+                        // بررسی فیلدهای اصلی
+                        Object.keys(fieldLabels).forEach(key => {
+                          const oldValue = old[key];
+                          const newValue = newVal[key];
+                          
+                          // تبدیل به string برای مقایسه
+                          const oldStr = JSON.stringify(oldValue);
+                          const newStr = JSON.stringify(newValue);
+                          
+                          if (oldStr !== newStr && (oldValue !== undefined || newValue !== undefined)) {
+                            // فرمت کردن مقادیر عددی
+                            let displayOld = oldValue;
+                            let displayNew = newValue;
+                            
+                            if (key.includes('freight_cost') || key.includes('FreightCost') || 
+                                key.includes('cargo_value') || key.includes('cargoValue')) {
+                              displayOld = oldValue ? formatNumberWithSeparator(oldValue) : '-';
+                              displayNew = newValue ? formatNumberWithSeparator(newValue) : '-';
+                            }
+                            
+                            if (key === 'destinations' && Array.isArray(newValue)) {
+                              // نمایش تغییرات مقاصد
+                              const destChanges = newValue.map((d: any, i: number) => 
+                                `${d.city || '-'}: ${formatNumberWithSeparator(d.freight_cost || d.freightCost || 0)}`
+                              ).join(' | ');
+                              changes.push({ label: 'مقاصد', oldVal: null, newVal: destChanges });
+                            } else if (key !== 'destinations') {
+                              changes.push({ label: fieldLabels[key], oldVal: displayOld, newVal: displayNew });
+                            }
+                          }
+                        });
+                        
+                        return changes;
+                      };
+                      
+                      const changedFields = getChangedFields();
+                      
                       return (
-                        <tr key={action.id}>
+                        <tr key={action.id} className="hover:bg-gray-50">
                           <td className="px-4 py-2 text-sm">{action.userName} ({action.userRole})</td>
                           <td className="px-4 py-2 text-sm">
                             <span className={`px-2 py-1 rounded text-xs ${
@@ -1434,8 +1562,31 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                                action.actionType === 'update' ? 'ویرایش' : 'حذف'}
                             </span>
                           </td>
+                          <td className="px-4 py-2 text-sm">
+                            {changedFields.length > 0 ? (
+                              <div className="space-y-1 text-xs">
+                                {changedFields.slice(0, 5).map((change, idx) => (
+                                  <div key={idx} className="flex gap-1 flex-wrap">
+                                    <span className="font-medium text-gray-700">{change.label}:</span>
+                                    {change.oldVal !== null && change.oldVal !== undefined && (
+                                      <>
+                                        <span className="text-red-500 line-through">{String(change.oldVal || '-')}</span>
+                                        <span className="text-gray-400">→</span>
+                                      </>
+                                    )}
+                                    <span className="text-green-600">{String(change.newVal || '-')}</span>
+                                  </div>
+                                ))}
+                                {changedFields.length > 5 && (
+                                  <div className="text-gray-400">و {changedFields.length - 5} تغییر دیگر...</div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-sm">{action.reason || '-'}</td>
-                          <td className="px-4 py-2 text-sm">{formatJalaliDateTime(action.createdAt)}</td>
+                          <td className="px-4 py-2 text-sm whitespace-nowrap">{formatJalaliDateTime(action.createdAt)}</td>
                         </tr>
                       );
                     })

@@ -260,10 +260,71 @@ async function getAllPersonalVehicles(req, res) {
   }
 }
 
+/**
+ * دریافت خودرو شخصی بر اساس ID
+ */
+async function getPersonalVehicleById(req, res) {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(`
+      SELECT 
+        id,
+        truck_smart_id AS "truckSmartId",
+        plate_part1 AS "platePart1",
+        plate_letter AS "plateLetter",
+        plate_part2 AS "platePart2",
+        plate_city_code AS "plateCityCode",
+        vehicle_type AS "vehicleType",
+        vehicle_usage AS "vehicleUsage",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM personal_vehicles 
+      WHERE id = $1
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'خودرو یافت نشد' });
+    }
+
+    const vehicle = rows[0];
+    vehicle.formattedPlate = `${vehicle.platePart1} ${vehicle.plateLetter} ${vehicle.platePart2} - ${vehicle.plateCityCode}`;
+
+    res.json(vehicle);
+  } catch (error) {
+    console.error('Error getting personal vehicle by id:', error);
+    res.status(500).json({ message: 'خطا در دریافت اطلاعات خودرو' });
+  }
+}
+
+/**
+ * حذف خودرو شخصی
+ */
+async function deletePersonalVehicle(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const { rows } = await pool.query(
+      'DELETE FROM personal_vehicles WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'خودرو یافت نشد' });
+    }
+
+    res.json({ message: 'خودرو با موفقیت حذف شد', deleted: rows[0] });
+  } catch (error) {
+    console.error('Error deleting personal vehicle:', error);
+    res.status(500).json({ message: 'خطا در حذف خودرو' });
+  }
+}
+
 module.exports = {
   searchPersonalVehicles,
   getPersonalVehicleByTruckSmartId,
   createPersonalVehicle,
   updatePersonalVehicle,
-  getAllPersonalVehicles
+  getAllPersonalVehicles,
+  getPersonalVehicleById,
+  deletePersonalVehicle
 };

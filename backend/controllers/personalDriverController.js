@@ -127,12 +127,26 @@ async function createPersonalDriver(req, res) {
 async function updatePersonalDriver(req, res) {
   try {
     const { id } = req.params;
-    const { name, mobile, driverSmartId } = req.body;
+    const { nationalId, name, mobile, driverSmartId } = req.body;
 
     const fields = [];
     const values = [];
     let idx = 1;
 
+    if (nationalId) {
+      // بررسی تکراری بودن کد ملی
+      const existingNationalId = await pool.query(
+        'SELECT id FROM personal_drivers WHERE national_id = $1 AND id != $2',
+        [nationalId, id]
+      );
+
+      if (existingNationalId.rows.length > 0) {
+        return res.status(400).json({ message: 'کد ملی قبلاً ثبت شده است' });
+      }
+      
+      fields.push(`national_id = $${idx++}`); 
+      values.push(nationalId); 
+    }
     if (name) { fields.push(`name = $${idx++}`); values.push(name); }
     if (mobile) { fields.push(`mobile = $${idx++}`); values.push(mobile); }
     if (driverSmartId) { 
@@ -156,9 +170,9 @@ async function updatePersonalDriver(req, res) {
       const updateQuery = `UPDATE personal_drivers SET ${fields.join(', ')} WHERE id = $${idx}`;
       values.push(id);
       
-      const { rows } = await pool.query(updateQuery, values);
+      const result = await pool.query(updateQuery, values);
       
-      if (rows.length === 0) {
+      if (result.rowCount === 0) {
         return res.status(404).json({ message: 'راننده یافت نشد' });
       }
     }
@@ -176,6 +190,10 @@ async function updatePersonalDriver(req, res) {
       FROM personal_drivers 
       WHERE id = $1
     `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'راننده یافت نشد' });
+    }
 
     res.json(rows[0]);
   } catch (error) {
@@ -209,10 +227,65 @@ async function getAllPersonalDrivers(req, res) {
   }
 }
 
+/**
+ * دریافت راننده شخصی بر اساس ID
+ */
+async function getPersonalDriverById(req, res) {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(`
+      SELECT 
+        id,
+        national_id AS "nationalId",
+        name,
+        mobile,
+        driver_smart_id AS "driverSmartId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM personal_drivers 
+      WHERE id = $1
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'راننده یافت نشد' });
+    }
+
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error getting personal driver by id:', error);
+    res.status(500).json({ message: 'خطا در دریافت اطلاعات راننده' });
+  }
+}
+
+/**
+ * حذف راننده شخصی
+ */
+async function deletePersonalDriver(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const { rows } = await pool.query(
+      'DELETE FROM personal_drivers WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'راننده یافت نشد' });
+    }
+
+    res.json({ message: 'راننده با موفقیت حذف شد', deleted: rows[0] });
+  } catch (error) {
+    console.error('Error deleting personal driver:', error);
+    res.status(500).json({ message: 'خطا در حذف راننده' });
+  }
+}
+
 module.exports = {
   searchPersonalDrivers,
   getPersonalDriverByNationalId,
   createPersonalDriver,
   updatePersonalDriver,
-  getAllPersonalDrivers
+  getAllPersonalDrivers,
+  getPersonalDriverById,
+  deletePersonalDriver
 };

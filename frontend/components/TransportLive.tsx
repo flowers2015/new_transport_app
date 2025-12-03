@@ -340,11 +340,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         }
                     }
                     const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                    const deliveryDate = (d as any).deliveryDate;
+                    const unloadTime = d.unloadTime;
                     return (
-                        <span key={d.id}>
+                        <span key={d.id} className="inline-block">
                             {destRepType ? `(${destRepType}) ` : ''}
                             <span className="font-bold text-blue-700">{d.city}</span>
                             {tonnage ? ` (${tonnage})` : ''}
+                            {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
+                            {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
                             {idx < ann.destinations.length - 1 && '، '}
                         </span>
                     );
@@ -624,6 +628,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+                { header: 'تاریخ تحویل بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap text-green-600">{(ann as any).deliveryDate || '-'}</span> },
                 { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
@@ -726,11 +731,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             }
                         }
                         const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                        const deliveryDate = (d as any).deliveryDate;
+                        const unloadTime = d.unloadTime;
                         return (
-                            <span key={d.id}>
+                            <span key={d.id} className="inline-block">
                                 {destRepType ? `(${destRepType}) ` : ''}
                                 <span className="font-bold text-blue-700">{d.city}</span>
                                 {tonnage ? ` (${tonnage})` : ''}
+                                {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
+                                {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
                                 {idx < ann.destinations.length - 1 && '، '}
                             </span>
                         );
@@ -841,11 +850,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             }
                         }
                         const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                        const deliveryDate = (d as any).deliveryDate;
+                        const unloadTime = d.unloadTime;
                         return (
-                            <span key={d.id}>
+                            <span key={d.id} className="inline-block">
                                 {destRepType ? `(${destRepType}) ` : ''}
                                 <span className="font-bold text-blue-700">{d.city}</span>
                                 {tonnage ? ` (${tonnage})` : ''}
+                                {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
+                                {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
                                 {idx < ann.destinations.length - 1 && '، '}
                             </span>
                         );
@@ -1070,10 +1083,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     <tr>
                                         {canPerformActions && <th rowSpan={2} className="p-2 sticky left-0 bg-gray-50 z-10"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(filteredAnnouncements.map(a=>a.id)) : new Set())}/></th>}
                                         {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center">{col.header}</th>)}
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد اول</th>
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد دوم</th>
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد سوم</th>
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد چهارم</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
                                         <th rowSpan={2} className="p-2 sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
                                     </tr>
                                     <tr>
@@ -1082,6 +1095,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 <th className="p-2 text-center font-normal border">نماینده</th>
                                                 <th className="p-2 text-center font-normal border">مقصد</th>
                                                 <th className="p-2 text-center font-normal border">تناژ</th>
+                                                <th className="p-2 text-center font-normal border">تاریخ تحویل</th>
                                                 <th className="p-2 text-center font-normal border">ساعت تخلیه</th>
                                                 <th className="p-2 text-center font-normal border">کرایه</th>
                                             </React.Fragment>
@@ -1258,6 +1272,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                         <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.city || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
+                                                        <td className="p-2 text-center border">{(dest as any)?.deliveryDate || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
                                                         <td className="p-2 text-center border font-mono">{formatCurrency(dest?.freightCost)}</td>
                                                     </React.Fragment>

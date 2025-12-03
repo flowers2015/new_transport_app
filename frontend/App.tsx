@@ -36,6 +36,7 @@ import AuditTrailView from './components/AuditTrailView';
 import CustomerManagement from './components/CustomerManagement';
 import UserManagement from './components/UserManagement';
 import FreightManagement from './components/FreightManagement';
+import AdminResourceManagement from './components/AdminResourceManagement';
 // Import other components as needed...
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
@@ -524,6 +525,11 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.FreightManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <FreightManagement currentUser={currentUser} />;
+            
+            case View.AdminResourceManagement:
+                console.log('[App] Render view:', View.AdminResourceManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <AdminResourceManagement />;
             
             // Add cases for other views here as they are implemented
             // e.g., case View.InvoiceDetail: ...

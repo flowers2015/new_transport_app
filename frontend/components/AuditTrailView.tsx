@@ -9,19 +9,20 @@ const DocumentMagnifyingGlassIcon: React.FC<React.SVGProps<SVGSVGElement>> = (pr
 );
 
 interface AuditTrailViewProps {
-    auditLog: AuditLog[];
+    auditLog?: AuditLog[];
 }
 
-const AuditTrailView: React.FC<AuditTrailViewProps> = ({ auditLog }) => {
+const AuditTrailView: React.FC<AuditTrailViewProps> = ({ auditLog = [] }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredLog = useMemo(() => {
+        if (!auditLog || auditLog.length === 0) return [];
         if (!searchTerm) return auditLog;
         const lowercasedFilter = searchTerm.toLowerCase();
         return auditLog.filter(log =>
-            log.userName.toLowerCase().includes(lowercasedFilter) ||
-            log.action.toLowerCase().includes(lowercasedFilter) ||
-            log.details.toLowerCase().includes(lowercasedFilter)
+            (log.userName?.toLowerCase() || '').includes(lowercasedFilter) ||
+            (log.action?.toLowerCase() || '').includes(lowercasedFilter) ||
+            (log.details?.toLowerCase() || '').includes(lowercasedFilter)
         );
     }, [searchTerm, auditLog]);
 

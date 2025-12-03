@@ -111,6 +111,7 @@ const columnsConfig = (props: {
         { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
         { header: 'اولویت', accessor: 'priority', width: '100px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => PRIORITIES[ann.priority || 'normal'] },
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+        { header: 'تاریخ تحویل', accessor: 'deliveryDate', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.deliveryDate || '-' },
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
@@ -126,9 +127,16 @@ const columnsConfig = (props: {
             return ann.rejectionReason || '-';
         }},
 
-        // --- Common Columns (for Dairy & Ambient) ---
+        // --- Common Columns (for Dairy & Ambient) - ترتیب صحیح ---
         { header: 'ردیف', width: '70px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
-        // Announcement code removed across all tabs per request → not displayed anywhere
+        { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
+        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+        { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
+        { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0), width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+        { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
+        { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+        { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
+        { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
             const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
@@ -142,21 +150,19 @@ const columnsConfig = (props: {
             }
             return ann.rejectionReason || '-';
         }},
-        { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-        { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-        { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
-        { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
-        { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
 
-        // Ambient (Compact): destinations list, show kg
-        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Ambient,
+        // Ambient (Compact): destinations list, show kg with delivery date
+        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '500px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Ambient,
             render: (ann: FreightAnnouncement) => (
                 <div className="flex flex-col text-xs space-y-1">
                     {ann.destinations.map((d, i) => (
-                        <div key={d.id} className="flex items-center justify-center gap-2">
+                        <div key={d.id} className="flex items-center justify-center gap-2 flex-wrap">
                             <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                             <span className="font-semibold text-slate-800">{d.city}</span>
-                            <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                            <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
+                            {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
+                            {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
+                            <span className="text-purple-600">{d.representativeType === 'distribution' ? 'پخش' : 'نماینده'}</span>
                         </div>
                     ))}
                 </div>
@@ -168,14 +174,17 @@ const columnsConfig = (props: {
         { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0), width: '150px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
-        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Dairy,
+        { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '500px', display: (vm: string, lt: any) => vm === 'compact' && lt === FreightLineType.Dairy,
             render: (ann: FreightAnnouncement) => (
                 <div className="flex flex-col text-xs space-y-1">
                     {ann.destinations.map((d, i) => (
-                        <div key={d.id} className="flex items-center justify-center gap-2">
+                        <div key={d.id} className="flex items-center justify-center gap-2 flex-wrap">
                             <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                             <span className="font-semibold text-slate-800">{d.city}</span>
-                            <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                            <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
+                            {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
+                            {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
+                            <span className="text-purple-600">{d.representativeType === 'distribution' ? 'پخش' : 'نماینده'}</span>
                         </div>
                     ))}
                 </div>
@@ -718,13 +727,16 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
-                { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '400px', render: (ann: FreightAnnouncement) => (
+                { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '500px', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
                         {ann.destinations.map((d, i) => (
-                            <div key={d.id} className="flex items-center justify-center gap-2">
+                            <div key={d.id} className="flex items-center justify-center gap-2 flex-wrap">
                                 <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                                 <span className="font-semibold text-slate-800">{d.city}</span>
-                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
+                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
+                                {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
+                                {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
+                                <span className="text-purple-600">{d.representativeType === 'distribution' ? 'پخش' : 'نماینده'}</span>
                             </div>
                         ))}
                     </div>
@@ -1010,7 +1022,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     
     // Header rendering logic
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeTab as any);
-    const commonCols = useMemo(() => visibleColumns.filter(c => c.header !== 'عملیات'), [visibleColumns]);
+    // فیلتر کردن checkbox و عملیات از commonCols - checkbox جداگانه render می‌شود
+    const commonCols = useMemo(() => visibleColumns.filter(c => c.header !== 'عملیات' && c.header !== ''), [visibleColumns]);
     const actionCol = useMemo(() => visibleColumns.find(c => c.header === 'عملیات'), [visibleColumns]);
 
 
@@ -1063,10 +1076,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                         />
                                                     </th>
                                                 {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center" style={{ width: col.width }}>{col.header}</th>)}
-                                                <th colSpan={5} className="p-2 text-center border-x">مقصد اول</th>
-                                                <th colSpan={5} className="p-2 text-center border-x">مقصد دوم</th>
-                                                <th colSpan={5} className="p-2 text-center border-x">مقصد سوم</th>
-                                                <th colSpan={5} className="p-2 text-center border-x">مقصد چهارم</th>
+                                                <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
+                                                <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
+                                                <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
+                                                <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
                                                 {actionCol && <th key={actionCol.header} rowSpan={2} className="p-2 text-center" style={{ width: actionCol.width }}>{actionCol.header}</th>}
                                             </tr>
                                             <tr>
@@ -1075,6 +1088,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                         <th className="p-2 text-center font-normal border">نماینده</th>
                                                         <th className="p-2 text-center font-normal border">مقصد</th>
                                                         <th className="p-2 text-center font-normal border">تناژ</th>
+                                                        <th className="p-2 text-center font-normal border">تاریخ تحویل</th>
                                                         <th className="p-2 text-center font-normal border">ساعت تخلیه</th>
                                                         <th className="p-2 text-center font-normal border">کرایه</th>
                                                     </React.Fragment>
@@ -1114,7 +1128,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                 ) : null}
                                             </th>
                                         ))}
-                                        {isFullDairyAmbient && [...Array(21)].map((_, i) => <th key={`ph-${i}`}></th>)}
+                                        {isFullDairyAmbient && [...Array(24)].map((_, i) => <th key={`ph-${i}`}></th>)}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1122,6 +1136,17 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                         <tr key={ann.id} className="border-b hover:bg-slate-50">
                                              {isFullDairyAmbient ? (
                                                 <>
+                                                    {/* Checkbox column */}
+                                                    <td className="p-2 text-center">
+                                                        {isAnnouncementSelectable(ann) && (
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedIds.includes(ann.id)}
+                                                                onChange={() => handleToggleSelect(ann.id)}
+                                                                className="cursor-pointer"
+                                                            />
+                                                        )}
+                                                    </td>
                                                     {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>)}
                                                     {[0, 1, 2, 3].map(i => {
                                                         const dest = ann.destinations[i];
@@ -1130,6 +1155,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                                 <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
                                                                 <td className="p-2 text-center border">{dest?.city || '-'}</td>
                                                                 <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
+                                                                <td className="p-2 text-center border">{dest?.deliveryDate || '-'}</td>
                                                                 <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
                                                                 <td className="p-2 text-center border font-mono">{formatCurrency(dest?.freightCost)}</td>
                                                             </React.Fragment>
@@ -1143,7 +1169,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                         </tr>
                                     ))}
                                     {filteredAnnouncements.length === 0 && (
-                                        <tr><td colSpan={isFullDairyAmbient ? commonCols.length + 21 : visibleColumns.length} className="text-center py-8 text-slate-500">موردی یافت نشد.</td></tr>
+                                        <tr><td colSpan={isFullDairyAmbient ? commonCols.length + 25 : visibleColumns.length} className="text-center py-8 text-slate-500">موردی یافت نشد.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -1221,7 +1247,7 @@ const AnnouncementPanel: React.FC<{
 }> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange }) => {
     const isEditMode = !!(data && data.id);
     
-    const initialCommonState = { loadingDate: '', cargoValue: '', vehicleType: '', notes: '' };
+    const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: '', vehicleType: '', notes: '' };
     const initialIceCreamState = { originCity: '', destinationCity: '', brand: 'میهن', representativeType: 'agent', representativeName: '', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
     const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '' }];
@@ -1333,7 +1359,7 @@ const AnnouncementPanel: React.FC<{
                     });
                 }
                 console.log(`📅 [FreightDashboard] Final loadingDateStr for form:`, loadingDateStr);
-                setCommonState({ loadingDate: loadingDateStr, cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
+                setCommonState({ loadingDate: loadingDateStr, deliveryDate: data.deliveryDate || '', cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
                 
                 // بارگذاری داده‌های دو جا بارگیری از data (اگر وجود داشته باشد)
                 let loadingLocationData: { loadingType: 'single' | 'double', originCity1: string, originCity2: string };
@@ -1550,6 +1576,7 @@ const AnnouncementPanel: React.FC<{
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
             ? { 
                 loadingDate: jalaliDate, 
+                deliveryDate: commonState.deliveryDate || null, // تاریخ تحویل بار
                 lineType, 
                 cargoValue: cargoValueInRials, 
                 vehicleType: commonState.vehicleType, 
@@ -1673,6 +1700,21 @@ const AnnouncementPanel: React.FC<{
                                 />
                                 <div className="text-xs text-slate-500 mt-1">فرمت: 1403/01/01</div>
                             </div>
+                            {lineType === FreightLineType.IceCream && (
+                                <div>
+                                    <label className="text-xs">تاریخ تحویل بار (جلالی)</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="1403/01/02" 
+                                        value={commonState.deliveryDate || ''} 
+                                        onChange={e => setCommonState(s=>({...s, deliveryDate: e.target.value}))} 
+                                        className="input-style mt-1" 
+                                        pattern="\d{4}/\d{1,2}/\d{1,2}"
+                                        title="فرمت صحیح: 1403/01/02"
+                                    />
+                                    <div className="text-xs text-slate-500 mt-1">فرمت: 1403/01/02</div>
+                                </div>
+                            )}
                             <div><label className="text-xs">نوع خودرو*</label><select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select></div>
                                 <div>
                                    <label className="text-xs">ارزش بار (میلیارد ریال)*</label>
@@ -2032,8 +2074,16 @@ const AnnouncementPanel: React.FC<{
                                         {destinations.length > 1 && <button type="button" onClick={() => removeDestination(dest.id!)} className="absolute top-2 right-2 text-red-500 text-xs">حذف</button>}
                                         <div className="grid grid-cols-2 gap-2">
                                             <div><label className="text-xs">شهر مقصد*</label><input value={dest.city || ''} onChange={e => handleDestinationChange(dest.id!, 'city', e.target.value)} list="cities" className="input-style" required/></div>
+                                            <div>
+                                                <label className="text-xs">نوع نماینده</label>
+                                                <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style">
+                                                    <option value="agent">نماینده</option>
+                                                    <option value="distribution">پخش</option>
+                                                </select>
+                                            </div>
                                             <div><label className="text-xs">نام نماینده</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style"/></div>
                                             <div><label className="text-xs">تناژ <span className="text-[10px] text-slate-500">(کیلوگرم)</span></label><input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style"/></div>
+                                            <div><label className="text-xs">تاریخ تحویل</label><input type="text" value={dest.deliveryDate || ''} onChange={e => handleDestinationChange(dest.id!, 'deliveryDate', e.target.value)} className="input-style" placeholder="1404/01/01" dir="ltr"/></div>
                                             <div><label className="text-xs">ساعت تخلیه</label><input type="time" value={dest.unloadTime || ''} onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)} className="input-style"/></div>
                                         </div>
                                     </div>

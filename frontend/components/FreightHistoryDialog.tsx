@@ -278,9 +278,10 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
         newValue = newVehicle ? newVehicle.plate : (newValue || '-');
       }
       
-      // فیلتر کردن total_freight_cost و totalFreightCost
+      // نمایش تغییرات کرایه کل با فرمت مناسب
       if (key === 'total_freight_cost' || key === 'totalFreightCost') {
-        return null; // نمایش نده
+        oldValue = oldValue ? Number(oldValue).toLocaleString('fa-IR') : '-';
+        newValue = newValue ? Number(newValue).toLocaleString('fa-IR') : '-';
       }
       
       return (

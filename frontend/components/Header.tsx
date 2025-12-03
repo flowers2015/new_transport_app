@@ -13,7 +13,9 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, onLogout, defaultDashboardView }) => {
     const [isMgmtDropdownOpen, setMgmtDropdownOpen] = useState(false);
+    const [isAdminDropdownOpen, setAdminDropdownOpen] = useState(false);
     const mgmtDropdownRef = useRef<HTMLDivElement>(null);
+    const adminDropdownRef = useRef<HTMLDivElement>(null);
 
     const useOutsideAlerter = (ref: React.RefObject<HTMLDivElement>, close: () => void) => {
         useEffect(() => {
@@ -28,11 +30,13 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
     };
 
     useOutsideAlerter(mgmtDropdownRef, () => setMgmtDropdownOpen(false));
+    useOutsideAlerter(adminDropdownRef, () => setAdminDropdownOpen(false));
 
     const handleNavigate = (view: View) => {
         // Debug navigation
         console.log('[Header] Navigating to view:', view);
         setMgmtDropdownOpen(false);
+        setAdminDropdownOpen(false);
         onNavigate(view);
     };
     
@@ -93,10 +97,14 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
       { view: View.CostReport, label: 'گزارش هزینه‌های شعب', roles: [] },
       { type: 'divider', roles: Object.values(UserRole) },
       { view: View.SupportTickets, label: 'تیکت‌های پشتیبانی', roles: [UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.BranchFinance, UserRole.VehicleAllocationExpert, UserRole.Transportation] },
-      { type: 'divider', roles: [UserRole.Admin] },
-      { view: View.UserManagement, label: 'مدیریت کاربران', roles: [UserRole.Admin] },
-      { view: View.FreightManagement, label: 'مدیریت اعلام بار', roles: [UserRole.Admin] },
-      { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', roles: [UserRole.Admin] },
+    ];
+
+    // آیتم‌های منوی ادمین - جداگانه
+    const adminItems = [
+      { view: View.UserManagement, label: 'مدیریت کاربران', icon: '👥' },
+      { view: View.FreightManagement, label: 'مدیریت اعلام بار', icon: '📦' },
+      { view: View.AdminResourceManagement, label: 'مدیریت منابع', icon: '🚛' },
+      { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', icon: '📋' },
     ];
 
 
@@ -121,6 +129,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                             )}
                             
                             {isAdmin ? (
+                                <>
+                                {/* منوی عمومی */}
                                 <div className="relative" ref={mgmtDropdownRef}>
                                     <button onClick={() => setMgmtDropdownOpen(!isMgmtDropdownOpen)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition flex items-center">
                                        <span>منوها</span>
@@ -131,16 +141,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                                            {navItems.map((item, index) => {
                                                 const hasItemAccess = hasAccess(item.roles);
                                                 if (!hasItemAccess) return null;
-                                                // Debug: لاگ برای منوی مدیریت کاربران
-                                                if (item.view === View.UserManagement) {
-                                                    console.log('🔍 [Header] UserManagement menu item:', {
-                                                        view: item.view,
-                                                        label: item.label,
-                                                        roles: item.roles,
-                                                        hasAccess: hasItemAccess,
-                                                        currentUserRole: currentUser?.role
-                                                    });
-                                                }
 
                                                 if (item.type === 'divider') {
                                                     const prevItem = index > 0 ? navItems[index - 1] : null;
@@ -168,6 +168,35 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                                         </div>
                                     )}
                                 </div>
+                                
+                                {/* منوی ادمین - جداگانه */}
+                                <div className="relative" ref={adminDropdownRef}>
+                                    <button 
+                                        onClick={() => setAdminDropdownOpen(!isAdminDropdownOpen)} 
+                                        className="px-3 py-2 rounded-md text-sm font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center border border-amber-200"
+                                    >
+                                       <span>🔧 پنل ادمین</span>
+                                       <ChevronDownIcon className={`w-4 h-4 mr-1 transition-transform ${isAdminDropdownOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isAdminDropdownOpen && (
+                                        <div className="absolute left-0 z-20 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-amber-200 focus:outline-none py-1">
+                                           <div className="px-4 py-2 text-xs font-medium text-amber-600 bg-amber-50 border-b border-amber-100">
+                                             ابزارهای مدیریت سیستم
+                                           </div>
+                                           {adminItems.map((item) => (
+                                                <a 
+                                                    key={item.view} 
+                                                    onClick={() => handleNavigate(item.view)} 
+                                                    className="cursor-pointer text-slate-700 block px-4 py-2 text-sm hover:bg-amber-50 flex items-center gap-2"
+                                                >
+                                                    <span>{item.icon}</span>
+                                                    <span>{item.label}</span>
+                                                </a>
+                                           ))}
+                                        </div>
+                                    )}
+                                </div>
+                                </>
                             ) : (
                                 <>
                                 {navItems.filter(item => item.type !== 'divider' && hasAccess(item.roles)).map(item => (

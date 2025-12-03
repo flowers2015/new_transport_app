@@ -488,21 +488,15 @@ async function updateFreightAnnouncement(req, res) {
         await client.query(updateQuery, values);
       }
 
-      // 3. آپدیت مقاصد (اگر ارسال شده)
+      // 3. آپدیت مقاصد (اگر ارسال شده) - با فیلدهای جدید deliveryDate و representativeType
       let newDestinations = oldDestinations;
       if (Array.isArray(destinations)) {
         await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);
 
-        const columnCheck = await client.query(
-          `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_destinations' AND column_name = 'unload_time'`
-        );
-        const hasUnloadTime = columnCheck.rowCount > 0;
-
-        const insertDestQuery = hasUnloadTime
-          ? `INSERT INTO freight_destinations (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`
-          : `INSERT INTO freight_destinations (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, NOW())`;
+        // INSERT با همه فیلدها شامل delivery_date و representative_type
+        const insertDestQuery = `INSERT INTO freight_destinations 
+          (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, delivery_date, representative_type, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`;
 
         for (const d of destinations) {
           const params = [
@@ -512,8 +506,10 @@ async function updateFreightAnnouncement(req, res) {
             d.representativeName || null,
             d.tonnage || null,
             d.freightCost || null,
+            d.unloadTime || null,
+            d.deliveryDate || null,
+            d.representativeType || 'agent',
           ];
-          if (hasUnloadTime) params.push(d.unloadTime || null);
           await client.query(insertDestQuery, params);
         }
         
@@ -665,6 +661,7 @@ async function createFreightAnnouncement(req, res) {
   try {
     const {
       loadingDate,
+      deliveryDate, // تاریخ تحویل بار (برای بستنی)
       lineType,
       cargoValue,
       vehicleType,
@@ -696,15 +693,15 @@ async function createFreightAnnouncement(req, res) {
 
     const insertAnnouncementQuery = `
       INSERT INTO freight_announcements (
-        id, announcement_code, loading_date, line_type, status, cargo_value,
+        id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
         vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
         total_freight_cost, platform_arrival_time, carton_count, created_at, updated_at,
         origin_city, brand, representative_type, representative_name, priority, products, notes
       ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, NULL, NULL,
-        $9, $10, $11, NOW(), NOW(),
-        $12, $13, $14, $15, $16, $17, $18
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, NULL, NULL,
+        $10, $11, $12, NOW(), NOW(),
+        $13, $14, $15, $16, $17, $18, $19
       )
     `;
 
@@ -723,6 +720,7 @@ async function createFreightAnnouncement(req, res) {
       id,
       announcementCode,
       normalizedLoadingDate,
+      deliveryDate || null, // تاریخ تحویل بار
       lineType,
       status,
       cargoValue || 0,
@@ -743,21 +741,12 @@ async function createFreightAnnouncement(req, res) {
     // Insert destinations if provided
     if (Array.isArray(destinations) && destinations.length > 0) {
       // Detect unload_time column existence for flexible insert
-      const columnCheck = await pool.query(
-        `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_destinations' AND column_name = 'unload_time'`
-      );
-      const hasUnloadTime = columnCheck.rowCount > 0;
-      const insertDestQuery = hasUnloadTime
-        ? `INSERT INTO freight_destinations (
-             id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, created_at
-           ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, NOW()
-           )`
-        : `INSERT INTO freight_destinations (
-             id, freight_announcement_id, city, representative_name, tonnage, freight_cost, created_at
-           ) VALUES (
-             $1, $2, $3, $4, $5, $6, NOW()
-           )`;
+      // INSERT destinations با فیلدهای جدید (delivery_date, representative_type)
+      const insertDestQuery = `INSERT INTO freight_destinations (
+           id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, delivery_date, representative_type, created_at
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+         )`;
 
       for (const d of destinations) {
         const destId = crypto.randomUUID();
@@ -768,8 +757,10 @@ async function createFreightAnnouncement(req, res) {
           d.representativeName || null,
           d.tonnage || null,
           d.freightCost || null,
+          d.unloadTime || null,
+          d.deliveryDate || null,
+          d.representativeType || 'agent',
         ];
-        if (hasUnloadTime) params.push(d.unloadTime || null);
         await pool.query(insertDestQuery, params);
       }
     }

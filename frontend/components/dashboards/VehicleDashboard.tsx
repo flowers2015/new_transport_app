@@ -4,6 +4,8 @@ import { Vehicle, Branch, PlateNumber, VehicleStatus, VehicleCategory } from '..
 import { TruckIcon } from '../icons/CarIcon';
 import { formatJalali, formatPlateNumber } from '../../utils/jalali';
 import { ChevronDownIcon } from '../icons/ChevronDownIcon';
+import VehicleSpecsDialog from '../VehicleSpecsDialog';
+import { getApiUrl } from '../../utils/apiConfig';
 
 interface VehicleManagementProps {
     vehicles: Vehicle[];
@@ -525,6 +527,12 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
     const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     
+    // States برای دیالوگ مشخصات و داده‌های API
+    const [showSpecsDialog, setShowSpecsDialog] = useState(false);
+    const [apiBrands, setApiBrands] = useState<string[]>([]);
+    const [apiModels, setApiModels] = useState<string[]>([]);
+    const [apiTips, setApiTips] = useState<any[]>([]);
+    
     const initialFormState = {
         holdingCompany: '' as 'mihan' | 'other' | '',
         mihanCompany: '',
@@ -551,6 +559,117 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         status: VehicleStatus.Active,
     };
     const [formState, setFormState] = useState(initialFormState);
+
+    // --- دریافت برندها از API بر اساس دسته‌بندی ---
+    useEffect(() => {
+        const fetchBrands = async () => {
+            if (!formState.vehicleCategory) {
+                setApiBrands([]);
+                return;
+            }
+            try {
+                const token = localStorage.getItem('token');
+                // تبدیل VehicleCategory به نام فارسی برای API
+                const categoryMap: Record<string, string> = {
+                    [VehicleCategory.Heavy]: 'خودرو سنگین',
+                    [VehicleCategory.Medium]: 'خودرو نیمه سنگین',
+                    [VehicleCategory.Car]: 'سواری',
+                    [VehicleCategory.Pickup]: 'وانت',
+                    [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+                };
+                const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
+                const res = await fetch(getApiUrl(`vehicle-specs/brands?category=${encodeURIComponent(categoryName)}`), {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setApiBrands(data);
+                }
+            } catch (err) {
+                console.error('Error fetching brands:', err);
+            }
+        };
+        fetchBrands();
+    }, [formState.vehicleCategory]);
+
+    // --- دریافت مدل‌ها از API بر اساس برند ---
+    useEffect(() => {
+        const fetchModels = async () => {
+            if (!formState.vehicleCategory || !formState.brand) {
+                setApiModels([]);
+                return;
+            }
+            try {
+                const token = localStorage.getItem('token');
+                const categoryMap: Record<string, string> = {
+                    [VehicleCategory.Heavy]: 'خودرو سنگین',
+                    [VehicleCategory.Medium]: 'خودرو نیمه سنگین',
+                    [VehicleCategory.Car]: 'سواری',
+                    [VehicleCategory.Pickup]: 'وانت',
+                    [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+                };
+                const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
+                const res = await fetch(getApiUrl(`vehicle-specs/models?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}`), {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setApiModels(data);
+                }
+            } catch (err) {
+                console.error('Error fetching models:', err);
+            }
+        };
+        fetchModels();
+    }, [formState.vehicleCategory, formState.brand]);
+
+    // --- دریافت تیپ‌ها و مشخصات فنی از API ---
+    useEffect(() => {
+        const fetchTips = async () => {
+            if (!formState.vehicleCategory || !formState.brand || !formState.model) {
+                setApiTips([]);
+                return;
+            }
+            try {
+                const token = localStorage.getItem('token');
+                const categoryMap: Record<string, string> = {
+                    [VehicleCategory.Heavy]: 'خودرو سنگین',
+                    [VehicleCategory.Medium]: 'خودرو نیمه سنگین',
+                    [VehicleCategory.Car]: 'سواری',
+                    [VehicleCategory.Pickup]: 'وانت',
+                    [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+                };
+                const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
+                const res = await fetch(getApiUrl(`vehicle-specs/tips?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}&model=${encodeURIComponent(formState.model)}`), {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setApiTips(data);
+                }
+            } catch (err) {
+                console.error('Error fetching tips:', err);
+            }
+        };
+        fetchTips();
+    }, [formState.vehicleCategory, formState.brand, formState.model]);
+
+    // --- پر کردن خودکار مشخصات فنی با انتخاب تیپ از API ---
+    useEffect(() => {
+        if (formState.vehicleTip && apiTips.length > 0) {
+            const selectedTip = apiTips.find(t => t.tip === formState.vehicleTip);
+            if (selectedTip) {
+                setFormState(prev => ({
+                    ...prev,
+                    fuelType: selectedTip.fuelType || prev.fuelType,
+                    cylinderCount: selectedTip.cylinderCount?.toString() || prev.cylinderCount,
+                    axleCount: selectedTip.axleCount?.toString() || prev.axleCount,
+                    wheelCount: selectedTip.wheelCount?.toString() || prev.wheelCount,
+                    capacity: selectedTip.capacity || prev.capacity,
+                }));
+            }
+        }
+    }, [formState.vehicleTip, apiTips]);
 
     // --- Cascading Dropdown Logic ---
     const brands = useMemo(() => {
@@ -768,10 +887,20 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-lg">
-                <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center">
-                    <TruckIcon className="w-6 h-6 mr-2 text-sky-600" />
-                    افزودن خودرو جدید
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                        <TruckIcon className="w-6 h-6 mr-2 text-sky-600" />
+                        افزودن خودرو جدید
+                    </h2>
+                    <button
+                        type="button"
+                        onClick={() => setShowSpecsDialog(true)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 text-sm"
+                    >
+                        <span>⚙️</span>
+                        <span>مدیریت مشخصات خودرو</span>
+                    </button>
+                </div>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -812,7 +941,8 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                         <label className="block text-sm font-medium text-slate-700">برند <span className="text-red-500">*</span></label>
                                         <input list="brand-list" name="brand" value={formState.brand} onChange={handleBrandChange} className="mt-1 input-style" placeholder="انتخاب یا تایپ کنید..." required />
                                         <datalist id="brand-list">
-                                            {brands.map(b => <option key={b} value={b} />)}
+                                            {/* اول از API و اگر خالی بود از دیتابیس محلی */}
+                                            {(apiBrands.length > 0 ? apiBrands : brands).map(b => <option key={b} value={b} />)}
                                         </datalist>
                                     </div>
 
@@ -820,7 +950,8 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                         <label className="block text-sm font-medium text-slate-700">مدل اصلی <span className="text-red-500">*</span></label>
                                         <input list="model-list" name="model" value={formState.model} onChange={handleModelChange} className="mt-1 input-style" placeholder="انتخاب یا تایپ کنید..." required />
                                         <datalist id="model-list">
-                                            {models.map(m => <option key={m} value={m} />)}
+                                            {/* اول از API و اگر خالی بود از دیتابیس محلی */}
+                                            {(apiModels.length > 0 ? apiModels : models).map(m => <option key={m} value={m} />)}
                                         </datalist>
                                     </div>
 
@@ -828,7 +959,8 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                         <label className="block text-sm font-medium text-slate-700">تیپ خودرو</label>
                                         <input list="submodel-list" name="vehicleTip" value={formState.vehicleTip} onChange={handleFormChange} className="mt-1 input-style" placeholder="انتخاب یا تایپ کنید..." />
                                         <datalist id="submodel-list">
-                                            {subModels.map(sm => <option key={sm} value={sm} />)}
+                                            {/* اول از API و اگر خالی بود از دیتابیس محلی */}
+                                            {(apiTips.length > 0 ? apiTips.map(t => t.tip).filter(Boolean) : subModels).map(sm => <option key={sm} value={sm} />)}
                                         </datalist>
                                     </div>
                                 </div>
@@ -1048,6 +1180,12 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                 </div>
             </div>
             <style>{`.input-style { direction: ltr; text-align: right; display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; }`}</style>
+            
+            {/* دیالوگ مدیریت مشخصات خودرو */}
+            <VehicleSpecsDialog 
+                isOpen={showSpecsDialog} 
+                onClose={() => setShowSpecsDialog(false)} 
+            />
         </div>
     );
 };

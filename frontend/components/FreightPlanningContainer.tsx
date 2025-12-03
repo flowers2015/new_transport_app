@@ -83,6 +83,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     tonnage: d.tonnage,
                     unloadTime: d.unload_time || d.unloadTime,
                     freightCost: d.freight_cost ?? d.freightCost,
+                    deliveryDate: d.delivery_date || d.deliveryDate,
+                    representativeType: d.representative_type || d.representativeType,
                 })) : [],
                 history: a.history || [],
             });

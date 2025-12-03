@@ -43,6 +43,7 @@ export enum View {
     AllowanceRegulation = 'allowance-regulation',
     UserManagement = 'user-management',
     FreightManagement = 'freight-management',
+    AdminResourceManagement = 'admin-resource-management',
 }
 
 export enum UserRole {
@@ -608,6 +609,8 @@ export interface Destination {
     unloadTime?: string;
     brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
     freightCost?: number;
+    deliveryDate?: string; // تاریخ تحویل بار (شمسی)
+    representativeType?: 'agent' | 'distribution'; // نوع نماینده: نماینده یا پخش
 }
 
 export interface AnnouncementHistory {
@@ -625,6 +628,7 @@ export interface FreightAnnouncement {
     announcementCode: string;
     createdAt: Date;
     loadingDate: Date;
+    deliveryDate?: string; // تاریخ تحویل بار (شمسی) - برای بستنی
     lineType: FreightLineType;
     status: FreightAnnouncementStatus;
     paymentStatus?: FreightPaymentStatus;
