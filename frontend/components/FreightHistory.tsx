@@ -596,7 +596,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
-                        <WorkflowRules view={View.TransportLive} userRole={currentUser.role} />
+                        <WorkflowRules view={View.FreightHistory} userRole={currentUser.role} />
                          <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     </div>
           </div>

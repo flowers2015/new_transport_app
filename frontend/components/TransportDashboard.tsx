@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, LabelList } from 'recharts';
-import { FreightLineType } from '../types';
+import { FreightLineType, User, View } from '../types';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { getApiUrl } from '../utils/apiConfig';
+import WorkflowRules from './WorkflowRules';
+import { BookOpenIcon } from './icons/BookOpenIcon';
 
 interface StatisticsData {
     timePeriod: string;
@@ -117,6 +119,7 @@ interface LineAnalyticsMeta {
 }
 
 interface TransportDashboardProps {
+    currentUser: User;
     iceCreamStats: StatisticsData[];
     dairyStats: StatisticsData[];
     ambientStats: StatisticsData[];
@@ -1011,6 +1014,7 @@ const LineRow: React.FC<{
 };
 
 const TransportDashboard: React.FC<TransportDashboardProps> = ({
+    currentUser,
     iceCreamStats,
     dairyStats,
     ambientStats,
@@ -1034,6 +1038,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     lineAnalyticsLoading,
     lineAnalyticsError,
 }) => {
+    const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [showDailyStats, setShowDailyStats] = useState(false);
     const [dailyStatsIndex, setDailyStatsIndex] = useState(0);
     const [dailyStats, setDailyStats] = useState<{
@@ -1240,6 +1245,9 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
             <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-slate-800">داشبورد ترابری</h1>
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین کارتابل">
+                        <BookOpenIcon className="w-5 h-5 text-slate-600"/>
+                    </button>
                     <button
                         onClick={() => {
                             setShowDailyStats(!showDailyStats);
@@ -2952,6 +2960,16 @@ const LineAnalyticsSection: React.FC<{
                                 بستن
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Dialog برای قوانین */}
+            {isRulesOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setIsRulesOpen(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
+                        <WorkflowRules view={View.TransportDashboard} userRole={currentUser.role} />
+                        <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     </div>
                 </div>
             )}

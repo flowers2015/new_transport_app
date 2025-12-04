@@ -617,7 +617,7 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
             <div className="bg-white p-6 rounded-xl shadow-lg">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><CreditCardIcon className="w-6 h-6 mr-2 text-sky-600" />جستجوی مالی حمل</h2>
-                    <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
+                    <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین کارتابل"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 border rounded-lg bg-slate-50">
                     <div>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, View } from '../types';
 import TransportFinanceDashboard from './TransportFinanceDashboard';
 import TransportFinanceCalculation from './TransportFinanceCalculation';
+import MonthlyCommissionCalculation from './MonthlyCommissionCalculation';
 import AllowanceRegulationManagement from './AllowanceRegulationManagement';
 import TransportFinancePaymentList from './TransportFinancePaymentList';
 import TransportFinancePaidInvoices from './TransportFinancePaidInvoices';
@@ -16,6 +17,10 @@ const TransportFinanceContainer: React.FC<TransportFinanceContainerProps> = ({ c
     // اگر view مشخص شده، آن را نمایش بده
     if (currentView === View.TransportFinanceCalculation) {
         return <TransportFinanceCalculation currentUser={currentUser} />;
+    }
+
+    if (currentView === View.MonthlyCommissionCalculation) {
+        return <MonthlyCommissionCalculation currentUser={currentUser} />;
     }
 
     if (currentView === View.AllowanceRegulation) {

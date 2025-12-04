@@ -104,6 +104,23 @@ interface FuelConsumptionRegulation {
     updatedByName?: string;
 }
 
+interface FixedAllowanceRegulation {
+    id?: string;
+    vehicleType: 'تریلی' | 'ده چرخ';
+    fixedAllowancePerKm: number; // اجرت ثابت به ازای هر کیلومتر (ریال)
+    approvalDate: string;
+    documentPath?: string;
+    startDate: string;
+    endDate: string;
+    isActive?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+    createdBy?: string;
+    createdByName?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+}
+
 interface AllowanceRegulationManagementProps {
     currentUser: User;
 }
@@ -135,7 +152,7 @@ const jalaliToGregorianDateInput = (jalaliStr: string): string => {
 };
 
 const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps> = ({ currentUser }) => {
-    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption'>('food');
+    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'fixed-allowance' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption'>('food');
     
     // Food Regulations
     const [foodRegulations, setFoodRegulations] = useState<FoodRegulation[]>([]);
@@ -162,6 +179,20 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         endDate: getTodayJalali(),
         isActive: true,
     });
+
+    // Fixed Allowance Regulations (اجرت ثابت)
+    const [fixedAllowanceRegulations, setFixedAllowanceRegulations] = useState<FixedAllowanceRegulation[]>([]);
+    const [showFixedAllowanceDialog, setShowFixedAllowanceDialog] = useState(false);
+    const [editingFixedAllowance, setEditingFixedAllowance] = useState<FixedAllowanceRegulation | null>(null);
+    const [fixedAllowanceFormData, setFixedAllowanceFormData] = useState<FixedAllowanceRegulation>({
+        vehicleType: 'تریلی',
+        fixedAllowancePerKm: 0,
+        approvalDate: getTodayJalali(),
+        documentPath: '',
+        startDate: getTodayJalali(),
+        endDate: getTodayJalali(),
+        isActive: true,
+    });
     
     // Mileage Regulations
     const [mileageRegulations, setMileageRegulations] = useState<MileageRegulation[]>([]);
@@ -178,6 +209,8 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         endDate: getTodayJalali(),
         isActive: true,
     });
+    // نمایش بازه‌های پلکانی برای یک دسته خودرو
+    const [selectedVehicleTypeForRanges, setSelectedVehicleTypeForRanges] = useState<'تریلی' | 'ده چرخ' | null>(null);
     
     // Excess Mission Regulations
     const [excessMissionRegulations, setExcessMissionRegulations] = useState<ExcessMissionRegulation[]>([]);
@@ -238,18 +271,20 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 'Content-Type': 'application/json',
             };
             
-            const [foodRes, helperRes, mileageRes, excessMissionRes, multiUnloadRes, fuelConsumptionRes] = await Promise.all([
+            const [foodRes, helperRes, fixedAllowanceRes, mileageRes, excessMissionRes, multiUnloadRes, fuelConsumptionRes] = await Promise.all([
                 fetch(getApiUrl('allowance-regulations/food'), { headers }),
                 fetch(getApiUrl('allowance-regulations/helper'), { headers }),
+                fetch(getApiUrl('allowance-regulations/fixed-allowance'), { headers }),
                 fetch(getApiUrl('allowance-regulations/mileage'), { headers }),
                 fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
                 fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
                 fetch(getApiUrl('allowance-regulations/fuel-consumption'), { headers }),
             ]);
             
-            if (foodRes.ok && helperRes.ok && mileageRes.ok && excessMissionRes.ok && multiUnloadRes.ok && fuelConsumptionRes.ok) {
+            if (foodRes.ok && helperRes.ok && fixedAllowanceRes.ok && mileageRes.ok && excessMissionRes.ok && multiUnloadRes.ok && fuelConsumptionRes.ok) {
                 const foodData = await foodRes.json();
                 const helperData = await helperRes.json();
+                const fixedAllowanceData = await fixedAllowanceRes.json();
                 const mileageData = await mileageRes.json();
                 const excessMissionData = await excessMissionRes.json();
                 const multiUnloadData = await multiUnloadRes.json();
@@ -257,6 +292,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 
                 setFoodRegulations(foodData);
                 setHelperRegulations(helperData);
+                setFixedAllowanceRegulations(fixedAllowanceData);
                 setMileageRegulations(mileageData);
                 setExcessMissionRegulations(excessMissionData);
                 setMultiUnloadRegulations(multiUnloadData);
@@ -492,6 +528,105 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         }
     };
 
+    // Fixed Allowance Regulation Handlers (اجرت ثابت)
+    const handleAddFixedAllowance = () => {
+        setEditingFixedAllowance(null);
+        setFixedAllowanceFormData({
+            vehicleType: 'تریلی',
+            fixedAllowancePerKm: 0,
+            approvalDate: getTodayJalali(),
+            documentPath: '',
+            startDate: getTodayJalali(),
+            endDate: getTodayJalali(),
+            isActive: true,
+        });
+        setShowFixedAllowanceDialog(true);
+    };
+
+    const handleEditFixedAllowance = (regulation: FixedAllowanceRegulation) => {
+        setEditingFixedAllowance(regulation);
+        setFixedAllowanceFormData(regulation);
+        setShowFixedAllowanceDialog(true);
+    };
+
+    const handleDeleteFixedAllowance = async (id: string) => {
+        if (!confirm('آیا از حذف این بخشنامه اطمینان دارید؟')) return;
+        
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const response = await fetch(getApiUrl(`allowance-regulations/fixed-allowance/${id}`), {
+                method: 'DELETE',
+                headers,
+            });
+
+            if (!response.ok) throw new Error('خطا در حذف بخشنامه');
+            
+            await fetchAllRegulations();
+            alert('بخشنامه با موفقیت حذف شد.');
+        } catch (err: any) {
+            console.error('❌ [handleDeleteFixedAllowance] Error:', err);
+            alert(`خطا در حذف بخشنامه: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    const handleSaveFixedAllowance = async () => {
+        if (!fixedAllowanceFormData.fixedAllowancePerKm || !fixedAllowanceFormData.approvalDate || !fixedAllowanceFormData.startDate || !fixedAllowanceFormData.endDate) {
+            alert('لطفاً تمام فیلدهای الزامی را پر کنید.');
+            return;
+        }
+
+        if (fixedAllowanceFormData.startDate > fixedAllowanceFormData.endDate) {
+            alert('تاریخ شروع باید قبل از تاریخ پایان باشد.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const userId = currentUser?.id;
+
+            const payload = {
+                id: editingFixedAllowance?.id || undefined,
+                vehicleType: fixedAllowanceFormData.vehicleType,
+                fixedAllowancePerKm: Number(fixedAllowanceFormData.fixedAllowancePerKm),
+                approvalDate: fixedAllowanceFormData.approvalDate,
+                documentPath: fixedAllowanceFormData.documentPath || null,
+                startDate: fixedAllowanceFormData.startDate,
+                endDate: fixedAllowanceFormData.endDate,
+                isActive: fixedAllowanceFormData.isActive !== false,
+                userId,
+            };
+
+            const response = await fetch(getApiUrl('allowance-regulations/fixed-allowance'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'خطا در ذخیره بخشنامه');
+            }
+
+            await fetchAllRegulations();
+            setShowFixedAllowanceDialog(false);
+            setEditingFixedAllowance(null);
+            alert(editingFixedAllowance ? 'بخشنامه با موفقیت به‌روزرسانی شد.' : 'بخشنامه با موفقیت ثبت شد.');
+        } catch (err: any) {
+            console.error('❌ [handleSaveFixedAllowance] Error:', err);
+            alert(`خطا در ذخیره بخشنامه: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
     // Mileage Regulation Handlers
     const handleAddMileage = () => {
         setEditingMileage(null);
@@ -558,8 +693,23 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
             };
 
             const userId = currentUser?.id || currentUser?.userId || '';
+            
+            // اگر دسته خودرو انتخاب شده، از regulation_id موجود استفاده کن
+            // یا یک regulation_id جدید بساز
+            let regulationId = (mileageFormData as any).regulationId;
+            if (!regulationId && selectedVehicleTypeForRanges) {
+                // پیدا کردن regulation_id موجود برای این دسته خودرو
+                const existingRegulations = mileageRegulations.filter(
+                    r => r.vehicleType === selectedVehicleTypeForRanges
+                );
+                if (existingRegulations.length > 0 && (existingRegulations[0] as any).regulationId) {
+                    regulationId = (existingRegulations[0] as any).regulationId;
+                }
+            }
+            
             const payload = {
                 ...(editingMileage?.id && { id: editingMileage.id }),
+                regulationId: regulationId || null, // اگر نبود، سرور یکی می‌سازه
                 vehicleType: mileageFormData.vehicleType,
                 minKilometers: Number(mileageFormData.minKilometers),
                 maxKilometers: Number(mileageFormData.maxKilometers),
@@ -571,6 +721,8 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 isActive: mileageFormData.isActive !== false,
                 userId,
             };
+
+            console.log('📤 [handleSaveMileage] Sending:', payload);
 
             const response = await fetch(getApiUrl('allowance-regulations/mileage'), {
                 method: 'POST',
@@ -931,6 +1083,16 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                             بخشنامه اجرت راننده کمکی
                         </button>
                         <button
+                            onClick={() => setActiveTab('fixed-allowance')}
+                            className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+                                activeTab === 'fixed-allowance'
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                        >
+                            بخشنامه اجرت ثابت
+                        </button>
+                        <button
                             onClick={() => setActiveTab('mileage')}
                             className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
                                 activeTab === 'mileage'
@@ -1150,56 +1312,53 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                     </div>
                 )}
 
-                {activeTab === 'mileage' && (
+                {activeTab === 'fixed-allowance' && (
                     <div>
                         <div className="flex justify-end mb-4">
                             <button
-                                onClick={handleAddMileage}
-                                className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors"
+                                onClick={handleAddFixedAllowance}
+                                className="px-4 py-2 bg-amber-600 text-white rounded-md text-sm hover:bg-amber-700 transition-colors"
                             >
-                                + افزودن بخشنامه اجرت پیمایش
+                                + افزودن بخشنامه اجرت ثابت
                             </button>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-amber-800">
+                                💡 <strong>اجرت ثابت:</strong> برای رانندگانی که در صف "اجرت ثابت" قرار دارند، اجرت بر اساس پیمایش × نرخ ثابت به ازای هر کیلومتر محاسبه می‌شود.
+                            </p>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-right border-collapse">
                                 <thead>
-                                    <tr className="bg-slate-700 text-white border-b">
-                                        <th className="p-3 text-right border-l border-slate-600">ردیف</th>
-                                        <th className="p-3 text-right border-l border-slate-600">نوع خودرو</th>
-                                        <th className="p-3 text-right border-l border-slate-600">حداقل (کیلومتر)</th>
-                                        <th className="p-3 text-right border-l border-slate-600">حداکثر (کیلومتر)</th>
-                                        <th className="p-3 text-right border-l border-slate-600">اجرت به ازای هر کیلومتر (ریال)</th>
-                                        <th className="p-3 text-right border-l border-slate-600">تاریخ مصوبه</th>
-                                        <th className="p-3 text-right border-l border-slate-600">تاریخ شروع</th>
-                                        <th className="p-3 text-right border-l border-slate-600">تاریخ پایان</th>
-                                        <th className="p-3 text-right border-l border-slate-600">وضعیت</th>
-                                        <th className="p-3 text-right border-l border-slate-600">ایجاد شده توسط</th>
-                                        <th className="p-3 text-right border-l border-slate-600">تاریخ ایجاد</th>
+                                    <tr className="bg-amber-700 text-white border-b">
+                                        <th className="p-3 text-right border-l border-amber-600">ردیف</th>
+                                        <th className="p-3 text-right border-l border-amber-600">نوع خودرو</th>
+                                        <th className="p-3 text-right border-l border-amber-600">اجرت ثابت به ازای هر کیلومتر (ریال)</th>
+                                        <th className="p-3 text-right border-l border-amber-600">تاریخ مصوبه</th>
+                                        <th className="p-3 text-right border-l border-amber-600">تاریخ شروع</th>
+                                        <th className="p-3 text-right border-l border-amber-600">تاریخ پایان</th>
+                                        <th className="p-3 text-right border-l border-amber-600">وضعیت</th>
+                                        <th className="p-3 text-right border-l border-amber-600">ایجاد شده توسط</th>
+                                        <th className="p-3 text-right border-l border-amber-600">تاریخ ایجاد</th>
                                         <th className="p-3 text-right">عملیات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {mileageRegulations.length === 0 ? (
+                                    {fixedAllowanceRegulations.length === 0 ? (
                                         <tr>
-                                            <td colSpan={12} className="p-6 text-center text-slate-500">
+                                            <td colSpan={10} className="p-6 text-center text-slate-500">
                                                 هیچ بخشنامه‌ای ثبت نشده است.
                                             </td>
                                         </tr>
                                     ) : (
-                                        mileageRegulations.map((regulation, index) => (
-                                            <tr key={regulation.id || index} className="border-b border-slate-200 bg-white hover:bg-slate-50">
+                                        fixedAllowanceRegulations.map((regulation, index) => (
+                                            <tr key={regulation.id || index} className="border-b border-slate-200 bg-white hover:bg-amber-50">
                                                 <td className="p-3 border-l border-slate-200 text-center">{index + 1}</td>
-                                                <td className="p-3 border-l border-slate-200 font-medium">
-                                                    {regulation.vehicleType}
+                                                <td className="p-3 border-l border-slate-200 font-semibold">
+                                                    {regulation.vehicleType === 'تریلی' ? '🚛 تریلی / مینی تریلی' : '🚚 ده چرخ'}
                                                 </td>
-                                                <td className="p-3 border-l border-slate-200 text-left">
-                                                    {regulation.minKilometers.toLocaleString('fa-IR')}
-                                                </td>
-                                                <td className="p-3 border-l border-slate-200 text-left">
-                                                    {regulation.maxKilometers.toLocaleString('fa-IR')}
-                                                </td>
-                                                <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
-                                                    {regulation.allowancePerKm.toLocaleString('fa-IR')}
+                                                <td className="p-3 border-l border-slate-200 text-left font-semibold text-amber-700">
+                                                    {regulation.fixedAllowancePerKm.toLocaleString('fa-IR')}
                                                 </td>
                                                 <td className="p-3 border-l border-slate-200 text-xs">
                                                     {regulation.approvalDate || '-'}
@@ -1228,13 +1387,13 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                                 <td className="p-3">
                                                     <div className="flex gap-2">
                                                         <button
-                                                            onClick={() => handleEditMileage(regulation)}
+                                                            onClick={() => handleEditFixedAllowance(regulation)}
                                                             className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
                                                         >
                                                             ویرایش
                                                         </button>
                                                         <button
-                                                            onClick={() => regulation.id && handleDeleteMileage(regulation.id)}
+                                                            onClick={() => regulation.id && handleDeleteFixedAllowance(regulation.id)}
                                                             className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700 transition-colors"
                                                         >
                                                             حذف
@@ -1247,6 +1406,251 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'mileage' && (
+                    <div>
+                        {/* کارت‌های دسته‌بندی خودرو */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            {/* کارت تریلی / مینی تریلی */}
+                            <div 
+                                className={`bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border-2 cursor-pointer transition-all hover:shadow-lg ${
+                                    selectedVehicleTypeForRanges === 'تریلی' ? 'border-purple-500 ring-2 ring-purple-300' : 'border-purple-200'
+                                }`}
+                                onClick={() => setSelectedVehicleTypeForRanges(selectedVehicleTypeForRanges === 'تریلی' ? null : 'تریلی')}
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="text-lg font-bold text-purple-800">🚛 تریلی / مینی تریلی</h3>
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-purple-200 text-purple-800">
+                                        {mileageRegulations.filter(r => r.vehicleType === 'تریلی').length} بازه
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-600 mb-2">
+                                    نرخ تریلی و مینی تریلی یکسان است
+                                </p>
+                                <div className="text-xs text-slate-500">
+                                    برای مشاهده/ویرایش بازه‌های پلکانی کلیک کنید
+                                </div>
+                            </div>
+                            
+                            {/* کارت ده چرخ */}
+                            <div 
+                                className={`bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border-2 cursor-pointer transition-all hover:shadow-lg ${
+                                    selectedVehicleTypeForRanges === 'ده چرخ' ? 'border-orange-500 ring-2 ring-orange-300' : 'border-orange-200'
+                                }`}
+                                onClick={() => setSelectedVehicleTypeForRanges(selectedVehicleTypeForRanges === 'ده چرخ' ? null : 'ده چرخ')}
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="text-lg font-bold text-orange-800">🚚 ده چرخ</h3>
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-orange-200 text-orange-800">
+                                        {mileageRegulations.filter(r => r.vehicleType === 'ده چرخ').length} بازه
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-600 mb-2">
+                                    نرخ ده چرخ
+                                </p>
+                                <div className="text-xs text-slate-500">
+                                    برای مشاهده/ویرایش بازه‌های پلکانی کلیک کنید
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* جدول بازه‌های پلکانی برای دسته انتخاب شده */}
+                        {selectedVehicleTypeForRanges && (
+                            <div className="bg-white rounded-lg border border-slate-200 p-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="text-lg font-bold text-slate-800">
+                                        بازه‌های پلکانی اجرت پیمایش - {selectedVehicleTypeForRanges}
+                                    </h4>
+                                    <div className="flex gap-2">
+                                        {/* دکمه تنظیم دسته‌ای فقط وقتی بازه وجود داره نمایش داده بشه */}
+                                        {mileageRegulations.filter(r => r.vehicleType === selectedVehicleTypeForRanges).length > 0 && (
+                                        <button
+                                            onClick={async () => {
+                                                // تنظیم دسته‌ای تاریخ‌ها
+                                                const startDate = prompt('تاریخ شروع بخشنامه (فرمت: YYYY/MM/DD):', getTodayJalali());
+                                                if (!startDate) return;
+                                                const endDate = prompt('تاریخ پایان بخشنامه (فرمت: YYYY/MM/DD):', '1404/12/29');
+                                                if (!endDate) return;
+                                                const approvalDate = prompt('تاریخ مصوبه (فرمت: YYYY/MM/DD):', getTodayJalali());
+                                                if (!approvalDate) return;
+                                                
+                                                const regsToUpdate = mileageRegulations.filter(r => r.vehicleType === selectedVehicleTypeForRanges);
+                                                if (regsToUpdate.length === 0) {
+                                                    alert('هیچ بازه‌ای برای به‌روزرسانی وجود ندارد.');
+                                                    return;
+                                                }
+                                                
+                                                if (!confirm(`آیا می‌خواهید تاریخ‌های ${regsToUpdate.length} بازه را به‌روزرسانی کنید؟`)) return;
+                                                
+                                                const token = localStorage.getItem('token');
+                                                const headers = {
+                                                    'Authorization': `Bearer ${token}`,
+                                                    'Content-Type': 'application/json',
+                                                };
+                                                const userId = currentUser?.id || currentUser?.userId || '';
+                                                
+                                                let successCount = 0;
+                                                let lastError = '';
+                                                for (const reg of regsToUpdate) {
+                                                    try {
+                                                        const payload = {
+                                                            id: reg.id,
+                                                            regulationId: (reg as any).regulationId || null,
+                                                            vehicleType: reg.vehicleType,
+                                                            minKilometers: Number(reg.minKilometers),
+                                                            maxKilometers: Number(reg.maxKilometers),
+                                                            allowancePerKm: Number(reg.allowancePerKm),
+                                                            approvalDate,
+                                                            startDate,
+                                                            endDate,
+                                                            isActive: true,
+                                                            userId,
+                                                        };
+                                                        
+                                                        console.log('📤 [تنظیم دسته‌ای] Sending:', payload);
+                                                        
+                                                        const response = await fetch(getApiUrl('allowance-regulations/mileage'), {
+                                                            method: 'POST',
+                                                            headers,
+                                                            body: JSON.stringify(payload),
+                                                        });
+                                                        
+                                                        if (response.ok) {
+                                                            successCount++;
+                                                        } else {
+                                                            const errText = await response.text();
+                                                            lastError = errText;
+                                                            console.error('❌ خطا:', errText);
+                                                        }
+                                                    } catch (err: any) {
+                                                        console.error('❌ خطا در به‌روزرسانی:', err);
+                                                        lastError = err.message;
+                                                    }
+                                                }
+                                                
+                                                await fetchAllRegulations();
+                                                if (successCount === regsToUpdate.length) {
+                                                    alert(`✅ همه ${successCount} بازه با موفقیت به‌روزرسانی شد.`);
+                                                } else {
+                                                    alert(`${successCount} بازه از ${regsToUpdate.length} به‌روزرسانی شد.\n\nخطا: ${lastError}`);
+                                                }
+                                            }}
+                                            className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 transition-colors"
+                                        >
+                                            📅 تنظیم دسته‌ای تاریخ‌ها
+                                        </button>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                // دریافت تاریخ‌های موجود از اولین بازه
+                                                const existingRegs = mileageRegulations.filter(r => r.vehicleType === selectedVehicleTypeForRanges);
+                                                const firstReg = existingRegs[0];
+                                                
+                                                setMileageFormData({
+                                                    vehicleType: selectedVehicleTypeForRanges,
+                                                    minKilometers: 0,
+                                                    maxKilometers: 0,
+                                                    allowancePerKm: 0,
+                                                    approvalDate: firstReg?.approvalDate || getTodayJalali(),
+                                                    documentPath: '',
+                                                    startDate: firstReg?.startDate || getTodayJalali(),
+                                                    endDate: firstReg?.endDate || getTodayJalali(),
+                                                    isActive: true,
+                                                });
+                                                setEditingMileage(null);
+                                                setShowMileageDialog(true);
+                                            }}
+                                            className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors"
+                                        >
+                                            + افزودن بازه جدید
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-right border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-700 text-white border-b">
+                                                <th className="p-3 text-right border-l border-slate-600">ردیف</th>
+                                                <th className="p-3 text-right border-l border-slate-600">از (کیلومتر)</th>
+                                                <th className="p-3 text-right border-l border-slate-600">تا (کیلومتر)</th>
+                                                <th className="p-3 text-right border-l border-slate-600">اجرت هر کیلومتر (ریال)</th>
+                                                <th className="p-3 text-right border-l border-slate-600">تاریخ شروع</th>
+                                                <th className="p-3 text-right border-l border-slate-600">تاریخ پایان</th>
+                                                <th className="p-3 text-right border-l border-slate-600">وضعیت</th>
+                                                <th className="p-3 text-right">عملیات</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {mileageRegulations
+                                                .filter(r => r.vehicleType === selectedVehicleTypeForRanges)
+                                                .sort((a, b) => a.minKilometers - b.minKilometers)
+                                                .map((regulation, index) => (
+                                                    <tr key={regulation.id || index} className="border-b border-slate-200 bg-white hover:bg-slate-50">
+                                                        <td className="p-3 border-l border-slate-200 text-center">{index + 1}</td>
+                                                        <td className="p-3 border-l border-slate-200 text-left font-medium">
+                                                            {regulation.minKilometers.toLocaleString('fa-IR')}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-left font-medium">
+                                                            {regulation.maxKilometers.toLocaleString('fa-IR')}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-left font-bold text-green-700">
+                                                            {regulation.allowancePerKm.toLocaleString('fa-IR')}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-xs">
+                                                            {regulation.startDate || '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-xs">
+                                                            {regulation.endDate || '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200">
+                                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+                                                                regulation.isActive !== false 
+                                                                    ? 'bg-green-100 text-green-800' 
+                                                                    : 'bg-red-100 text-red-800'
+                                                            }`}>
+                                                                {regulation.isActive !== false ? 'فعال' : 'غیرفعال'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleEditMileage(regulation)}
+                                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                                >
+                                                                    ویرایش
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => regulation.id && handleDeleteMileage(regulation.id)}
+                                                                    className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700 transition-colors"
+                                                                >
+                                                                    حذف
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            {mileageRegulations.filter(r => r.vehicleType === selectedVehicleTypeForRanges).length === 0 && (
+                                                <tr>
+                                                    <td colSpan={8} className="p-6 text-center text-slate-500">
+                                                        هیچ بازه‌ای برای {selectedVehicleTypeForRanges} ثبت نشده است.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* راهنما */}
+                        {!selectedVehicleTypeForRanges && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                                <strong>💡 راهنما:</strong> روی هر کارت کلیک کنید تا بازه‌های پلکانی آن دسته خودرو را مشاهده و ویرایش کنید.
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1775,6 +2179,150 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
                             >
                                 {editingHelper ? 'به‌روزرسانی' : 'ثبت'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* دیالوگ بخشنامه اجرت ثابت */}
+            {showFixedAllowanceDialog && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-xl font-bold text-amber-800 mb-4">
+                            {editingFixedAllowance ? 'ویرایش بخشنامه اجرت ثابت' : 'افزودن بخشنامه اجرت ثابت'}
+                        </h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    نوع خودرو *
+                                </label>
+                                <select
+                                    value={fixedAllowanceFormData.vehicleType}
+                                    onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, vehicleType: e.target.value as 'تریلی' | 'ده چرخ' })}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                                >
+                                    <option value="تریلی">🚛 تریلی / مینی تریلی</option>
+                                    <option value="ده چرخ">🚚 ده چرخ</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    اجرت ثابت به ازای هر کیلومتر (ریال) *
+                                </label>
+                                <input
+                                    type="number"
+                                    value={fixedAllowanceFormData.fixedAllowancePerKm}
+                                    onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, fixedAllowancePerKm: Number(e.target.value) })}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500 text-left"
+                                    placeholder="0"
+                                    min="0"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">مثال: اگر 10,000 ریال وارد کنید، برای پیمایش 1000 کیلومتر = 10,000,000 ریال</p>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ مصوبه (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={fixedAllowanceFormData.approvalDate}
+                                        onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, approvalDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                                        placeholder="1403/01/01"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ شروع (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={fixedAllowanceFormData.startDate}
+                                        onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, startDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                                        placeholder="1403/01/01"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ پایان (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={fixedAllowanceFormData.endDate}
+                                        onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, endDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                                        placeholder="1403/12/29"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    آپلود بخشنامه
+                                </label>
+                                <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const filePath = await handleFileUpload(file);
+                                            if (filePath) {
+                                                setFixedAllowanceFormData(prev => ({ ...prev, documentPath: filePath }));
+                                            }
+                                        }
+                                    }}
+                                    disabled={uploadingFile}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500"
+                                />
+                                {uploadingFile && (
+                                    <p className="text-xs text-slate-500 mt-1">در حال آپلود...</p>
+                                )}
+                                {fixedAllowanceFormData.documentPath && (
+                                    <p className="text-xs text-green-600 mt-1">✓ فایل آپلود شد</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={fixedAllowanceFormData.isActive !== false}
+                                        onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, isActive: e.target.checked })}
+                                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                    />
+                                    <span className="text-sm font-medium text-slate-700">فعال</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    setShowFixedAllowanceDialog(false);
+                                    setEditingFixedAllowance(null);
+                                }}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300"
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                onClick={handleSaveFixedAllowance}
+                                className="px-4 py-2 bg-amber-600 text-white rounded-md text-sm hover:bg-amber-700"
+                            >
+                                {editingFixedAllowance ? 'به‌روزرسانی' : 'ثبت'}
                             </button>
                         </div>
                     </div>

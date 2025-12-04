@@ -65,7 +65,7 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
         case UserRole.CentralFinance:
             return View.CentralFinance; // کارتابل مالی ستاد
         case UserRole.TransportationFinance:
-            return View.TransportFinance; // داشبورد مالی ترابری
+            return View.TransportFinanceCalculation; // محاسبه هزینه تور
         default:
             return View.Dashboard;
     }
@@ -542,6 +542,9 @@ const App: React.FC = () => {
             case View.TransportFinanceCalculation:
                 console.log('[App] Render view:', View.TransportFinanceCalculation);
                 return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinanceCalculation} onNavigate={handleNavigate} />;
+            case View.MonthlyCommissionCalculation:
+                console.log('[App] Render view:', View.MonthlyCommissionCalculation);
+                return <TransportFinanceContainer currentUser={currentUser} currentView={View.MonthlyCommissionCalculation} onNavigate={handleNavigate} />;
             case View.AllowanceRegulation:
                 console.log('[App] Render view:', View.AllowanceRegulation);
                 return <TransportFinanceContainer currentUser={currentUser} currentView={View.AllowanceRegulation} onNavigate={handleNavigate} />;

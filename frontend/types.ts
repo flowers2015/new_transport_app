@@ -41,6 +41,7 @@ export enum View {
     TransportFinancePaymentList = 'transport-finance-payment-list',
     TransportFinancePaidInvoices = 'transport-finance-paid-invoices',
     AllowanceRegulation = 'allowance-regulation',
+    MonthlyCommissionCalculation = 'monthly-commission-calculation',
     UserManagement = 'user-management',
     FreightManagement = 'freight-management',
     AdminResourceManagement = 'admin-resource-management',

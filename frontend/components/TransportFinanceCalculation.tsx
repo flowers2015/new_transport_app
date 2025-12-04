@@ -60,6 +60,7 @@ interface AllowanceInputDialogData {
     fuelCost: number; // هزینه سوخت (ریال) - محاسبه خودکار
     loadingCost: number; // هزینه بارگیری اصلی
     returnCargoCost: number; // هزینه بار برگشتی (ریال)
+    returnBillOfLadingCost: number; // هزینه بارنامه برگشتی (ریال)
     multiUnloadCost: number; // هزینه چندجا تخلیه (ریال)
     excessMissionCost: number; // هزینه ماموریت مازاد (ریال)
     helperDriverCost: number; // هزینه راننده کمکی (ریال)
@@ -141,6 +142,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [showTourDetailsDialog, setShowTourDetailsDialog] = useState(false);
     const [selectedTourDetails, setSelectedTourDetails] = useState<DriverTourDetailWithCalculation[] | null>(null);
     const [selectedDriverName, setSelectedDriverName] = useState<string>('');
+    const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+    const [selectedDriverQueueType, setSelectedDriverQueueType] = useState<'porsant' | 'fixed_allowance' | 'helper'>('porsant');
     
     // بخشنامه‌ها
     const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
@@ -155,6 +158,85 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         fetchData();
         fetchRegulations();
     }, []);
+
+    // محاسبه اتوماتیک اجرت وقتی دیالوگ باز شد و صف "اجرت ثابت" هست یا پیمایش تغییر کرد (با debounce)
+    useEffect(() => {
+        if (!showInputDialog || !inputDialogData || selectedDriverQueueType === 'porsant') {
+            return;
+        }
+        
+        const timeoutId = setTimeout(async () => {
+            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+            if (!calc) return;
+            
+            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+            if (!tour) return;
+            
+            try {
+                const token = localStorage.getItem('token');
+                const headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                };
+                
+                const vehicleType = tour.vehicleType || '';
+                const isTrailer = vehicleType.includes('تریلی');
+                const isTenWheeler = vehicleType.includes('ده چرخ');
+                let vehicleTypeForApi = '';
+                if (isTrailer) vehicleTypeForApi = 'تریلی';
+                else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
+                
+                if (vehicleTypeForApi) {
+                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                    const billDate = inputDialogData.billOfLadingDate || '';
+                    
+                    // دریافت بخشنامه اجرت ثابت برای نوع خودرو
+                    const fixedAllowanceRes = await fetch(
+                        getApiUrl(`allowance-regulations/fixed-allowance?vehicleType=${encodeURIComponent(vehicleTypeForApi)}`),
+                        { headers }
+                    );
+                    
+                    if (fixedAllowanceRes.ok) {
+                        const fixedAllowanceData = await fixedAllowanceRes.json();
+                        console.log('📋 [useEffect] بخشنامه‌های اجرت ثابت:', fixedAllowanceData);
+                        
+                        // پیدا کردن بخشنامه مناسب بر اساس تاریخ بارنامه
+                        let applicableRegulation = null;
+                        if (billDate && fixedAllowanceData.length > 0) {
+                            applicableRegulation = fixedAllowanceData.find((reg: any) => {
+                                const start = reg.startDate || '';
+                                const end = reg.endDate || '';
+                                return billDate >= start && billDate <= end && reg.isActive !== false;
+                            });
+                        }
+                        // اگر بر اساس تاریخ پیدا نشد، اولین بخشنامه فعال رو بگیر
+                        if (!applicableRegulation && fixedAllowanceData.length > 0) {
+                            applicableRegulation = fixedAllowanceData.find((reg: any) => reg.isActive !== false);
+                        }
+                        
+                        if (applicableRegulation) {
+                            const ratePerKm = Number(applicableRegulation.fixedAllowancePerKm) || 0;
+                            const calculatedAllowance = Math.round(totalKm * ratePerKm);
+                            console.log('💰 [useEffect] اجرت ثابت محاسبه شده:', { totalKm, ratePerKm, calculatedAllowance, vehicleTypeForApi });
+                            
+                            setInputDialogData(prev => prev ? {
+                                ...prev,
+                                fixedAllowance: calculatedAllowance
+                            } : null);
+                        } else {
+                            console.warn('⚠️ [useEffect] بخشنامه اجرت ثابت یافت نشد برای:', vehicleTypeForApi);
+                        }
+                    } else {
+                        console.warn('⚠️ [useEffect] خطا در API اجرت ثابت:', fixedAllowanceRes.status);
+                    }
+                }
+            } catch (err) {
+                console.warn('⚠️ [useEffect] خطا در محاسبه اجرت:', err);
+            }
+        }, 500); // debounce 500ms
+        
+        return () => clearTimeout(timeoutId);
+    }, [showInputDialog, inputDialogData?.tourId, inputDialogData?.approvedKilometers, inputDialogData?.excessKilometers, selectedDriverQueueType]);
 
     // Fetch بخشنامه‌ها
     const fetchRegulations = async () => {
@@ -363,9 +445,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     const savedData = await savedRes.json();
                     console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده:', savedData.length, 'رکورد');
                     
+                    // فیلتر کردن تورهایی که دوره‌شان بسته شده (commission_calculated یا paid)
+                    const closedTourIds = new Set(
+                        savedData
+                            .filter((s: any) => s.commission_status === 'commission_calculated' || s.commission_status === 'paid')
+                            .map((s: any) => s.announcement_id)
+                    );
+                    console.log('🔒 [loadSavedCalculations] تورهای بسته شده:', closedTourIds.size, 'تور');
+                    
                     // Merge کردن داده‌های ذخیره شده با calculateDriverData
                     const updated = calculateDriverData.map(calc => {
-                            const updatedTours = calc.tours.map(tour => {
+                            // فیلتر کردن تورهایی که بسته نشده‌اند
+                            const openTours = calc.tours.filter(tour => !closedTourIds.has(tour.announcementId));
+                            
+                            const updatedTours = openTours.map(tour => {
                                 const saved = savedData.find((s: any) => 
                                     s.driver_id === calc.driverId && s.announcement_id === tour.announcementId
                                 );
@@ -389,6 +482,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         loadingCost: saved.loading_cost || saved.loadingCost || 0,
                                         billOfLadingCost: saved.bill_of_lading_cost || saved.billOfLadingCost || 0,
                                         returnCargoCost: saved.return_cargo_cost || saved.returnCargoCost || 0,
+                                        returnBillOfLadingCost: saved.return_bill_of_lading_cost || saved.returnBillOfLadingCost || 0,
                                         multiUnloadCost: saved.multi_unload_cost || saved.multiUnloadCost || 0,
                                         excessMissionCost: saved.excess_mission_cost || saved.excessMissionCost || 0,
                                         helperDriverCost: saved.helper_driver_cost || saved.helperDriverCost || 0,
@@ -399,6 +493,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         totalCost: saved.total_cost || saved.totalCost || 0,
                                         notes: saved.notes || '',
                                         isDataRecorded: true,
+                                        commissionStatus: saved.commission_status || 'recorded',
                                         // فیلدهای راننده کمکی
                                         helperDriverId: saved.helper_driver_id || saved.helperDriverId || '',
                                         helperDriverEmployeeId: saved.helper_driver_employee_id || saved.helperDriverEmployeeId || '',
@@ -428,8 +523,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             };
                     });
                     
+                    // فیلتر کردن رانندگانی که تور باز ندارند
+                    const filteredUpdated = updated.filter(calc => calc.tours.length > 0);
+                    console.log('📊 [loadSavedCalculations] رانندگان با تور باز:', filteredUpdated.length, 'از', updated.length);
+                    
                     // تنظیم calculations با داده‌های merge شده
-                    setCalculations(updated);
+                    setCalculations(filteredUpdated);
                 } else {
                     console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText);
                 }
@@ -469,6 +568,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         if (calc) {
             setSelectedTourDetails(calc.tours);
             setSelectedDriverName(calc.driverName);
+            setSelectedDriverId(calc.driverId);
+            setSelectedDriverQueueType(calc.queueType || 'porsant');
             setShowTourDetailsDialog(true);
         }
     };
@@ -1002,6 +1103,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: initialFuelCost,
                 loadingCost: tour.loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnBillOfLadingCost: (tour as any).returnBillOfLadingCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
@@ -1155,6 +1257,36 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
             }
             
+            // محاسبه اجرت از بخشنامه برای صف اجرت ثابت (پیشنهاد)
+            let initialFixedAllowance = (tour as any).fixedAllowance || 0;
+            const activeQueueTypeForInit = selectedDriverQueueType || calc.queueType || 'porsant';
+            if (activeQueueTypeForInit !== 'porsant' && initialFixedAllowance === 0) {
+                try {
+                    const vehicleType = tour.vehicleType || '';
+                    const isTrailer = vehicleType.includes('تریلی');
+                    const isTenWheeler = vehicleType.includes('ده چرخ');
+                    let vehicleTypeForApi = '';
+                    if (isTrailer) vehicleTypeForApi = 'تریلی';
+                    else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
+                    
+                    if (vehicleTypeForApi) {
+                        const totalKm = approvedKm + (tour.excessKilometers || 0);
+                        const allowanceRes = await fetch(
+                            getApiUrl(`allowance-regulations/calculate?vehicleType=${encodeURIComponent(vehicleTypeForApi)}&kilometers=${totalKm}&billOfLadingDate=${encodeURIComponent(billOfLadingDateStr)}`),
+                            { headers }
+                        );
+                        
+                        if (allowanceRes.ok) {
+                            const allowanceData = await allowanceRes.json();
+                            initialFixedAllowance = Math.round(allowanceData.allowance || 0) || 0;
+                            console.log('💰 [handleRecordData] اجرت پیشنهادی از بخشنامه:', initialFixedAllowance);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('⚠️ [handleRecordData] خطا در محاسبه اجرت پیشنهادی:', err);
+                }
+            }
+            
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
@@ -1169,10 +1301,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnBillOfLadingCost: (tour as any).returnBillOfLadingCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
-                fixedAllowance: (tour as any).fixedAllowance || 0,
+                fixedAllowance: initialFixedAllowance,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
                 helperDriverId: (tour as any).helperDriverId || '',
@@ -1219,6 +1352,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnBillOfLadingCost: (tour as any).returnBillOfLadingCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
@@ -1237,6 +1371,77 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         setShowInputDialog(true);
     };
+
+    // محاسبه اتوماتیک اجرت وقتی فرم باز می‌شه و صف "اجرت ثابت" هست
+    useEffect(() => {
+        const calculateFixedAllowance = async () => {
+            if (!showInputDialog || !inputDialogData || selectedDriverQueueType === 'porsant') return;
+            if (inputDialogData.fixedAllowance > 0) return; // اگه قبلاً محاسبه شده، دوباره محاسبه نکن
+            
+            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+            if (!calc) return;
+            
+            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+            if (!tour) return;
+            
+            try {
+                const token = localStorage.getItem('token');
+                const headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                };
+                
+                const vehicleType = tour.vehicleType || '';
+                const isTrailer = vehicleType.includes('تریلی');
+                const isTenWheeler = vehicleType.includes('ده چرخ');
+                let vehicleTypeForApi = '';
+                if (isTrailer) vehicleTypeForApi = 'تریلی';
+                else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
+                
+                if (vehicleTypeForApi) {
+                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                    const billOfLadingDate = inputDialogData.billOfLadingDate || '';
+                    
+                    // دریافت بخشنامه اجرت ثابت
+                    const fixedAllowanceRes = await fetch(
+                        getApiUrl(`allowance-regulations/fixed-allowance?vehicleType=${encodeURIComponent(vehicleTypeForApi)}`),
+                        { headers }
+                    );
+                    
+                    if (fixedAllowanceRes.ok) {
+                        const fixedAllowanceData = await fixedAllowanceRes.json();
+                        
+                        // پیدا کردن بخشنامه مناسب بر اساس تاریخ بارنامه
+                        let applicableRegulation = null;
+                        if (billOfLadingDate && fixedAllowanceData.length > 0) {
+                            applicableRegulation = fixedAllowanceData.find((reg: any) => {
+                                const start = reg.startDate || '';
+                                const end = reg.endDate || '';
+                                return billOfLadingDate >= start && billOfLadingDate <= end && reg.isActive !== false;
+                            });
+                        }
+                        if (!applicableRegulation && fixedAllowanceData.length > 0) {
+                            applicableRegulation = fixedAllowanceData.find((reg: any) => reg.isActive !== false);
+                        }
+                        
+                        if (applicableRegulation) {
+                            const ratePerKm = Number(applicableRegulation.fixedAllowancePerKm) || 0;
+                            const calculatedAllowance = Math.round(totalKm * ratePerKm);
+                            console.log('💰 [useEffect-init] اجرت ثابت محاسبه شده:', { totalKm, ratePerKm, calculatedAllowance });
+                            
+                            if (calculatedAllowance > 0) {
+                                setInputDialogData(prev => prev ? { ...prev, fixedAllowance: calculatedAllowance } : null);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('⚠️ [useEffect] خطا در محاسبه اجرت:', err);
+            }
+        };
+        
+        calculateFixedAllowance();
+    }, [showInputDialog, inputDialogData?.tourId, selectedDriverQueueType]);
 
     const handleSaveInputData = async () => {
         if (!inputDialogData) return;
@@ -1291,9 +1496,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             'Content-Type': 'application/json',
         };
         
-        // محاسبه اجرت بر اساس صف
+        // محاسبه اجرت بر اساس صف (از state انتخاب شده در دیالوگ جزئیات)
         let tourCost = 0;
-        if (calc.queueType === 'porsant') {
+        const activeQueueType = selectedDriverQueueType || calc.queueType || 'porsant';
+        if (activeQueueType === 'porsant') {
             // اجرت بر اساس بخشنامه (بازه‌ای)
             try {
                 const vehicleType = tour.vehicleType || '';
@@ -1304,8 +1510,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
                     const totalKm = inputDialogData.approvedKilometers + inputDialogData.excessKilometers;
                     
+                    // اضافه کردن تاریخ بارنامه برای انتخاب بخشنامه صحیح
+                    const billOfLadingDateParam = inputDialogData.billOfLadingDate 
+                        ? `&billOfLadingDate=${encodeURIComponent(inputDialogData.billOfLadingDate)}`
+                        : '';
+                    
                     const allowanceRes = await fetch(
-                        getApiUrl(`allowance-regulations/calculate?vehicleType=${encodeURIComponent(vehicleTypeForApi)}&kilometers=${totalKm}`),
+                        getApiUrl(`allowance-regulations/calculate?vehicleType=${encodeURIComponent(vehicleTypeForApi)}&kilometers=${totalKm}${billOfLadingDateParam}`),
                         { headers }
                     );
                     
@@ -1324,8 +1535,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             } catch (allowanceErr) {
                 console.warn('⚠️ [handleSaveInputData] خطا در محاسبه اجرت:', allowanceErr);
             }
-        } else if (calc.queueType === 'fixed_allowance' || calc.queueType === 'helper') {
-            // اجرت ثابت - از فیلد اجرت ثابت در دیالوگ استفاده می‌کنیم
+        } else if (activeQueueType === 'fixed_allowance') {
+            // اجرت ثابت - از فیلد اجرت ثابت در دیالوگ استفاده می‌کنیم (محاسبه شده از بخشنامه)
             tourCost = Math.round(Number(inputDialogData.fixedAllowance) || 0) || 0;
         }
         
@@ -1333,10 +1544,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const billOfLadingCostNum = Math.round(Number(inputDialogData.billOfLadingCost) || 0) || 0;
         const loadingCostNum = Math.round(Number(inputDialogData.loadingCost) || 0) || 0;
         const returnCargoCostNum = Math.round(Number(inputDialogData.returnCargoCost) || 0) || 0;
+        const returnBillOfLadingCostNum = Math.round(Number(inputDialogData.returnBillOfLadingCost) || 0) || 0;
         
         // استفاده از مقادیر محاسبه شده خودکار
         const multiUnloadCostNum = calculatedMultiUnloadCost;
         const excessMissionCostNum = calculatedExcessMissionCost;
+        
+        // اجرت ثابت (برای رانندگان اجرت ثابت)
+        const fixedAllowanceNum = activeQueueType === 'fixed_allowance' ? tourCost : 0;
         
         // هزینه راننده کمکی = اجرت راننده کمکی + هزینه غذا راننده کمکی + هزینه ماموریت مازاد راننده کمکی
         // فقط در صورتی که اطلاعات راننده کمکی ثبت شده باشد
@@ -1345,8 +1560,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             ? (calculatedHelperDriverAllowance + calculatedHelperDriverFoodCost + calculatedHelperDriverExcessMissionCost)
             : 0;
         
-        // هزینه بارگیری کل = هزینه بارگیری اصلی + هزینه بار برگشتی + هزینه چندجا تخلیه + هزینه ماموریت مازاد + هزینه راننده کمکی
-        const totalLoadingCost = loadingCostNum + returnCargoCostNum + multiUnloadCostNum + excessMissionCostNum + helperDriverTotalCost;
+        // هزینه بارگیری کل = هزینه بارگیری اصلی + هزینه بار برگشتی + هزینه بارنامه برگشتی + هزینه چندجا تخلیه + هزینه ماموریت مازاد + اجرت ثابت + هزینه راننده کمکی
+        const totalLoadingCost = loadingCostNum + returnCargoCostNum + returnBillOfLadingCostNum + multiUnloadCostNum + excessMissionCostNum + fixedAllowanceNum + helperDriverTotalCost;
         
         // هزینه سفر = مجموع همه هزینه‌ها
         const totalCost = Math.round(foodCost + fuelCost + tollCostNum + billOfLadingCostNum + totalLoadingCost + tourCost) || 0;
@@ -1372,15 +1587,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     tollCost: tollCostNum,
                     loadingCost: totalLoadingCost, // هزینه بارگیری کل
                     returnCargoCost: returnCargoCostNum,
+                    returnBillOfLadingCost: returnBillOfLadingCostNum,
                     multiUnloadCost: multiUnloadCostNum,
                     excessMissionCost: excessMissionCostNum,
-                    fixedAllowance: calc.queueType === 'fixed_allowance' || calc.queueType === 'helper' ? tourCost : 0,
+                    fixedAllowance: activeQueueType === 'fixed_allowance' ? tourCost : 0,
                     foodCost: foodCost,
                     fuelCost: fuelCost,
                     tourCost: tourCost,
                     totalCost: totalCost,
                     notes: inputDialogData.notes,
-                    queueType: calc.queueType,
+                    queueType: activeQueueType,
                     billOfLadingDate: inputDialogData.billOfLadingDate,
                     calculationDate: inputDialogData.calculationDate,
                     userId, // اضافه کردن userId
@@ -1434,6 +1650,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 isDataRecorded: true,
                                 billOfLadingCost: billOfLadingCostNum,
                                 returnCargoCost: returnCargoCostNum,
+                                returnBillOfLadingCost: returnBillOfLadingCostNum,
                                 multiUnloadCost: multiUnloadCostNum,
                                 excessMissionCost: excessMissionCostNum,
                                 fixedAllowance: calc.queueType === 'fixed_allowance' || calc.queueType === 'helper' ? tourCost : 0,
@@ -1683,12 +1900,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 >
                                     نام و نام خانوادگی {sortField === 'driverName' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th 
-                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
-                                    onClick={() => handleSort('queueType')}
-                                >
-                                    صف {sortField === 'queueType' && (sortDirection === 'asc' ? '↑' : '↓')}
-                                </th>
+                                {/* ستون صف حذف شد - صف در صفحه جزئیات تورها تنظیم می‌شود */}
                                 <th 
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
                                     onClick={() => handleSort('tourCount')}
@@ -1812,23 +2024,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             </td>
                                             <td className="p-3 border-l border-slate-200 font-medium">{calc.employeeId}</td>
                                             <td className="p-3 border-l border-slate-200 font-semibold text-slate-800">{calc.driverName}</td>
-                                            <td className="p-3 border-l border-slate-200">
-                                                <select
-                                                    value={calc.queueType}
-                                                    onChange={(e) => {
-                                                        setCalculations(prev => prev.map(c => 
-                                                            c.id === calc.id 
-                                                                ? { ...c, queueType: e.target.value as any }
-                                                                : c
-                                                        ));
-                                                    }}
-                                                    className="input-style text-sm w-full"
-                                                >
-                                                    <option value="porsant">پورسانت</option>
-                                                    <option value="fixed_allowance">اجرت ثابت</option>
-                                                    <option value="helper">راننده کمکی</option>
-                                                </select>
-                                            </td>
+                                            {/* ستون صف حذف شد - صف در صفحه جزئیات تورها تنظیم می‌شود */}
                                             <td className="p-3 border-l border-slate-200 text-center font-medium">{calc.tourCount}</td>
                                             <td className="p-3 border-l border-slate-200 text-center">
                                                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
@@ -1961,6 +2157,43 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         <div className="flex-1 overflow-y-auto" style={{ minHeight: '400px' }}>
                         {inputDialogTab === 'basic' && (
                         <div className="space-y-4">
+                            {/* نمایش نوع محاسبه اجرت */}
+                            <div className={`p-3 rounded-lg border ${
+                                selectedDriverQueueType === 'porsant' 
+                                    ? 'bg-blue-50 border-blue-200' 
+                                    : 'bg-orange-50 border-orange-200'
+                            }`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                                            selectedDriverQueueType === 'porsant' 
+                                                ? 'bg-blue-100 text-blue-800' 
+                                                : 'bg-orange-100 text-orange-800'
+                                        }`}>
+                                            {selectedDriverQueueType === 'porsant' 
+                                                ? '📊 محاسبه طبق بخشنامه پلکانی' 
+                                                : '💰 اجرت ثابت'}
+                                        </span>
+                                    </div>
+                                    {selectedDriverQueueType !== 'porsant' && (
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-sm font-medium text-slate-700">اجرت (ریال):</label>
+                                            <span className="px-3 py-2 bg-orange-100 border border-orange-300 rounded-md text-left font-bold text-orange-800 min-w-[140px]">
+                                                {(() => {
+                                                    // محاسبه اتوماتیک: پیمایش × نرخ بخشنامه
+                                                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                                                    const calculatedAllowance = inputDialogData.fixedAllowance || 0;
+                                                    return calculatedAllowance ? calculatedAllowance.toLocaleString('fa-IR') : 'در حال محاسبه...';
+                                                })()}
+                                            </span>
+                                            <span className="text-xs text-slate-500">
+                                                (پیمایش: {((Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0)).toLocaleString('fa-IR')} کیلومتر)
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
                             {/* ردیف اول: تاریخ محاسبه، شماره بارنامه، تاریخ صدور بارنامه */}
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
@@ -2228,6 +2461,27 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             setInputDialogData({
                                                 ...inputDialogData,
                                                 returnCargoCost: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه بارنامه برگشتی (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.returnBillOfLadingCost ? String(inputDialogData.returnBillOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                returnBillOfLadingCost: numValue
                                             });
                                         }}
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
@@ -2548,11 +2802,50 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 setShowTourDetailsDialog(false);
                                 setSelectedTourDetails(null);
                                 setSelectedDriverName('');
+                                setSelectedDriverId('');
                             }}
                             className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
                         >
                             بستن
                         </button>
+                    </div>
+                    
+                    {/* تنظیم صف برای تورهای جدید */}
+                    <div className="bg-slate-50 border-b border-slate-200 p-4">
+                        <div className="flex items-center gap-4">
+                            <label className="text-sm font-medium text-slate-700">
+                                نوع محاسبه اجرت برای تورهای جدید:
+                            </label>
+                            <select
+                                value={selectedDriverQueueType}
+                                onChange={(e) => {
+                                    const newQueueType = e.target.value as any;
+                                    setSelectedDriverQueueType(newQueueType);
+                                    // به‌روزرسانی در state اصلی
+                                    setCalculations(prev => prev.map(c => 
+                                        c.driverId === selectedDriverId 
+                                            ? { ...c, queueType: newQueueType }
+                                            : c
+                                    ));
+                                }}
+                                className="px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="porsant">پورسانت (محاسبه از بخشنامه پلکانی)</option>
+                                <option value="fixed_allowance">اجرت ثابت</option>
+                            </select>
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                selectedDriverQueueType === 'porsant' 
+                                    ? 'bg-blue-100 text-blue-800' 
+                                    : 'bg-orange-100 text-orange-800'
+                            }`}>
+                                {selectedDriverQueueType === 'porsant' 
+                                    ? '📊 اجرت طبق بخشنامه' 
+                                    : '💰 اجرت ثابت'}
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">
+                            ⚠️ این تنظیم فقط برای تورهای جدید اعمال می‌شود. تورهای قبلاً ثبت شده تغییر نمی‌کنند.
+                        </p>
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-6">
@@ -2732,6 +3025,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         </div>
                                                     </td>
                                                     <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">هزینه بارنامه برگشتی (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {(tour as any).returnBillOfLadingCost
+                                                                ? (tour as any).returnBillOfLadingCost.toLocaleString('fa-IR')
+                                                                : '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
                                                         <div className="text-xs text-slate-600 mb-1">هزینه چندجا تخلیه (ریال)</div>
                                                         <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
                                                             {(tour as any).multiUnloadCost
@@ -2747,7 +3048,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                 : '-'}
                                                         </div>
                                                     </td>
-                                                    <td className="p-2 border-l border-slate-200" colSpan={2}>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <div className="text-xs text-slate-600 mb-1">اجرت ثابت (ریال)</div>
+                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-amber-700' : 'text-slate-400'}`}>
+                                                            {(tour as any).fixedAllowance
+                                                                ? (tour as any).fixedAllowance.toLocaleString('fa-IR')
+                                                                : '-'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
                                                         {tour.notes && (
                                                             <div>
                                                                 <div className="text-xs text-slate-600 mb-1">توضیحات</div>

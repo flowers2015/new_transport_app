@@ -19,6 +19,7 @@ async function saveDriverCalculation(req, res) {
       tollCost,
       loadingCost,
       returnCargoCost,
+      returnBillOfLadingCost,
       multiUnloadCost,
       excessMissionCost,
       helperDriverCost,
@@ -123,6 +124,7 @@ async function saveDriverCalculation(req, res) {
           toll_cost INTEGER DEFAULT 0,
           loading_cost INTEGER DEFAULT 0, -- هزینه بارگیری اصلی
           return_cargo_cost INTEGER DEFAULT 0, -- هزینه بار برگشتی
+          return_bill_of_lading_cost INTEGER DEFAULT 0, -- هزینه بارنامه برگشتی
           multi_unload_cost INTEGER DEFAULT 0, -- هزینه چندجا تخلیه
           excess_mission_cost INTEGER DEFAULT 0, -- هزینه ماموریت مازاد
           helper_driver_cost INTEGER DEFAULT 0, -- هزینه راننده کمکی
@@ -159,6 +161,7 @@ async function saveDriverCalculation(req, res) {
           ADD COLUMN IF NOT EXISTS bill_of_lading_date VARCHAR(10),
           ADD COLUMN IF NOT EXISTS bill_of_lading_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS return_cargo_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS return_bill_of_lading_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS multi_unload_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS excess_mission_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS helper_driver_cost INTEGER DEFAULT 0,
@@ -170,7 +173,9 @@ async function saveDriverCalculation(req, res) {
           ADD COLUMN IF NOT EXISTS helper_driver_food_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_days INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_cost INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE
+          ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'recorded',
+          ADD COLUMN IF NOT EXISTS period_id VARCHAR(255)
         `);
         // تبدیل ستون‌های DECIMAL به INTEGER برای هزینه‌ها
         try {
@@ -211,27 +216,28 @@ async function saveDriverCalculation(req, res) {
           toll_cost = $8,
           loading_cost = $9,
           return_cargo_cost = $10,
-          multi_unload_cost = $11,
-          excess_mission_cost = $12,
-          helper_driver_cost = $13,
-          fixed_allowance = $14,
-          helper_driver_id = $15,
-          helper_driver_employee_id = $16,
-          helper_driver_name = $17,
-          helper_driver_allowance = $18,
-          helper_driver_food_cost = $19,
-          helper_driver_excess_mission_days = $20,
-          helper_driver_excess_mission_cost = $21,
-          food_cost = $22,
-          fuel_cost = $23,
-          tour_cost = $24,
-          total_cost = $25,
-          notes = $26,
-          queue_type = $27,
-          calculation_date = $28,
-          updated_by = $29,
+          return_bill_of_lading_cost = $11,
+          multi_unload_cost = $12,
+          excess_mission_cost = $13,
+          helper_driver_cost = $14,
+          fixed_allowance = $15,
+          helper_driver_id = $16,
+          helper_driver_employee_id = $17,
+          helper_driver_name = $18,
+          helper_driver_allowance = $19,
+          helper_driver_food_cost = $20,
+          helper_driver_excess_mission_days = $21,
+          helper_driver_excess_mission_cost = $22,
+          food_cost = $23,
+          fuel_cost = $24,
+          tour_cost = $25,
+          total_cost = $26,
+          notes = $27,
+          queue_type = $28,
+          calculation_date = $29,
+          updated_by = $30,
           updated_at = NOW()
-        WHERE driver_id = $30 AND announcement_id = $31
+        WHERE driver_id = $31 AND announcement_id = $32
       `, [
         billOfLadingNumber || null,
         billOfLadingDate || null,
@@ -243,6 +249,7 @@ async function saveDriverCalculation(req, res) {
         validatedTollCost,
         validatedLoadingCost,
         parseNumber(returnCargoCost, 0),
+        parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
         parseNumber(excessMissionCost, 0),
         parseNumber(helperDriverCost, 0),
@@ -277,11 +284,11 @@ async function saveDriverCalculation(req, res) {
         INSERT INTO driver_calculations (
           id, driver_id, announcement_id, bill_of_lading_number, bill_of_lading_date, bill_of_lading_cost,
           approved_kilometers, excess_kilometers, approved_mission_days, excess_mission_days,
-          toll_cost, loading_cost, return_cargo_cost, multi_unload_cost, excess_mission_cost, helper_driver_cost, fixed_allowance,
+          toll_cost, loading_cost, return_cargo_cost, return_bill_of_lading_cost, multi_unload_cost, excess_mission_cost, helper_driver_cost, fixed_allowance,
           helper_driver_id, helper_driver_employee_id, helper_driver_name, helper_driver_allowance, helper_driver_food_cost, helper_driver_excess_mission_days, helper_driver_excess_mission_cost,
           food_cost, fuel_cost, tour_cost, total_cost,
           notes, queue_type, calculation_date, created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
       `, [
         id,
         driverId,
@@ -296,6 +303,7 @@ async function saveDriverCalculation(req, res) {
         validatedTollCost,
         validatedLoadingCost,
         parseNumber(returnCargoCost, 0),
+        parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
         parseNumber(excessMissionCost, 0),
         parseNumber(helperDriverCost, 0),
@@ -416,8 +424,67 @@ async function getDriverCalculations(req, res) {
   }
 }
 
+/**
+ * دریافت محاسبات بر اساس بازه تاریخ صدور بارنامه
+ */
+async function getCalculationsByDateRange(req, res) {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: 'تاریخ شروع و پایان الزامی است.' });
+    }
+
+    console.log('📅 [getCalculationsByDateRange] بازه:', startDate, 'تا', endDate);
+
+    // بررسی وجود ستون bill_of_lading_date
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'driver_calculations' 
+        AND column_name = 'bill_of_lading_date'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await pool.query(`ALTER TABLE driver_calculations ADD COLUMN bill_of_lading_date VARCHAR(10)`);
+        console.log('✅ [getCalculationsByDateRange] ستون bill_of_lading_date اضافه شد');
+      }
+    } catch (alterError) {
+      console.error('⚠️ [getCalculationsByDateRange] خطا در بررسی ستون:', alterError);
+    }
+
+    // دریافت محاسبات در بازه تاریخ صدور بارنامه
+    const query = `
+      SELECT dc.*, 
+             fa.announcement_code,
+             fa.loading_date,
+             fa.line_type,
+             fa.vehicle_type,
+             d.employee_id,
+             d.name as driver_name
+      FROM driver_calculations dc
+      LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+      LEFT JOIN drivers d ON dc.driver_id = d.id
+      WHERE dc.bill_of_lading_date IS NOT NULL 
+        AND dc.bill_of_lading_date >= $1
+        AND dc.bill_of_lading_date <= $2
+      ORDER BY d.employee_id, dc.bill_of_lading_date
+    `;
+
+    const { rows } = await pool.query(query, [startDate, endDate]);
+    
+    console.log('✅ [getCalculationsByDateRange] یافت شد:', rows.length, 'رکورد');
+    res.json(rows);
+  } catch (error) {
+    console.error('❌ [getCalculationsByDateRange] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت اطلاعات محاسباتی.' });
+  }
+}
+
 module.exports = {
   saveDriverCalculation,
   getDriverCalculations,
+  getCalculationsByDateRange,
 };
 

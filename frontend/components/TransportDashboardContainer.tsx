@@ -319,29 +319,30 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
 
     return (
         <TransportDashboard
-            iceCreamStats={iceCreamStats}
-            dairyStats={dairyStats}
-            ambientStats={ambientStats}
-            loading={loading}
-            error={error}
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            selectedDay={selectedDay}
-            timeRange={timeRange}
-            onYearChange={setSelectedYear}
-            onMonthChange={setSelectedMonth}
-            onDayChange={setSelectedDay}
-            onTimeRangeChange={setTimeRange}
-            onRefresh={fetchStatistics}
-            representativeStats={representativeStats}
-            representativeStatsLoading={representativeStatsLoading}
-            representativeStatsError={representativeStatsError}
-            onFetchRepresentativeDetails={fetchRepresentativeDetails}
-            lineAnalytics={lineAnalytics}
-            lineAnalyticsMeta={lineAnalyticsMeta}
-            lineAnalyticsLoading={lineAnalyticsLoading}
-            lineAnalyticsError={lineAnalyticsError}
-        />
+            currentUser={currentUser}
+                iceCreamStats={iceCreamStats}
+                dairyStats={dairyStats}
+                ambientStats={ambientStats}
+                loading={loading}
+                error={error}
+                selectedYear={selectedYear}
+                selectedMonth={selectedMonth}
+                selectedDay={selectedDay}
+                timeRange={timeRange}
+                onYearChange={setSelectedYear}
+                onMonthChange={setSelectedMonth}
+                onDayChange={setSelectedDay}
+                onTimeRangeChange={setTimeRange}
+                onRefresh={fetchStatistics}
+                representativeStats={representativeStats}
+                representativeStatsLoading={representativeStatsLoading}
+                representativeStatsError={representativeStatsError}
+                onFetchRepresentativeDetails={fetchRepresentativeDetails}
+                lineAnalytics={lineAnalytics}
+                lineAnalyticsMeta={lineAnalyticsMeta}
+                lineAnalyticsLoading={lineAnalyticsLoading}
+                lineAnalyticsError={lineAnalyticsError}
+            />
     );
 };
 

@@ -58,21 +58,25 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
     const isTransportDefault = defaultDashboardView === View.TransportDashboard;
 
     const navItems = [
-      // Transport Finance Section - منوهای مالی ترابری (اولویت اول)
+      // Transport Finance Section - منوهای مالی ترابری
+      { view: View.TransportFinance, label: 'داشبورد', roles: [UserRole.TransportationFinance] },
       { view: View.TransportFinanceCalculation, label: 'محاسبه هزینه تور', roles: [UserRole.TransportationFinance] },
-      { view: View.AllowanceRegulation, label: 'بخشنامه', roles: [UserRole.TransportationFinance] },
+      { view: View.MonthlyCommissionCalculation, label: 'محاسبه پورسانت', roles: [UserRole.TransportationFinance] },
       { view: View.TransportFinancePaymentList, label: 'لیست پرداخت', roles: [UserRole.TransportationFinance] },
       { view: View.TransportFinancePaidInvoices, label: 'صورتحساب‌های پرداخت شده', roles: [UserRole.TransportationFinance] },
+      { view: View.AllowanceRegulation, label: 'بخشنامه', roles: [UserRole.TransportationFinance] },
       { type: 'divider', roles: [UserRole.TransportationFinance] },
-      // Freight Management Section - مالی حمل برای مالی شعب (بدون transport_finance)
+      // Freight Management Section - اعلام بار
+      { view: View.TransportLive, label: 'پیگیری اعلام بار-زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
+      { view: View.FreightHistory, label: 'تاریخچه اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
+      { type: 'divider', roles: [UserRole.TransportationFinance] },
+      // سایر منوها
       { view: View.FreightFinance, label: 'مالی حمل', roles: [UserRole.BranchFinance, UserRole.HQFinance] },
       { view: View.CentralFinance, label: 'کارتابل مالی ستاد', roles: [UserRole.CentralFinance] },
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
       { view: View.TransportDashboard, label: 'داشبورد ترابری', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },
-      { view: View.TransportLive, label: 'پیگیری اعلام بار-زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
       { view: View.TransportDispatchQueue, label: 'ثبت نوبت', roles: [UserRole.TransportationUser] },
       { view: View.TransportDispatchBoard, label: 'تابلو اعلام بار', roles: [UserRole.TransportationUser] },
-      { view: View.FreightHistory, label: 'تاریخچه اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
       { type: 'divider', roles: Object.values(UserRole) },
       // Workshop & Fleet Management
       { view: View.Branches, label: 'مدیریت شعب', roles: [UserRole.Transportation, UserRole.VehicleAllocationExpert] },

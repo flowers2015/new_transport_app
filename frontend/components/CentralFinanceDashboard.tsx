@@ -1,6 +1,6 @@
 // This is a new file: components/CentralFinanceDashboard.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { FreightAnnouncement, FreightPaymentStatus, FreightTransaction, User, Destination } from '../types';
+import { FreightAnnouncement, FreightPaymentStatus, FreightTransaction, User, Destination, View } from '../types';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import { CreditCardIcon } from './icons/CreditCardIcon';
 import WorkflowRules from './WorkflowRules';
@@ -424,7 +424,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                         <CreditCardIcon className="w-6 h-6 mr-2 text-sky-600" />
                         کارتابل مالی ستاد
                     </h2>
-                    <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100">
+                    <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین کارتابل">
                         <BookOpenIcon className="w-5 h-5 text-slate-600"/>
                     </button>
                 </div>
@@ -520,6 +520,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                                 <th className="p-2">نام راننده</th>
                                 <th className="p-2">شماره پلاک</th>
                                 <th className="p-2">وضعیت پرداخت</th>
+                                <th className="p-2">وضعیت ارجاع</th>
                                 <th className="p-2">توضیحات ارجاع شعبه</th>
                                 <th className="p-2">عملیات</th>
                             </tr>
@@ -604,9 +605,18 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                                                 {row.paymentStatus === FreightPaymentStatus.Paid ? 'پرداخت شده' : 'پرداخت نشده'}
                                             </span>
                                         </td>
+                                        <td className="p-2 text-xs">
+                                            {(() => {
+                                                if (!existingTransaction) return <span className="text-gray-400">-</span>;
+                                                if (isApproved) return <span className="px-2 py-1 rounded-full bg-green-100 text-green-800">تأیید شده</span>;
+                                                if (isRejected) return <span className="px-2 py-1 rounded-full bg-red-100 text-red-800">رد شده</span>;
+                                                if (isReferred) return <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800">در انتظار بررسی</span>;
+                                                return <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">pending</span>;
+                                            })()}
+                                        </td>
                                         <td className="p-2 text-xs">{existingTransaction?.referralNotes || '-'}</td>
                                         <td className="p-2">
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 flex-wrap">
                                                 {existingTransaction && (
                                                     <button 
                                                         onClick={() => {
@@ -635,9 +645,24 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
                                                             onClick={() => handleApprove(existingTransaction!, dest.id)}
                                                             className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
                                                         >
-                                                            بررسی شد
+                                                            تأیید
                                                         </button>
                                                     </>
+                                                )}
+                                                {isApproved && (
+                                                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-md text-xs">
+                                                        ✓ تأیید شده
+                                                    </span>
+                                                )}
+                                                {isRejected && (
+                                                    <span className="px-3 py-1 bg-red-100 text-red-800 rounded-md text-xs">
+                                                        ✗ رد شده
+                                                    </span>
+                                                )}
+                                                {!existingTransaction && (
+                                                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-xs">
+                                                        در انتظار ثبت شعبه
+                                                    </span>
                                                 )}
                                             </div>
                                         </td>
@@ -796,7 +821,7 @@ const CentralFinanceDashboard: React.FC<CentralFinanceDashboardProps> = (props) 
             {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
-                        <WorkflowRules view={undefined as any} userRole={currentUser.role} />
+                        <WorkflowRules view={View.CentralFinance} userRole={currentUser.role} />
                         <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     </div>
                 </div>

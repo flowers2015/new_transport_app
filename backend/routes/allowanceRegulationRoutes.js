@@ -8,18 +8,21 @@ const {
   getExcessMissionRegulations,
   getMultiUnloadRegulations,
   getFuelConsumptionRegulations,
+  getFixedAllowanceRegulations,
   saveFoodRegulation,
   saveHelperRegulation,
   saveMileageRegulation,
   saveExcessMissionRegulation,
   saveMultiUnloadRegulation,
   saveFuelConsumptionRegulation,
+  saveFixedAllowanceRegulation,
   deleteFoodRegulation,
   deleteHelperRegulation,
   deleteMileageRegulation,
   deleteExcessMissionRegulation,
   deleteMultiUnloadRegulation,
   deleteFuelConsumptionRegulation,
+  deleteFixedAllowanceRegulation,
   calculateAllowance,
   uploadRegulationDocument,
 } = require('../controllers/allowanceRegulationController');
@@ -144,6 +147,26 @@ router.delete(
   authenticateToken,
   authorizeRole(financeRoles),
   deleteFuelConsumptionRegulation
+);
+
+// Routes for Fixed Allowance Regulations
+router.get(
+  '/fixed-allowance',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  getFixedAllowanceRegulations
+);
+router.post(
+  '/fixed-allowance',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  saveFixedAllowanceRegulation
+);
+router.delete(
+  '/fixed-allowance/:id',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  deleteFixedAllowanceRegulation
 );
 
 // Route to calculate allowance

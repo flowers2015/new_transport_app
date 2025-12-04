@@ -153,6 +153,24 @@ async function createAllowanceRegulationTables() {
       )
     `);
 
+    // جدول بخشنامه اجرت ثابت (برای رانندگان اجرت ثابت)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS allowance_regulations_fixed_allowance (
+        id VARCHAR(255) PRIMARY KEY,
+        vehicle_type VARCHAR(50) NOT NULL, -- 'تریلی' یا 'ده چرخ'
+        fixed_allowance_per_km DECIMAL(15, 2) NOT NULL, -- اجرت ثابت به ازای هر کیلومتر (ریال)
+        approval_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        document_path VARCHAR(500),
+        start_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        end_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by VARCHAR(255),
+        updated_by VARCHAR(255)
+      )
+    `);
+
     // اضافه کردن ستون‌های جدید به جداول موجود (اگر وجود دارند)
     try {
       // بررسی و اضافه کردن ستون‌های جدید به جدول mileage
@@ -411,6 +429,7 @@ async function getMileageRegulations(req, res) {
     
     const regulations = result.rows.map(row => ({
       id: row.id,
+      regulationId: row.regulation_id || null,
       vehicleType: row.vehicle_type,
       minKilometers: row.min_kilometers,
       maxKilometers: row.max_kilometers,
@@ -599,12 +618,13 @@ async function saveHelperRegulation(req, res) {
 }
 
 /**
- * ذخیره یا به‌روزرسانی بخشنامه اجرت پیمایش
+ * ذخیره یا به‌روزرسانی بخشنامه اجرت پیمایش (یک بازه)
  */
 async function saveMileageRegulation(req, res) {
   try {
     const {
       id,
+      regulationId, // شناسه بخشنامه (برای گروه‌بندی بازه‌ها)
       vehicleType,
       minKilometers,
       maxKilometers,
@@ -617,11 +637,19 @@ async function saveMileageRegulation(req, res) {
       userId,
     } = req.body;
 
-    if (!vehicleType || minKilometers === undefined || maxKilometers === undefined || !allowancePerKm) {
-      return res.status(400).json({ message: 'نوع خودرو، بازه کیلومتر و اجرت به ازای هر کیلومتر الزامی است.' });
+    console.log('📥 [saveMileageRegulation] Request body:', { id, regulationId, vehicleType, minKilometers, maxKilometers, allowancePerKm, startDate, endDate });
+    
+    if (!vehicleType || minKilometers === undefined || minKilometers === null || maxKilometers === undefined || maxKilometers === null || !allowancePerKm) {
+      return res.status(400).json({ 
+        message: 'نوع خودرو، بازه کیلومتر و اجرت به ازای هر کیلومتر الزامی است.',
+        received: { vehicleType, minKilometers, maxKilometers, allowancePerKm }
+      });
     }
 
     await createAllowanceRegulationTables();
+
+    // اگر regulation_id داده نشده، یکی بساز
+    const finalRegulationId = regulationId || crypto.randomUUID();
 
     if (id) {
       // به‌روزرسانی
@@ -662,12 +690,13 @@ async function saveMileageRegulation(req, res) {
       const newId = crypto.randomUUID();
       await pool.query(`
         INSERT INTO allowance_regulations_mileage (
-          id, vehicle_type, min_kilometers, max_kilometers,
+          id, regulation_id, vehicle_type, min_kilometers, max_kilometers,
           allowance_per_km, approval_date, document_path,
           start_date, end_date, is_active, created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
         newId,
+        finalRegulationId,
         vehicleType,
         minKilometers,
         maxKilometers,
@@ -683,12 +712,15 @@ async function saveMileageRegulation(req, res) {
 
       return res.status(201).json({ 
         message: 'بخشنامه اجرت پیمایش ثبت شد.',
-        id: newId 
+        id: newId,
+        regulationId: finalRegulationId
       });
     }
   } catch (error) {
     console.error('❌ [saveMileageRegulation] Error:', error);
-    res.status(500).json({ message: 'خطا در ذخیره بخشنامه اجرت پیمایش.' });
+    console.error('❌ [saveMileageRegulation] Error Stack:', error.stack);
+    console.error('❌ [saveMileageRegulation] Request Body:', req.body);
+    res.status(500).json({ message: 'خطا در ذخیره بخشنامه اجرت پیمایش: ' + error.message });
   }
 }
 
@@ -1323,11 +1355,11 @@ async function deleteFuelConsumptionRegulation(req, res) {
 }
 
 /**
- * محاسبه اجرت بر اساس بخشنامه
+ * محاسبه اجرت بر اساس بخشنامه و تاریخ بارنامه
  */
 async function calculateAllowance(req, res) {
   try {
-    const { vehicleType, kilometers } = req.query;
+    const { vehicleType, kilometers, billOfLadingDate } = req.query;
 
     if (!vehicleType || !kilometers) {
       return res.status(400).json({ message: 'vehicleType و kilometers الزامی است.' });
@@ -1340,20 +1372,23 @@ async function calculateAllowance(req, res) {
 
     await createAllowanceRegulationTables();
 
-    // دریافت بخشنامه اجرت پیمایش فعال
+    // تاریخ مرجع: تاریخ بارنامه یا تاریخ جاری
+    const referenceDate = billOfLadingDate || new Date().toISOString().split('T')[0].replace(/-/g, '/');
+
+    // دریافت بخشنامه اجرت پیمایش فعال بر اساس تاریخ بارنامه
     const mileageQuery = `
       SELECT * FROM allowance_regulations_mileage
       WHERE is_active = TRUE
         AND vehicle_type = $1
         AND min_kilometers <= $2
         AND max_kilometers >= $2
-        AND (start_date IS NULL OR start_date <= CURRENT_DATE::text)
-        AND (end_date IS NULL OR end_date >= CURRENT_DATE::text)
-      ORDER BY min_kilometers DESC
+        AND (start_date IS NULL OR start_date <= $3)
+        AND (end_date IS NULL OR end_date >= $3)
+      ORDER BY start_date DESC NULLS LAST, min_kilometers DESC
       LIMIT 1
     `;
 
-    const mileageResult = await pool.query(mileageQuery, [vehicleType, km]);
+    const mileageResult = await pool.query(mileageQuery, [vehicleType, km, referenceDate]);
 
     if (mileageResult.rows.length === 0) {
       return res.json({ 
@@ -1432,6 +1467,188 @@ async function uploadRegulationDocument(req, res) {
   });
 }
 
+/**
+ * دریافت بخشنامه اجرت ثابت
+ */
+async function getFixedAllowanceRegulations(req, res) {
+  try {
+    await createAllowanceRegulationTables();
+
+    const { vehicleType } = req.query;
+
+    let query = `
+      SELECT arfa.*
+      FROM allowance_regulations_fixed_allowance arfa
+      WHERE arfa.is_active = TRUE
+    `;
+    const params = [];
+    let paramIndex = 1;
+
+    if (vehicleType) {
+      query += ` AND arfa.vehicle_type = $${paramIndex++}`;
+      params.push(vehicleType);
+    }
+
+    query += ` ORDER BY arfa.created_at DESC`;
+    
+    try {
+      const usersTableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'users'
+        )
+      `);
+      
+      if (usersTableCheck.rows[0]?.exists) {
+        let baseQuery = `
+          SELECT 
+            arfa.*,
+            u1.name as created_by_name,
+            u2.name as updated_by_name
+          FROM allowance_regulations_fixed_allowance arfa
+          LEFT JOIN users u1 ON arfa.created_by = u1.id
+          LEFT JOIN users u2 ON arfa.updated_by = u2.id
+          WHERE arfa.is_active = TRUE
+        `;
+        if (vehicleType) {
+          baseQuery += ` AND arfa.vehicle_type = $1`;
+          params.length = 0;
+          params.push(vehicleType);
+        }
+        baseQuery += ` ORDER BY arfa.created_at DESC`;
+        query = baseQuery;
+      }
+    } catch (joinError) {
+      console.warn('⚠️ [getFixedAllowanceRegulations] جدول users وجود ندارد:', joinError.message);
+    }
+
+    const result = await pool.query(query, params);
+    console.log('✅ [getFixedAllowanceRegulations] تعداد رکوردها:', result.rows.length);
+    
+    const regulations = result.rows.map(row => ({
+      id: row.id,
+      vehicleType: row.vehicle_type,
+      fixedAllowancePerKm: parseFloat(row.fixed_allowance_per_km || 0),
+      approvalDate: row.approval_date || null,
+      documentPath: row.document_path || null,
+      startDate: row.start_date || null,
+      endDate: row.end_date || null,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      createdBy: row.created_by || null,
+      createdByName: row.created_by_name || null,
+      updatedBy: row.updated_by || null,
+      updatedByName: row.updated_by_name || null,
+    }));
+
+    res.json(regulations);
+  } catch (error) {
+    console.error('❌ [getFixedAllowanceRegulations] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت بخشنامه اجرت ثابت: ' + error.message });
+  }
+}
+
+/**
+ * ذخیره یا به‌روزرسانی بخشنامه اجرت ثابت
+ */
+async function saveFixedAllowanceRegulation(req, res) {
+  try {
+    const {
+      id,
+      vehicleType,
+      fixedAllowancePerKm,
+      approvalDate,
+      documentPath,
+      startDate,
+      endDate,
+      isActive,
+      userId,
+    } = req.body;
+
+    if (!vehicleType || !fixedAllowancePerKm || !approvalDate || !startDate || !endDate) {
+      return res.status(400).json({ message: 'نوع خودرو، اجرت ثابت، تاریخ مصوبه، تاریخ شروع و پایان الزامی است.' });
+    }
+
+    await createAllowanceRegulationTables();
+
+    if (id) {
+      // Update existing
+      const updateQuery = `
+        UPDATE allowance_regulations_fixed_allowance
+        SET vehicle_type = $1, fixed_allowance_per_km = $2, approval_date = $3, document_path = $4,
+            start_date = $5, end_date = $6, is_active = $7, updated_at = NOW(), updated_by = $8
+        WHERE id = $9
+        RETURNING *
+      `;
+      const result = await pool.query(updateQuery, [
+        vehicleType, fixedAllowancePerKm, approvalDate, documentPath || null,
+        startDate, endDate, isActive !== false, userId || null, id
+      ]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: 'بخشنامه یافت نشد.' });
+      }
+
+      console.log('✅ [saveFixedAllowanceRegulation] بخشنامه به‌روزرسانی شد:', id);
+      res.json({ message: 'بخشنامه با موفقیت به‌روزرسانی شد.', id });
+    } else {
+      // Insert new
+      const newId = 'FIXED-' + crypto.randomUUID();
+      const insertQuery = `
+        INSERT INTO allowance_regulations_fixed_allowance 
+        (id, vehicle_type, fixed_allowance_per_km, approval_date, document_path, start_date, end_date, is_active, created_by, updated_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+        RETURNING *
+      `;
+      await pool.query(insertQuery, [
+        newId, vehicleType, fixedAllowancePerKm, approvalDate, documentPath || null,
+        startDate, endDate, isActive !== false, userId || null
+      ]);
+
+      console.log('✅ [saveFixedAllowanceRegulation] بخشنامه جدید ایجاد شد:', newId);
+      res.json({ message: 'بخشنامه با موفقیت ذخیره شد.', id: newId });
+    }
+  } catch (error) {
+    console.error('❌ [saveFixedAllowanceRegulation] Error:', error);
+    res.status(500).json({ message: 'خطا در ذخیره بخشنامه اجرت ثابت: ' + error.message });
+  }
+}
+
+/**
+ * حذف بخشنامه اجرت ثابت (غیرفعال کردن)
+ */
+async function deleteFixedAllowanceRegulation(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: 'شناسه بخشنامه الزامی است.' });
+    }
+
+    await createAllowanceRegulationTables();
+
+    const deleteQuery = `
+      UPDATE allowance_regulations_fixed_allowance
+      SET is_active = FALSE, updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+    const result = await pool.query(deleteQuery, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'بخشنامه یافت نشد.' });
+    }
+
+    console.log('✅ [deleteFixedAllowanceRegulation] بخشنامه حذف شد:', id);
+    res.json({ message: 'بخشنامه با موفقیت حذف شد.' });
+  } catch (error) {
+    console.error('❌ [deleteFixedAllowanceRegulation] Error:', error);
+    res.status(500).json({ message: 'خطا در حذف بخشنامه اجرت ثابت: ' + error.message });
+  }
+}
+
 module.exports = {
   getFoodRegulations,
   getHelperRegulations,
@@ -1439,18 +1656,21 @@ module.exports = {
   getExcessMissionRegulations,
   getMultiUnloadRegulations,
   getFuelConsumptionRegulations,
+  getFixedAllowanceRegulations,
   saveFoodRegulation,
   saveHelperRegulation,
   saveMileageRegulation,
   saveExcessMissionRegulation,
   saveMultiUnloadRegulation,
   saveFuelConsumptionRegulation,
+  saveFixedAllowanceRegulation,
   deleteFoodRegulation,
   deleteHelperRegulation,
   deleteMileageRegulation,
   deleteExcessMissionRegulation,
   deleteMultiUnloadRegulation,
   deleteFuelConsumptionRegulation,
+  deleteFixedAllowanceRegulation,
   calculateAllowance,
   uploadRegulationDocument,
   createAllowanceRegulationTables,
