@@ -40,11 +40,6 @@ const upload = multer({
  * ایجاد جداول بخشنامه (جداگانه برای غذا، اجرت راننده کمکی و اجرت پیمایش)
  */
 async function createAllowanceRegulationTables() {
-  // اگر قبلاً اجرا شده، skip کن
-  if (tablesCreated) {
-    return;
-  }
-  
   try {
     // جدول بخشنامه هزینه غذا
     await pool.query(`
@@ -226,8 +221,11 @@ async function createAllowanceRegulationTables() {
       console.warn('⚠️ [createAllowanceRegulationTables] خطا در اضافه کردن ستون‌ها (ممکن است قبلاً اضافه شده باشند):', alterError.message);
     }
 
-    console.log('✅ [createAllowanceRegulationTables] جداول بخشنامه ایجاد شدند');
-    tablesCreated = true; // Mark as created
+    // فقط برای اولین بار flag را set کن (برای جلوگیری از CREATE TABLE مکرر)
+    if (!tablesCreated) {
+      console.log('✅ [createAllowanceRegulationTables] جداول بخشنامه ایجاد شدند');
+      tablesCreated = true; // Mark as created
+    }
   } catch (error) {
     console.error('❌ [createAllowanceRegulationTables] خطا:', error);
     throw error;
