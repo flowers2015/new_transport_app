@@ -46,7 +46,14 @@ cd ../backend
 # بررسی اینکه آیا PM2 نصب است یا نه
 if command -v pm2 &> /dev/null; then
     echo -e "${GREEN}✅ استفاده از PM2 برای Restart...${NC}"
-    pm2 restart transport-app || pm2 restart all
+    # تلاش برای restart کردن با نام‌های مختلف
+    if pm2 list | grep -q "transport-backend"; then
+        pm2 restart transport-backend
+    elif pm2 list | grep -q "transport-app"; then
+        pm2 restart transport-app
+    else
+        pm2 restart all
+    fi
     pm2 save
 else
     echo -e "${YELLOW}⚠️ PM2 یافت نشد. لطفاً سرور را به صورت دستی Restart کنید.${NC}"
@@ -54,5 +61,5 @@ else
 fi
 
 echo -e "${GREEN}✅ آپدیت با موفقیت انجام شد!${NC}"
-echo -e "${GREEN}📊 برای مشاهده لاگ‌ها: pm2 logs transport-app${NC}"
+echo -e "${GREEN}📊 برای مشاهده لاگ‌ها: pm2 logs transport-backend${NC}"
 
