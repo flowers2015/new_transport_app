@@ -1292,7 +1292,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 driverId: calc.driverId,
                 billOfLadingNumber: billOfLading,
                 billOfLadingDate: billOfLadingDateStr,
-                billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                billOfLadingCost: 0, // حذف شده از دیالوگ - همیشه 0
                 approvedKilometers: approvedKm,
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: approvedDays,
@@ -1343,7 +1343,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 driverId: calc.driverId,
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
-                billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                billOfLadingCost: 0, // حذف شده از دیالوگ - همیشه 0
                 approvedKilometers: tour.approvedKilometers || tour.roundTripKm || 0,
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: tour.approvedMissionDays || 1,
@@ -2246,43 +2246,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        هزینه بارنامه (ریال) *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.billOfLadingCost ? String(inputDialogData.billOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                billOfLadingCost: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
                                         پیمایش مصوب (کیلومتر)
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
                                         value={inputDialogData.approvedKilometers ? String(inputDialogData.approvedKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                approvedKilometers: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
                                         placeholder="0"
                                     />
                                 </div>
@@ -2315,27 +2286,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         type="text"
                                         inputMode="numeric"
                                         value={inputDialogData.approvedMissionDays ? String(inputDialogData.approvedMissionDays) : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value;
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                approvedMissionDays: numValue
-                                            });
-                                        }}
-                                        onBlur={(e) => {
-                                            const numValue = parseNumberFromFormatted(e.target.value);
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                approvedMissionDays: numValue || 0
-                                            });
-                                            // فرمت با جداکننده 3 رقمی
-                                            if (numValue > 0) {
-                                                e.target.value = numValue.toLocaleString('fa-IR');
-                                            }
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
                                         placeholder="0"
                                     />
                                 </div>
@@ -2988,14 +2940,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         <div className="text-xs text-slate-600 mb-1">ماموریت مازاد (روز)</div>
                                                         <div className={`font-semibold ${tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}`}>
                                                             {tour.excessMissionDays || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه بارنامه (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {(tour as any).billOfLadingCost
-                                                                ? (tour as any).billOfLadingCost.toLocaleString('fa-IR')
-                                                                : '-'}
                                                         </div>
                                                     </td>
                                                     <td className="p-2 border-l border-slate-200">
