@@ -23,34 +23,58 @@ async function fixRegulationIdColumn() {
 
     console.log('✅ جدول allowance_regulations_mileage پیدا شد');
 
-    // بررسی وجود ستون
+    // بررسی وجود ستون در همه schemaها
     const checkColumn = await pool.query(`
-      SELECT column_name 
+      SELECT column_name, table_schema
       FROM information_schema.columns 
       WHERE table_name = 'allowance_regulations_mileage' 
       AND column_name = 'regulation_id'
     `);
 
-    if (checkColumn.rows.length > 0) {
-      console.log('⚠️  ستون regulation_id از قبل وجود دارد');
-      
-      // برای رکوردهای موجود که regulation_id ندارند، آن را برابر id قرار بده
-      const updateResult = await pool.query(`
-        UPDATE allowance_regulations_mileage 
-        SET regulation_id = id 
-        WHERE regulation_id IS NULL
+    console.log('🔍 بررسی ستون‌ها:', JSON.stringify(checkColumn.rows, null, 2));
+
+    // مستقیماً سعی کن ستون را اضافه کن - اگر وجود داشته باشد خطا می‌دهد که catch می‌کنیم
+    console.log('➕ اضافه کردن ستون regulation_id...');
+    let columnAdded = false;
+    try {
+      await pool.query(`
+        ALTER TABLE allowance_regulations_mileage 
+        ADD COLUMN regulation_id VARCHAR(255)
       `);
-      console.log(`✅ ${updateResult.rowCount} رکورد به‌روزرسانی شد`);
-      process.exit(0);
+      console.log('✅ ستون regulation_id به جدول allowance_regulations_mileage اضافه شد');
+      columnAdded = true;
+    } catch (alterError) {
+      if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
+        console.log('⚠️  ستون regulation_id از قبل وجود دارد');
+        columnAdded = true; // ستون وجود دارد
+      } else {
+        console.error('❌ خطا در اضافه کردن ستون:', alterError.message);
+        throw alterError; // خطای دیگری است
+      }
     }
 
-    // اضافه کردن ستون
-    console.log('➕ اضافه کردن ستون regulation_id...');
-    await pool.query(`
-      ALTER TABLE allowance_regulations_mileage 
-      ADD COLUMN regulation_id VARCHAR(255)
-    `);
-    console.log('✅ ستون regulation_id به جدول allowance_regulations_mileage اضافه شد');
+    // تست: سعی کن یک SELECT ساده انجام بده تا ببینیم ستون واقعاً وجود دارد
+    if (columnAdded) {
+      try {
+        const testQuery = await pool.query(`
+          SELECT regulation_id FROM allowance_regulations_mileage LIMIT 1
+        `);
+        console.log('✅ تست SELECT موفق بود - ستون regulation_id واقعاً وجود دارد');
+      } catch (testError) {
+        console.error('❌ تست SELECT ناموفق بود - ستون regulation_id وجود ندارد:', testError.message);
+        console.log('🔄 تلاش مجدد برای اضافه کردن ستون...');
+        // دوباره سعی کن اضافه کن
+        try {
+          await pool.query(`
+            ALTER TABLE allowance_regulations_mileage 
+            ADD COLUMN regulation_id VARCHAR(255)
+          `);
+          console.log('✅ ستون regulation_id در تلاش دوم اضافه شد');
+        } catch (retryError) {
+          console.error('❌ خطا در تلاش دوم:', retryError.message);
+        }
+      }
+    }
     
     // برای رکوردهای موجود، regulation_id را برابر id قرار بده
     const updateResult = await pool.query(`
