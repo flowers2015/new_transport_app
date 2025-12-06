@@ -47,7 +47,7 @@ async function setupDatabase() {
       console.log('❌ Complete sample data file not found');
     }
     // Seed exact roles/users requested with password '123'
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const passwordHash = await bcrypt.hash('123', 10);
     const seedUsers = [
       { id: 'USR100', username: 'admin', name: 'مدیر سیستم', role: 'admin' },
