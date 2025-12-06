@@ -84,6 +84,7 @@ async function createAllowanceRegulationTables() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS allowance_regulations_mileage (
         id VARCHAR(255) PRIMARY KEY,
+        regulation_id VARCHAR(255),
         vehicle_type VARCHAR(50) NOT NULL, -- 'تریلی' یا 'ده چرخ'
         min_kilometers INTEGER NOT NULL,
         max_kilometers INTEGER NOT NULL,
@@ -215,6 +216,11 @@ async function createAllowanceRegulationTables() {
       if (!columnNames.includes('updated_by')) {
         await pool.query(`ALTER TABLE allowance_regulations_mileage ADD COLUMN updated_by VARCHAR(255)`);
         console.log('✅ [createAllowanceRegulationTables] ستون updated_by به جدول mileage اضافه شد');
+      }
+      
+      if (!columnNames.includes('regulation_id')) {
+        await pool.query(`ALTER TABLE allowance_regulations_mileage ADD COLUMN regulation_id VARCHAR(255)`);
+        console.log('✅ [createAllowanceRegulationTables] ستون regulation_id به جدول mileage اضافه شد');
       }
     } catch (alterError) {
       console.warn('⚠️ [createAllowanceRegulationTables] خطا در اضافه کردن ستون‌ها (ممکن است قبلاً اضافه شده باشند):', alterError.message);
