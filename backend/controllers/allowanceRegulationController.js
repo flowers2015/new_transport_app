@@ -755,29 +755,62 @@ async function saveMileageRegulation(req, res) {
     } else {
       // ایجاد جدید
       const newId = crypto.randomUUID();
+      
+      // ابتدا سعی کن با regulation_id اضافه کن
       if (hasRegulationIdColumn) {
-        await pool.query(`
-          INSERT INTO allowance_regulations_mileage (
-            id, regulation_id, vehicle_type, min_kilometers, max_kilometers,
-            allowance_per_km, approval_date, document_path,
-            start_date, end_date, is_active, created_by, updated_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        `, [
-          newId,
-          finalRegulationId,
-          vehicleType,
-          minKilometers,
-          maxKilometers,
-          allowancePerKm,
-          approvalDate || null,
-          documentPath || null,
-          startDate || null,
-          endDate || null,
-          isActive !== undefined ? isActive : true,
-          userId || null,
-          userId || null,
-        ]);
+        try {
+          await pool.query(`
+            INSERT INTO allowance_regulations_mileage (
+              id, regulation_id, vehicle_type, min_kilometers, max_kilometers,
+              allowance_per_km, approval_date, document_path,
+              start_date, end_date, is_active, created_by, updated_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          `, [
+            newId,
+            finalRegulationId,
+            vehicleType,
+            minKilometers,
+            maxKilometers,
+            allowancePerKm,
+            approvalDate || null,
+            documentPath || null,
+            startDate || null,
+            endDate || null,
+            isActive !== undefined ? isActive : true,
+            userId || null,
+            userId || null,
+          ]);
+          console.log('✅ [saveMileageRegulation] INSERT با regulation_id موفق بود');
+        } catch (insertError) {
+          if (insertError.message.includes('does not exist') && insertError.message.includes('regulation_id')) {
+            console.warn('⚠️ [saveMileageRegulation] ستون regulation_id وجود ندارد - INSERT بدون regulation_id');
+            // دوباره بدون regulation_id امتحان کن
+            await pool.query(`
+              INSERT INTO allowance_regulations_mileage (
+                id, vehicle_type, min_kilometers, max_kilometers,
+                allowance_per_km, approval_date, document_path,
+                start_date, end_date, is_active, created_by, updated_by
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            `, [
+              newId,
+              vehicleType,
+              minKilometers,
+              maxKilometers,
+              allowancePerKm,
+              approvalDate || null,
+              documentPath || null,
+              startDate || null,
+              endDate || null,
+              isActive !== undefined ? isActive : true,
+              userId || null,
+              userId || null,
+            ]);
+          } else {
+            throw insertError; // خطای دیگری است
+          }
+        }
       } else {
+        // بدون regulation_id
         await pool.query(`
           INSERT INTO allowance_regulations_mileage (
             id, vehicle_type, min_kilometers, max_kilometers,
