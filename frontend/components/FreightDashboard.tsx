@@ -1553,10 +1553,17 @@ const AnnouncementPanel: React.FC<{
             isValid: jalaliDate && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliDate),
             isEditMode
         });
-        if (!jalaliDate || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliDate)) { 
+        // بررسی فرمت دقیق تاریخ: YYYY/MM/DD (ماه و روز باید دو رقمی باشند)
+        if (!jalaliDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(jalaliDate)) { 
             console.error(`📅 [FreightDashboard] Invalid date format:`, jalaliDate);
-            alert('تاریخ نامعتبر است. قالب صحیح: YYYY/MM/DD'); 
+            alert('تاریخ نامعتبر است. قالب صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)'); 
             return; 
+        }
+        
+        // بررسی تاریخ تحویل (اگر وارد شده باشد)
+        if (commonState.deliveryDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(commonState.deliveryDate)) {
+            alert('تاریخ تحویل نامعتبر است. قالب صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)');
+            return;
         }
         console.log(`📅 [FreightDashboard] Submitting with loadingDate:`, jalaliDate);
         // محاسبه originCity بر اساس نوع بارگیری
@@ -1569,14 +1576,34 @@ const AnnouncementPanel: React.FC<{
             ? `${brandState.brand1} و ${brandState.brand2}`
             : brandState.brand1;
         
-        // برای Dairy و Ambient: فیلتر کردن مقاصدی که city ندارند
+        // برای Dairy و Ambient: فیلتر کردن مقاصدی که city ندارند و بررسی فیلدهای اجباری
         const validDestinations = lineType !== FreightLineType.IceCream
-            ? destinations.filter(d => d.city && d.city.trim() !== '')
+            ? destinations.filter(d => {
+                // بررسی فیلدهای اجباری (به جز unloadTime)
+                if (!d.city || d.city.trim() === '') return false;
+                if (!d.representativeType) return false;
+                if (!d.representativeName || d.representativeName.trim() === '') return false;
+                if (!d.tonnage || Number(d.tonnage) <= 0) return false;
+                if (!d.deliveryDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(d.deliveryDate)) return false;
+                return true;
+            })
             : [];
         
         // بررسی اینکه حداقل یک مقصد معتبر وجود دارد (برای Dairy و Ambient)
         if (lineType !== FreightLineType.IceCream && validDestinations.length === 0) {
-            alert('حداقل یک مقصد با شهر معتبر الزامی است.');
+            alert('حداقل یک مقصد با تمام فیلدهای اجباری (شهر، نوع نماینده، نام نماینده، تناژ، تاریخ تحویل) الزامی است.');
+            return;
+        }
+        
+        // بررسی اینکه تمام مقاصد معتبر هستند (برای Dairy و Ambient)
+        if (lineType !== FreightLineType.IceCream && validDestinations.length !== destinations.length) {
+            alert('تمام مقاصد باید دارای شهر، نوع نماینده، نام نماینده، تناژ و تاریخ تحویل معتبر باشند.');
+            return;
+        }
+        
+        // بررسی تاریخ تحویل برای بستنی (اگر وارد شده باشد)
+        if (lineType === FreightLineType.IceCream && commonState.deliveryDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(commonState.deliveryDate)) {
+            alert('تاریخ تحویل نامعتبر است. قالب صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)');
             return;
         }
         
@@ -1697,29 +1724,89 @@ const AnnouncementPanel: React.FC<{
                                 <label className="text-xs">تاریخ بارگیری (جلالی)*</label>
                                 <input 
                                     type="text" 
-                                    placeholder="1403/01/01" 
+                                    placeholder="1404/09/18" 
                                     value={commonState.loadingDate} 
-                                    onChange={e => setCommonState(s=>({...s, loadingDate: e.target.value}))} 
+                                    onChange={e => {
+                                        let value = e.target.value.replace(/[^\d\/]/g, '');
+                                        // اعمال خودکار فرمت YYYY/MM/DD
+                                        if (value.length > 4 && !value.includes('/')) {
+                                            value = value.slice(0, 4) + '/' + value.slice(4);
+                                        }
+                                        if (value.length > 7 && value.split('/').length === 2) {
+                                            const parts = value.split('/');
+                                            if (parts[1].length > 2) {
+                                                value = parts[0] + '/' + parts[1].slice(0, 2) + '/' + parts[1].slice(2);
+                                            }
+                                        }
+                                        // محدود کردن به فرمت YYYY/MM/DD
+                                        if (value.length <= 10) {
+                                            setCommonState(s=>({...s, loadingDate: value}));
+                                        }
+                                    }} 
+                                    onBlur={e => {
+                                        // هنگام blur، فرمت را کامل کن (اضافه کردن صفرهای ابتدایی)
+                                        const value = e.target.value;
+                                        const parts = value.split('/');
+                                        if (parts.length === 3) {
+                                            const year = parts[0].padStart(4, '0');
+                                            const month = parts[1].padStart(2, '0');
+                                            const day = parts[2].padStart(2, '0');
+                                            if (year.length === 4 && month.length === 2 && day.length === 2) {
+                                                setCommonState(s=>({...s, loadingDate: `${year}/${month}/${day}`}));
+                                            }
+                                        }
+                                    }}
                                     className="input-style mt-1" 
-                                    pattern="\d{4}/\d{1,2}/\d{1,2}"
-                                    title="فرمت صحیح: 1403/01/01"
+                                    pattern="\d{4}\/\d{2}\/\d{2}"
+                                    title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)"
                                     required
+                                    maxLength={10}
                                 />
-                                <div className="text-xs text-slate-500 mt-1">فرمت: 1403/01/01</div>
+                                <div className="text-xs text-slate-500 mt-1">فرمت: 1404/09/18 (ماه و روز باید دو رقمی باشند)</div>
                             </div>
                             {lineType === FreightLineType.IceCream && (
                                 <div>
                                     <label className="text-xs">تاریخ تحویل بار (جلالی)</label>
                                     <input 
                                         type="text" 
-                                        placeholder="1403/01/02" 
+                                        placeholder="1404/09/18" 
                                         value={commonState.deliveryDate || ''} 
-                                        onChange={e => setCommonState(s=>({...s, deliveryDate: e.target.value}))} 
+                                        onChange={e => {
+                                            let value = e.target.value.replace(/[^\d\/]/g, '');
+                                            // اعمال خودکار فرمت YYYY/MM/DD
+                                            if (value.length > 4 && !value.includes('/')) {
+                                                value = value.slice(0, 4) + '/' + value.slice(4);
+                                            }
+                                            if (value.length > 7 && value.split('/').length === 2) {
+                                                const parts = value.split('/');
+                                                if (parts[1].length > 2) {
+                                                    value = parts[0] + '/' + parts[1].slice(0, 2) + '/' + parts[1].slice(2);
+                                                }
+                                            }
+                                            // محدود کردن به فرمت YYYY/MM/DD
+                                            if (value.length <= 10) {
+                                                setCommonState(s=>({...s, deliveryDate: value}));
+                                            }
+                                        }} 
+                                        onBlur={e => {
+                                            // هنگام blur، فرمت را کامل کن (اضافه کردن صفرهای ابتدایی)
+                                            const value = e.target.value;
+                                            const parts = value.split('/');
+                                            if (parts.length === 3) {
+                                                const year = parts[0].padStart(4, '0');
+                                                const month = parts[1].padStart(2, '0');
+                                                const day = parts[2].padStart(2, '0');
+                                                if (year.length === 4 && month.length === 2 && day.length === 2) {
+                                                    setCommonState(s=>({...s, deliveryDate: `${year}/${month}/${day}`}));
+                                                }
+                                            }
+                                        }}
                                         className="input-style mt-1" 
-                                        pattern="\d{4}/\d{1,2}/\d{1,2}"
-                                        title="فرمت صحیح: 1403/01/02"
+                                        pattern="\d{4}\/\d{2}\/\d{2}"
+                                        title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)"
+                                        maxLength={10}
                                     />
-                                    <div className="text-xs text-slate-500 mt-1">فرمت: 1403/01/02</div>
+                                    <div className="text-xs text-slate-500 mt-1">فرمت: 1404/09/18 (ماه و روز باید دو رقمی باشند)</div>
                                 </div>
                             )}
                             <div><label className="text-xs">نوع خودرو*</label><select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select></div>
@@ -2082,15 +2169,43 @@ const AnnouncementPanel: React.FC<{
                                         <div className="grid grid-cols-2 gap-2">
                                             <div><label className="text-xs">شهر مقصد*</label><input value={dest.city || ''} onChange={e => handleDestinationChange(dest.id!, 'city', e.target.value)} list="cities" className="input-style" required/></div>
                                             <div>
-                                                <label className="text-xs">نوع نماینده</label>
-                                                <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style">
+                                                <label className="text-xs">نوع نماینده*</label>
+                                                <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style" required>
                                                     <option value="agent">نماینده</option>
                                                     <option value="distribution">پخش</option>
                                                 </select>
                                             </div>
-                                            <div><label className="text-xs">نام نماینده</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style"/></div>
-                                            <div><label className="text-xs">تناژ <span className="text-[10px] text-slate-500">(کیلوگرم)</span></label><input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style"/></div>
-                                            <div><label className="text-xs">تاریخ تحویل</label><input type="text" value={dest.deliveryDate || ''} onChange={e => handleDestinationChange(dest.id!, 'deliveryDate', e.target.value)} className="input-style" placeholder="1404/01/01" dir="ltr"/></div>
+                                            <div><label className="text-xs">نام نماینده*</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style" required/></div>
+                                            <div><label className="text-xs">تناژ <span className="text-[10px] text-slate-500">(کیلوگرم)*</span></label><input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style" required min="0" step="0.01"/></div>
+                                            <div><label className="text-xs">تاریخ تحویل*</label><input type="text" value={dest.deliveryDate || ''} onChange={e => {
+                                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                                // اعمال خودکار فرمت YYYY/MM/DD
+                                                if (value.length > 4 && !value.includes('/')) {
+                                                    value = value.slice(0, 4) + '/' + value.slice(4);
+                                                }
+                                                if (value.length > 7 && value.split('/').length === 2) {
+                                                    const parts = value.split('/');
+                                                    if (parts[1].length > 2) {
+                                                        value = parts[0] + '/' + parts[1].slice(0, 2) + '/' + parts[1].slice(2);
+                                                    }
+                                                }
+                                                // محدود کردن به فرمت YYYY/MM/DD
+                                                if (value.length <= 10) {
+                                                    handleDestinationChange(dest.id!, 'deliveryDate', value);
+                                                }
+                                            }} onBlur={e => {
+                                                // هنگام blur، فرمت را کامل کن (اضافه کردن صفرهای ابتدایی)
+                                                const value = e.target.value;
+                                                const parts = value.split('/');
+                                                if (parts.length === 3) {
+                                                    const year = parts[0].padStart(4, '0');
+                                                    const month = parts[1].padStart(2, '0');
+                                                    const day = parts[2].padStart(2, '0');
+                                                    if (year.length === 4 && month.length === 2 && day.length === 2) {
+                                                        handleDestinationChange(dest.id!, 'deliveryDate', `${year}/${month}/${day}`);
+                                                    }
+                                                }
+                                            }} className="input-style" placeholder="1404/09/18" dir="ltr" pattern="\d{4}\/\d{2}\/\d{2}" title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)" required maxLength={10}/></div>
                                             <div><label className="text-xs">ساعت تخلیه</label><input type="time" value={dest.unloadTime || ''} onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)} className="input-style"/></div>
                                         </div>
                                     </div>

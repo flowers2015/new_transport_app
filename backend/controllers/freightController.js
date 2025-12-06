@@ -2017,6 +2017,62 @@ async function finalizeAssignments(req, res) {
     return res.status(400).json({ message: 'lineType is required.' });
   }
   
+  // ساخت userName به فرمت "username - name - role"
+  // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+  const currentUserId = req.user?.userId || req.user?.id;
+  let userFullName = '';
+  if (currentUserId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some(r => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name, role FROM users WHERE id = $1`, [currentUserId]);
+      if (userRow.rows.length > 0) {
+        userFullName = userRow.rows[0].display_name || '';
+      }
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+  
+  const userName = (() => {
+    const userUsername = req.user?.username || '';
+    const userName = userFullName;
+    const role = req.user?.role || '';
+    
+    // نقش‌های فارسی
+    const roleLabels = {
+      'transport_user': 'کاربر ترابری (شرکت)',
+      'personal_transport_user': 'کاربر ترابری (شخصی)',
+      'planner': 'کارمند برنامه‌ریزی',
+      'planner_manager': 'مدیر برنامه‌ریزی',
+      'transport_finance': 'مالی ترابری',
+      'finance': 'مالی شعب',
+      'central_finance': 'مالی ستاد',
+      'admin': 'مدیر سیستم',
+      'system': 'سیستم'
+    };
+    const roleLabel = roleLabels[role] || role || '';
+    
+    if (userUsername && userName && roleLabel) {
+      return `${userUsername} - ${userName} - ${roleLabel}`;
+    } else if (userUsername && userName) {
+      return `${userUsername} - ${userName}`;
+    } else if (userUsername) {
+      return userUsername;
+    } else if (userName) {
+      return userName;
+    }
+    return 'کاربر';
+  })();
+  
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -2146,10 +2202,8 @@ async function finalizeAssignments(req, res) {
         // ثبت تاریخچه
         await logFreightHistory({
           announcementId: annId,
-          userId: userId,
-          userName: username 
-            ? (name ? `${username} - ${name}` : username)
-            : (name || 'کاربر'),
+          userId: currentUserId,
+          userName: userName,
           action: 'ASSIGNMENT_FINALIZED',
           oldStatus: oldStatus,
           newStatus: newStatus,
@@ -2189,10 +2243,8 @@ async function finalizeAssignments(req, res) {
         // ثبت تاریخچه
         await logFreightHistory({
           announcementId: annId,
-          userId: userId,
-          userName: username 
-            ? (name ? `${username} - ${name}` : username)
-            : (name || 'کاربر'),
+          userId: currentUserId,
+          userName: userName,
           action: 'RETURNED_TO_PLANNER',
           oldStatus: ann.status || 'PendingCompanyAssignment',
           newStatus: 'Leftover',
@@ -4032,9 +4084,62 @@ async function createChangeRequest(req, res) {
   const { id: announcementId } = req.params;
   const { type, targetQueue, description, payload } = req.body || {};
   const { id: actingUserId, name, username } = req.user || {};
-  const userName = username 
-    ? (name ? `${username} - ${name}` : username)
-    : (name || 'system');
+  
+  // ساخت userName به فرمت "username - name - role"
+  // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+  const currentUserId = req.user?.userId || req.user?.id;
+  let userFullName = '';
+  if (currentUserId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some(r => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name, role FROM users WHERE id = $1`, [currentUserId]);
+      if (userRow.rows.length > 0) {
+        userFullName = userRow.rows[0].display_name || '';
+      }
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+  
+  const userName = (() => {
+    const userUsername = req.user?.username || '';
+    const userName = userFullName;
+    const role = req.user?.role || '';
+    
+    // نقش‌های فارسی
+    const roleLabels = {
+      'transport_user': 'کاربر ترابری (شرکت)',
+      'personal_transport_user': 'کاربر ترابری (شخصی)',
+      'planner': 'کارمند برنامه‌ریزی',
+      'planner_manager': 'مدیر برنامه‌ریزی',
+      'transport_finance': 'مالی ترابری',
+      'finance': 'مالی شعب',
+      'central_finance': 'مالی ستاد',
+      'admin': 'مدیر سیستم',
+      'system': 'سیستم'
+    };
+    const roleLabel = roleLabels[role] || role || '';
+    
+    if (userUsername && userName && roleLabel) {
+      return `${userUsername} - ${userName} - ${roleLabel}`;
+    } else if (userUsername && userName) {
+      return `${userUsername} - ${userName}`;
+    } else if (userUsername) {
+      return userUsername;
+    } else if (userName) {
+      return userName;
+    }
+    return 'کاربر';
+  })();
 
   if (!type || !['change', 'split', 'merge'].includes(type)) {
     return res.status(400).json({ message: 'نوع درخواست نامعتبر است.' });
@@ -4133,7 +4238,7 @@ async function createChangeRequest(req, res) {
     // ثبت تاریخچه
     await logFreightHistory({
       announcementId: announcementId,
-      userId: actingUserId || null,
+      userId: currentUserId || null,
       userName: userName,
       action: 'CHANGE_REQUESTED',
       oldStatus: oldStatus,

@@ -57,6 +57,9 @@ import AdminResourceManagement from './components/AdminResourceManagement';
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
+        case UserRole.PlanningEmployee:
+        case UserRole.PlanningManager:
+            return View.FreightPlanning; // برنامه ریزی ارسال بار
         case UserRole.TransportationUser:
         case UserRole.Transportation_Personal_Vehicle_User:
             return View.TransportLive; // پیگیری اعلام بار زنده
