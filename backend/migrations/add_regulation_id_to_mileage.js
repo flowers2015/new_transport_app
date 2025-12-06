@@ -5,16 +5,20 @@ const pool = require('../db');
  */
 async function addRegulationIdToMileage() {
   try {
-    // بررسی وجود ستون
-    const checkColumn = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'allowance_regulations_mileage' 
-      AND column_name = 'regulation_id'
+    // بررسی وجود جدول
+    const checkTable = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'allowance_regulations_mileage'
     `);
 
-    if (checkColumn.rows.length === 0) {
-      // اضافه کردن ستون
+    if (checkTable.rows.length === 0) {
+      console.log('⚠️  جدول allowance_regulations_mileage هنوز ایجاد نشده است');
+      return;
+    }
+
+    // سعی کن ستون را اضافه کن - اگر وجود داشته باشد، خطا می‌دهد که catch می‌کنیم
+    try {
       await pool.query(`
         ALTER TABLE allowance_regulations_mileage 
         ADD COLUMN regulation_id VARCHAR(255)
@@ -28,8 +32,25 @@ async function addRegulationIdToMileage() {
         WHERE regulation_id IS NULL
       `);
       console.log('✅ مقادیر regulation_id برای رکوردهای موجود تنظیم شد');
-    } else {
-      console.log('⚠️  ستون regulation_id از قبل وجود دارد');
+    } catch (alterError) {
+      // اگر ستون از قبل وجود داشته باشد، خطا می‌دهد
+      if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
+        console.log('⚠️  ستون regulation_id از قبل وجود دارد');
+        
+        // برای رکوردهای موجود که regulation_id ندارند، آن را برابر id قرار بده
+        try {
+          await pool.query(`
+            UPDATE allowance_regulations_mileage 
+            SET regulation_id = id 
+            WHERE regulation_id IS NULL
+          `);
+          console.log('✅ مقادیر regulation_id برای رکوردهای موجود تنظیم شد');
+        } catch (updateError) {
+          console.log('⚠️  خطا در تنظیم مقادیر regulation_id:', updateError.message);
+        }
+      } else {
+        throw alterError; // خطای دیگری است، throw کن
+      }
     }
   } catch (error) {
     // اگر جدول وجود نداشته باشد، خطا نده (جدول بعداً ایجاد می‌شود)
@@ -37,7 +58,7 @@ async function addRegulationIdToMileage() {
       console.log('⚠️  جدول allowance_regulations_mileage هنوز ایجاد نشده است');
     } else {
       console.error('❌ [addRegulationIdToMileage] خطا:', error.message);
-      throw error;
+      // خطا را throw نکن - فقط log کن تا سرور crash نشود
     }
   }
 }
