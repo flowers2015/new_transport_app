@@ -652,38 +652,34 @@ async function saveMileageRegulation(req, res) {
 
     await createAllowanceRegulationTables();
 
-    // بررسی وجود ستون regulation_id
+    // همیشه سعی کن ستون regulation_id را اضافه کن (اگر وجود نداشته باشد)
     let hasRegulationIdColumn = false;
     try {
-      const checkColumn = await pool.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'allowance_regulations_mileage' 
-        AND column_name = 'regulation_id'
-        AND table_schema = 'public'
+      await pool.query(`
+        ALTER TABLE allowance_regulations_mileage 
+        ADD COLUMN regulation_id VARCHAR(255)
       `);
-      hasRegulationIdColumn = checkColumn.rows.length > 0;
-      console.log('🔍 [saveMileageRegulation] بررسی ستون regulation_id:', hasRegulationIdColumn);
-    } catch (checkError) {
-      console.warn('⚠️ [saveMileageRegulation] خطا در بررسی ستون:', checkError.message);
+      console.log('✅ [saveMileageRegulation] ستون regulation_id اضافه شد');
+      hasRegulationIdColumn = true;
+    } catch (alterError) {
+      if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
+        console.log('✅ [saveMileageRegulation] ستون regulation_id از قبل وجود دارد');
+        hasRegulationIdColumn = true;
+      } else {
+        console.error('❌ [saveMileageRegulation] خطا در اضافه کردن ستون:', alterError.message);
+        // اگر خطای دیگری است، سعی کن بدون regulation_id ادامه بده
+        hasRegulationIdColumn = false;
+      }
     }
 
-    // اگر ستون وجود ندارد، سعی کن اضافه کن
-    if (!hasRegulationIdColumn) {
+    // تست: سعی کن یک SELECT ساده انجام بده تا مطمئن شویم ستون واقعاً وجود دارد
+    if (hasRegulationIdColumn) {
       try {
-        await pool.query(`
-          ALTER TABLE allowance_regulations_mileage 
-          ADD COLUMN regulation_id VARCHAR(255)
-        `);
-        console.log('✅ [saveMileageRegulation] ستون regulation_id اضافه شد');
-        hasRegulationIdColumn = true;
-      } catch (alterError) {
-        if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
-          console.log('⚠️ [saveMileageRegulation] ستون regulation_id از قبل وجود دارد');
-          hasRegulationIdColumn = true;
-        } else {
-          console.error('❌ [saveMileageRegulation] خطا در اضافه کردن ستون:', alterError.message);
-        }
+        await pool.query(`SELECT regulation_id FROM allowance_regulations_mileage LIMIT 1`);
+        console.log('✅ [saveMileageRegulation] تست SELECT موفق - ستون regulation_id واقعاً وجود دارد');
+      } catch (testError) {
+        console.warn('⚠️ [saveMileageRegulation] تست SELECT ناموفق - ستون regulation_id وجود ندارد:', testError.message);
+        hasRegulationIdColumn = false;
       }
     }
 
