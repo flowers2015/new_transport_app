@@ -652,38 +652,105 @@ async function saveMileageRegulation(req, res) {
 
     await createAllowanceRegulationTables();
 
+    // بررسی وجود ستون regulation_id
+    let hasRegulationIdColumn = false;
+    try {
+      const checkColumn = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'allowance_regulations_mileage' 
+        AND column_name = 'regulation_id'
+        AND table_schema = 'public'
+      `);
+      hasRegulationIdColumn = checkColumn.rows.length > 0;
+      console.log('🔍 [saveMileageRegulation] بررسی ستون regulation_id:', hasRegulationIdColumn);
+    } catch (checkError) {
+      console.warn('⚠️ [saveMileageRegulation] خطا در بررسی ستون:', checkError.message);
+    }
+
+    // اگر ستون وجود ندارد، سعی کن اضافه کن
+    if (!hasRegulationIdColumn) {
+      try {
+        await pool.query(`
+          ALTER TABLE allowance_regulations_mileage 
+          ADD COLUMN regulation_id VARCHAR(255)
+        `);
+        console.log('✅ [saveMileageRegulation] ستون regulation_id اضافه شد');
+        hasRegulationIdColumn = true;
+      } catch (alterError) {
+        if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
+          console.log('⚠️ [saveMileageRegulation] ستون regulation_id از قبل وجود دارد');
+          hasRegulationIdColumn = true;
+        } else {
+          console.error('❌ [saveMileageRegulation] خطا در اضافه کردن ستون:', alterError.message);
+        }
+      }
+    }
+
     // اگر regulation_id داده نشده، یکی بساز
     const finalRegulationId = regulationId || crypto.randomUUID();
 
     if (id) {
       // به‌روزرسانی
-      await pool.query(`
-        UPDATE allowance_regulations_mileage SET
-          vehicle_type = $1,
-          min_kilometers = $2,
-          max_kilometers = $3,
-          allowance_per_km = $4,
-          approval_date = $5,
-          document_path = $6,
-          start_date = $7,
-          end_date = $8,
-          is_active = $9,
-          updated_by = $10,
-          updated_at = NOW()
-        WHERE id = $11
-      `, [
-        vehicleType,
-        minKilometers,
-        maxKilometers,
-        allowancePerKm,
-        approvalDate || null,
-        documentPath || null,
-        startDate || null,
-        endDate || null,
-        isActive !== undefined ? isActive : true,
-        userId || null,
-        id,
-      ]);
+      if (hasRegulationIdColumn) {
+        await pool.query(`
+          UPDATE allowance_regulations_mileage SET
+            regulation_id = $1,
+            vehicle_type = $2,
+            min_kilometers = $3,
+            max_kilometers = $4,
+            allowance_per_km = $5,
+            approval_date = $6,
+            document_path = $7,
+            start_date = $8,
+            end_date = $9,
+            is_active = $10,
+            updated_by = $11,
+            updated_at = NOW()
+          WHERE id = $12
+        `, [
+          finalRegulationId,
+          vehicleType,
+          minKilometers,
+          maxKilometers,
+          allowancePerKm,
+          approvalDate || null,
+          documentPath || null,
+          startDate || null,
+          endDate || null,
+          isActive !== undefined ? isActive : true,
+          userId || null,
+          id,
+        ]);
+      } else {
+        await pool.query(`
+          UPDATE allowance_regulations_mileage SET
+            vehicle_type = $1,
+            min_kilometers = $2,
+            max_kilometers = $3,
+            allowance_per_km = $4,
+            approval_date = $5,
+            document_path = $6,
+            start_date = $7,
+            end_date = $8,
+            is_active = $9,
+            updated_by = $10,
+            updated_at = NOW()
+          WHERE id = $11
+        `, [
+          vehicleType,
+          minKilometers,
+          maxKilometers,
+          allowancePerKm,
+          approvalDate || null,
+          documentPath || null,
+          startDate || null,
+          endDate || null,
+          isActive !== undefined ? isActive : true,
+          userId || null,
+          id,
+        ]);
+      }
 
       return res.json({ 
         message: 'بخشنامه اجرت پیمایش به‌روزرسانی شد.',
@@ -692,32 +759,55 @@ async function saveMileageRegulation(req, res) {
     } else {
       // ایجاد جدید
       const newId = crypto.randomUUID();
-      await pool.query(`
-        INSERT INTO allowance_regulations_mileage (
-          id, regulation_id, vehicle_type, min_kilometers, max_kilometers,
-          allowance_per_km, approval_date, document_path,
-          start_date, end_date, is_active, created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      `, [
-        newId,
-        finalRegulationId,
-        vehicleType,
-        minKilometers,
-        maxKilometers,
-        allowancePerKm,
-        approvalDate || null,
-        documentPath || null,
-        startDate || null,
-        endDate || null,
-        isActive !== undefined ? isActive : true,
-        userId || null,
-        userId || null,
-      ]);
+      if (hasRegulationIdColumn) {
+        await pool.query(`
+          INSERT INTO allowance_regulations_mileage (
+            id, regulation_id, vehicle_type, min_kilometers, max_kilometers,
+            allowance_per_km, approval_date, document_path,
+            start_date, end_date, is_active, created_by, updated_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `, [
+          newId,
+          finalRegulationId,
+          vehicleType,
+          minKilometers,
+          maxKilometers,
+          allowancePerKm,
+          approvalDate || null,
+          documentPath || null,
+          startDate || null,
+          endDate || null,
+          isActive !== undefined ? isActive : true,
+          userId || null,
+          userId || null,
+        ]);
+      } else {
+        await pool.query(`
+          INSERT INTO allowance_regulations_mileage (
+            id, vehicle_type, min_kilometers, max_kilometers,
+            allowance_per_km, approval_date, document_path,
+            start_date, end_date, is_active, created_by, updated_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, [
+          newId,
+          vehicleType,
+          minKilometers,
+          maxKilometers,
+          allowancePerKm,
+          approvalDate || null,
+          documentPath || null,
+          startDate || null,
+          endDate || null,
+          isActive !== undefined ? isActive : true,
+          userId || null,
+          userId || null,
+        ]);
+      }
 
       return res.status(201).json({ 
         message: 'بخشنامه اجرت پیمایش ثبت شد.',
         id: newId,
-        regulationId: finalRegulationId
+        regulationId: hasRegulationIdColumn ? finalRegulationId : null
       });
     }
   } catch (error) {
