@@ -111,10 +111,16 @@ const App: React.FC = () => {
             username: raw.username
         });
         if (!mappedRole) return null;
+        // اگر fullName وجود داره و با username متفاوته، از fullName استفاده کن
+        // در غیر این صورت، اگر name وجود داره و با username متفاوته، از name استفاده کن
+        // در غیر این صورت، فقط username رو استفاده کن (نه username رو به عنوان name)
+        const fullName = raw.fullName || raw.name || null;
+        const displayName = (fullName && fullName !== raw.username) ? fullName : null;
+        
         return {
             id: raw.id || raw.userId || '',
             username: raw.username || '',
-            name: raw.fullName || raw.name || raw.username || 'کاربر',
+            name: displayName || raw.username || 'کاربر', // اگر fullName وجود نداشت، از username استفاده کن
             role: mappedRole,
             employeeId: raw.employeeId || undefined,
             branchCity: raw.branchCity || undefined,

@@ -161,10 +161,37 @@ async function getFreightAnnouncements(req, res) {
     
     console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, includeFinalized=${includeFinalized}, whereClause=${whereClause}`);
     
+    // Get user role and ID for filtering
+    const userRole = req.user?.role || req.user?.userRole;
+    const userId = req.user?.id || req.user?.userId;
+    const isPlanningEmployee = userRole === 'planner' || userRole === 'کارمند برنامه‌ریزی';
+    const isPlanningManager = userRole === 'planner_manager' || userRole === 'مدیر برنامه‌ریزی';
+    
+    // Add filter for planning employees (only see their own announcements)
+    let userFilter = '';
+    if (isPlanningEmployee && userId) {
+      userFilter = ` AND fa.created_by_user_id = '${userId}'`;
+    }
+    
+    // بررسی اینکه کدام ستون name در جدول users وجود دارد
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('full_name', 'name')
+    `);
+    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
+    const hasName = columnCheck.rows.some(r => r.column_name === 'name');
+    const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+    
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (fa.id)
         fa.*,
         fa.rejection_reason,
+        -- اطلاعات کارمند اعلام‌کننده
+        u_creator.id as creator_user_id,
+        u_creator.${nameColumn} as creator_full_name,
+        u_creator.username as creator_username,
         -- اگر admin مقدار صریح set کرده، از آن استفاده کن، در غیر این صورت از JOIN
         COALESCE(fa.assigned_driver_name, d.name, pd.name) as assigned_driver_name,
         COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
@@ -186,6 +213,7 @@ async function getFreightAnnouncements(req, res) {
           ELSE NULL
         END as detected_assignment_type
       FROM freight_announcements fa
+      LEFT JOIN users u_creator ON fa.created_by_user_id = u_creator.id
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
       LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
@@ -197,7 +225,7 @@ async function getFreightAnnouncements(req, res) {
         ORDER BY created_at DESC
         LIMIT 1
       ) da ON true
-      ${whereClause}
+      ${whereClause}${userFilter}
       ORDER BY fa.id, fa.created_at DESC
     `);
     
@@ -259,6 +287,11 @@ async function getFreightAnnouncements(req, res) {
           console.log(`📅 [getFreightAnnouncements] ID ${announcement.id}: "${before}" → "${announcement.loading_date}"`);
         }
       }
+      
+      // normalize delivery_date هم
+      if (announcement.delivery_date) {
+        announcement.delivery_date = normalizeJalaliDate(announcement.delivery_date);
+      }
     }
     
     // لاگ آمار نماینده‌ها و پخش‌ها
@@ -311,6 +344,11 @@ async function getFreightAnnouncementById(req, res) {
         before,
         after: announcement.loading_date
       });
+    }
+    
+    // normalize delivery_date هم
+    if (announcement.delivery_date) {
+      announcement.delivery_date = normalizeJalaliDate(announcement.delivery_date);
     }
     
     // دریافت مقاصد برای گرفتن اطلاعات مصوب از dispatch_routes
@@ -372,6 +410,7 @@ async function updateFreightAnnouncement(req, res) {
   try {
     const {
       loadingDate,
+      deliveryDate, // تاریخ تحویل بار (برای بستنی)
       lineType,
       cargoValue,
       vehicleType,
@@ -442,6 +481,11 @@ async function updateFreightAnnouncement(req, res) {
       if (vehicleType) { fields.push(`vehicle_type = $${idx++}`); values.push(vehicleType); }
       
       // فیلدهای اضافی بستنی
+      if (deliveryDate !== undefined) { 
+        const normalizedDeliveryDate = ensureJalaliDateFormat(deliveryDate);
+        fields.push(`delivery_date = $${idx++}`); 
+        values.push(normalizedDeliveryDate || null); 
+      }
       if (originCity !== undefined) { fields.push(`origin_city = $${idx++}`); values.push(originCity); }
       if (brand !== undefined) { fields.push(`brand = $${idx++}`); values.push(brand); }
       if (representativeType !== undefined) { fields.push(`representative_type = $${idx++}`); values.push(representativeType); }
@@ -552,8 +596,61 @@ async function updateFreightAnnouncement(req, res) {
 
       // 6. ثبت تاریخچه (فقط اگه تغییری رخ داده)
       if (allChanges && Object.keys(allChanges).length > 0) {
-        const userName = req.user?.name || req.user?.username || 'کاربر';
+        // ساخت userName به فرمت "username - name - role"
+        // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
         const userId = req.user?.userId || req.user?.id;
+        let userFullName = '';
+        if (userId) {
+          try {
+            const userCheck = await pool.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'users' 
+              AND column_name IN ('full_name', 'name')
+            `);
+            const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+            const hasName = userCheck.rows.some(r => r.column_name === 'name');
+            const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+            
+            const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+            if (userRow.rows.length > 0) {
+              userFullName = userRow.rows[0].display_name || '';
+            }
+          } catch (e) {
+            console.error('Failed to fetch user name:', e);
+          }
+        }
+        
+        const userName = (() => {
+          const username = req.user?.username || '';
+          const name = userFullName;
+          const role = req.user?.role || '';
+          
+          // نقش‌های فارسی
+          const roleLabels = {
+            'transport_user': 'کاربر ترابری (شرکت)',
+            'personal_transport_user': 'کاربر ترابری (شخصی)',
+            'planner': 'کارمند برنامه‌ریزی',
+            'planner_manager': 'مدیر برنامه‌ریزی',
+            'transport_finance': 'مالی ترابری',
+            'finance': 'مالی شعب',
+            'central_finance': 'مالی ستاد',
+            'admin': 'مدیر سیستم',
+            'system': 'سیستم'
+          };
+          const roleLabel = roleLabels[role] || role || '';
+          
+          if (username && name && roleLabel) {
+            return `${username} - ${name} - ${roleLabel}`;
+          } else if (username && name) {
+            return `${username} - ${name}`;
+          } else if (username) {
+            return username;
+          } else if (name) {
+            return name;
+          }
+          return 'کاربر';
+        })();
         
         let action = 'EDITED';
         if (destinationChanges && !fieldChanges) {
@@ -637,6 +734,11 @@ async function updateFreightAnnouncement(req, res) {
         });
       }
       
+      // normalize delivery_date هم
+      if (updated.delivery_date) {
+        updated.delivery_date = normalizeJalaliDate(updated.delivery_date);
+      }
+      
       const destRows = await pool.query('SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC', [id]);
       updated.destinations = destRows.rows;
       
@@ -691,17 +793,21 @@ async function createFreightAnnouncement(req, res) {
       ? destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0)
       : 0;
 
+    // Get user ID from request (set by authMiddleware)
+    const userId = req.user?.id || req.user?.userId;
+    
     const insertAnnouncementQuery = `
       INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
         vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
         total_freight_cost, platform_arrival_time, carton_count, created_at, updated_at,
-        origin_city, brand, representative_type, representative_name, priority, products, notes
+        origin_city, brand, representative_type, representative_name, priority, products, notes,
+        created_by_user_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, NULL, NULL,
         $10, $11, $12, NOW(), NOW(),
-        $13, $14, $15, $16, $17, $18, $19
+        $13, $14, $15, $16, $17, $18, $19, $20
       )
     `;
 
@@ -736,6 +842,7 @@ async function createFreightAnnouncement(req, res) {
       priority || null,
       Array.isArray(products) ? JSON.stringify(products) : '[]',
       notes || null,
+      userId || null, // created_by_user_id
     ]);
 
     // Insert destinations if provided
@@ -798,6 +905,11 @@ async function createFreightAnnouncement(req, res) {
       });
     }
     
+    // normalize delivery_date هم
+    if (created.delivery_date) {
+      created.delivery_date = normalizeJalaliDate(created.delivery_date);
+    }
+    
     const destRows = await pool.query(
       'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
       [id]
@@ -814,9 +926,61 @@ async function createFreightAnnouncement(req, res) {
     created.platform_arrival_time = platformArrivalTime || null;
     created.notes = notes || null;
 
-    // ثبت رویداد CREATED در تاریخچه
-    const userName = req.user?.name || req.user?.username || 'کاربر';
-    const userId = req.user?.userId || req.user?.id;
+    // ثبت رویداد CREATED در تاریخچه - فرمت: "username - name - role"
+    // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+    // userId قبلاً در خط 797 تعریف شده
+    let userFullName = '';
+    if (userId) {
+      try {
+        const userCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'users' 
+          AND column_name IN ('full_name', 'name')
+        `);
+        const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+        const hasName = userCheck.rows.some(r => r.column_name === 'name');
+        const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+        
+        const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+        if (userRow.rows.length > 0) {
+          userFullName = userRow.rows[0].display_name || '';
+        }
+      } catch (e) {
+        console.error('Failed to fetch user name:', e);
+      }
+    }
+    
+    const userName = (() => {
+      const username = req.user?.username || '';
+      const name = userFullName;
+      const role = req.user?.role || '';
+      
+      // نقش‌های فارسی
+      const roleLabels = {
+        'transport_user': 'کاربر ترابری (شرکت)',
+        'personal_transport_user': 'کاربر ترابری (شخصی)',
+        'planner': 'کارمند برنامه‌ریزی',
+        'planner_manager': 'مدیر برنامه‌ریزی',
+        'transport_finance': 'مالی ترابری',
+        'finance': 'مالی شعب',
+        'central_finance': 'مالی ستاد',
+        'admin': 'مدیر سیستم',
+        'system': 'سیستم'
+      };
+      const roleLabel = roleLabels[role] || role || '';
+      
+      if (username && name && roleLabel) {
+        return `${username} - ${name} - ${roleLabel}`;
+      } else if (username && name) {
+        return `${username} - ${name}`;
+      } else if (username) {
+        return username;
+      } else if (name) {
+        return name;
+      }
+      return 'کاربر';
+    })();
     // گرفتن شهر برای نمایش در توضیحات (از همان destRows استفاده می‌کنیم)
     const city = destRows.rows[0]?.city || 'بدون مقصد';
     const description = `اعلام بار به مقصد ${city} ایجاد شد (${lineType})`;
@@ -856,7 +1020,9 @@ async function createFreightAnnouncement(req, res) {
 async function approveAnnouncement(req, res) {
   const { id: announcementId } = req.params;
   const { userId, name, username } = req.user;
-  const userName = name || username || 'مدیر';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'مدیر');
   
   const client = await pool.connect();
   try {
@@ -936,8 +1102,11 @@ async function approveAnnouncement(req, res) {
 async function rejectAnnouncement(req, res) {
   const { id: announcementId } = req.params;
   const { userId, name, username } = req.user;
-  const userName = name || username || 'مدیر';
-  const newStatus = 'Rejected';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'مدیر');
+  // وقتی مدیر رد می‌کنه، باید به Draft برگرده تا کارمند بتونه دوباره ویرایش کنه
+  const newStatus = 'Draft';
   const reason = (req.body && req.body.reason) || 'بدون علت';
   
   const client = await pool.connect();
@@ -946,7 +1115,7 @@ async function rejectAnnouncement(req, res) {
     
     // گرفتن اطلاعات قبلی با مقاصد
     const { rows } = await client.query(
-      'SELECT status, announcement_code FROM freight_announcements WHERE id = $1',
+      'SELECT status, announcement_code, created_by_user_id FROM freight_announcements WHERE id = $1',
       [announcementId]
     );
     if (rows.length === 0) {
@@ -954,7 +1123,7 @@ async function rejectAnnouncement(req, res) {
       return res.status(404).json({ message: 'Announcement not found.' });
     }
     
-    const { status: oldStatus, announcement_code: code } = rows[0];
+    const { status: oldStatus, announcement_code: code, created_by_user_id } = rows[0];
     
     // گرفتن مقاصد برای نمایش در توضیحات
     const destRows = await client.query(
@@ -964,9 +1133,9 @@ async function rejectAnnouncement(req, res) {
     const destinations = destRows.rows.map(d => d.city).join('، ');
     const destinationLabel = destinations || 'بدون مقصد';
     
-    const description = `بار به مقصد ${destinationLabel} توسط ${userName} رد شد. علت: ${reason}`;
+    const description = `بار به مقصد ${destinationLabel} توسط ${userName} رد شد و به کارتابل کارمند برگشت. علت: ${reason}`;
 
-    // ثبت علت رد
+    // ثبت علت رد و برگشت به Draft
       const col = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'rejection_reason'`);
       if (col.rowCount > 0) {
       await client.query(
@@ -995,7 +1164,7 @@ async function rejectAnnouncement(req, res) {
     });
     
     await client.query('COMMIT');
-    return res.status(200).json({ message: 'Announcement rejected.' });
+    return res.status(200).json({ message: 'Announcement rejected and returned to planner.' });
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('Failed to reject announcement:', e);
@@ -1020,8 +1189,78 @@ async function assignPersonalDriverAndVehicle(req, res) {
     totalFreightCost,
     billOfLadingNumber
   } = req.body;
-  const { userId, role, name, username } = req.user;
-  const userName = name || username || 'کاربر ترابری';
+  const userId = req.user?.userId || req.user?.id;
+  // ساخت userName به فرمت "username - name - role"
+  // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+  let userFullName = '';
+  if (userId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some(r => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+      if (userRow.rows.length > 0) {
+        userFullName = userRow.rows[0].display_name || '';
+      }
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+  
+  const userName = (() => {
+    const username = req.user?.username || '';
+    const name = userFullName;
+    const role = req.user?.role || '';
+    
+    // نقش‌های فارسی
+    const roleLabels = {
+      'transport_user': 'کاربر ترابری (شرکت)',
+      'personal_transport_user': 'کاربر ترابری (شخصی)',
+      'planner': 'کارمند برنامه‌ریزی',
+      'planner_manager': 'مدیر برنامه‌ریزی',
+      'transport_finance': 'مالی ترابری',
+      'finance': 'مالی شعب',
+      'central_finance': 'مالی ستاد',
+      'admin': 'مدیر سیستم',
+      'system': 'سیستم'
+    };
+    const roleLabel = roleLabels[role] || role || '';
+    
+    console.log('🔍 [assignPersonalDriverAndVehicle] userName construction:', {
+      username,
+      name,
+      role,
+      roleLabel,
+      userId
+    });
+    
+    // همیشه سعی کن فرمت کامل رو برگردونی، حتی اگر name یا roleLabel خالی باشه
+    if (username) {
+      if (name && roleLabel) {
+        return `${username} - ${name} - ${roleLabel}`;
+      } else if (name) {
+        return `${username} - ${name}`;
+      } else if (roleLabel) {
+        return `${username} - ${roleLabel}`;
+      }
+      return username;
+    } else if (name) {
+      if (roleLabel) {
+        return `${name} - ${roleLabel}`;
+      }
+      return name;
+    } else if (roleLabel) {
+      return roleLabel;
+    }
+    return 'کاربر';
+  })();
 
   if (!nationalId || !driverName || !driverContact || !driverSmartId || !vehicleType || !vehiclePlate || !truckSmartId) {
     return res.status(400).json({ 
@@ -1200,6 +1439,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
       fieldChanges.assignedVehicleId = { old: oldVehicleId, new: personalVehicleId };
     }
     
+    console.log('🔍 [assignPersonalDriverAndVehicle] Logging history with userName:', userName);
+    
+    console.log('🔍 [assignPersonalDriverAndVehicle] Logging history with userName:', userName);
+    
     await logFreightHistory({
       announcementId,
       userId,
@@ -1251,13 +1494,66 @@ async function assignVehicleAndDriver(req, res) {
     truckSmartId,
     destinations
   } = req.body;
-  const { userId, role, name, username } = req.user;
-  const userName = name || username || 'کاربر ترابری';
+  const userId = req.user?.userId || req.user?.id;
+  // ساخت userName به فرمت "username - name - role"
+  // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+  let userFullName = '';
+  if (userId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some(r => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+      if (userRow.rows.length > 0) {
+        userFullName = userRow.rows[0].display_name || '';
+      }
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+  
+  const userName = (() => {
+    const username = req.user?.username || '';
+    const name = userFullName;
+    const role = req.user?.role || '';
+    
+    // نقش‌های فارسی
+    const roleLabels = {
+      'transport_user': 'کاربر ترابری (شرکت)',
+      'personal_transport_user': 'کاربر ترابری (شخصی)',
+      'planner': 'کارمند برنامه‌ریزی',
+      'planner_manager': 'مدیر برنامه‌ریزی',
+      'transport_finance': 'مالی ترابری',
+      'finance': 'مالی شعب',
+      'central_finance': 'مالی ستاد',
+      'admin': 'مدیر سیستم',
+      'system': 'سیستم'
+    };
+    const roleLabel = roleLabels[role] || role || '';
+    
+    if (username && name && roleLabel) {
+      return `${username} - ${name} - ${roleLabel}`;
+    } else if (username && name) {
+      return `${username} - ${name}`;
+    } else if (username) {
+      return username;
+    } else if (name) {
+      return name;
+    }
+    return 'کاربر';
+  })();
 
   console.log('🔍 [Assignment] Request details:', {
     announcementId,
     assignmentType,
-    role,
+    role: req.user?.role || '',
     userId,
     body: req.body
   });
@@ -1374,7 +1670,9 @@ async function setAssignmentQueue(req, res) {
   const { id: announcementId } = req.params;
   const { nextQueue } = req.body || {};
   const { userId, name, username } = req.user;
-  const userName = name || username || 'مدیر';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'مدیر');
   
   if (!['company', 'personal'].includes(nextQueue)) {
     return res.status(400).json({ message: 'nextQueue must be "company" or "personal"' });
@@ -1849,7 +2147,9 @@ async function finalizeAssignments(req, res) {
         await logFreightHistory({
           announcementId: annId,
           userId: userId,
-          userName: name || username || 'کاربر',
+          userName: username 
+            ? (name ? `${username} - ${name}` : username)
+            : (name || 'کاربر'),
           action: 'ASSIGNMENT_FINALIZED',
           oldStatus: oldStatus,
           newStatus: newStatus,
@@ -1890,7 +2190,9 @@ async function finalizeAssignments(req, res) {
         await logFreightHistory({
           announcementId: annId,
           userId: userId,
-          userName: name || username || 'کاربر',
+          userName: username 
+            ? (name ? `${username} - ${name}` : username)
+            : (name || 'کاربر'),
           action: 'RETURNED_TO_PLANNER',
           oldStatus: ann.status || 'PendingCompanyAssignment',
           newStatus: 'Leftover',
@@ -3553,8 +3855,71 @@ module.exports = {
  */
 async function cancelAssignment(req, res) {
   const { id: announcementId } = req.params;
-  const { userId, name, username } = req.user || {};
-  const userName = name || username || 'system';
+  const userId = req.user?.userId || req.user?.id;
+  
+  // ساخت userName به فرمت "username - name - role"
+  // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+  let userFullName = '';
+  if (userId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some(r => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+      if (userRow.rows.length > 0) {
+        userFullName = userRow.rows[0].display_name || '';
+      }
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+  
+  const userName = (() => {
+    const username = req.user?.username || '';
+    const name = userFullName;
+    const role = req.user?.role || '';
+    
+    // نقش‌های فارسی
+    const roleLabels = {
+      'transport_user': 'کاربر ترابری (شرکت)',
+      'personal_transport_user': 'کاربر ترابری (شخصی)',
+      'planner': 'کارمند برنامه‌ریزی',
+      'planner_manager': 'مدیر برنامه‌ریزی',
+      'transport_finance': 'مالی ترابری',
+      'finance': 'مالی شعب',
+      'central_finance': 'مالی ستاد',
+      'admin': 'مدیر سیستم',
+      'system': 'سیستم'
+    };
+    const roleLabel = roleLabels[role] || role || '';
+    
+    // همیشه سعی کن فرمت کامل رو برگردونی، حتی اگر name یا roleLabel خالی باشه
+    if (username) {
+      if (name && roleLabel) {
+        return `${username} - ${name} - ${roleLabel}`;
+      } else if (name) {
+        return `${username} - ${name}`;
+      } else if (roleLabel) {
+        return `${username} - ${roleLabel}`;
+      }
+      return username;
+    } else if (name) {
+      if (roleLabel) {
+        return `${name} - ${roleLabel}`;
+      }
+      return name;
+    } else if (roleLabel) {
+      return roleLabel;
+    }
+    return 'کاربر';
+  })();
 
   const client = await pool.connect();
   try {
@@ -3562,7 +3927,7 @@ async function cancelAssignment(req, res) {
 
     // قفل رکورد اعلام بار
     const { rows } = await client.query(
-      `SELECT id, announcement_code, status, assignment_type, assigned_driver_id, assigned_vehicle_id
+      `SELECT id, announcement_code, status, assignment_type, assigned_driver_id, assigned_vehicle_id, total_freight_cost
        FROM freight_announcements
        WHERE id = $1
        FOR UPDATE`,
@@ -3576,6 +3941,7 @@ async function cancelAssignment(req, res) {
     const oldStatus = ann.status || null;
     const oldDriverId = ann.assigned_driver_id || null;
     const oldVehicleId = ann.assigned_vehicle_id || null;
+    const oldTotalFreightCost = ann.total_freight_cost || null;
 
     // تعیین وضعیت جدید برای بازگشت به صف مربوطه
     let newStatus = 'PendingCompanyAssignment';
@@ -3585,14 +3951,25 @@ async function cancelAssignment(req, res) {
       newStatus = 'PendingCompanyAssignment';
     }
 
+    // حذف تخصیص راننده و خودرو و کرایه
     await client.query(
       `UPDATE freight_announcements
          SET assigned_driver_id = NULL,
              assigned_vehicle_id = NULL,
+             bill_of_lading_number = NULL,
+             total_freight_cost = NULL,
              status = $1,
              updated_at = NOW()
        WHERE id = $2`,
       [newStatus, announcementId]
+    );
+    
+    // حذف کرایه از تمام مقاصد
+    await client.query(
+      `UPDATE freight_destinations
+         SET freight_cost = NULL
+       WHERE freight_announcement_id = $1`,
+      [announcementId]
     );
 
     // علامت‌گذاری تخصیص‌های مربوطه به عنوان لغو شده
@@ -3623,6 +4000,7 @@ async function cancelAssignment(req, res) {
       fieldChanges: {
         assigned_driver_id: { old: oldDriverId, new: null },
         assigned_vehicle_id: { old: oldVehicleId, new: null },
+        total_freight_cost: { old: oldTotalFreightCost, new: null },
         status: { old: oldStatus, new: newStatus }
       },
       description: `لغو تخصیص برای بار به مقصد ${city}`,
@@ -3654,7 +4032,9 @@ async function createChangeRequest(req, res) {
   const { id: announcementId } = req.params;
   const { type, targetQueue, description, payload } = req.body || {};
   const { id: actingUserId, name, username } = req.user || {};
-  const userName = name || username || 'system';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'system');
 
   if (!type || !['change', 'split', 'merge'].includes(type)) {
     return res.status(400).json({ message: 'نوع درخواست نامعتبر است.' });
@@ -3841,7 +4221,9 @@ async function approveChangeRequest(req, res) {
   const { id: requestId } = req.params;
   const { newAnnouncements } = req.body || {};
   const { id: actingUserId, name, username } = req.user || {};
-  const userName = name || username || 'system';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'system');
 
   const client = await pool.connect();
   try {
@@ -3895,18 +4277,25 @@ async function approveChangeRequest(req, res) {
         const assignmentType = newAnn.assignmentType || changeReq.target_queue || 'company';
         const newStatus = assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
 
+        // گرفتن created_by_user_id از اعلام بار اصلی
+        const originalAnnQuery = await client.query(
+          'SELECT created_by_user_id FROM freight_announcements WHERE id = $1',
+          [originalAnnId]
+        );
+        const originalCreatedBy = originalAnnQuery.rows[0]?.created_by_user_id || null;
+
         await client.query(
           `INSERT INTO freight_announcements 
            (id, announcement_code, loading_date, line_type, cargo_value, vehicle_type, notes, origin_city, brand, 
             representative_type, representative_name, carton_count, priority, products, platform_arrival_time, 
-            assignment_type, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())`,
+            assignment_type, status, created_at, updated_at, created_by_user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW(), $18)`,
           [
             newId, annCode, newAnn.loadingDate, newAnn.lineType || changeReq.type, newAnn.cargoValue || 0,
             newAnn.vehicleType, newAnn.notes || null, newAnn.originCity || null, newAnn.brand || null,
             newAnn.representativeType || null, newAnn.representativeName || null, newAnn.cartonCount || null,
             newAnn.priority || 'normal', Array.isArray(newAnn.products) ? JSON.stringify(newAnn.products) : '[]',
-            newAnn.platformArrivalTime || null, assignmentType, newStatus
+            newAnn.platformArrivalTime || null, assignmentType, newStatus, originalCreatedBy
           ]
         );
 
@@ -3996,14 +4385,17 @@ async function rejectChangeRequest(req, res) {
   const { id: requestId } = req.params;
   const { reviewNote } = req.body || {};
   const { id: actingUserId, name, username } = req.user || {};
-  const userName = name || username || 'system';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'system');
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const { rows: reqRows } = await client.query(
-      `SELECT r.*, fa.id as announcement_id, fa.announcement_code, fa.status as announcement_status, fa.assignment_type
+      `SELECT r.*, fa.id as announcement_id, fa.announcement_code, fa.status as announcement_status, 
+              fa.assignment_type, fa.created_by_user_id
        FROM freight_change_requests r
        LEFT JOIN freight_announcements fa ON fa.id = r.freight_announcement_id
        WHERE r.id = $1 AND r.status = 'requested'
@@ -4017,9 +4409,9 @@ async function rejectChangeRequest(req, res) {
     const changeReq = reqRows[0];
     const originalAnnId = changeReq.announcement_id;
 
-    // بازگرداندن وضعیت اعلام بار به وضعیت قبلی (Pending*)
-    const assignmentType = changeReq.assignment_type || 'company';
-    const newStatus = assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
+    // وقتی درخواست تغییر رد می‌شه، باید به کارمند اعلام‌کننده برگرده (Draft)
+    // تا کارمند بتونه دوباره ویرایش کنه و برای تایید مجدد ارسال کنه
+    const newStatus = 'Draft';
 
     await client.query(
       `UPDATE freight_announcements SET status = $1, updated_at = NOW() WHERE id = $2`,
@@ -4036,7 +4428,7 @@ async function rejectChangeRequest(req, res) {
       fieldChanges: {
         status: { old: 'ChangeRequested', new: newStatus },
       },
-      description: `درخواست تغییر رد شد${reviewNote ? `: ${reviewNote}` : ''}`,
+      description: `درخواست تغییر رد شد و به کارتابل کارمند اعلام‌کننده برگشت${reviewNote ? `: ${reviewNote}` : ''}`,
       ipAddress: req.ip,
       client
     });
@@ -4067,7 +4459,9 @@ async function rejectChangeRequest(req, res) {
 async function archiveChangeRequest(req, res) {
   const { id: requestId } = req.params;
   const { id: actingUserId, name, username } = req.user || {};
-  const userName = name || username || 'system';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'system');
 
   const client = await pool.connect();
   try {
@@ -4143,8 +4537,61 @@ module.exports.archiveChangeRequest = archiveChangeRequest;
 async function transferDestination(req, res) {
   const { id: sourceAnnouncementId } = req.params;
   const { destinationId, targetAnnouncementId, newPosition } = req.body || {};
-  const { id: userId, name, username } = req.user || {};
-  const userName = name || username || 'کاربر';
+  const userId = req.user?.userId || req.user?.id;
+  // ساخت userName به فرمت "username - name - role"
+  // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
+  let userFullName = '';
+  if (userId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some(r => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+      if (userRow.rows.length > 0) {
+        userFullName = userRow.rows[0].display_name || '';
+      }
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+  
+  const userName = (() => {
+    const username = req.user?.username || '';
+    const name = userFullName;
+    const role = req.user?.role || '';
+    
+    // نقش‌های فارسی
+    const roleLabels = {
+      'transport_user': 'کاربر ترابری (شرکت)',
+      'personal_transport_user': 'کاربر ترابری (شخصی)',
+      'planner': 'کارمند برنامه‌ریزی',
+      'planner_manager': 'مدیر برنامه‌ریزی',
+      'transport_finance': 'مالی ترابری',
+      'finance': 'مالی شعب',
+      'central_finance': 'مالی ستاد',
+      'admin': 'مدیر سیستم',
+      'system': 'سیستم'
+    };
+    const roleLabel = roleLabels[role] || role || '';
+    
+    if (username && name && roleLabel) {
+      return `${username} - ${name} - ${roleLabel}`;
+    } else if (username && name) {
+      return `${username} - ${name}`;
+    } else if (username) {
+      return username;
+    } else if (name) {
+      return name;
+    }
+    return 'کاربر';
+  })();
 
   console.log('🔄 [transferDestination] Request received:', {
     sourceAnnouncementId,
@@ -4426,7 +4873,9 @@ async function changeVehicleType(req, res) {
   const { id: announcementId } = req.params;
   const { vehicleType } = req.body || {};
   const { id: userId, name, username } = req.user || {};
-  const userName = name || username || 'کاربر';
+  const userName = username 
+    ? (name ? `${username} - ${name}` : username)
+    : (name || 'کاربر');
 
   console.log('🔄 [changeVehicleType] Request received:', {
     announcementId,

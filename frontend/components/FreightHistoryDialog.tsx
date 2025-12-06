@@ -137,7 +137,7 @@ const ActionIcon: React.FC<{ action: string }> = ({ action }) => {
 };
 
 // نمایش تغییرات فیلد (اگر موجود باشد)
-const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: string]: { name: string; employeeId: string } }; vehicleMap?: { [key: string]: { plate: string; model?: string } } }> = ({ fieldChanges, driverMap = {}, vehicleMap = {} }) => {
+const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: string]: { name: string; employeeId: string } }; vehicleMap?: { [key: string]: { plate: string; model?: string } }; personalDriverMap?: { [key: string]: { name: string; contact?: string } }; personalVehicleMap?: { [key: string]: { plate: string; model?: string } } }> = ({ fieldChanges, driverMap = {}, vehicleMap = {}, personalDriverMap = {}, personalVehicleMap = {} }) => {
   if (!fieldChanges || Object.keys(fieldChanges).length === 0) {
     return null;
   }
@@ -265,15 +265,35 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
           // اگه تاریخ معتبر نبود، همون مقدار اصلی رو نگه دار
         }
       } else if (key === 'assigned_driver_id' || key === 'assignedDriverId') {
-        // تبدیل UUID راننده به نام و کد پرسنلی
-        const oldDriver = oldValue ? driverMap[oldValue] : null;
-        const newDriver = newValue ? driverMap[newValue] : null;
-        oldValue = oldDriver ? `${oldDriver.name} (${oldDriver.employeeId})` : (oldValue || '-');
-        newValue = newDriver ? `${newDriver.name} (${newDriver.employeeId})` : (newValue || '-');
+        // تبدیل UUID راننده به نام و کد پرسنلی (اول شرکتی، بعد شخصی)
+        const oldDriver = oldValue ? (driverMap[oldValue] || personalDriverMap[oldValue]) : null;
+        const newDriver = newValue ? (driverMap[newValue] || personalDriverMap[newValue]) : null;
+        if (oldDriver) {
+          if ('employeeId' in oldDriver) {
+            // راننده شرکتی
+            oldValue = `${oldDriver.name}${oldDriver.employeeId ? ` (${oldDriver.employeeId})` : ''}`;
+          } else {
+            // راننده شخصی
+            oldValue = oldDriver.name || '-';
+          }
+        } else {
+          oldValue = oldValue || '-';
+        }
+        if (newDriver) {
+          if ('employeeId' in newDriver) {
+            // راننده شرکتی
+            newValue = `${newDriver.name}${newDriver.employeeId ? ` (${newDriver.employeeId})` : ''}`;
+          } else {
+            // راننده شخصی
+            newValue = newDriver.name || '-';
+          }
+        } else {
+          newValue = newValue || '-';
+        }
       } else if (key === 'assigned_vehicle_id' || key === 'assignedVehicleId') {
-        // تبدیل UUID خودرو به پلاک
-        const oldVehicle = oldValue ? vehicleMap[oldValue] : null;
-        const newVehicle = newValue ? vehicleMap[newValue] : null;
+        // تبدیل UUID خودرو به پلاک (اول شرکتی، بعد شخصی)
+        const oldVehicle = oldValue ? (vehicleMap[oldValue] || personalVehicleMap[oldValue]) : null;
+        const newVehicle = newValue ? (vehicleMap[newValue] || personalVehicleMap[newValue]) : null;
         oldValue = oldVehicle ? oldVehicle.plate : (oldValue || '-');
         newValue = newVehicle ? newVehicle.plate : (newValue || '-');
       }
@@ -286,9 +306,9 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
       
       return (
         <div key={key} className="text-slate-700">
-          {label}: از 
+          {label}: 
           <span className="text-red-600 line-through mx-1">{String(oldValue || '-')}</span>
-          به 
+          <span className="mx-1">→</span>
           <span className="text-green-600 mx-1">{String(newValue || '-')}</span>
         </div>
       );
@@ -304,6 +324,8 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
   const [error, setError] = useState<string | null>(null);
   const [driverMap, setDriverMap] = useState<{ [key: string]: { name: string; employeeId: string } }>({});
   const [vehicleMap, setVehicleMap] = useState<{ [key: string]: { plate: string; model?: string } }>({});
+  const [personalDriverMap, setPersonalDriverMap] = useState<{ [key: string]: { name: string; contact?: string } }>({});
+  const [personalVehicleMap, setPersonalVehicleMap] = useState<{ [key: string]: { plate: string; model?: string } }>({});
   
   useEffect(() => {
     if (isOpen && announcementId) {
@@ -346,7 +368,7 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
         }
       });
       
-      // دریافت اطلاعات رانندگان
+      // دریافت اطلاعات رانندگان (شرکتی)
       if (driverIds.size > 0) {
         try {
           const driversRes = await fetch(getApiUrl('drivers'), { headers });
@@ -365,7 +387,26 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
         }
       }
       
-      // دریافت اطلاعات خودروها
+      // دریافت اطلاعات رانندگان شخصی
+      if (driverIds.size > 0) {
+        try {
+          const personalDriversRes = await fetch(getApiUrl('personal-drivers'), { headers });
+          if (personalDriversRes.ok) {
+            const personalDrivers: any[] = await personalDriversRes.json();
+            const personalDriverMapData: { [key: string]: { name: string; contact?: string } } = {};
+            personalDrivers.forEach(d => {
+              if (driverIds.has(d.id)) {
+                personalDriverMapData[d.id] = { name: d.name || d.driver_name || '-', contact: d.mobile || d.contact || '' };
+              }
+            });
+            setPersonalDriverMap(personalDriverMapData);
+          }
+        } catch (e) {
+          console.error('Failed to fetch personal drivers:', e);
+        }
+      }
+      
+      // دریافت اطلاعات خودروها (شرکتی)
       if (vehicleIds.size > 0) {
         try {
           const vehiclesRes = await fetch(getApiUrl('vehicles'), { headers });
@@ -384,6 +425,30 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
           }
         } catch (e) {
           console.error('Failed to fetch vehicles:', e);
+        }
+      }
+      
+      // دریافت اطلاعات خودروهای شخصی
+      if (vehicleIds.size > 0) {
+        try {
+          const personalVehiclesRes = await fetch(getApiUrl('personal-vehicles'), { headers });
+          if (personalVehiclesRes.ok) {
+            const personalVehicles: any[] = await personalVehiclesRes.json();
+            const personalVehicleMapData: { [key: string]: { plate: string; model?: string } } = {};
+            personalVehicles.forEach(v => {
+              if (vehicleIds.has(v.id)) {
+                const plate = v.plate_part1 && v.plate_letter && v.plate_part2 && v.plate_city_code
+                  ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}-${v.plate_city_code}`
+                  : (v.platePart1 && v.plateLetter && v.platePart2 && v.plateCityCode
+                    ? `${v.platePart1}${v.plateLetter}${v.platePart2}-${v.plateCityCode}`
+                    : v.vehicle_type || 'نامشخص');
+                personalVehicleMapData[v.id] = { plate, model: v.vehicle_type || v.model };
+              }
+            });
+            setPersonalVehicleMap(personalVehicleMapData);
+          }
+        } catch (e) {
+          console.error('Failed to fetch personal vehicles:', e);
         }
       }
     } catch (err: any) {
@@ -470,6 +535,13 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
                           </svg>
                           <span className="font-semibold text-slate-700">
                             {(() => {
+                              // اگر userName به فرمت "username - name" هست، همون رو نشون بده
+                              // در غیر این صورت، از userLabels استفاده کن
+                              const userName = entry.user_name || '';
+                              if (userName.includes(' - ')) {
+                                // فرمت: "username - name" یا "username - name - role"
+                                return userName;
+                              }
                               const userLabels: { [key: string]: string } = {
                                 'transport_user': 'کاربر ترابری (شرکت)',
                                 'personal_transport_user': 'کاربر ترابری (شخصی)',
@@ -477,7 +549,7 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
                                 'planner_manager': 'مدیر برنامه‌ریزی',
                                 'system': 'سیستم'
                               };
-                              return userLabels[entry.user_name] || entry.user_name;
+                              return userLabels[userName] || userName;
                             })()}
                           </span>
                         </div>
@@ -542,7 +614,7 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
                       
                       {/* جزئیات تغییرات فیلدها */}
                       {entry.field_changes && (
-                        <FieldChangesDetails fieldChanges={entry.field_changes} driverMap={driverMap} vehicleMap={vehicleMap} />
+                        <FieldChangesDetails fieldChanges={entry.field_changes} driverMap={driverMap} vehicleMap={vehicleMap} personalDriverMap={personalDriverMap} personalVehicleMap={personalVehicleMap} />
                       )}
                     </div>
                   </div>

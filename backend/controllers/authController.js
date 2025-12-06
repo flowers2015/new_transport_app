@@ -10,7 +10,18 @@ async function login(req, res) {
   }
 
   try {
-    const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    // بررسی اینکه کدام ستون name در جدول users وجود دارد
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('full_name', 'name')
+    `);
+    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
+    const hasName = columnCheck.rows.some(r => r.column_name === 'name');
+    const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+    
+    const { rows } = await pool.query(`SELECT *, ${nameColumn} as display_name FROM users WHERE username = $1`, [username]);
     const user = rows[0];
 
     if (!user) {
@@ -40,8 +51,8 @@ async function login(req, res) {
         username: user.username,
         role: user.role,
         employeeId: user.branch_id,
-        fullName: user.full_name,
-        email: user.email,
+        fullName: user.display_name || user.full_name || user.name || null,
+        email: user.email || null,
         branchCity: user.branch_city || null
       }
     });

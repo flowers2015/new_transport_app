@@ -16,7 +16,9 @@ async function logAdminAction(req, actionType, tableName, recordId, oldValue, ne
     await createAdminActionsTable();
     
     const userId = req.user?.userId || req.user?.id;
-    const userName = req.user?.username || req.user?.name;
+    const userName = req.user?.username 
+      ? (req.user?.name ? `${req.user.username} - ${req.user.name}` : req.user.username)
+      : (req.user?.name || 'سیستم');
     const userRole = req.user?.role;
     const ipAddress = req.ip || req.connection?.remoteAddress || req.headers['x-forwarded-for'];
     const userAgent = req.headers['user-agent'];

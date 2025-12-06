@@ -714,8 +714,10 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                     startDate,
                     endDate,
                     userId: currentUser.id,
-                    userName: currentUser.name,
-                    notes: `بسته شده توسط ${currentUser.name}`
+                    userName: currentUser.username 
+                        ? (currentUser.name ? `${currentUser.username} - ${currentUser.name}` : currentUser.username)
+                        : (currentUser.name || 'کاربر'),
+                    notes: `بسته شده توسط ${currentUser.username ? `${currentUser.username} - ${currentUser.name || ''}` : currentUser.name || 'کاربر'}`
                 })
             });
             

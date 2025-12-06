@@ -61,6 +61,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 status: statusMap[a.status] || a.status,
                 cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
                 vehicleType: a.vehicle_type || a.vehicleType || '',
+                deliveryDate: a.delivery_date || a.deliveryDate || null, // تاریخ تحویل بار
                 notes: a.notes,
                 rejectionReason: a.rejection_reason || a.rejectionReason,
                 assignmentType: a.assignment_type || a.assignmentType,
@@ -76,6 +77,10 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 priority: a.priority,
                 products: a.products || [],
                 platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+                // اطلاعات کارمند اعلام‌کننده
+                creator_full_name: a.creator_full_name || a.creatorFullName,
+                creator_username: a.creator_username || a.creatorUsername,
+                creator_user_id: a.creator_user_id || a.creatorUserId,
                 destinations: Array.isArray(a.destinations) ? a.destinations.map((d: any) => ({
                     id: d.id,
                     city: d.city,
@@ -87,7 +92,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     representativeType: d.representative_type || d.representativeType,
                 })) : [],
                 history: a.history || [],
-            });
+            } as any);
             const normalized: FreightAnnouncement[] = Array.isArray(raw) ? raw.map(normalize) : [];
             console.log('🧭 [FreightPlanning] Normalized announcements:', {
                 total: normalized.length,
@@ -202,12 +207,19 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 headers,
                 body: JSON.stringify({
                     loadingDate: updated.loadingDate,
+                    deliveryDate: (updated as any).deliveryDate || null, // تاریخ تحویل بار
                     lineType: updated.lineType,
                     cargoValue: updated.cargoValue,
                     vehicleType: updated.vehicleType,
                     notes: updated.notes,
                     originCity: updated.originCity,
                     brand: updated.brand,
+                    representativeType: updated.representativeType,
+                    representativeName: updated.representativeName,
+                    cartonCount: updated.cartonCount,
+                    priority: updated.priority,
+                    products: updated.products,
+                    platformArrivalTime: (updated as any).platformArrivalTime,
                     status: updated.status,
                     destinations: updated.destinations,
                 }),

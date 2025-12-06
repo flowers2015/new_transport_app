@@ -140,6 +140,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         })) : [],
                         history: a.history || [],
                         assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,
+                        // اطلاعات کارمند اعلام‌کننده
+                        creator_full_name: a.creator_full_name || a.creatorFullName,
+                        creator_username: a.creator_username || a.creatorUsername,
+                        creator_user_id: a.creator_user_id || a.creatorUserId,
                     };
                 };
 
@@ -401,6 +405,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             });
             
             console.log('✅ [TransportLive] State updated without full reload');
+            
+            // بدون refresh - state به‌روزرسانی شده است
         } catch (error: any) {
             console.error('❌ [TransportLive] Transfer error:', error);
             alert(error.message || 'خطا در انتقال مقصد');

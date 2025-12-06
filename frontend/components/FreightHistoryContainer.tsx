@@ -116,6 +116,10 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                         freightCost: d.freight_cost ?? d.freightCost,
                     })) : [],
                     history: a.history || [],
+                    // اطلاعات کارمند اعلام‌کننده
+                    creator_full_name: a.creator_full_name || a.creatorFullName,
+                    creator_username: a.creator_username || a.creatorUsername,
+                    creator_user_id: a.creator_user_id || a.creatorUserId,
                 };
             };
 

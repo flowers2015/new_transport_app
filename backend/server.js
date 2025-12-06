@@ -154,6 +154,12 @@ addDeliveryDateColumns().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون‌های تاریخ تحویل:', err);
 });
 
+// اضافه کردن ستون created_by_user_id به freight_announcements
+const addCreatedByUserId = require('./migrations/add_created_by_user_id');
+addCreatedByUserId().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون created_by_user_id:', err);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

@@ -122,8 +122,16 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                             <h1 className="text-xl font-bold mr-3 text-slate-800">مدیریت ناوگان</h1>
                         </div>
                         <div className="mr-6 border-r border-slate-200 pr-6">
-                            <p className="font-semibold text-sm text-slate-800">{currentUser?.name || 'کاربر مهمان'}</p>
-                            <p className="text-xs text-slate-500">{currentUser?.role ?? ''}</p>
+                            <p className="font-semibold text-sm text-slate-800">
+                                {currentUser 
+                                    ? (currentUser.name && currentUser.name !== currentUser.username 
+                                        ? `${currentUser.username} - ${currentUser.name}` 
+                                        : currentUser.username)
+                                    : 'کاربر مهمان'}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                                {currentUser?.role ? `${currentUser.role}` : ''}
+                            </p>
                         </div>
                     </div>
                     <div className="flex items-center">

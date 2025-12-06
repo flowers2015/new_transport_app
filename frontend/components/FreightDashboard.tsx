@@ -110,6 +110,7 @@ const columnsConfig = (props: {
         { header: 'کارتن', accessor: 'cartonCount', width: '90px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
         { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
         { header: 'اولویت', accessor: 'priority', width: '100px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => PRIORITIES[ann.priority || 'normal'] },
+        { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => ann.creator_full_name || ann.creator_username || '-', width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: any) => <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span> },
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'تاریخ تحویل', accessor: 'deliveryDate', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.deliveryDate || '-' },
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
@@ -135,6 +136,7 @@ const columnsConfig = (props: {
         { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0), width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
         { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (vm: string, lt:any) => lt !== FreightLineType.IceCream && vm === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
         { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+        { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => ann.creator_full_name || ann.creator_username || '-', width: '150px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: any) => <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span> },
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
@@ -1359,7 +1361,10 @@ const AnnouncementPanel: React.FC<{
                     });
                 }
                 console.log(`📅 [FreightDashboard] Final loadingDateStr for form:`, loadingDateStr);
-                setCommonState({ loadingDate: loadingDateStr, deliveryDate: data.deliveryDate || '', cargoValue: String((data.cargoValue || 0) / 1_000_000_000), vehicleType: data.vehicleType, notes: data.notes || '' });
+                // تبدیل cargoValue از ریال به میلیارد با گرد کردن برای جلوگیری از خطای floating point
+                const cargoValueInBillions = (data.cargoValue || 0) / 1_000_000_000;
+                const roundedCargoValue = Math.round(cargoValueInBillions * 10) / 10; // گرد کردن به یک رقم اعشار
+                setCommonState({ loadingDate: loadingDateStr, deliveryDate: data.deliveryDate || '', cargoValue: String(roundedCargoValue), vehicleType: data.vehicleType, notes: data.notes || '' });
                 
                 // بارگذاری داده‌های دو جا بارگیری از data (اگر وجود داشته باشد)
                 let loadingLocationData: { loadingType: 'single' | 'double', originCity1: string, originCity2: string };
@@ -1533,7 +1538,9 @@ const AnnouncementPanel: React.FC<{
 
     const handleSubmit = (e: React.FormEvent, isDraft: boolean = false) => {
         e.preventDefault();
-        const cargoValueInRials = parseFloat(commonState.cargoValue) * 1_000_000_000;
+        // تبدیل از میلیارد به ریال با دقت بالا
+        const cargoValueInBillions = parseFloat(commonState.cargoValue);
+        const cargoValueInRials = Math.round(cargoValueInBillions * 1_000_000_000);
         if (isNaN(cargoValueInRials) || cargoValueInRials < 1_000_000_000 || cargoValueInRials > 110_000_000_000) { alert('ارزش بار باید بین ۱ تا ۱۱۰ میلیارد ریال باشد.'); return; }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
 
