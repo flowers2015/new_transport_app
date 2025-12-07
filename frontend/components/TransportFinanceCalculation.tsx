@@ -2365,6 +2365,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر</p>
                                 </div>
                             </div>
+                            </div>
                         </div>
                         
                         {/* بخش دوم: هزینه بارگیری */}
