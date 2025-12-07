@@ -39,6 +39,12 @@ async function saveDriverCalculation(req, res) {
       helperDriverFoodCost,
       helperDriverExcessMissionDays,
       helperDriverExcessMissionCost,
+      vehicleCode,
+      vehiclePlate,
+      vehicleType,
+      destinations,
+      multiUnloadCount,
+      advancePayment,
     } = req.body;
 
     // تبدیل و اعتبارسنجی مقادیر عددی
@@ -143,6 +149,11 @@ async function saveDriverCalculation(req, res) {
           notes TEXT,
           queue_type VARCHAR(50),
           calculation_date VARCHAR(10), -- تاریخ شمسی محاسبه YYYY/MM/DD
+          vehicle_code VARCHAR(255), -- کد خودرو
+          vehicle_plate VARCHAR(255), -- پلاک خودرو
+          destinations TEXT, -- فیلد مقاصد
+          multi_unload_count INTEGER DEFAULT 0, -- تعداد چندجا تخلیه
+          advance_payment INTEGER DEFAULT 0, -- پیش پرداخت (ریال)
           created_by VARCHAR(255),
           updated_by VARCHAR(255),
           created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -175,7 +186,12 @@ async function saveDriverCalculation(req, res) {
           ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'recorded',
-          ADD COLUMN IF NOT EXISTS period_id VARCHAR(255)
+          ADD COLUMN IF NOT EXISTS period_id VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS vehicle_code VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS vehicle_plate VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS destinations TEXT,
+          ADD COLUMN IF NOT EXISTS multi_unload_count INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS advance_payment INTEGER DEFAULT 0
         `);
         // تبدیل ستون‌های DECIMAL به INTEGER برای هزینه‌ها
         try {
@@ -235,9 +251,14 @@ async function saveDriverCalculation(req, res) {
           notes = $27,
           queue_type = $28,
           calculation_date = $29,
-          updated_by = $30,
+          vehicle_code = $30,
+          vehicle_plate = $31,
+          destinations = $32,
+          multi_unload_count = $33,
+          advance_payment = $34,
+          updated_by = $35,
           updated_at = NOW()
-        WHERE driver_id = $31 AND announcement_id = $32
+        WHERE driver_id = $36 AND announcement_id = $37
       `, [
         billOfLadingNumber || null,
         billOfLadingDate || null,
@@ -268,6 +289,11 @@ async function saveDriverCalculation(req, res) {
         notes || null,
         queueType || null,
         calculationDate || null,
+        vehicleCode || null,
+        vehiclePlate || null,
+        destinations || null,
+        parseNumber(multiUnloadCount, 0),
+        parseNumber(advancePayment, 0),
         userId || null,
         driverId,
         announcementId,
@@ -287,8 +313,8 @@ async function saveDriverCalculation(req, res) {
           toll_cost, loading_cost, return_cargo_cost, return_bill_of_lading_cost, multi_unload_cost, excess_mission_cost, helper_driver_cost, fixed_allowance,
           helper_driver_id, helper_driver_employee_id, helper_driver_name, helper_driver_allowance, helper_driver_food_cost, helper_driver_excess_mission_days, helper_driver_excess_mission_cost,
           food_cost, fuel_cost, tour_cost, total_cost,
-          notes, queue_type, calculation_date, created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+          notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, created_by, updated_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
       `, [
         id,
         driverId,
@@ -322,6 +348,11 @@ async function saveDriverCalculation(req, res) {
         notes || null,
         queueType || null,
         calculationDate || null,
+        vehicleCode || null,
+        vehiclePlate || null,
+        destinations || null,
+        parseNumber(multiUnloadCount, 0),
+        parseNumber(advancePayment, 0),
         userId || null,
         userId || null,
       ]);

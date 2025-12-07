@@ -49,22 +49,30 @@ interface DriverTourDetailWithCalculation extends DriverTourDetail {
 interface AllowanceInputDialogData {
     tourId: string; // شناسه تور (announcementId)
     driverId: string;
+    driverEmployeeId?: string; // کد پرسنلی راننده (فیلد ثابت - فقط نمایش)
+    driverName?: string; // نام راننده (فیلد ثابت - فقط نمایش)
+    vehicleCode?: string; // کد خودرو
+    vehiclePlate?: string; // پلاک خودرو
+    vehicleType?: string; // نوع خودرو
+    destinations?: string; // فیلد مقاصد (متن)
     billOfLadingNumber: string;
     billOfLadingDate: string; // تاریخ صدور بارنامه (شمسی YYYY/MM/DD)
-    billOfLadingCost: number; // هزینه بارنامه (ریال)
+    billOfLadingCost: number; // هزینه بارنامه (ریال) - لندی گراف و ...
     approvedKilometers: number;
     excessKilometers: number;
     approvedMissionDays: number;
     excessMissionDays: number;
-    tollCost: number;
+    multiUnloadCount?: number; // تعداد چندجا تخلیه
+    tollCost: number; // هزینه عوارض آزاد راهی
     fuelCost: number; // هزینه سوخت (ریال) - محاسبه خودکار
     loadingCost: number; // هزینه بارگیری اصلی
     returnCargoCost: number; // هزینه بار برگشتی (ریال)
     returnBillOfLadingCost: number; // هزینه بارنامه برگشتی (ریال)
     multiUnloadCost: number; // هزینه چندجا تخلیه (ریال)
-    excessMissionCost: number; // هزینه ماموریت مازاد (ریال)
+    excessMissionCost: number; // حق ماموریت (ماموریت مازاد) (ریال)
     helperDriverCost: number; // هزینه راننده کمکی (ریال)
     fixedAllowance: number; // اجرت ثابت (در صورتی که اجرت ثابت باشد)
+    advancePayment?: number; // پیش پرداخت (ریال)
     calculationDate: string; // تاریخ محاسبه (شمسی YYYY/MM/DD)
     notes: string;
     // فیلدهای راننده کمکی
@@ -1089,9 +1097,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
             }
             
+            // محاسبه تعداد چندجا تخلیه
+            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
+                driverEmployeeId: calc.employeeId || '',
+                driverName: calc.driverName || '',
+                vehicleCode: tour.vehicleCode || '',
+                vehiclePlate: tour.plateNumber || '',
+                vehicleType: tour.vehicleType || '',
+                destinations: tour.destinations?.join('، ') || '',
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
@@ -1099,6 +1116,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: tour.approvedMissionDays || 1,
                 excessMissionDays: tour.excessMissionDays || 0,
+                multiUnloadCount: multiUnloadCount,
                 tollCost: tour.tollCost || 0,
                 fuelCost: initialFuelCost,
                 loadingCost: tour.loadingCost || 0,
@@ -1108,6 +1126,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
                 fixedAllowance: (tour as any).fixedAllowance || 0,
+                advancePayment: (tour as any).advancePayment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
                 helperDriverId: (tour as any).helperDriverId || '',
@@ -1287,16 +1306,26 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 }
             }
             
+            // محاسبه تعداد چندجا تخلیه
+            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
+                driverEmployeeId: calc.employeeId || '',
+                driverName: calc.driverName || '',
+                vehicleCode: tour.vehicleCode || '',
+                vehiclePlate: tour.plateNumber || '',
+                vehicleType: tour.vehicleType || '',
+                destinations: tour.destinations?.join('، ') || '',
                 billOfLadingNumber: billOfLading,
                 billOfLadingDate: billOfLadingDateStr,
-                billOfLadingCost: 0, // حذف شده از دیالوگ - همیشه 0
+                billOfLadingCost: (tour as any).billOfLadingCost || 0,
                 approvedKilometers: approvedKm,
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: approvedDays,
                 excessMissionDays: tour.excessMissionDays || 0,
+                multiUnloadCount: multiUnloadCount,
                 tollCost: tour.tollCost || 0,
                 fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
@@ -1306,6 +1335,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
                 fixedAllowance: initialFixedAllowance,
+                advancePayment: (tour as any).advancePayment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
                 helperDriverId: (tour as any).helperDriverId || '',
@@ -1337,17 +1367,27 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
             }
             
+            // محاسبه تعداد چندجا تخلیه
+            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            
             // در صورت خطا، از مقادیر موجود در tour استفاده کن
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
+                driverEmployeeId: calc.employeeId || '',
+                driverName: calc.driverName || '',
+                vehicleCode: tour.vehicleCode || '',
+                vehiclePlate: tour.plateNumber || '',
+                vehicleType: tour.vehicleType || '',
+                destinations: tour.destinations?.join('، ') || '',
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
-                billOfLadingCost: 0, // حذف شده از دیالوگ - همیشه 0
+                billOfLadingCost: (tour as any).billOfLadingCost || 0,
                 approvedKilometers: tour.approvedKilometers || tour.roundTripKm || 0,
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: tour.approvedMissionDays || 1,
                 excessMissionDays: tour.excessMissionDays || 0,
+                multiUnloadCount: multiUnloadCount,
                 tollCost: tour.tollCost || 0,
                 fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
@@ -1357,6 +1397,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
                 fixedAllowance: (tour as any).fixedAllowance || 0,
+                advancePayment: (tour as any).advancePayment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
                 helperDriverId: (tour as any).helperDriverId || '',
@@ -1608,6 +1649,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     helperDriverFoodCost: calculatedHelperDriverFoodCost,
                     helperDriverExcessMissionDays: excessMissionDays, // استفاده از ماموریت مازاد راننده اصلی
                     helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
+                    // فیلدهای جدید
+                    vehicleCode: inputDialogData.vehicleCode || null,
+                    vehiclePlate: inputDialogData.vehiclePlate || null,
+                    vehicleType: inputDialogData.vehicleType || null,
+                    destinations: inputDialogData.destinations || null,
+                    multiUnloadCount: inputDialogData.multiUnloadCount || 0,
+                    advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,
                 }),
             });
             
@@ -2169,8 +2217,32 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                             </div>
                             
-                            {/* ردیف اول: تاریخ محاسبه، شماره بارنامه، تاریخ صدور بارنامه */}
+                            {/* ردیف اول: کد پرسنلی راننده، نام راننده، تاریخ محاسبه */}
                             <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        کد پرسنلی راننده
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.driverEmployeeId || ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                        placeholder="کد پرسنلی"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        نام راننده
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.driverName || ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                        placeholder="نام راننده"
+                                    />
+                                </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
                                         تاریخ محاسبه *
@@ -2186,6 +2258,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="1403/01/01"
                                     />
                                 </div>
+                            </div>
+                            
+                            {/* ردیف دوم: شماره بارنامه، تاریخ صدور بارنامه، کد خودرو، پلاک خودرو، نوع خودرو */}
+                            <div className="grid grid-cols-5 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
                                         شماره بارنامه
@@ -2216,9 +2292,58 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="1403/01/01"
                                     />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        کد خودرو
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.vehicleCode || ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                        placeholder="کد خودرو"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        پلاک خودرو
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.vehiclePlate || ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                        placeholder="پلاک خودرو"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        نوع خودرو
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.vehicleType || ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                        placeholder="نوع خودرو"
+                                    />
+                                </div>
                             </div>
-                            {/* بقیه فیلدها */}
-                            <div className="grid grid-cols-2 gap-4">
+                            
+                            {/* ردیف سوم: فیلد مقاصد، پیمایش مصوب، پیمایش مازاد */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        مقاصد
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inputDialogData.destinations || ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                                        placeholder="مقاصد"
+                                    />
+                                </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
                                         پیمایش مصوب (کیلومتر)
@@ -2253,6 +2378,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
+                            </div>
+                            
+                            {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، حق ماموریت (ماموریت مازاد) */}
+                            <div className="grid grid-cols-6 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
                                         ماموریت مصوب (روز)
@@ -2268,56 +2397,39 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        ماموریت مازاد (روز) *
+                                        تعداد چندجا تخلیه
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value;
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                excessMissionDays: numValue
-                                            });
-                                        }}
-                                        onBlur={(e) => {
-                                            const numValue = parseNumberFromFormatted(e.target.value);
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                excessMissionDays: numValue || 0
-                                            });
-                                            // فرمت با جداکننده 3 رقمی
-                                            if (numValue > 0) {
-                                                e.target.value = numValue.toLocaleString('fa-IR');
-                                            }
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        value={inputDialogData.multiUnloadCount ? String(inputDialogData.multiUnloadCount) : ''}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
                                         placeholder="0"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        هزینه عوارض (ریال) *
+                                        هزینه چند جا تخلیه (ریال)
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={inputDialogData.tollCost ? String(inputDialogData.tollCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                tollCost: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        value={(() => {
+                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+                                            if (!calc) return '0';
+                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+                                            if (!tour) return '0';
+                                            const destinationsCount = tour.destinations?.length || 0;
+                                            const multiUnloadUnits = Math.max(0, destinationsCount - 1);
+                                            const cost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
+                                            return cost.toLocaleString('fa-IR');
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (تعداد مقاصد - 1) × بخشنامه</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2364,25 +2476,88 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     />
                                     <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر</p>
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        حق ماموریت (ماموریت مازاد) (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={(() => {
+                                            const excessDays = Number(inputDialogData.excessMissionDays) || 0;
+                                            const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+                                            return cost.toLocaleString('fa-IR');
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
+                                </div>
+                            </div>
+                            
+                            {/* فیلد ماموریت مازاد (روز) - قابل ویرایش */}
+                            <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        ماموریت مازاد (روز) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value;
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                excessMissionDays: numValue
+                                            });
+                                        }}
+                                        onBlur={(e) => {
+                                            const numValue = parseNumberFromFormatted(e.target.value);
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                excessMissionDays: numValue || 0
+                                            });
+                                            // فرمت با جداکننده 3 رقمی
+                                            if (numValue > 0) {
+                                                e.target.value = numValue.toLocaleString('fa-IR');
+                                            }
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
                             </div>
                             </div>
                         </div>
                         
-                        {/* بخش دوم: هزینه بارگیری */}
+                        {/* بخش دوم: هزینه بارگیری (بدون عنوان) */}
                         <div className="space-y-4 mb-6">
-                            {/* Separator: هزینه بارگیری */}
-                            <div className="flex items-center gap-3 mb-4 mt-6">
-                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
-                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-orange-50 border border-orange-200 rounded-lg">
-                                    💰 هزینه بارگیری
-                                </h3>
-                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
-                            </div>
-                            
-                            {/* بخش اول: هزینه‌های بارگیری */}
-                            <div className="mb-6">
-                                <h4 className="text-sm font-semibold text-slate-700 mb-3">هزینه‌های بارگیری</h4>
-                                <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-4 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        هزینه عوارض آزاد راهی (ریال) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.tollCost ? String(inputDialogData.tollCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                tollCost: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
                                         هزینه بار برگشتی (ریال)
@@ -2406,19 +2581,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        هزینه بارنامه برگشتی (ریال)
+                                        هزینه بارنامه (لندی گراف و ..) (ریال)
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={inputDialogData.returnBillOfLadingCost ? String(inputDialogData.returnBillOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        value={inputDialogData.billOfLadingCost ? String(inputDialogData.billOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
                                         onChange={(e) => {
                                             const inputValue = e.target.value.replace(/,/g, '');
                                             const cleaned = inputValue.replace(/[^\d]/g, '');
                                             const numValue = cleaned ? Number(cleaned) : 0;
                                             setInputDialogData({
                                                 ...inputDialogData,
-                                                returnBillOfLadingCost: numValue
+                                                billOfLadingCost: numValue
                                             });
                                         }}
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
@@ -2427,75 +2602,28 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        هزینه چندجا تخلیه (ریال)
+                                        پیش پرداخت (ریال)
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={(() => {
-                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
-                                            if (!calc) return '0';
-                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
-                                            if (!tour) return '0';
-                                            const destinationsCount = tour.destinations?.length || 0;
-                                            const multiUnloadUnits = Math.max(0, destinationsCount - 1);
-                                            const cost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
-                                            return cost.toLocaleString('fa-IR');
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        value={inputDialogData.advancePayment ? String(inputDialogData.advancePayment).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                advancePayment: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (تعداد مقاصد - 1) × بخشنامه</p>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        هزینه ماموریت مازاد (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={(() => {
-                                            const excessDays = Number(inputDialogData.excessMissionDays) || 0;
-                                            const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
-                                            return cost.toLocaleString('fa-IR');
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
-                                </div>
-                                {(() => {
-                                    const currentCalc = calculations.find(c => c.driverId === inputDialogData.driverId);
-                                    return currentCalc && (currentCalc.queueType === 'fixed_allowance' || currentCalc.queueType === 'helper') ? (
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                اجرت ثابت (ریال) *
-                                            </label>
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                value={inputDialogData.fixedAllowance ? String(inputDialogData.fixedAllowance).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                                onChange={(e) => {
-                                                    const inputValue = e.target.value.replace(/,/g, '');
-                                                    const cleaned = inputValue.replace(/[^\d]/g, '');
-                                                    const numValue = cleaned ? Number(cleaned) : 0;
-                                                    setInputDialogData({
-                                                        ...inputDialogData,
-                                                        fixedAllowance: numValue
-                                                    });
-                                                }}
-                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                                placeholder="0"
-                                            />
-                                        </div>
-                                    ) : null;
-                                })()}
                                 </div>
                             </div>
                             
-                            {/* بخش دوم: راننده کمکی */}
+                            {/* بخش سوم: راننده کمکی */}
                             <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-300">
                                 <h3 className="text-sm font-semibold text-slate-700 mb-3">راننده کمکی</h3>
                                 <div className="grid grid-cols-2 gap-4">
