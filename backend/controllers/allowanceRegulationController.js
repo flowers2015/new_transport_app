@@ -686,9 +686,12 @@ async function saveMileageRegulation(req, res) {
     // اگر regulation_id داده نشده، یکی بساز
     const finalRegulationId = regulationId || crypto.randomUUID();
 
+    console.log('🔍 [saveMileageRegulation] hasRegulationIdColumn:', hasRegulationIdColumn, 'id:', id);
+
     if (id) {
       // به‌روزرسانی
       if (hasRegulationIdColumn) {
+        console.log('🔍 [saveMileageRegulation] اجرای UPDATE با regulation_id');
         await pool.query(`
           UPDATE allowance_regulations_mileage SET
             regulation_id = $1,
@@ -718,7 +721,9 @@ async function saveMileageRegulation(req, res) {
           userId || null,
           id,
         ]);
+        console.log('✅ [saveMileageRegulation] UPDATE با regulation_id موفق بود');
       } else {
+        console.log('🔍 [saveMileageRegulation] اجرای UPDATE بدون regulation_id');
         await pool.query(`
           UPDATE allowance_regulations_mileage SET
             vehicle_type = $1,
@@ -746,6 +751,7 @@ async function saveMileageRegulation(req, res) {
           userId || null,
           id,
         ]);
+        console.log('✅ [saveMileageRegulation] UPDATE بدون regulation_id موفق بود');
       }
 
       return res.json({ 
