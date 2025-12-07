@@ -7,6 +7,79 @@ const fs = require('fs');
 // Cache flag برای جلوگیری از اجرای مکرر createAllowanceRegulationTables
 let tablesCreated = false;
 
+// Cache برای column existence checks - جلوگیری از query های مکرر
+const columnExistenceCache = new Map();
+
+/**
+ * بررسی وجود ستون در جدول با استفاده از cache
+ * @param {string} tableName - نام جدول
+ * @param {string} columnName - نام ستون
+ * @returns {Promise<boolean>} - true اگر ستون وجود دارد
+ */
+async function checkColumnExists(tableName, columnName) {
+  const cacheKey = `${tableName}.${columnName}`;
+  
+  // بررسی cache
+  if (columnExistenceCache.has(cacheKey)) {
+    return columnExistenceCache.get(cacheKey);
+  }
+  
+  try {
+    const checkResult = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = $1
+      AND column_name = $2
+      AND table_schema = 'public'
+    `, [tableName, columnName]);
+    
+    const exists = checkResult.rows.length > 0;
+    columnExistenceCache.set(cacheKey, exists);
+    return exists;
+  } catch (error) {
+    console.error(`❌ [checkColumnExists] خطا در بررسی ستون ${tableName}.${columnName}:`, error.message);
+    // در صورت خطا، false برمی‌گردانیم تا کد بدون ستون کار کند
+    return false;
+  }
+}
+
+/**
+ * اضافه کردن ستون به جدول (اگر وجود نداشته باشد)
+ * @param {string} tableName - نام جدول
+ * @param {string} columnName - نام ستون
+ * @param {string} columnType - نوع ستون (مثلاً VARCHAR(255))
+ * @returns {Promise<boolean>} - true اگر ستون اضافه شد یا از قبل وجود داشت
+ */
+async function ensureColumnExists(tableName, columnName, columnType) {
+  // ابتدا بررسی کن که آیا ستون وجود دارد
+  const exists = await checkColumnExists(tableName, columnName);
+  
+  if (exists) {
+    return true;
+  }
+  
+  // ستون وجود ندارد، اضافه کن
+  try {
+    await pool.query(`
+      ALTER TABLE ${tableName} 
+      ADD COLUMN ${columnName} ${columnType}
+    `);
+    console.log(`✅ [ensureColumnExists] ستون ${tableName}.${columnName} اضافه شد`);
+    // cache را به‌روز کن
+    columnExistenceCache.set(`${tableName}.${columnName}`, true);
+    return true;
+  } catch (alterError) {
+    if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
+      console.log(`✅ [ensureColumnExists] ستون ${tableName}.${columnName} از قبل وجود دارد`);
+      columnExistenceCache.set(`${tableName}.${columnName}`, true);
+      return true;
+    } else {
+      console.error(`❌ [ensureColumnExists] خطا در اضافه کردن ستون ${tableName}.${columnName}:`, alterError.message);
+      return false;
+    }
+  }
+}
+
 // تنظیمات multer برای آپلود فایل
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -652,34 +725,24 @@ async function saveMileageRegulation(req, res) {
 
     await createAllowanceRegulationTables();
 
-    // همیشه سعی کن ستون regulation_id را اضافه کن (اگر وجود نداشته باشد)
-    let hasRegulationIdColumn = false;
-    try {
-      await pool.query(`
-        ALTER TABLE allowance_regulations_mileage 
-        ADD COLUMN regulation_id VARCHAR(255)
-      `);
-      console.log('✅ [saveMileageRegulation] ستون regulation_id اضافه شد');
-      hasRegulationIdColumn = true;
-    } catch (alterError) {
-      if (alterError.message.includes('already exists') || alterError.message.includes('duplicate column')) {
-        console.log('✅ [saveMileageRegulation] ستون regulation_id از قبل وجود دارد');
-        hasRegulationIdColumn = true;
-      } else {
-        console.error('❌ [saveMileageRegulation] خطا در اضافه کردن ستون:', alterError.message);
-        // اگر خطای دیگری است، سعی کن بدون regulation_id ادامه بده
-        hasRegulationIdColumn = false;
-      }
-    }
-
-    // تست: سعی کن یک SELECT ساده انجام بده تا مطمئن شویم ستون واقعاً وجود دارد
+    // بررسی و اطمینان از وجود ستون regulation_id در دیتابیس
+    // استفاده از helper function برای مدیریت بهتر schema changes
+    const hasRegulationIdColumn = await ensureColumnExists(
+      'allowance_regulations_mileage',
+      'regulation_id',
+      'VARCHAR(255)'
+    );
+    
+    // تست نهایی: سعی کن یک SELECT ساده انجام بده تا مطمئن شویم ستون واقعاً کار می‌کند
     if (hasRegulationIdColumn) {
       try {
         await pool.query(`SELECT regulation_id FROM allowance_regulations_mileage LIMIT 1`);
         console.log('✅ [saveMileageRegulation] تست SELECT موفق - ستون regulation_id واقعاً وجود دارد');
       } catch (testError) {
         console.warn('⚠️ [saveMileageRegulation] تست SELECT ناموفق - ستون regulation_id وجود ندارد:', testError.message);
-        hasRegulationIdColumn = false;
+        // cache را invalidate کن و false برگردان
+        columnExistenceCache.delete('allowance_regulations_mileage.regulation_id');
+        // بدون regulation_id ادامه بده
       }
     }
 
@@ -761,9 +824,11 @@ async function saveMileageRegulation(req, res) {
     } else {
       // ایجاد جدید
       const newId = crypto.randomUUID();
+      console.log('🔍 [saveMileageRegulation] INSERT - hasRegulationIdColumn:', hasRegulationIdColumn);
       
       // ابتدا سعی کن با regulation_id اضافه کن
       if (hasRegulationIdColumn) {
+        console.log('🔍 [saveMileageRegulation] اجرای INSERT با regulation_id');
         try {
           await pool.query(`
             INSERT INTO allowance_regulations_mileage (
