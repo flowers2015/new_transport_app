@@ -4,7 +4,19 @@
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# بررسی اینکه آیا در دایرکتوری پروژه هستیم
+if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
+    echo -e "${RED}❌ خطا: این اسکریپت باید در دایرکتوری اصلی پروژه اجرا شود!${NC}"
+    echo -e "${YELLOW}   مسیر صحیح: /var/www/my-transport-app${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}🚀 شروع آپدیت سرور${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 
 echo -e "${YELLOW}🔄 در حال دریافت آخرین تغییرات از گیت...${NC}"
 git pull origin master
@@ -60,6 +72,13 @@ else
     echo -e "${YELLOW}   دستور: cd backend && node server.js${NC}"
 fi
 
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✅ آپدیت با موفقیت انجام شد!${NC}"
-echo -e "${GREEN}📊 برای مشاهده لاگ‌ها: pm2 logs transport-backend${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}📊 برای مشاهده لاگ‌ها:${NC}"
+echo -e "   ${YELLOW}pm2 logs transport-backend --lines 50${NC}"
+echo -e "${GREEN}📊 برای مشاهده خطاها:${NC}"
+echo -e "   ${YELLOW}pm2 logs transport-backend --err --lines 20${NC}"
+echo -e "${GREEN}📊 برای بررسی وضعیت:${NC}"
+echo -e "   ${YELLOW}pm2 status${NC}"
 
