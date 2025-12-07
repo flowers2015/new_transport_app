@@ -2711,7 +2711,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 />
                             </div>
                         </div>
-                        </div>
 
                         <div className="mt-6 flex justify-end gap-2">
                             <button
