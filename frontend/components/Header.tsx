@@ -139,7 +139,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                     </div>
                     <div className="flex items-center">
                         <nav className="hidden md:flex items-center flex-wrap gap-x-2 gap-y-1">
-                            {!isTransportDefault && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.PlanningManager && (
+                            {!isTransportDefault && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && (
                                 <button onClick={() => onNavigate(defaultDashboardView)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
                             )}
                             
