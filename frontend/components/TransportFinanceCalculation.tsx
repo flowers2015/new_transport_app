@@ -135,7 +135,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // دیالوگ ثبت اطلاعات
     const [showInputDialog, setShowInputDialog] = useState(false);
     const [inputDialogData, setInputDialogData] = useState<AllowanceInputDialogData | null>(null);
-    const [inputDialogTab, setInputDialogTab] = useState<'basic' | 'costs' | 'notes'>('basic');
+    // تب‌ها حذف شدند - همه محتوا در یک صفحه نمایش داده می‌شود
     const [helperDriverSearchResults, setHelperDriverSearchResults] = useState<Driver[]>([]);
     
     // دیالوگ نمایش جزئیات تور
@@ -2120,43 +2120,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             {inputDialogData && calculations.find(c => c.driverId === inputDialogData.driverId)?.tours.find(t => t.announcementId === inputDialogData.tourId)?.isDataRecorded ? 'ویرایش اطلاعات محاسباتی' : 'ثبت اطلاعات محاسباتی'}
                         </h2>
                         
-                        {/* تب‌ها */}
-                        <div className="flex border-b border-slate-300 mb-4">
-                            <button
-                                onClick={() => setInputDialogTab('basic')}
-                                className={`px-4 py-2 font-medium text-sm ${
-                                    inputDialogTab === 'basic'
-                                        ? 'border-b-2 border-sky-600 text-sky-600'
-                                        : 'text-slate-600 hover:text-slate-800'
-                                }`}
-                            >
-                                اطلاعات اصلی
-                            </button>
-                            <button
-                                onClick={() => setInputDialogTab('costs')}
-                                className={`px-4 py-2 font-medium text-sm ${
-                                    inputDialogTab === 'costs'
-                                        ? 'border-b-2 border-sky-600 text-sky-600'
-                                        : 'text-slate-600 hover:text-slate-800'
-                                }`}
-                            >
-                                هزینه بارگیری
-                            </button>
-                            <button
-                                onClick={() => setInputDialogTab('notes')}
-                                className={`px-4 py-2 font-medium text-sm ${
-                                    inputDialogTab === 'notes'
-                                        ? 'border-b-2 border-sky-600 text-sky-600'
-                                        : 'text-slate-600 hover:text-slate-800'
-                                }`}
-                            >
-                                توضیحات
-                            </button>
-                        </div>
-                        
                         <div className="flex-1 overflow-y-auto" style={{ minHeight: '400px' }}>
-                        {inputDialogTab === 'basic' && (
-                        <div className="space-y-4">
+                        {/* بخش اول: اطلاعات اصلی */}
+                        <div className="space-y-4 mb-6">
+                            {/* Separator: اطلاعات اصلی */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-sky-50 border border-sky-200 rounded-lg">
+                                    📋 اطلاعات اصلی
+                                </h3>
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                            </div>
+                            <div className="space-y-4">
                             {/* نمایش نوع محاسبه اجرت */}
                             <div className={`p-3 rounded-lg border ${
                                 selectedDriverQueueType === 'porsant' 
@@ -2391,12 +2366,21 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                             </div>
                         </div>
-                        )}
-                        {inputDialogTab === 'costs' && (
-                        <div className="space-y-4" style={{ minHeight: '400px' }}>
+                        
+                        {/* بخش دوم: هزینه بارگیری */}
+                        <div className="space-y-4 mb-6">
+                            {/* Separator: هزینه بارگیری */}
+                            <div className="flex items-center gap-3 mb-4 mt-6">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-orange-50 border border-orange-200 rounded-lg">
+                                    💰 هزینه بارگیری
+                                </h3>
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                            </div>
+                            
                             {/* بخش اول: هزینه‌های بارگیری */}
                             <div className="mb-6">
-                                <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه‌های بارگیری</h3>
+                                <h4 className="text-sm font-semibold text-slate-700 mb-3">هزینه‌های بارگیری</h4>
                                 <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2700,9 +2684,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                             </div>
                         </div>
-                        )}
-                        {inputDialogTab === 'notes' && (
-                        <div className="space-y-4" style={{ minHeight: '400px' }}>
+                        
+                        {/* بخش سوم: توضیحات */}
+                        <div className="space-y-4">
+                            {/* Separator: توضیحات */}
+                            <div className="flex items-center gap-3 mb-4 mt-6">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                                    📝 توضیحات
+                                </h3>
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                            </div>
+                            
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
                                     توضیحات
@@ -2718,7 +2711,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 />
                             </div>
                         </div>
-                        )}
                         </div>
 
                         <div className="mt-6 flex justify-end gap-2">
