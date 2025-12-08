@@ -1252,7 +1252,7 @@ const AnnouncementPanel: React.FC<{
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: '', vehicleType: '', notes: '' };
     const initialIceCreamState = { originCity: '', destinationCity: '', brand: 'میهن', representativeType: 'agent', representativeName: '', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
-    const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '' }];
+    const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }];
     const initialLoadingLocationState = { loadingType: 'single' as 'single' | 'double', originCity1: '', originCity2: '' };
     const initialBrandState = { brandType: 'single' as 'single' | 'double', brand1: 'میهن', brand2: '' };
 
@@ -1441,7 +1441,10 @@ const AnnouncementPanel: React.FC<{
                     });
                 } else {
                     setMultiDestState({ platformArrivalTime: data.platformArrivalTime || '' });
-                    setDestinations(data.destinations.length > 0 ? data.destinations.map(d => ({...d})) : initialDestinations);
+                    setDestinations(data.destinations.length > 0 ? data.destinations.map(d => ({
+                        ...d,
+                        representativeType: d.representativeType || 'agent' // اگر representativeType وجود نداشت، پیش‌فرض 'agent' است
+                    })) : initialDestinations);
                 }
             } else { // Create mode: ensure form is clear
                 resetForm();
@@ -1526,7 +1529,7 @@ const AnnouncementPanel: React.FC<{
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
 
-    const addDestination = () => { if(destinations.length < 4) setDestinations([...destinations, { id: generateUUID(), city: '', representativeName: '' }]); };
+    const addDestination = () => { if(destinations.length < 4) setDestinations([...destinations, { id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }]); };
     const removeDestination = (id: string) => setDestinations(destinations.filter(d => d.id !== id));
     const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
         if (field === 'city' && typeof value === 'string') {
@@ -1581,7 +1584,8 @@ const AnnouncementPanel: React.FC<{
             ? destinations.filter(d => {
                 // بررسی فیلدهای اجباری (به جز unloadTime)
                 if (!d.city || d.city.trim() === '') return false;
-                if (!d.representativeType) return false;
+                // بررسی representativeType: باید 'agent' یا 'distributor' باشد
+                if (!d.representativeType || (d.representativeType !== 'agent' && d.representativeType !== 'distributor')) return false;
                 if (!d.representativeName || d.representativeName.trim() === '') return false;
                 if (!d.tonnage || Number(d.tonnage) <= 0) return false;
                 if (!d.deliveryDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(d.deliveryDate)) return false;
