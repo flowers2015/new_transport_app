@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali } from '../utils/jalali';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface TransportFinancePaidInvoicesProps {
     currentUser: User;
@@ -138,6 +140,331 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const startIndex = (currentPage - 1) * itemsPerPage;
         return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredRecords, currentPage, itemsPerPage]);
+
+    // تولید PDF یکجا از تصاویر صورتحساب‌های پرداخت شده
+    const exportAllInvoicesToPDF = async () => {
+        if (filteredRecords.length === 0) {
+            alert('هیچ صورتحساب پرداخت شده‌ای برای تولید PDF وجود ندارد.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            // ایجاد PDF
+            const pdf = new jsPDF('l', 'mm', 'a4'); // landscape orientation
+            const pageWidth = 297; // A4 landscape width in mm
+            const pageHeight = 210; // A4 landscape height in mm
+
+            // برای هر رکورد پرداخت شده
+            for (let i = 0; i < filteredRecords.length; i++) {
+                const record = filteredRecords[i];
+                
+                // نمایش پیشرفت
+                console.log(`📄 در حال تولید صورتحساب ${i + 1} از ${filteredRecords.length}: ${record.driverName}`);
+
+                // دریافت محاسبات مربوط به این راننده
+                const calcDateFrom = record.calculationDateFrom || '';
+                const calcDateTo = record.calculationDateTo || '';
+                let calculationsUrl = `driver-calculations?driverId=${record.driverId}`;
+                if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
+                if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
+
+                const calculationsRes = await fetch(getApiUrl(calculationsUrl), { headers });
+                if (!calculationsRes.ok) {
+                    console.warn(`⚠️ خطا در دریافت محاسبات برای ${record.driverName}`);
+                    continue;
+                }
+
+                const calculationsData = await calculationsRes.json();
+                const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
+                
+                // فقط محاسبات پرداخت شده را نمایش بده
+                const paidCalculations = calculationsArray.filter((calc: any) => 
+                    calc.is_paid || calc.isPaid
+                );
+
+                if (paidCalculations.length === 0) {
+                    console.warn(`⚠️ هیچ محاسبه پرداخت شده‌ای برای ${record.driverName} یافت نشد`);
+                    continue;
+                }
+
+                // دریافت اطلاعات اعلام بار
+                const announcementsMap = new Map<string, any>();
+                await Promise.all(paidCalculations.map(async (calc: any) => {
+                    const announcementId = calc.announcement_id || calc.announcementId;
+                    if (announcementId && !announcementsMap.has(announcementId)) {
+                        try {
+                            const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
+                            if (annRes.ok) {
+                                const annData = await annRes.json();
+                                announcementsMap.set(announcementId, annData);
+                            }
+                        } catch (err) {
+                            console.warn('⚠️ خطا در دریافت اعلام بار:', err);
+                        }
+                    }
+                }));
+
+                // ایجاد یک div موقت برای render کردن HTML صورتحساب
+                const tempDiv = document.createElement('div');
+                tempDiv.style.position = 'absolute';
+                tempDiv.style.left = '-9999px';
+                tempDiv.style.width = '297mm';
+                tempDiv.style.backgroundColor = '#ffffff';
+                tempDiv.dir = 'rtl';
+                document.body.appendChild(tempDiv);
+
+                // Render کردن HTML صورتحساب (مشابه TransportFinancePaymentList)
+                tempDiv.innerHTML = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+
+                // تبدیل به canvas
+                const canvas = await html2canvas(tempDiv, {
+                    scale: 1.2,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    quality: 0.85,
+                });
+
+                // حذف div موقت
+                document.body.removeChild(tempDiv);
+
+                // تبدیل به JPEG
+                const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                const imgWidth = pageWidth;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                let heightLeft = imgHeight;
+
+                // اضافه کردن به PDF
+                if (i > 0) {
+                    pdf.addPage('l'); // اضافه کردن صفحه جدید برای هر صورتحساب
+                }
+
+                let position = 0;
+                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage('l');
+                    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+            }
+
+            // ذخیره PDF
+            const dateRange = startDate && endDate ? `${startDate}_${endDate}` : new Date().toISOString().split('T')[0];
+            pdf.save(`صورتحساب_های_پرداخت_شده_${dateRange}.pdf`);
+            
+            alert(`✅ PDF با موفقیت تولید شد. تعداد ${filteredRecords.length} صورتحساب در فایل قرار گرفت.`);
+        } catch (err: any) {
+            console.error('❌ [exportAllInvoicesToPDF] Error:', err);
+            alert(`خطا در تولید PDF: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    // تابع helper برای render کردن HTML صورتحساب
+    const renderInvoiceHTML = async (
+        record: PaidInvoiceRecord,
+        calculations: any[],
+        announcementsMap: Map<string, any>,
+        calcDateFrom: string,
+        calcDateTo: string
+    ): Promise<string> => {
+        // این تابع HTML صورتحساب را برمی‌گرداند (مشابه آنچه در TransportFinancePaymentList است)
+        // برای سادگی، از همان ساختار استفاده می‌کنیم
+        
+        const calculateMainDriverCost = (calc: any) => {
+            const food = calc.food_cost || calc.foodCost || 0;
+            const fuel = calc.fuel_cost || calc.fuelCost || 0;
+            const toll = calc.toll_cost || calc.tollCost || 0;
+            const bill = calc.bill_of_lading_cost || calc.billOfLadingCost || 0;
+            const returnCargo = calc.return_cargo_cost || calc.returnCargoCost || 0;
+            const returnBill = calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0;
+            const multiUnload = calc.multi_unload_cost || calc.multiUnloadCost || 0;
+            const excessMission = calc.excess_mission_cost || calc.excessMissionCost || 0;
+            const fixedAllowance = calc.fixed_allowance || calc.fixedAllowance || 0;
+            return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance;
+        };
+
+        const calculateHelperDriverCost = (calc: any) => {
+            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+            return helperAllowance + helperFoodCost + helperExcessMissionCost;
+        };
+
+        // محاسبه جمع کل
+        const totalMainAll = calculations.reduce((sum, calc) => sum + calculateMainDriverCost(calc), 0);
+        const helperCostsByEmployee = new Map<string, number>();
+        calculations.forEach((calc: any) => {
+            const helperId = calc.helper_driver_id || calc.helperDriverId;
+            const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+            const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+            
+            if (helperId && helperEmployeeId && helperTotal > 0) {
+                if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                    helperCostsByEmployee.set(helperEmployeeId, 0);
+                }
+                const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+                helperCostsByEmployee.set(helperEmployeeId, existing + helperTotal);
+            }
+        });
+        const totalHelper = Array.from(helperCostsByEmployee.values()).reduce((sum, h) => sum + h, 0);
+        const grandTotal = totalMainAll + totalHelper;
+        const totalAdvancePayment = calculations.reduce((sum, calc) => {
+            return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
+        }, 0);
+
+        // ساخت HTML
+        let html = `
+            <div class="p-6 bg-white" dir="rtl" style="width: 297mm; min-height: 210mm; font-family: Arial, sans-serif;">
+                <div class="mb-4 border-b-2 border-slate-800 pb-3">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <h1 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 4px;">صورتحساب هزینه</h1>
+                            <p style="font-size: 11px; color: #475569;">کد پرسنلی: ${record.employeeId}</p>
+                            <p style="font-size: 11px; color: #475569;">نام: ${record.driverName}</p>
+                            <p style="font-size: 11px; color: #475569;">شماره حساب: ${record.accountNumber || '-'}</p>
+                        </div>
+                        <div style="text-align: left;">
+                            <p style="font-size: 11px; color: #475569; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
+                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 11px; color: #475569;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
+                            <p style="font-size: 11px; color: #475569;">تاریخ پرداخت: ${record.paymentDate}</p>
+                        </div>
+                    </div>
+                </div>
+        `;
+
+        // جدا کردن محاسبات با و بدون راننده کمکی
+        const calculationsWithoutHelper = calculations.filter((calc: any) => {
+            const helperId = calc.helper_driver_id || calc.helperDriverId;
+            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+            return !helperId || (helperAllowance + helperFoodCost + helperExcessMissionCost === 0);
+        });
+
+        const calculationsWithHelper = calculations.filter((calc: any) => {
+            const helperId = calc.helper_driver_id || calc.helperDriverId;
+            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+            return helperId && (helperAllowance + helperFoodCost + helperExcessMissionCost > 0);
+        });
+
+        // جدول راننده اصلی
+        if (calculationsWithoutHelper.length > 0 || calculationsWithHelper.length > 0) {
+            html += `
+                <div style="margin-bottom: 24px;">
+                    <h3 style="font-size: 16px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #475569; padding-bottom: 8px;">
+                        هزینه‌های راننده اصلی
+                    </h3>
+                    <table style="width: 100%; font-size: 9px; border-collapse: collapse; border: 1px solid #1e293b; margin-bottom: 12px;">
+                        <thead>
+                            <tr style="background-color: #1e293b; color: white;">
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: center;">ردیف</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">شماره بارنامه</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">مقاصد</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">تاریخ صدور</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">تاریخ محاسبه</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">پیمایش مصوب</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">پیمایش مازاد</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">ماموریت مصوب</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">ماموریت مازاد</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه بارنامه</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه غذا</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه سوخت</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه عوارض</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه بار برگشتی</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه بارنامه برگشتی</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه چندجا تخلیه</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه ماموریت مازاد</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">اجرت ثابت</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left; font-weight: bold;">جمع کل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            [...calculationsWithoutHelper, ...calculationsWithHelper].forEach((calc, idx) => {
+                const announcementId = calc.announcement_id || calc.announcementId;
+                const announcement = announcementsMap.get(announcementId);
+                const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                const mainCost = calculateMainDriverCost(calc);
+                
+                html += `
+                    <tr style="border-bottom: 1px solid #cbd5e1;">
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${destinations}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.calculation_date || calc.calculationDate || '-'}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${calc.approved_mission_days || calc.approvedMissionDays || 0}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${calc.excess_mission_days || calc.excessMissionDays || 0}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.fixed_allowance || calc.fixedAllowance || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold;">${mainCost.toLocaleString('fa-IR')}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                        <tfoot>
+                            <tr style="background-color: #f1f5f9; font-weight: bold;">
+                                <td colspan="18" style="padding: 4px; border: 1px solid #cbd5e1; text-align: right;">جمع کل:</td>
+                                <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold;">${totalMainAll.toLocaleString('fa-IR')} ریال</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `;
+        }
+
+        // جمع کل نهایی
+        html += `
+                <div style="margin-top: 16px; padding: 16px; background-color: #e2e8f0; border-radius: 8px; border: 2px solid #475569;">
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 16px; font-weight: bold; color: #1e293b;">جمع کل هزینه سفر:</span>
+                            <span style="font-size: 18px; font-weight: bold; color: #059669;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
+                        </div>
+                        ${totalAdvancePayment > 0 ? `
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #94a3b8; padding-top: 8px; margin-top: 8px;">
+                                <span style="font-size: 14px; font-weight: 600; color: #1e293b;">کسور (پیش پرداخت):</span>
+                                <span style="font-size: 16px; font-weight: bold; color: #ea580c;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 8px; margin-top: 8px;">
+                                <span style="font-size: 16px; font-weight: bold; color: #1e293b;">مبلغ قابل پرداخت:</span>
+                                <span style="font-size: 18px; font-weight: bold; color: #0284c7;">${(grandTotal - totalAdvancePayment).toLocaleString('fa-IR')} ریال</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        return html;
+    };
 
     // خروجی اکسل
     const exportToExcel = () => {
@@ -278,6 +605,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             />
                         </div>
                         <div className="flex gap-2 items-end">
+                            <button
+                                onClick={exportAllInvoicesToPDF}
+                                disabled={filteredRecords.length === 0}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                تولید PDF یکجا
+                            </button>
                             <button
                                 onClick={exportToExcel}
                                 className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"

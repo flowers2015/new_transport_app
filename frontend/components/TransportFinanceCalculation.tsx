@@ -83,6 +83,7 @@ interface AllowanceInputDialogData {
     helperDriverFoodCost?: number; // هزینه غذا راننده کمکی
     helperDriverExcessMissionDays?: number; // ماموریت مازاد راننده کمکی
     helperDriverExcessMissionCost?: number; // هزینه ماموریت مازاد راننده کمکی
+    helperDriverExcessKilometers?: number; // پیمایش مازاد راننده کمکی
 }
 
 const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = ({ currentUser }) => {
@@ -145,6 +146,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [inputDialogData, setInputDialogData] = useState<AllowanceInputDialogData | null>(null);
     // تب‌ها حذف شدند - همه محتوا در یک صفحه نمایش داده می‌شود
     const [helperDriverSearchResults, setHelperDriverSearchResults] = useState<Driver[]>([]);
+    const [dialogZoom, setDialogZoom] = useState(100); // بزرگنمایی دیالوگ
     
     // دیالوگ نمایش جزئیات تور
     const [showTourDetailsDialog, setShowTourDetailsDialog] = useState(false);
@@ -510,6 +512,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         helperDriverFoodCost: saved.helper_driver_food_cost || saved.helperDriverFoodCost || 0,
                                         helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || saved.helperDriverExcessMissionDays || 0,
                                         helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || saved.helperDriverExcessMissionCost || 0,
+                                        helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || saved.helperDriverExcessKilometers || 0,
                                         isPaid: saved.is_paid || saved.isPaid || false,
                                     } as any;
                                 }
@@ -1136,6 +1139,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
             });
             setShowInputDialog(true);
         }
@@ -1345,6 +1349,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
             });
         } catch (err) {
             console.error('خطا در دریافت اطلاعات مصوب:', err);
@@ -1407,6 +1412,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
             });
         }
         
@@ -1508,15 +1514,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const multiUnloadUnits = Math.max(0, destinationsCount - 1);
         const calculatedMultiUnloadCost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
         
-        // 4. اجرت راننده کمکی = بخشنامه اجرت راننده کمکی × (کیلومتر مصوب + کیلومتر مازاد)
-        const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
-        const calculatedHelperDriverAllowance = Math.round(totalKm * (Number(helperAllowancePerKm) || 0)) || 0;
+        // 4. اجرت راننده کمکی = بخشنامه اجرت راننده کمکی × (کیلومتر مصوب + کیلومتر مازاد راننده کمکی)
+        const helperExcessKilometers = Number(inputDialogData.helperDriverExcessKilometers) || 0;
+        const totalKmForHelper = (Number(inputDialogData.approvedKilometers) || 0) + helperExcessKilometers;
+        const calculatedHelperDriverAllowance = Math.round(totalKmForHelper * (Number(helperAllowancePerKm) || 0)) || 0;
         
         // 5. هزینه غذا راننده کمکی = ماموریت مصوب × بخشنامه غذا
         const calculatedHelperDriverFoodCost = Math.round(approvedMissionDays * (Number(foodCostPerDay) || 0)) || 0;
         
-        // 6. هزینه ماموریت مازاد راننده کمکی = ماموریت مازاد × بخشنامه ماموریت مازاد
-        const calculatedHelperDriverExcessMissionCost = Math.round(excessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+        // 6. هزینه ماموریت مازاد راننده کمکی = ماموریت مازاد راننده کمکی × بخشنامه ماموریت مازاد
+        const helperExcessMissionDays = Number(inputDialogData.helperDriverExcessMissionDays) || 0;
+        const calculatedHelperDriverExcessMissionCost = Math.round(helperExcessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
         
         // محاسبه هزینه سوخت بر اساس نوع خودرو و بخشنامه مصرف سوخت
         const vehicleType = tour.vehicleType || '';
@@ -1647,8 +1655,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     helperDriverName: inputDialogData.helperDriverName || null,
                     helperDriverAllowance: calculatedHelperDriverAllowance,
                     helperDriverFoodCost: calculatedHelperDriverFoodCost,
-                    helperDriverExcessMissionDays: excessMissionDays, // استفاده از ماموریت مازاد راننده اصلی
+                    helperDriverExcessMissionDays: helperExcessMissionDays, // استفاده از ماموریت مازاد راننده کمکی
                     helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
+                    helperDriverExcessKilometers: helperExcessKilometers,
                     // فیلدهای جدید
                     vehicleCode: inputDialogData.vehicleCode || null,
                     vehiclePlate: inputDialogData.vehiclePlate || null,
@@ -2162,10 +2171,32 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             {/* دیالوگ ثبت اطلاعات */}
             {showInputDialog && inputDialogData && (
                 <div className="fixed inset-0 bg-black bg-opacity-30 z-[60] flex items-center justify-center">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                        <h2 className="text-xl font-bold text-slate-800 mb-4">
-                            {inputDialogData && calculations.find(c => c.driverId === inputDialogData.driverId)?.tours.find(t => t.announcementId === inputDialogData.tourId)?.isDataRecorded ? 'ویرایش اطلاعات محاسباتی' : 'ثبت اطلاعات محاسباتی'}
-                        </h2>
+                    <div 
+                        className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transition-transform duration-200"
+                        style={{ transform: `scale(${dialogZoom / 100})`, transformOrigin: 'center' }}
+                    >
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-slate-800">
+                                {inputDialogData && calculations.find(c => c.driverId === inputDialogData.driverId)?.tours.find(t => t.announcementId === inputDialogData.tourId)?.isDataRecorded ? 'ویرایش اطلاعات محاسباتی' : 'ثبت اطلاعات محاسباتی'}
+                            </h2>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setDialogZoom(prev => Math.max(50, prev - 10))}
+                                    className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-sm hover:bg-slate-300"
+                                    title="کوچک کردن"
+                                >
+                                    −
+                                </button>
+                                <span className="text-sm text-slate-600 min-w-[50px] text-center">{dialogZoom}%</span>
+                                <button
+                                    onClick={() => setDialogZoom(prev => Math.min(150, prev + 10))}
+                                    className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-sm hover:bg-slate-300"
+                                    title="بزرگ کردن"
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
                         
                         <div className="flex-1 overflow-y-auto" style={{ minHeight: '400px' }}>
                         {/* بخش اول: اطلاعات اصلی */}
@@ -2379,7 +2410,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                             </div>
                             
-                            {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، حق ماموریت (ماموریت مازاد) */}
+                            {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، ماموریت مازاد، حق ماموریت (ماموریت مازاد) */}
                             <div className="grid grid-cols-6 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2477,28 +2508,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        حق ماموریت (ماموریت مازاد) (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={(() => {
-                                            const excessDays = Number(inputDialogData.excessMissionDays) || 0;
-                                            const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
-                                            return cost.toLocaleString('fa-IR');
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
-                                </div>
-                            </div>
-                            
-                            {/* فیلد ماموریت مازاد (روز) - قابل ویرایش */}
-                            <div className="grid grid-cols-1 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
                                         ماموریت مازاد (روز) *
                                     </label>
                                     <input
@@ -2514,20 +2523,31 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 excessMissionDays: numValue
                                             });
                                         }}
-                                        onBlur={(e) => {
-                                            const numValue = parseNumberFromFormatted(e.target.value);
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                excessMissionDays: numValue || 0
-                                            });
-                                            // فرمت با جداکننده 3 رقمی
-                                            if (numValue > 0) {
-                                                e.target.value = numValue.toLocaleString('fa-IR');
-                                            }
-                                        }}
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
+                                </div>
+                            </div>
+                            
+                            {/* ردیف پنجم: حق ماموریت (ماموریت مازاد) */}
+                            <div className="grid grid-cols-6 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        حق ماموریت (ماموریت مازاد) (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={(() => {
+                                            const excessDays = Number(inputDialogData.excessMissionDays) || 0;
+                                            const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+                                            return cost.toLocaleString('fa-IR');
+                                        })()}
+                                        readOnly
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
                                 </div>
                             </div>
                             </div>
@@ -2749,7 +2769,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             type="text"
                                             inputMode="numeric"
                                             value={(() => {
-                                                const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                                                const helperExcessKm = Number(inputDialogData.helperDriverExcessKilometers) || 0;
+                                                const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + helperExcessKm;
                                                 const cost = Math.round(totalKm * (Number(helperAllowancePerKm) || 0)) || 0;
                                                 return cost.toLocaleString('fa-IR');
                                             })()}
@@ -2757,7 +2778,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
                                             placeholder="0"
                                         />
-                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کیلومتر مصوب + مازاد) × بخشنامه</p>
+                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کیلومتر مصوب + مازاد راننده کمکی) × بخشنامه</p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2779,17 +2800,45 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            پیمایش مازاد راننده کمکی (کیلومتر)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={inputDialogData.helperDriverExcessKilometers ? String(inputDialogData.helperDriverExcessKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                            onChange={(e) => {
+                                                const inputValue = e.target.value.replace(/,/g, '');
+                                                const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                const numValue = cleaned ? Number(cleaned) : 0;
+                                                setInputDialogData({
+                                                    ...inputDialogData,
+                                                    helperDriverExcessKilometers: numValue
+                                                });
+                                            }}
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
                                             ماموریت مازاد راننده کمکی (روز)
                                         </label>
                                         <input
                                             type="text"
                                             inputMode="numeric"
-                                            value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
-                                            readOnly
-                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
+                                            value={inputDialogData.helperDriverExcessMissionDays ? String(inputDialogData.helperDriverExcessMissionDays) : ''}
+                                            onChange={(e) => {
+                                                const inputValue = e.target.value;
+                                                const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                const numValue = cleaned ? Number(cleaned) : 0;
+                                                setInputDialogData({
+                                                    ...inputDialogData,
+                                                    helperDriverExcessMissionDays: numValue
+                                                });
+                                            }}
+                                            className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                             placeholder="0"
                                         />
-                                        <p className="text-xs text-slate-500 mt-1">برابر با ماموریت مازاد راننده اصلی</p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2799,7 +2848,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             type="text"
                                             inputMode="numeric"
                                             value={(() => {
-                                                const excessDays = Number(inputDialogData.excessMissionDays) || 0;
+                                                const excessDays = Number(inputDialogData.helperDriverExcessMissionDays) || 0;
                                                 const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
                                                 return cost.toLocaleString('fa-IR');
                                             })()}
@@ -2807,7 +2856,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
                                             placeholder="0"
                                         />
-                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
+                                        <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد راننده کمکی × بخشنامه</p>
                                     </div>
                                 </div>
                             </div>

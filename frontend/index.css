@@ -6,6 +6,7 @@
 
 body {
   font-family: 'Vazirmatn', sans-serif;
+  zoom: 0.8; /* کاهش zoom کلی به 80% */
 }
 
 @keyframes blink {
