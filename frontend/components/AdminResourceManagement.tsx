@@ -162,11 +162,19 @@ const AdminResourceManagement: React.FC = () => {
 
   const fetchPersonalDrivers = async () => {
     try {
+      console.log('🔄 [fetchPersonalDrivers] Fetching personal drivers...');
       const res = await fetch(getApiUrl('personal-drivers'), { headers });
-      if (!res.ok) throw new Error('خطا در دریافت رانندگان شخصی');
+      console.log('📥 [fetchPersonalDrivers] Response status:', res.status);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('❌ [fetchPersonalDrivers] Error response:', errorText);
+        throw new Error('خطا در دریافت رانندگان شخصی');
+      }
       const data = await res.json();
+      console.log('✅ [fetchPersonalDrivers] Received data:', data.length, 'drivers');
       setPersonalDrivers(data);
     } catch (err: any) {
+      console.error('❌ [fetchPersonalDrivers] Error:', err);
       setError(err.message);
     }
   };
@@ -1444,6 +1452,8 @@ const ImportExcelButton: React.FC<{
     setResult(null);
 
     try {
+      console.log('🚀 [ImportExcel] Starting upload...', { type, fileName: file.name });
+      
       const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('file', file);
@@ -1451,6 +1461,8 @@ const ImportExcelButton: React.FC<{
       const endpoint = type === 'personal-drivers' 
         ? 'personal-drivers/import-excel'
         : 'personal-vehicles/import-excel';
+
+      console.log('📡 [ImportExcel] Sending request to:', getApiUrl(endpoint));
 
       const response = await fetch(getApiUrl(endpoint), {
         method: 'POST',
@@ -1460,23 +1472,70 @@ const ImportExcelButton: React.FC<{
         body: formData
       });
 
+      console.log('📥 [ImportExcel] Response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorText = await response.text();
+        console.error('❌ [ImportExcel] Error response:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText || 'خطا در آپلود فایل' };
+        }
         throw new Error(errorData.message || 'خطا در آپلود فایل');
       }
 
-      const data = await response.json();
-      setResult(data);
-      alert(`✅ Import موفق!\n\nکل: ${data.total}\nموفق: ${data.success}\nبه‌روزرسانی شده: ${data.updated || 0}\nرد شده: ${data.skipped || 0}\nخطا: ${data.errors || 0}`);
+      const responseText = await response.text();
+      console.log('📦 [ImportExcel] Response text:', responseText);
       
-      if (data.errors > 0 && data.errorDetails) {
-        console.error('جزئیات خطاها:', data.errorDetails);
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ [ImportExcel] JSON parse error:', parseError);
+        throw new Error('پاسخ سرور قابل پردازش نیست');
+      }
+
+      console.log('✅ [ImportExcel] Parsed data:', data);
+      
+      // Backend response structure: { message, results: { total, success, updated, skipped, errors: [] } }
+      const results = data.results || data; // اگر results وجود داشت استفاده کن، وگرنه خود data
+      setResult(results);
+      
+      const successCount = results.success || 0;
+      const updatedCount = results.updated || 0;
+      const skippedCount = results.skipped || 0;
+      const errorCount = Array.isArray(results.errors) ? results.errors.length : (results.errors || 0);
+      const totalCount = results.total || 0;
+      
+      console.log('📊 [ImportExcel] Import summary:', {
+        total: totalCount,
+        success: successCount,
+        updated: updatedCount,
+        skipped: skippedCount,
+        errors: errorCount
+      });
+      
+      alert(`✅ Import موفق!\n\nکل: ${totalCount}\nموفق: ${successCount}\nبه‌روزرسانی شده: ${updatedCount}\nرد شده: ${skippedCount}\nخطا: ${errorCount}`);
+      
+      if (errorCount > 0 && results.errors && Array.isArray(results.errors)) {
+        console.error('❌ [ImportExcel] جزئیات خطاها:', results.errors);
+        if (results.errors.length > 0) {
+          const errorDetails = results.errors.slice(0, 5).map((e: any) => `ردیف ${e.row}: ${e.error}`).join('\n');
+          console.warn('⚠️ [ImportExcel] نمونه خطاها:', errorDetails);
+        }
       }
       
-      onImportSuccess();
+      console.log('🔄 [ImportExcel] Calling onImportSuccess...');
+      // فراخوانی fetchData برای refresh کردن جدول
+      await onImportSuccess();
+      console.log('✅ [ImportExcel] Data refreshed');
       setFile(null);
       setShowDialog(false);
+      console.log('✅ [ImportExcel] Import completed successfully');
     } catch (error: any) {
+      console.error('❌ [ImportExcel] Error:', error);
       alert(`❌ خطا: ${error.message}`);
     } finally {
       setUploading(false);
