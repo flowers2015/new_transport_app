@@ -1652,7 +1652,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     // فیلدهای جدید
                     vehicleCode: inputDialogData.vehicleCode || null,
                     vehiclePlate: inputDialogData.vehiclePlate || null,
-                    vehicleType: inputDialogData.vehicleType || null,
                     destinations: inputDialogData.destinations || null,
                     multiUnloadCount: inputDialogData.multiUnloadCount || 0,
                     advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,

@@ -41,7 +41,6 @@ async function saveDriverCalculation(req, res) {
       helperDriverExcessMissionCost,
       vehicleCode,
       vehiclePlate,
-      vehicleType,
       destinations,
       multiUnloadCount,
       advancePayment,
@@ -314,7 +313,7 @@ async function saveDriverCalculation(req, res) {
           helper_driver_id, helper_driver_employee_id, helper_driver_name, helper_driver_allowance, helper_driver_food_cost, helper_driver_excess_mission_days, helper_driver_excess_mission_cost,
           food_cost, fuel_cost, tour_cost, total_cost,
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
       `, [
         id,
         driverId,
