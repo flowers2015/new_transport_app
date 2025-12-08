@@ -76,8 +76,8 @@ async function createPersonalDriver(req, res) {
   try {
     const { nationalId, name, mobile, driverSmartId } = req.body;
 
-    if (!nationalId || !name || !driverSmartId) {
-      return res.status(400).json({ message: 'کد ملی، نام و هوشمند راننده الزامی است (موبایل اختیاری است)' });
+    if (!nationalId || !name) {
+      return res.status(400).json({ message: 'کد ملی و نام الزامی است (موبایل و کد هوشمند راننده اختیاری هستند)' });
     }
 
     // بررسی تکراری بودن کد ملی
@@ -90,14 +90,16 @@ async function createPersonalDriver(req, res) {
       return res.status(400).json({ message: 'راننده با این کد ملی قبلاً ثبت شده است' });
     }
 
-    // بررسی تکراری بودن هوشمند راننده
-    const existingSmartId = await pool.query(
-      'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
-      [driverSmartId]
-    );
+    // بررسی تکراری بودن هوشمند راننده (فقط اگر وارد شده باشد)
+    if (driverSmartId) {
+      const existingSmartId = await pool.query(
+        'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
+        [driverSmartId]
+      );
 
-    if (existingSmartId.rows.length > 0) {
-      return res.status(400).json({ message: 'هوشمند راننده قبلاً استفاده شده است' });
+      if (existingSmartId.rows.length > 0) {
+        return res.status(400).json({ message: 'هوشمند راننده قبلاً استفاده شده است' });
+      }
     }
 
     const id = crypto.randomUUID();
@@ -112,7 +114,7 @@ async function createPersonalDriver(req, res) {
         mobile,
         driver_smart_id AS "driverSmartId",
         created_at AS "createdAt"
-    `, [id, nationalId, name, mobile || null, driverSmartId]);
+    `, [id, nationalId, name, mobile || null, driverSmartId || null]);
 
     res.status(201).json(rows[0]);
   } catch (error) {
@@ -299,7 +301,19 @@ async function importPersonalDriversFromExcel(req, res) {
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0]; // اولین sheet
     const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    
+    // خواندن به صورت array برای بررسی header
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    console.log('🔍 [ImportExcel] First 3 rows of raw data:', rawData.slice(0, 3));
+    
+    // خواندن به صورت object
+    const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    
+    console.log('🔍 [ImportExcel] Total rows:', data.length);
+    if (data.length > 0) {
+      console.log('🔍 [ImportExcel] First row keys:', Object.keys(data[0]));
+      console.log('🔍 [ImportExcel] First row values:', data[0]);
+    }
 
     if (data.length === 0) {
       // حذف فایل موقت
@@ -322,16 +336,70 @@ async function importPersonalDriversFromExcel(req, res) {
 
       try {
         // استخراج داده‌ها از اکسل (با نام‌های مختلف ممکن)
-        const nationalId = String(row['کد ملی'] || row['کدملی'] || row['national_id'] || row['nationalId'] || '').trim();
-        const name = String(row['نام'] || row['name'] || '').trim();
-        const mobile = String(row['موبایل'] || row['شماره موبایل'] || row['mobile'] || '').trim();
-        const driverSmartId = String(row['کد هوشمند راننده'] || row['کد هوشمند'] || row['driver_smart_id'] || row['driverSmartId'] || '').trim();
+        // لاگ کردن کلیدهای موجود در row برای دیباگ
+        if (i === 0) {
+          console.log('🔍 [ImportExcel] Available columns in first row:', Object.keys(row));
+        }
+        
+        const nationalId = String(
+          row['کد ملی'] || 
+          row['کدملی'] || 
+          row['کد ملی '] || // با فاصله در انتها
+          row['کد‌ملی'] || // با نیم‌فاصله
+          row['national_id'] || 
+          row['nationalId'] ||
+          row['National ID'] ||
+          row['NATIONAL_ID'] ||
+          ''
+        ).trim();
+        
+        const name = String(
+          row['نام'] || 
+          row['name'] || 
+          row['نام '] || // با فاصله در انتها
+          row['Name'] ||
+          row['NAME'] ||
+          ''
+        ).trim();
+        
+        const mobile = String(
+          row['موبایل'] || 
+          row['شماره موبایل'] || 
+          row['موبایل '] || // با فاصله در انتها
+          row['mobile'] || 
+          row['Mobile'] ||
+          row['MOBILE'] ||
+          ''
+        ).trim();
+        
+        const driverSmartId = String(
+          row['کد هوشمند راننده'] || 
+          row['کد هوشمند'] || 
+          row['کد هوشمند راننده '] || // با فاصله در انتها
+          row['کد‌هوشمند راننده'] || // با نیم‌فاصله
+          row['driver_smart_id'] || 
+          row['driverSmartId'] ||
+          row['Driver Smart ID'] ||
+          row['DRIVER_SMART_ID'] ||
+          ''
+        ).trim();
+        
+        // لاگ کردن برای ردیف اول
+        if (i === 0) {
+          console.log('🔍 [ImportExcel] First row extracted data:', {
+            nationalId,
+            name,
+            mobile,
+            driverSmartId,
+            rawRow: row
+          });
+        }
 
-        // Validation فیلدهای اجباری (موبایل اختیاری است)
+        // Validation فیلدهای اجباری (موبایل و کد هوشمند راننده اختیاری هستند - از کاربر گرفته می‌شوند)
         const missingFields = [];
         if (!nationalId) missingFields.push('کد ملی');
         if (!name) missingFields.push('نام');
-        if (!driverSmartId) missingFields.push('کد هوشمند راننده');
+        // driverSmartId اختیاری است - اگر خالی بود، null می‌گذاریم و بعد از کاربر گرفته می‌شود
         
         if (missingFields.length > 0) {
           results.skipped++;
@@ -376,49 +444,54 @@ async function importPersonalDriversFromExcel(req, res) {
           // Update existing driver
           const driverId = existingDriver.rows[0].id;
           
-          // بررسی تکراری بودن driver_smart_id برای راننده دیگر
-          const existingSmartId = await pool.query(
-            'SELECT id FROM personal_drivers WHERE driver_smart_id = $1 AND id != $2',
-            [driverSmartId, driverId]
-          );
+          // بررسی تکراری بودن driver_smart_id برای راننده دیگر (فقط اگر driverSmartId وارد شده باشد)
+          if (driverSmartId) {
+            const existingSmartId = await pool.query(
+              'SELECT id FROM personal_drivers WHERE driver_smart_id = $1 AND id != $2',
+              [driverSmartId, driverId]
+            );
 
-          if (existingSmartId.rows.length > 0) {
-            results.skipped++;
-            results.errors.push({
-              row: rowNumber,
-              error: 'کد هوشمند راننده قبلاً برای راننده دیگری استفاده شده است',
-              data: { driverSmartId }
-            });
-            continue;
+            if (existingSmartId.rows.length > 0) {
+              results.skipped++;
+              results.errors.push({
+                row: rowNumber,
+                error: 'کد هوشمند راننده قبلاً برای راننده دیگری استفاده شده است',
+                data: { driverSmartId }
+              });
+              continue;
+            }
           }
 
+          // Update: اگر driverSmartId خالی بود، null می‌گذاریم (بعد از کاربر گرفته می‌شود)
           await pool.query(
             'UPDATE personal_drivers SET name = $1, mobile = $2, driver_smart_id = $3, updated_at = NOW() WHERE id = $4',
-            [name, mobile || null, driverSmartId, driverId]
+            [name, mobile || null, driverSmartId || null, driverId]
           );
           results.updated++;
         } else {
-          // بررسی تکراری بودن driver_smart_id
-          const existingSmartId = await pool.query(
-            'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
-            [driverSmartId]
-          );
+          // بررسی تکراری بودن driver_smart_id (فقط اگر driverSmartId وارد شده باشد)
+          if (driverSmartId) {
+            const existingSmartId = await pool.query(
+              'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
+              [driverSmartId]
+            );
 
-          if (existingSmartId.rows.length > 0) {
-            results.skipped++;
-            results.errors.push({
-              row: rowNumber,
-              error: 'کد هوشمند راننده قبلاً استفاده شده است',
-              data: { driverSmartId }
-            });
-            continue;
+            if (existingSmartId.rows.length > 0) {
+              results.skipped++;
+              results.errors.push({
+                row: rowNumber,
+                error: 'کد هوشمند راننده قبلاً استفاده شده است',
+                data: { driverSmartId }
+              });
+              continue;
+            }
           }
 
-          // Create new driver
+          // Create new driver: اگر driverSmartId خالی بود، null می‌گذاریم (بعد از کاربر گرفته می‌شود)
           const id = crypto.randomUUID();
           await pool.query(
             'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
-            [id, nationalId, name, mobile || null, driverSmartId]
+            [id, nationalId, name, mobile || null, driverSmartId || null]
           );
           results.success++;
         }

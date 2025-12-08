@@ -1587,13 +1587,19 @@ const ImportExcelButton: React.FC<{
 
               {type === 'personal-drivers' && (
                 <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
-                  <strong>ستون‌های مورد نیاز:</strong>
+                  <strong>ستون‌های مورد نیاز (نام ستون‌ها باید دقیقاً مطابق زیر باشد):</strong>
                   <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>کد ملی (اجباری)</li>
-                    <li>نام (اجباری)</li>
-                    <li>موبایل (اختیاری)</li>
-                    <li>کد هوشمند راننده (اجباری)</li>
+                    <li><strong>کد ملی</strong> (اجباری) - نام‌های قابل قبول: "کد ملی", "کدملی", "national_id", "nationalId"</li>
+                    <li><strong>نام</strong> (اجباری) - نام‌های قابل قبول: "نام", "name"</li>
+                    <li><strong>موبایل</strong> (اختیاری) - اگر خالی باشد، بعداً از کاربر گرفته می‌شود</li>
+                    <li><strong>کد هوشمند راننده</strong> (اختیاری) - اگر خالی باشد، بعداً از کاربر گرفته می‌شود</li>
                   </ul>
+                  <p className="mt-2 text-xs text-blue-700">
+                    ⚠️ توجه: نام ستون‌ها در اکسل باید دقیقاً مطابق یکی از نام‌های بالا باشد (بدون فاصله اضافی یا کاراکتر خاص)
+                  </p>
+                  <p className="mt-1 text-xs text-green-700">
+                    ✅ اگر موبایل یا کد هوشمند راننده خالی باشد، در زمان تخصیص از کاربر سوال می‌شود
+                  </p>
                 </div>
               )}
 

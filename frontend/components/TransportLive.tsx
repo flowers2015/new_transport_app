@@ -1628,6 +1628,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 driverId: foundCompanyDriver.id, vehicleId: foundVehicle.id, billOfLadingNumber: blNumber, assignmentType: 'company',
             });
         } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
+            // موبایل و کد هوشمند راننده اگر خالی باشند، باید از کاربر گرفته شوند
             if (!nationalId || !personalDriverDetails.name || !personalDriverDetails.mobile || !personalDriverDetails.driverSmartId || !personalVehicleDetails.type || !personalVehicleDetails.plate || !personalVehicleDetails.truckSmartId) {
                 alert('کد ملی، نام راننده، شماره تماس، هوشمند راننده، نوع خودرو، پلاک خودرو و هوشمند کامیون الزامی است.');
                 return;
