@@ -2172,7 +2172,7 @@ const AnnouncementPanel: React.FC<{
                                                 <label className="text-xs">نوع نماینده*</label>
                                                 <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style" required>
                                                     <option value="agent">نماینده</option>
-                                                    <option value="distribution">پخش</option>
+                                                    <option value="distributor">پخش</option>
                                                 </select>
                                             </div>
                                             <div><label className="text-xs">نام نماینده*</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style" required/></div>

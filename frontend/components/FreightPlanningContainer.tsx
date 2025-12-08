@@ -3,6 +3,7 @@ import FreightDashboard from './FreightDashboard';
 import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
 import { useCallback } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -111,7 +112,14 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
-    useEffect(() => { fetchAnnouncements(); }, []);
+    // Auto-refresh هر 10 ثانیه
+    useAutoRefresh({
+        refreshFn: fetchAnnouncements,
+        interval: 10000, // 10 ثانیه
+        onlyWhenVisible: true,
+        immediate: true,
+        enabled: true,
+    });
 
     const searchRouteSuggestions = useCallback(async (query: string): Promise<DispatchRouteSuggestion[]> => {
         const trimmed = query.trim();

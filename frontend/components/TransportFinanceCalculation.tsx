@@ -2248,9 +2248,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* ردیف اول: کد پرسنلی راننده، نام راننده، تاریخ محاسبه */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <div className="grid grid-cols-3 gap-4 items-start">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         کد پرسنلی راننده
                                     </label>
                                     <input
@@ -2261,8 +2261,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="کد پرسنلی"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         نام راننده
                                     </label>
                                     <input
@@ -2273,8 +2273,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="نام راننده"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         تاریخ محاسبه *
                                     </label>
                                     <input
@@ -2291,9 +2291,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* ردیف دوم: شماره بارنامه، تاریخ صدور بارنامه، کد خودرو، پلاک خودرو، نوع خودرو */}
-                            <div className="grid grid-cols-5 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <div className="grid grid-cols-5 gap-4 items-start">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         شماره بارنامه
                                     </label>
                                     <input
@@ -2307,8 +2307,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="شماره بارنامه"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         تاریخ صدور بارنامه
                                     </label>
                                     <input
@@ -2322,8 +2322,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="1403/01/01"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         کد خودرو
                                     </label>
                                     <input
@@ -2334,8 +2334,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="کد خودرو"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         پلاک خودرو
                                     </label>
                                     <input
@@ -2346,8 +2346,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="پلاک خودرو"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         نوع خودرو
                                     </label>
                                     <input
@@ -2361,9 +2361,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* ردیف سوم: فیلد مقاصد، پیمایش مصوب، پیمایش مازاد */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <div className="grid grid-cols-3 gap-4 items-start">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         مقاصد
                                     </label>
                                     <input
@@ -2374,8 +2374,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="مقاصد"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         پیمایش مصوب (کیلومتر)
                                     </label>
                                     <input
@@ -2387,8 +2387,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         پیمایش مازاد (کیلومتر) *
                                     </label>
                                     <input
@@ -2410,10 +2410,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                             </div>
                             
-                            {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، ماموریت مازاد، حق ماموریت (ماموریت مازاد) */}
-                            <div className="grid grid-cols-6 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                            {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، ماموریت مازاد */}
+                            <div className="grid grid-cols-6 gap-4 items-start">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         ماموریت مصوب (روز)
                                     </label>
                                     <input
@@ -2425,8 +2425,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         تعداد چندجا تخلیه
                                     </label>
                                     <input
@@ -2438,8 +2438,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         هزینه چند جا تخلیه (ریال)
                                     </label>
                                     <input
@@ -2461,8 +2461,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     />
                                     <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (تعداد مقاصد - 1) × بخشنامه</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         هزینه غذا (ریال)
                                     </label>
                                     <input
@@ -2479,8 +2479,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     />
                                     <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         هزینه سوخت (ریال)
                                     </label>
                                     <input
@@ -2506,8 +2506,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     />
                                     <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         ماموریت مازاد (روز) *
                                     </label>
                                     <input
@@ -2530,9 +2530,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* ردیف پنجم: حق ماموریت (ماموریت مازاد) */}
-                            <div className="grid grid-cols-6 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <div className="grid grid-cols-6 gap-4 items-start">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         حق ماموریت (ماموریت مازاد) (ریال)
                                     </label>
                                     <input
@@ -2555,9 +2555,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         
                         {/* بخش دوم: هزینه بارگیری (بدون عنوان) */}
                         <div className="space-y-4 mb-6">
-                            <div className="grid grid-cols-4 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <div className="grid grid-cols-4 gap-4 items-start">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         هزینه عوارض آزاد راهی (ریال) *
                                     </label>
                                     <input
@@ -2577,8 +2577,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         هزینه بار برگشتی (ریال)
                                     </label>
                                     <input
@@ -2598,8 +2598,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         هزینه بارنامه (لندی گراف و ..) (ریال)
                                     </label>
                                     <input
@@ -2619,8 +2619,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         پیش پرداخت (ریال)
                                     </label>
                                     <input
@@ -2645,9 +2645,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             {/* بخش سوم: راننده کمکی */}
                             <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-300">
                                 <h3 className="text-sm font-semibold text-slate-700 mb-3">راننده کمکی</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <div className="grid grid-cols-2 gap-4 items-start">
+                                    <div className="flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             کد پرسنلی راننده کمکی
                                         </label>
                                         <input
@@ -2695,8 +2695,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             placeholder="کد پرسنلی"
                                         />
                                     </div>
-                                    <div className="relative">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <div className="relative flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             نام و نام خانوادگی (جستجو)
                                         </label>
                                         <input
@@ -2761,8 +2761,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             </div>
                                         )}
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <div className="flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             اجرت راننده کمکی (ریال)
                                         </label>
                                         <input
@@ -2780,8 +2780,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         />
                                         <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کیلومتر مصوب + مازاد راننده کمکی) × بخشنامه</p>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <div className="flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             هزینه غذا راننده کمکی (ریال)
                                         </label>
                                         <input
@@ -2798,8 +2798,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         />
                                         <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <div className="flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             پیمایش مازاد راننده کمکی (کیلومتر)
                                         </label>
                                         <input
@@ -2819,8 +2819,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             placeholder="0"
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <div className="flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             ماموریت مازاد راننده کمکی (روز)
                                         </label>
                                         <input
@@ -2840,8 +2840,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             placeholder="0"
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <div className="flex flex-col">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                             هزینه ماموریت مازاد راننده کمکی (ریال)
                                         </label>
                                         <input

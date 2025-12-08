@@ -3,6 +3,7 @@ import { FreightAnnouncement, FreightLineType, FreightAnnouncementStatus, User, 
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalaliDateTime, formatJalali } from '../utils/jalali';
 import { formatNumberWhileTyping, parseNumberFromFormatted, formatNumberWithSeparator } from '../utils/numberFormatter';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 interface FreightManagementProps {
   currentUser: User;
@@ -451,9 +452,14 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     }
   };
 
-  useEffect(() => {
-    fetchAnnouncements();
-  }, []);
+  // Auto-refresh هر 10 ثانیه
+  useAutoRefresh({
+    refreshFn: fetchAnnouncements,
+    interval: 10000, // 10 ثانیه
+    onlyWhenVisible: true,
+    immediate: true,
+    enabled: true,
+  });
 
   // لاگ تغییرات history state
   useEffect(() => {

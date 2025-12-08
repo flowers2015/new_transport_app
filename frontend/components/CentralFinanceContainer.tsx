@@ -91,9 +91,14 @@ const CentralFinanceContainer: React.FC<CentralFinanceContainerProps> = ({ curre
         }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    // Auto-refresh هر 10 ثانیه
+    useAutoRefresh({
+        refreshFn: fetchData,
+        interval: 10000, // 10 ثانیه
+        onlyWhenVisible: true,
+        immediate: true,
+        enabled: true,
+    });
 
     if (loading) {
         return (

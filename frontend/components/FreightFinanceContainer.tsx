@@ -3,6 +3,7 @@ import { FreightAnnouncement, Branch, FreightTransaction, User, FreightPaymentSt
 import FreightFinanceDashboard from './FreightFinanceDashboard';
 import { gregorianToJalali, jalaliToGregorian } from '../utils/jalali';
 import { getApiUrl } from '../utils/apiConfig';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 interface FreightFinanceContainerProps {
     currentUser: User;
@@ -186,9 +187,14 @@ const FreightFinanceContainer: React.FC<FreightFinanceContainerProps> = ({ curre
         }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    // Auto-refresh هر 10 ثانیه
+    useAutoRefresh({
+        refreshFn: fetchData,
+        interval: 10000, // 10 ثانیه
+        onlyWhenVisible: true,
+        immediate: true,
+        enabled: true,
+    });
 
     const handleAddTransaction = async (transaction: Omit<FreightTransaction, 'id'>) => {
         try {

@@ -369,22 +369,23 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
-    // تبدیل صورتحساب به PDF (بهینه شده برای حجم کمتر)
+    // تبدیل صورتحساب به PDF (با کیفیت بالا و خوانایی بهتر)
     const exportInvoiceToPDF = async () => {
         if (!invoiceRef.current || !selectedInvoiceRecord) return;
 
         try {
-            // استفاده از scale کمتر و JPEG برای کاهش حجم
+            // استفاده از scale بالاتر برای کیفیت بهتر و خوانایی
             const canvas = await html2canvas(invoiceRef.current, {
-                scale: 1.2, // کاهش scale از 2 به 1.2 برای حجم کمتر
+                scale: 2.5, // افزایش scale برای کیفیت بهتر
                 useCORS: true,
                 logging: false,
                 backgroundColor: '#ffffff',
-                quality: 0.85, // کیفیت JPEG
+                allowTaint: true,
+                removeContainer: false,
             });
 
-            // استفاده از JPEG به جای PNG برای حجم کمتر
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+            // استفاده از PNG برای کیفیت بهتر (به جای JPEG)
+            const imgData = canvas.toDataURL('image/png', 1.0);
             
             // استفاده از landscape orientation برای A4
             const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' برای landscape
@@ -398,13 +399,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
             let position = 0;
 
-            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
             heightLeft -= pageHeight;
 
             while (heightLeft >= 0) {
                 position = heightLeft - imgHeight;
                 pdf.addPage('l'); // اضافه کردن صفحه جدید با landscape orientation
-                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
             }
 
@@ -751,15 +752,15 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             <div className="mb-4 border-b-2 border-slate-800 pb-3">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <h1 className="text-xl font-bold text-slate-900 mb-1">صورتحساب هزینه</h1>
-                                        <p className="text-xs text-slate-600">کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
-                                        <p className="text-xs text-slate-600">نام: {selectedInvoiceRecord.driverName}</p>
-                                        <p className="text-xs text-slate-600">شماره حساب: {selectedInvoiceRecord.accountNumber || '-'}</p>
+                                        <h1 className="text-2xl font-bold text-slate-900 mb-2" style={{ fontSize: '20px' }}>صورتحساب هزینه</h1>
+                                        <p className="text-sm text-slate-600 mb-1" style={{ fontSize: '14px' }}>کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
+                                        <p className="text-sm text-slate-600 mb-1" style={{ fontSize: '14px' }}>نام: {selectedInvoiceRecord.driverName}</p>
+                                        <p className="text-sm text-slate-600" style={{ fontSize: '14px' }}>شماره حساب: {selectedInvoiceRecord.accountNumber || '-'}</p>
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-xs text-slate-600 mb-1">تاریخ تهیه لیست: {formatJalali(new Date())}</p>
+                                        <p className="text-sm text-slate-600 mb-1" style={{ fontSize: '14px' }}>تاریخ تهیه لیست: {formatJalali(new Date())}</p>
                                         {startDate && endDate && (
-                                            <p className="text-xs text-slate-600">
+                                            <p className="text-sm text-slate-600" style={{ fontSize: '14px' }}>
                                                 بازه زمانی: {startDate} تا {endDate}
                                             </p>
                                         )}
@@ -826,32 +827,32 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
                                     return (
                                         <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2">
+                                            <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '16px' }}>
                                                 {title}
                                             </h3>
                                             <div className="overflow-x-auto">
-                                                <table className="w-full text-xs border-collapse border border-slate-800 mb-3" style={{ fontSize: '9px' }}>
+                                                <table className="w-full border-collapse border border-slate-800 mb-3" style={{ fontSize: '12px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                                                     <thead>
                                                         <tr className="bg-slate-800 text-white">
-                                                            <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '9px' }}>ردیف</th>
-                                                            <th className="p-1 border border-slate-600" style={{ fontSize: '9px' }}>شماره بارنامه</th>
-                                                            <th className="p-1 border border-slate-600" style={{ fontSize: '9px' }}>مقاصد</th>
-                                                            <th className="p-1 border border-slate-600" style={{ fontSize: '9px' }}>تاریخ صدور</th>
-                                                            <th className="p-1 border border-slate-600" style={{ fontSize: '9px' }}>تاریخ محاسبه</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>پیمایش مصوب</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>پیمایش مازاد</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>ماموریت مصوب</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>ماموریت مازاد</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه بارنامه (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه غذا (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه سوخت (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه عوارض (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه بار برگشتی (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه بارنامه برگشتی (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه چندجا تخلیه (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>هزینه ماموریت مازاد (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px' }}>اجرت ثابت (ریال)</th>
-                                                            <th className="p-1 border border-slate-600 text-left font-semibold" style={{ fontSize: '9px' }}>جمع کل (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-center" style={{ fontSize: '12px', fontWeight: 'bold' }}>ردیف</th>
+                                                            <th className="p-2 border border-slate-600" style={{ fontSize: '12px', fontWeight: 'bold' }}>شماره بارنامه</th>
+                                                            <th className="p-2 border border-slate-600" style={{ fontSize: '12px', fontWeight: 'bold' }}>مقاصد</th>
+                                                            <th className="p-2 border border-slate-600" style={{ fontSize: '12px', fontWeight: 'bold' }}>تاریخ صدور</th>
+                                                            <th className="p-2 border border-slate-600" style={{ fontSize: '12px', fontWeight: 'bold' }}>تاریخ محاسبه</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>پیمایش مصوب</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>پیمایش مازاد</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>ماموریت مصوب</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>ماموریت مازاد</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه بارنامه (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه غذا (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه سوخت (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه عوارض (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه بار برگشتی (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه بارنامه برگشتی (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه چندجا تخلیه (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>هزینه ماموریت مازاد (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left" style={{ fontSize: '12px', fontWeight: 'bold' }}>اجرت ثابت (ریال)</th>
+                                                            <th className="p-2 border border-slate-600 text-left font-semibold" style={{ fontSize: '12px', fontWeight: 'bold' }}>جمع کل (ریال)</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -863,59 +864,59 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                             
                                                             return (
                                                                 <tr key={calc.id || idx} className="border-b border-slate-300">
-                                                                    <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '9px' }}>{idx + 1}</td>
-                                                                    <td className="p-1 border border-slate-300" style={{ fontSize: '9px' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                                                                    <td className="p-1 border border-slate-300" style={{ fontSize: '9px' }}>{destinations}</td>
-                                                                    <td className="p-1 border border-slate-300" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '12px' }}>{idx + 1}</td>
+                                                                    <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                                                                    <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>{destinations}</td>
+                                                                    <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>
                                                                         {calc.bill_of_lading_date || calc.billOfLadingDate ? 
                                                                             (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
                                                                                 ? (calc.bill_of_lading_date || calc.billOfLadingDate)
                                                                                 : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate))
                                                                             : '-'}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>
                                                                         {calc.calculation_date || calc.calculationDate || '-'}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {calc.approved_mission_days || calc.approvedMissionDays || 0}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {calc.excess_mission_days || calc.excessMissionDays || 0}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.fixed_allowance || calc.fixedAllowance || 0).toLocaleString('fa-IR')}
                                                                     </td>
-                                                                    <td className="p-1 border border-slate-300 text-left font-semibold" style={{ fontSize: '9px' }}>
+                                                                    <td className="p-2 border border-slate-300 text-left font-semibold" style={{ fontSize: '12px' }}>
                                                                         {mainCost.toLocaleString('fa-IR')}
                                                                     </td>
                                                                 </tr>
@@ -924,10 +925,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                     </tbody>
                                                     <tfoot>
                                                         <tr className="bg-slate-100 font-bold">
-                                                            <td colSpan={18} className="p-1 border border-slate-300 text-right" style={{ fontSize: '9px' }}>
+                                                            <td colSpan={18} className="p-2 border border-slate-300 text-right" style={{ fontSize: '12px' }}>
                                                                 جمع کل:
                                                             </td>
-                                                            <td className="p-1 border border-slate-300 text-left font-bold" style={{ fontSize: '9px' }}>
+                                                            <td className="p-2 border border-slate-300 text-left font-bold" style={{ fontSize: '12px' }}>
                                                                 {(() => {
                                                                     const total = calculations.reduce((sum, calc) => {
                                                                         return sum + calculateMainDriverCost(calc);
@@ -949,7 +950,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
                                     return (
                                         <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2">
+                                            <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '16px' }}>
                                                 راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
                                             </h3>
                                             <div className="overflow-x-auto">
@@ -1119,23 +1120,23 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                 <div className="mt-4 p-4 bg-slate-200 rounded-lg border-2 border-slate-600">
                                                     <div className="space-y-2">
                                                         <div className="flex justify-between items-center">
-                                                            <span className="text-lg font-bold text-slate-900">جمع کل هزینه سفر:</span>
-                                                            <span className="text-xl font-bold text-green-700">
+                                                            <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>جمع کل هزینه سفر:</span>
+                                                            <span className="text-xl font-bold text-green-700" style={{ fontSize: '18px' }}>
                                                                 {grandTotal.toLocaleString('fa-IR')} ریال
                                                             </span>
                                                         </div>
                                                         {totalAdvancePayment > 0 && (
                                                             <div className="flex justify-between items-center border-t border-slate-400 pt-2 mt-2">
-                                                                <span className="text-base font-semibold text-slate-800">کسور (پیش پرداخت):</span>
-                                                                <span className="text-lg font-bold text-orange-700">
+                                                                <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>کسور (پیش پرداخت):</span>
+                                                                <span className="text-lg font-bold text-orange-700" style={{ fontSize: '17px' }}>
                                                                     {totalAdvancePayment.toLocaleString('fa-IR')} ریال
                                                                 </span>
                                                             </div>
                                                         )}
                                                         {totalAdvancePayment > 0 && (
                                                             <div className="flex justify-between items-center border-t-2 border-slate-600 pt-2 mt-2">
-                                                                <span className="text-lg font-bold text-slate-900">مبلغ قابل پرداخت:</span>
-                                                                <span className="text-xl font-bold text-blue-700">
+                                                                <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>مبلغ قابل پرداخت:</span>
+                                                                <span className="text-xl font-bold text-blue-700" style={{ fontSize: '18px' }}>
                                                                     {payableAmount.toLocaleString('fa-IR')} ریال
                                                                 </span>
                                                             </div>
@@ -1214,33 +1215,33 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 
                                 return (
                                     <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-300">
-                                        <div className="grid grid-cols-2 gap-4 text-xs">
+                                        <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <p className="font-semibold text-slate-700 mb-2">خلاصه:</p>
-                                                <p className="text-xs">تعداد تور: {invoiceCalculations.length}</p>
+                                                <p className="font-semibold text-slate-700 mb-2" style={{ fontSize: '14px' }}>خلاصه:</p>
+                                                <p className="text-sm mb-1" style={{ fontSize: '13px' }}>تعداد تور: {invoiceCalculations.length}</p>
                                                 <div className="mt-2 space-y-1">
-                                                    <p className="text-xs">هزینه‌های راننده اصلی: <span className="font-semibold">{totalMainCosts.toLocaleString('fa-IR')}</span> ریال</p>
+                                                    <p className="text-sm" style={{ fontSize: '13px' }}>هزینه‌های راننده اصلی: <span className="font-semibold">{totalMainCosts.toLocaleString('fa-IR')}</span> ریال</p>
                                                     {totalFixedAllowance > 0 && (
-                                                        <p className="text-xs">اجرت ثابت: <span className="font-semibold text-amber-700">{totalFixedAllowance.toLocaleString('fa-IR')}</span> ریال</p>
+                                                        <p className="text-sm" style={{ fontSize: '13px' }}>اجرت ثابت: <span className="font-semibold text-amber-700">{totalFixedAllowance.toLocaleString('fa-IR')}</span> ریال</p>
                                                     )}
                                                     {Array.from(helperCostsByEmployee.values()).map((helper, idx) => (
-                                                        <p key={idx} className="text-xs">
+                                                        <p key={idx} className="text-sm" style={{ fontSize: '13px' }}>
                                                             هزینه راننده کمکی ({helper.employeeId}-{helper.name}): <span className="font-semibold">{helper.total.toLocaleString('fa-IR')}</span> ریال
                                                         </p>
                                                     ))}
                                                 </div>
                                                 <div className="mt-3 pt-2 border-t border-slate-300">
-                                                    <p className="text-sm font-bold text-green-700">
+                                                    <p className="text-base font-bold text-green-700" style={{ fontSize: '15px' }}>
                                                         جمع کل هزینه سفر: {grandTotal.toLocaleString('fa-IR')} ریال
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="text-left">
-                                                <p className="font-semibold text-slate-700 mb-1">توضیحات:</p>
-                                                <p className="text-xs text-slate-600">
+                                                <p className="font-semibold text-slate-700 mb-1" style={{ fontSize: '14px' }}>توضیحات:</p>
+                                                <p className="text-sm text-slate-600" style={{ fontSize: '13px' }}>
                                                     این صورتحساب بر اساس محاسبات ثبت شده و پرداخت نشده در سیستم تهیه شده است.
                                                 </p>
-                                                <p className="text-xs text-slate-500 mt-2">
+                                                <p className="text-sm text-slate-500 mt-2" style={{ fontSize: '13px' }}>
                                                     جمع کل = هزینه‌های راننده اصلی + اجرت ثابت + هزینه راننده کمکی
                                                 </p>
                                             </div>

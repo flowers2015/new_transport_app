@@ -4918,6 +4918,93 @@ async function transferDestination(req, res) {
       client: client
     });
 
+    // بررسی اینکه آیا source announcement دیگر مقصدی ندارد
+    const { rows: remainingDestRows } = await client.query(
+      `SELECT COUNT(*) as count FROM freight_destinations WHERE freight_announcement_id = $1`,
+      [sourceAnnouncementId]
+    );
+    const remainingDestCount = parseInt(remainingDestRows[0]?.count || '0', 10);
+    
+    // اگر همه مقاصد جابجا شدند، اعلام بار را حذف کن (اما مقاصد حذف نمی‌شوند - آنها به target منتقل شده‌اند)
+    if (remainingDestCount === 0) {
+      console.log('🗑️ [transferDestination] Source announcement has no destinations left, merging announcement:', {
+        sourceAnnouncementId,
+        sourceAnnouncementCode: sourceAnn.announcement_code,
+        targetAnnouncementId,
+        targetAnnouncementCode: targetAnn.announcement_code
+      });
+      
+      // 1. دریافت همه تاریخچه‌های source قبل از حذف
+      const { rows: sourceHistoryRows } = await client.query(
+        `SELECT id, user_id, user_name, action, old_status, new_status, field_changes, description, ip_address, created_at
+         FROM freight_announcement_history
+         WHERE freight_announcement_id = $1
+         ORDER BY created_at ASC`,
+        [sourceAnnouncementId]
+      );
+      
+      console.log(`📚 [transferDestination] Found ${sourceHistoryRows.length} history entries to transfer from source announcement`);
+      
+      // 2. ثبت یک رکورد تاریخچه در target که نشان می‌دهد این اعلام بار از ادغام آمده
+      await logFreightHistory({
+        announcementId: targetAnnouncementId,
+        userId: userId,
+        userName: userName,
+        action: 'ANNOUNCEMENT_MERGED',
+        oldStatus: targetAnn.status,
+        newStatus: targetAnn.status,
+        description: `اعلام بار ${sourceAnn.announcement_code} با انتقال همه مقاصد به این اعلام بار ادغام شد. تاریخچه کامل اعلام بار ${sourceAnn.announcement_code} در ادامه آمده است. (توسط ${userName})`,
+        ipAddress: req.ip,
+        client: client
+      });
+      
+      // 3. انتقال همه تاریخچه‌های source به target (با حفظ ترتیب زمانی)
+      if (sourceHistoryRows.length > 0) {
+        for (const historyRow of sourceHistoryRows) {
+          // اضافه کردن پیشوند به description برای مشخص کردن که این تاریخچه از اعلام بار ادغام شده آمده
+          const mergedDescription = `[از اعلام بار ${sourceAnn.announcement_code}]: ${historyRow.description}`;
+          
+          await client.query(
+            `INSERT INTO freight_announcement_history 
+             (freight_announcement_id, user_id, user_name, action, old_status, new_status, field_changes, description, ip_address, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              targetAnnouncementId, // انتقال به target
+              historyRow.user_id,
+              historyRow.user_name,
+              historyRow.action,
+              historyRow.old_status,
+              historyRow.new_status,
+              historyRow.field_changes,
+              mergedDescription,
+              historyRow.ip_address,
+              historyRow.created_at // حفظ تاریخ اصلی
+            ]
+          );
+        }
+        console.log(`✅ [transferDestination] Transferred ${sourceHistoryRows.length} history entries to target announcement`);
+      }
+      
+      // 4. حذف اعلام بار (تاریخچه‌ها قبلاً منتقل شده‌اند، پس با CASCADE حذف نمی‌شوند)
+      // اما چون foreign key با ON DELETE CASCADE است، باید constraint را موقتاً غیرفعال کنیم
+      // یا اینکه تاریخچه‌ها را قبلاً حذف کنیم (که ما این کار را نکردیم، بلکه منتقل کردیم)
+      // پس باید constraint را موقتاً غیرفعال کنیم یا تاریخچه‌های قدیمی را حذف کنیم
+      
+      // حذف تاریخچه‌های قدیمی source (چون قبلاً به target منتقل شده‌اند)
+      await client.query(
+        `DELETE FROM freight_announcement_history WHERE freight_announcement_id = $1`,
+        [sourceAnnouncementId]
+      );
+      
+      // حالا می‌توانیم اعلام بار را حذف کنیم
+      await client.query(
+        `DELETE FROM freight_announcements WHERE id = $1`,
+        [sourceAnnouncementId]
+      );
+      
+      console.log('✅ [transferDestination] Source announcement deleted after transferring all history to target');
+    }
+
     await client.query('COMMIT');
     
     console.log('✅ [transferDestination] Transfer completed successfully');
@@ -4927,7 +5014,8 @@ async function transferDestination(req, res) {
       sourceAnnouncementId,
       targetAnnouncementId,
       destinationId,
-      newPosition: actualPosition
+      newPosition: actualPosition,
+      sourceAnnouncementDeleted: remainingDestCount === 0
     });
   } catch (error) {
     await client.query('ROLLBACK');

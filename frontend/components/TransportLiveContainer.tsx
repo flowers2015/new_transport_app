@@ -3,6 +3,7 @@ import TransportLive from './TransportLive';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { getApiUrl } from '../utils/apiConfig';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -169,9 +170,14 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
         };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    // Auto-refresh هر 10 ثانیه
+    useAutoRefresh({
+        refreshFn: fetchData,
+        interval: 10000, // 10 ثانیه
+        onlyWhenVisible: true,
+        immediate: true,
+        enabled: true,
+    });
 
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
         // console.log('🔄 [TransportLive] Assignment Update Request:', {
@@ -378,10 +384,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             
             // به‌روزرسانی state بدون reload کامل
             setAnnouncements(prev => {
+                const sourceAnn = prev.find(a => a.id === sourceAnnouncementId);
                 const updated = prev.map(ann => {
                     if (ann.id === sourceAnnouncementId) {
                         // حذف مقصد از source
                         const updatedDestinations = ann.destinations.filter(d => d.id !== destinationId);
+                        // اگر همه مقاصد جابجا شدند، ردیف را حذف کن (null برگردان تا بعداً فیلتر شود)
+                        if (updatedDestinations.length === 0) {
+                            return null; // علامت برای حذف
+                        }
                         return { ...ann, destinations: updatedDestinations };
                     } else if (ann.id === targetAnnouncementId) {
                         // اضافه کردن مقصد به target در موقعیت جدید
@@ -401,7 +412,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     }
                     return ann;
                 });
-                return updated;
+                // حذف ردیف‌هایی که null هستند (همه مقاصدشان جابجا شده)
+                return updated.filter(ann => ann !== null);
             });
             
             console.log('✅ [TransportLive] State updated without full reload');

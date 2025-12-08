@@ -222,20 +222,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 // Render کردن HTML صورتحساب (مشابه TransportFinancePaymentList)
                 tempDiv.innerHTML = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
 
-                // تبدیل به canvas
+                // تبدیل به canvas با کیفیت بالا
                 const canvas = await html2canvas(tempDiv, {
-                    scale: 1.2,
+                    scale: 2.5, // افزایش scale برای کیفیت بهتر
                     useCORS: true,
                     logging: false,
                     backgroundColor: '#ffffff',
-                    quality: 0.85,
+                    allowTaint: true,
+                    removeContainer: false,
                 });
 
                 // حذف div موقت
                 document.body.removeChild(tempDiv);
 
-                // تبدیل به JPEG
-                const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                // تبدیل به PNG برای کیفیت بهتر
+                const imgData = canvas.toDataURL('image/png', 1.0);
                 const imgWidth = pageWidth;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                 let heightLeft = imgHeight;
@@ -246,14 +247,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 }
 
                 let position = 0;
-                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
 
                 // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
                 while (heightLeft >= 0) {
                     position = heightLeft - imgHeight;
                     pdf.addPage('l');
-                    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
                     heightLeft -= pageHeight;
                 }
             }
@@ -325,21 +326,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
         }, 0);
 
-        // ساخت HTML
+        // ساخت HTML با فونت‌های بزرگتر
         let html = `
-            <div class="p-6 bg-white" dir="rtl" style="width: 297mm; min-height: 210mm; font-family: Arial, sans-serif;">
+            <div class="p-6 bg-white" dir="rtl" style="width: 297mm; min-height: 210mm; font-family: 'Vazirmatn', Arial, sans-serif;">
                 <div class="mb-4 border-b-2 border-slate-800 pb-3">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
-                            <h1 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 4px;">صورتحساب هزینه</h1>
-                            <p style="font-size: 11px; color: #475569;">کد پرسنلی: ${record.employeeId}</p>
-                            <p style="font-size: 11px; color: #475569;">نام: ${record.driverName}</p>
-                            <p style="font-size: 11px; color: #475569;">شماره حساب: ${record.accountNumber || '-'}</p>
+                            <h1 style="font-size: 24px; font-weight: bold; color: #1e293b; margin-bottom: 8px;">صورتحساب هزینه</h1>
+                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">کد پرسنلی: ${record.employeeId}</p>
+                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">نام: ${record.driverName}</p>
+                            <p style="font-size: 14px; color: #475569;">شماره حساب: ${record.accountNumber || '-'}</p>
                         </div>
                         <div style="text-align: left;">
-                            <p style="font-size: 11px; color: #475569; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
-                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 11px; color: #475569;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
-                            <p style="font-size: 11px; color: #475569;">تاریخ پرداخت: ${record.paymentDate}</p>
+                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
+                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 14px; color: #475569; margin-bottom: 4px;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
+                            <p style="font-size: 14px; color: #475569;">تاریخ پرداخت: ${record.paymentDate}</p>
                         </div>
                     </div>
                 </div>
@@ -369,28 +370,28 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     <h3 style="font-size: 16px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #475569; padding-bottom: 8px;">
                         هزینه‌های راننده اصلی
                     </h3>
-                    <table style="width: 100%; font-size: 9px; border-collapse: collapse; border: 1px solid #1e293b; margin-bottom: 12px;">
+                    <table style="width: 100%; font-size: 12px; border-collapse: collapse; border: 1px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif;">
                         <thead>
                             <tr style="background-color: #1e293b; color: white;">
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: center;">ردیف</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">شماره بارنامه</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">مقاصد</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">تاریخ صدور</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">تاریخ محاسبه</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">پیمایش مصوب</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">پیمایش مازاد</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">ماموریت مصوب</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">ماموریت مازاد</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه بارنامه</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه غذا</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه سوخت</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه عوارض</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه بار برگشتی</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه بارنامه برگشتی</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه چندجا تخلیه</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">هزینه ماموریت مازاد</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">اجرت ثابت</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left; font-weight: bold;">جمع کل</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: center; font-size: 12px; font-weight: bold;">ردیف</th>
+                                <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">شماره بارنامه</th>
+                                <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">مقاصد</th>
+                                <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">تاریخ صدور</th>
+                                <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">تاریخ محاسبه</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">پیمایش مصوب</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">پیمایش مازاد</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">ماموریت مصوب</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">ماموریت مازاد</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه بارنامه</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه غذا</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه سوخت</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه عوارض</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه بار برگشتی</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه بارنامه برگشتی</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه چندجا تخلیه</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">هزینه ماموریت مازاد</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">اجرت ثابت</th>
+                                <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-weight: bold; font-size: 12px;">جمع کل</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -404,25 +405,25 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 
                 html += `
                     <tr style="border-bottom: 1px solid #cbd5e1;">
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${destinations}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.calculation_date || calc.calculationDate || '-'}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${calc.approved_mission_days || calc.approvedMissionDays || 0}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${calc.excess_mission_days || calc.excessMissionDays || 0}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${(calc.fixed_allowance || calc.fixedAllowance || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold;">${mainCost.toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${idx + 1}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${destinations}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.calculation_date || calc.calculationDate || '-'}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${calc.approved_mission_days || calc.approvedMissionDays || 0}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${calc.excess_mission_days || calc.excessMissionDays || 0}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.fixed_allowance || calc.fixedAllowance || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; font-size: 12px;">${mainCost.toLocaleString('fa-IR')}</td>
                     </tr>
                 `;
             });
@@ -431,8 +432,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         </tbody>
                         <tfoot>
                             <tr style="background-color: #f1f5f9; font-weight: bold;">
-                                <td colspan="18" style="padding: 4px; border: 1px solid #cbd5e1; text-align: right;">جمع کل:</td>
-                                <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold;">${totalMainAll.toLocaleString('fa-IR')} ریال</td>
+                                <td colspan="18" style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; font-size: 12px;">جمع کل:</td>
+                                <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; font-size: 12px;">${totalMainAll.toLocaleString('fa-IR')} ریال</td>
                             </tr>
                         </tfoot>
                     </table>
