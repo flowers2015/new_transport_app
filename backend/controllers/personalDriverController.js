@@ -341,48 +341,52 @@ async function importPersonalDriversFromExcel(req, res) {
           console.log('🔍 [ImportExcel] Available columns in first row:', Object.keys(row));
         }
         
-        const nationalId = String(
-          row['کد ملی'] || 
-          row['کدملی'] || 
-          row['کد ملی '] || // با فاصله در انتها
-          row['کد‌ملی'] || // با نیم‌فاصله
-          row['national_id'] || 
-          row['nationalId'] ||
-          row['National ID'] ||
-          row['NATIONAL_ID'] ||
-          ''
-        ).trim();
+        // استخراج کد ملی - بررسی همه حالت‌های ممکن (با فاصله، بدون فاصله، نیم‌فاصله)
+        let nationalId = '';
+        const nationalIdKeys = Object.keys(row).find(key => 
+          key.trim() === 'کد ملی' || 
+          key.trim() === 'کدملی' || 
+          key.trim() === 'کد‌ملی' ||
+          key.toLowerCase().trim() === 'national_id' ||
+          key.toLowerCase().trim() === 'nationalid'
+        );
+        if (nationalIdKeys) {
+          nationalId = String(row[nationalIdKeys] || '').trim();
+        }
         
-        const name = String(
-          row['نام'] || 
-          row['name'] || 
-          row['نام '] || // با فاصله در انتها
-          row['Name'] ||
-          row['NAME'] ||
-          ''
-        ).trim();
+        // استخراج نام - بررسی همه حالت‌های ممکن
+        let name = '';
+        const nameKeys = Object.keys(row).find(key => 
+          key.trim() === 'نام' ||
+          key.toLowerCase().trim() === 'name'
+        );
+        if (nameKeys) {
+          name = String(row[nameKeys] || '').trim();
+        }
         
-        const mobile = String(
-          row['موبایل'] || 
-          row['شماره موبایل'] || 
-          row['موبایل '] || // با فاصله در انتها
-          row['mobile'] || 
-          row['Mobile'] ||
-          row['MOBILE'] ||
-          ''
-        ).trim();
+        // استخراج موبایل - بررسی همه حالت‌های ممکن
+        let mobile = '';
+        const mobileKeys = Object.keys(row).find(key => 
+          key.trim() === 'موبایل' ||
+          key.trim() === 'شماره موبایل' ||
+          key.toLowerCase().trim() === 'mobile'
+        );
+        if (mobileKeys) {
+          mobile = String(row[mobileKeys] || '').trim();
+        }
         
-        const driverSmartId = String(
-          row['کد هوشمند راننده'] || 
-          row['کد هوشمند'] || 
-          row['کد هوشمند راننده '] || // با فاصله در انتها
-          row['کد‌هوشمند راننده'] || // با نیم‌فاصله
-          row['driver_smart_id'] || 
-          row['driverSmartId'] ||
-          row['Driver Smart ID'] ||
-          row['DRIVER_SMART_ID'] ||
-          ''
-        ).trim();
+        // استخراج کد هوشمند راننده - بررسی همه حالت‌های ممکن
+        let driverSmartId = '';
+        const driverSmartIdKeys = Object.keys(row).find(key => 
+          key.trim() === 'کد هوشمند راننده' ||
+          key.trim() === 'کد هوشمند' ||
+          key.trim() === 'کد‌هوشمند راننده' ||
+          key.toLowerCase().trim() === 'driver_smart_id' ||
+          key.toLowerCase().trim() === 'driversmartid'
+        );
+        if (driverSmartIdKeys) {
+          driverSmartId = String(row[driverSmartIdKeys] || '').trim();
+        }
         
         // لاگ کردن برای ردیف اول
         if (i === 0) {
