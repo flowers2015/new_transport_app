@@ -1544,8 +1544,8 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         setFoundPersonalDriver(driver);
         setPersonalDriverDetails({ 
             name: driver.name, 
-            mobile: driver.mobile, 
-            driverSmartId: driver.driverSmartId || '' 
+            mobile: driver.mobile || '', // اگر خالی بود، فیلد editable می‌شود
+            driverSmartId: driver.driverSmartId || '' // اگر خالی بود، فیلد editable می‌شود
         });
         setShowDriverDropdown(false);
     };
@@ -1621,7 +1621,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         return total;
     }, [destinations]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (currentUser.role === UserRole.TransportationUser) {
             if (!foundCompanyDriver || !foundVehicle) { alert('لطفا راننده و خودروی شرکتی را با جستجو مشخص کنید.'); return; }
             onUpdateAssignment(announcement.id, {
@@ -1632,6 +1632,41 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 alert('کد ملی، نام راننده، شماره تماس، هوشمند راننده، نوع خودرو، پلاک خودرو و هوشمند کامیون الزامی است.');
                 return;
             }
+            
+            // اگر راننده پیدا شده بود و موبایل یا کد هوشمند تغییر کرده، در دیتابیس به‌روزرسانی کن
+            if (foundPersonalDriver && foundPersonalDriver.id && typeof foundPersonalDriver === 'object' && foundPersonalDriver !== 'not_found') {
+                const originalDriver = foundPersonalDriver;
+                const mobileChanged = originalDriver.mobile !== personalDriverDetails.mobile;
+                const driverSmartIdChanged = originalDriver.driverSmartId !== personalDriverDetails.driverSmartId;
+                
+                if (mobileChanged || driverSmartIdChanged) {
+                    try {
+                        const token = localStorage.getItem('token');
+                        const updateResponse = await fetch(getApiUrl(`personal-drivers/${foundPersonalDriver.id}`), {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                mobile: personalDriverDetails.mobile,
+                                driverSmartId: personalDriverDetails.driverSmartId
+                            })
+                        });
+                        
+                        if (!updateResponse.ok) {
+                            const errorData = await updateResponse.json();
+                            alert(`خطا در به‌روزرسانی اطلاعات راننده: ${errorData.message || 'خطای نامشخص'}`);
+                            return;
+                        }
+                    } catch (error) {
+                        console.error('Error updating personal driver:', error);
+                        alert('خطا در به‌روزرسانی اطلاعات راننده');
+                        return;
+                    }
+                }
+            }
+            
             // Format plate number for backend (ensure Iranian format)
             const formattedPlate = personalVehicleDetails.plate.replace(/\s/g, '').toLowerCase();
             

@@ -696,6 +696,12 @@ const AdminResourceManagement: React.FC = () => {
             >
               + افزودن جدید
             </button>
+            {(activeTab === 'personal-drivers' || activeTab === 'personal-vehicles') && (
+              <ImportExcelButton 
+                type={activeTab} 
+                onImportSuccess={fetchData}
+              />
+            )}
             <button
               onClick={fetchData}
               disabled={loading}
@@ -1406,6 +1412,168 @@ const PersonalVehicleForm: React.FC<{
         </button>
       </div>
     </form>
+  );
+};
+
+// ============================================
+// Import Excel Component
+// ============================================
+const ImportExcelButton: React.FC<{
+  type: 'personal-drivers' | 'personal-vehicles';
+  onImportSuccess: () => void;
+}> = ({ type, onImportSuccess }) => {
+  const [showDialog, setShowDialog] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setResult(null);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      alert('لطفاً فایل اکسل را انتخاب کنید');
+      return;
+    }
+
+    setUploading(true);
+    setResult(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const endpoint = type === 'personal-drivers' 
+        ? 'personal-drivers/import-excel'
+        : 'personal-vehicles/import-excel';
+
+      const response = await fetch(getApiUrl(endpoint), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'خطا در آپلود فایل');
+      }
+
+      const data = await response.json();
+      setResult(data);
+      alert(`✅ Import موفق!\n\nکل: ${data.total}\nموفق: ${data.success}\nبه‌روزرسانی شده: ${data.updated || 0}\nرد شده: ${data.skipped || 0}\nخطا: ${data.errors || 0}`);
+      
+      if (data.errors > 0 && data.errorDetails) {
+        console.error('جزئیات خطاها:', data.errorDetails);
+      }
+      
+      onImportSuccess();
+      setFile(null);
+      setShowDialog(false);
+    } catch (error: any) {
+      alert(`❌ خطا: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setShowDialog(true)}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+      >
+        📥 Import از اکسل
+      </button>
+
+      {showDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">
+                Import {type === 'personal-drivers' ? 'رانندگان شخصی' : 'خودروهای شخصی'} از اکسل
+              </h2>
+              <button
+                onClick={() => { setShowDialog(false); setFile(null); setResult(null); }}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  انتخاب فایل اکسل (.xlsx, .xls)
+                </label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileSelect}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  disabled={uploading}
+                />
+                {file && (
+                  <p className="mt-2 text-sm text-gray-600">
+                    فایل انتخاب شده: {file.name}
+                  </p>
+                )}
+              </div>
+
+              {type === 'personal-drivers' && (
+                <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                  <strong>ستون‌های مورد نیاز:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>کد ملی (اجباری)</li>
+                    <li>نام (اجباری)</li>
+                    <li>موبایل (اختیاری)</li>
+                    <li>کد هوشمند راننده (اجباری)</li>
+                  </ul>
+                </div>
+              )}
+
+              {type === 'personal-vehicles' && (
+                <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                  <strong>ستون‌های مورد نیاز:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>کد هوشمند کامیون (اجباری)</li>
+                    <li>بخش اول پلاک (اجباری)</li>
+                    <li>حرف پلاک (اجباری)</li>
+                    <li>بخش دوم پلاک (اجباری)</li>
+                    <li>کد شهر پلاک (اجباری)</li>
+                    <li>نوع خودرو (اجباری)</li>
+                    <li>کاربرد خودرو (اختیاری)</li>
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setShowDialog(false); setFile(null); setResult(null); }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  disabled={uploading}
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={handleUpload}
+                  disabled={!file || uploading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {uploading ? 'در حال آپلود...' : 'آپلود و Import'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

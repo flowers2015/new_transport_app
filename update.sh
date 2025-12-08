@@ -35,6 +35,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo -e "${YELLOW}🔄 در حال اجرای Migration برای nullable کردن mobile...${NC}"
+node migrations/update_personal_drivers_mobile_nullable.js
+
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}⚠️ هشدار: Migration اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
+fi
+
 echo -e "${YELLOW}📦 در حال نصب وابستگی‌های Frontend...${NC}"
 cd ../frontend
 npm install

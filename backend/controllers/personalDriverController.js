@@ -76,8 +76,8 @@ async function createPersonalDriver(req, res) {
   try {
     const { nationalId, name, mobile, driverSmartId } = req.body;
 
-    if (!nationalId || !name || !mobile || !driverSmartId) {
-      return res.status(400).json({ message: 'کد ملی، نام، شماره تماس و هوشمند راننده الزامی است' });
+    if (!nationalId || !name || !driverSmartId) {
+      return res.status(400).json({ message: 'کد ملی، نام و هوشمند راننده الزامی است (موبایل اختیاری است)' });
     }
 
     // بررسی تکراری بودن کد ملی
@@ -112,7 +112,7 @@ async function createPersonalDriver(req, res) {
         mobile,
         driver_smart_id AS "driverSmartId",
         created_at AS "createdAt"
-    `, [id, nationalId, name, mobile, driverSmartId]);
+    `, [id, nationalId, name, mobile || null, driverSmartId]);
 
     res.status(201).json(rows[0]);
   } catch (error) {
@@ -280,6 +280,180 @@ async function deletePersonalDriver(req, res) {
   }
 }
 
+/**
+ * Import رانندگان شخصی از فایل اکسل
+ * POST /api/v1/personal-drivers/import-excel
+ * Body (multipart/form-data):
+ *   - file: فایل اکسل (.xlsx, .xls)
+ */
+async function importPersonalDriversFromExcel(req, res) {
+  const XLSX = require('xlsx');
+  const fs = require('fs');
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'هیچ فایلی ارسال نشده است' });
+    }
+
+    // خواندن فایل اکسل
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0]; // اولین sheet
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet);
+
+    if (data.length === 0) {
+      // حذف فایل موقت
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'فایل اکسل خالی است' });
+    }
+
+    const results = {
+      total: data.length,
+      success: 0,
+      updated: 0,
+      skipped: 0,
+      errors: []
+    };
+
+    // پردازش هر ردیف
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowNumber = i + 2; // +2 چون header در ردیف 1 است و index از 0 شروع می‌شود
+
+      try {
+        // استخراج داده‌ها از اکسل (با نام‌های مختلف ممکن)
+        const nationalId = String(row['کد ملی'] || row['کدملی'] || row['national_id'] || row['nationalId'] || '').trim();
+        const name = String(row['نام'] || row['name'] || '').trim();
+        const mobile = String(row['موبایل'] || row['شماره موبایل'] || row['mobile'] || '').trim();
+        const driverSmartId = String(row['کد هوشمند راننده'] || row['کد هوشمند'] || row['driver_smart_id'] || row['driverSmartId'] || '').trim();
+
+        // Validation فیلدهای اجباری (موبایل اختیاری است)
+        const missingFields = [];
+        if (!nationalId) missingFields.push('کد ملی');
+        if (!name) missingFields.push('نام');
+        if (!driverSmartId) missingFields.push('کد هوشمند راننده');
+        
+        if (missingFields.length > 0) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: `فیلدهای اجباری خالی است: ${missingFields.join('، ')}`,
+            data: { nationalId, name, mobile, driverSmartId }
+          });
+          continue;
+        }
+
+        // Validation فرمت کد ملی (10 رقم)
+        if (!/^\d{10}$/.test(nationalId)) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: 'کد ملی باید 10 رقم باشد',
+            data: { nationalId }
+          });
+          continue;
+        }
+
+        // Validation فرمت موبایل (اگر وارد شده باشد، باید معتبر باشد)
+        // موبایل اختیاری است، اما اگر وارد شده باشد باید معتبر باشد
+        if (mobile && !/^09\d{9}$/.test(mobile)) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: 'شماره موبایل باید 11 رقم و با 09 شروع شود (یا خالی باشد)',
+            data: { mobile }
+          });
+          continue;
+        }
+
+        // بررسی وجود راننده با این کد ملی
+        const existingDriver = await pool.query(
+          'SELECT id FROM personal_drivers WHERE national_id = $1',
+          [nationalId]
+        );
+
+        if (existingDriver.rows.length > 0) {
+          // Update existing driver
+          const driverId = existingDriver.rows[0].id;
+          
+          // بررسی تکراری بودن driver_smart_id برای راننده دیگر
+          const existingSmartId = await pool.query(
+            'SELECT id FROM personal_drivers WHERE driver_smart_id = $1 AND id != $2',
+            [driverSmartId, driverId]
+          );
+
+          if (existingSmartId.rows.length > 0) {
+            results.skipped++;
+            results.errors.push({
+              row: rowNumber,
+              error: 'کد هوشمند راننده قبلاً برای راننده دیگری استفاده شده است',
+              data: { driverSmartId }
+            });
+            continue;
+          }
+
+          await pool.query(
+            'UPDATE personal_drivers SET name = $1, mobile = $2, driver_smart_id = $3, updated_at = NOW() WHERE id = $4',
+            [name, mobile || null, driverSmartId, driverId]
+          );
+          results.updated++;
+        } else {
+          // بررسی تکراری بودن driver_smart_id
+          const existingSmartId = await pool.query(
+            'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
+            [driverSmartId]
+          );
+
+          if (existingSmartId.rows.length > 0) {
+            results.skipped++;
+            results.errors.push({
+              row: rowNumber,
+              error: 'کد هوشمند راننده قبلاً استفاده شده است',
+              data: { driverSmartId }
+            });
+            continue;
+          }
+
+          // Create new driver
+          const id = crypto.randomUUID();
+          await pool.query(
+            'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
+            [id, nationalId, name, mobile || null, driverSmartId]
+          );
+          results.success++;
+        }
+      } catch (error) {
+        results.skipped++;
+        results.errors.push({
+          row: rowNumber,
+          error: error.message || 'خطای نامشخص',
+          data: row
+        });
+      }
+    }
+
+    // حذف فایل موقت
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      message: 'Import با موفقیت انجام شد',
+      results
+    });
+  } catch (error) {
+    // حذف فایل موقت در صورت خطا
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting temp file:', unlinkError);
+      }
+    }
+
+    console.error('Error importing personal drivers from Excel:', error);
+    res.status(500).json({ message: 'خطا در import فایل اکسل', error: error.message });
+  }
+}
+
 module.exports = {
   searchPersonalDrivers,
   getPersonalDriverByNationalId,
@@ -287,5 +461,6 @@ module.exports = {
   updatePersonalDriver,
   getAllPersonalDrivers,
   getPersonalDriverById,
-  deletePersonalDriver
+  deletePersonalDriver,
+  importPersonalDriversFromExcel
 };
