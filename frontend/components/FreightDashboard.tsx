@@ -1262,13 +1262,7 @@ const AnnouncementPanel: React.FC<{
     const [multiDestState, setMultiDestState] = useState(initialMultiDestState);
     const [loadingLocationState, setLoadingLocationState] = useState(initialLoadingLocationState);
     const [brandState, setBrandState] = useState(initialBrandState);
-    const cargoPreview = useMemo(() => {
-        const rials = parseFloat(commonState.cargoValue || '');
-        if (!isFinite(rials)) return '';
-        const toman = rials / 10;
-        const millionToman = toman / 1_000_000;
-        return millionToman > 0 ? `${millionToman.toLocaleString('fa-IR')} میلیون تومان` : '';
-    }, [commonState.cargoValue]);
+    // cargoPreview حذف شد - دیگر نیازی به تبدیل نیست
     const [destinations, setDestinations] = useState<Partial<Destination>[]>(initialDestinations);
     
     const resetForm = () => {
@@ -1362,9 +1356,10 @@ const AnnouncementPanel: React.FC<{
                 }
                 console.log(`📅 [FreightDashboard] Final loadingDateStr for form:`, loadingDateStr);
                 // تبدیل cargoValue از ریال به میلیارد با گرد کردن برای جلوگیری از خطای floating point
-                const cargoValueInBillions = (data.cargoValue || 0) / 1_000_000_000;
-                const roundedCargoValue = Math.round(cargoValueInBillions * 10) / 10; // گرد کردن به یک رقم اعشار
-                setCommonState({ loadingDate: loadingDateStr, deliveryDate: data.deliveryDate || '', cargoValue: String(roundedCargoValue), vehicleType: data.vehicleType, notes: data.notes || '' });
+                // فرمت cargoValue به صورت سه رقم سه رقم (مستقیماً ریال)
+                const cargoValueInRials = data.cargoValue || 0;
+                const formattedCargoValue = cargoValueInRials > 0 ? cargoValueInRials.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '';
+                setCommonState({ loadingDate: loadingDateStr, deliveryDate: data.deliveryDate || '', cargoValue: formattedCargoValue, vehicleType: data.vehicleType, notes: data.notes || '' });
                 
                 // بارگذاری داده‌های دو جا بارگیری از data (اگر وجود داشته باشد)
                 let loadingLocationData: { loadingType: 'single' | 'double', originCity1: string, originCity2: string };
@@ -1541,10 +1536,13 @@ const AnnouncementPanel: React.FC<{
 
     const handleSubmit = (e: React.FormEvent, isDraft: boolean = false) => {
         e.preventDefault();
-        // تبدیل از میلیارد به ریال با دقت بالا
-        const cargoValueInBillions = parseFloat(commonState.cargoValue);
-        const cargoValueInRials = Math.round(cargoValueInBillions * 1_000_000_000);
-        if (isNaN(cargoValueInRials) || cargoValueInRials < 1_000_000_000 || cargoValueInRials > 110_000_000_000) { alert('ارزش بار باید بین ۱ تا ۱۱۰ میلیارد ریال باشد.'); return; }
+        // تبدیل از رشته با کاما به عدد (مستقیماً ریال)
+        const cargoValueStr = commonState.cargoValue.replace(/,/g, '');
+        const cargoValueInRials = parseInt(cargoValueStr, 10);
+        if (isNaN(cargoValueInRials) || cargoValueInRials <= 0 || cargoValueInRials > 110_000_000_000) { 
+            alert('ارزش بار باید بین 1 تا 110,000,000,000 ریال باشد.'); 
+            return; 
+        }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
 
         // Use the string directly instead of converting to Date
@@ -1815,10 +1813,41 @@ const AnnouncementPanel: React.FC<{
                             )}
                             <div><label className="text-xs">نوع خودرو*</label><select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select></div>
                                 <div>
-                                   <label className="text-xs">ارزش بار (میلیارد ریال)*</label>
-                                   <input type="number" step="0.1" value={commonState.cargoValue} onChange={e => setCommonState(s=>({...s, cargoValue: e.target.value}))} className="input-style mt-1" required/>
-                                   <div className="text-[11px] text-slate-500 mt-1">≈ {cargoPreview || '-'} (حدوداً)</div>
-                                   <small className="text-slate-500 text-xs">بین ۱ تا ۱۱۰</small>
+                                   <label className="text-xs">ارزش بار (ریال)*</label>
+                                   <div className="flex items-center gap-2">
+                                       <input 
+                                           type="text" 
+                                           value={commonState.cargoValue} 
+                                           onChange={e => {
+                                               // فقط اعداد و کاما را بپذیر
+                                               let value = e.target.value.replace(/[^\d,]/g, '');
+                                               // حذف کاماها برای محاسبه
+                                               const numValue = value.replace(/,/g, '');
+                                               // اگر خالی است، مقدار خالی بگذار
+                                               if (numValue === '') {
+                                                   setCommonState(s=>({...s, cargoValue: ''}));
+                                                   return;
+                                               }
+                                               // اگر عدد معتبر است، فرمت سه رقم سه رقم اعمال کن
+                                               if (/^\d+$/.test(numValue)) {
+                                                   const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                                   setCommonState(s=>({...s, cargoValue: formatted}));
+                                               }
+                                           }}
+                                           onKeyPress={e => {
+                                               // فقط اعداد را بپذیر
+                                               if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+                                                   e.preventDefault();
+                                               }
+                                           }}
+                                           className="input-style mt-1 flex-1" 
+                                           required
+                                           placeholder="25,000,000"
+                                           maxLength={15}
+                                       />
+                                       <span className="text-xs text-slate-600 mt-1">ریال</span>
+                                   </div>
+                                   <small className="text-slate-500 text-xs">حداکثر 110,000,000,000 ریال</small>
                                 </div>
                         </div>
                     </fieldset>
