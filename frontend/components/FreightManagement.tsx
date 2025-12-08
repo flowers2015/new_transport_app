@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { FreightAnnouncement, FreightLineType, FreightAnnouncementStatus, User, Destination } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalaliDateTime, formatJalali } from '../utils/jalali';
@@ -177,9 +177,11 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
   });
 
   // دریافت لیست اعلام بارها
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = useCallback(async (silent: boolean = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       // اضافه کردن timestamp برای جلوگیری از cache
       const timestamp = new Date().getTime();
       const headers = getHeaders();
@@ -403,11 +405,15 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       });
     } catch (err: any) {
       console.error('❌ [FreightManagement] خطا در دریافت اعلام بارها:', err);
-      setError(err.message);
+      if (!silent) {
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
   // دریافت لاگ تغییرات یک اعلام بار
   const fetchHistory = async (announcementId: string) => {
@@ -452,13 +458,19 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     }
   };
 
-  // Auto-refresh هر 10 ثانیه
+  // بارگذاری اولیه
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []); // فقط یک بار در mount
+
+  // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
   useAutoRefresh({
-    refreshFn: fetchAnnouncements,
-    interval: 10000, // 10 ثانیه
+    refreshFn: () => fetchAnnouncements(true), // silent refresh
+    interval: 30000, // 30 ثانیه
     onlyWhenVisible: true,
-    immediate: true,
+    immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
     enabled: true,
+    silent: true, // silent mode برای جلوگیری از چشمک زدن
   });
 
   // لاگ تغییرات history state

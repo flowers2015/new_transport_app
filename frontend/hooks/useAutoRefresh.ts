@@ -29,6 +29,12 @@ interface UseAutoRefreshOptions {
      * پیش‌فرض: true
      */
     enabled?: boolean;
+    
+    /**
+     * آیا refresh باید به صورت silent انجام شود (بدون loading state و بدون re-render غیرضروری)؟
+     * پیش‌فرض: false
+     */
+    silent?: boolean;
 }
 
 /**
@@ -49,6 +55,7 @@ export const useAutoRefresh = ({
     onlyWhenVisible = true,
     immediate = true,
     enabled = true,
+    silent = false, // پیش‌فرض: false (برای backward compatibility)
 }: UseAutoRefreshOptions) => {
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const isRefreshingRef = useRef(false);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FreightAnnouncement, Branch, FreightTransaction, User, FreightPaymentStatus } from '../types';
 import FreightFinanceDashboard from './FreightFinanceDashboard';
 import { gregorianToJalali, jalaliToGregorian } from '../utils/jalali';
@@ -39,9 +39,11 @@ const FreightFinanceContainer: React.FC<FreightFinanceContainerProps> = ({ curre
         return { startDate, endDate };
     };
 
-    const fetchData = async () => {
-        setLoading(true);
-        setError(null);
+    const fetchData = useCallback(async (silent: boolean = false) => {
+        if (!silent) {
+            setLoading(true);
+            setError(null);
+        }
         try {
             const token = localStorage.getItem('token');
             const headers: HeadersInit = {
@@ -181,19 +183,29 @@ const FreightFinanceContainer: React.FC<FreightFinanceContainerProps> = ({ curre
             setTransactions(transactionsData);
         } catch (err: any) {
             console.error('❌ [FreightFinance] Failed to fetch data:', err);
-            setError(err.message || 'خطا در دریافت اطلاعات');
+            if (!silent) {
+                setError(err.message || 'خطا در دریافت اطلاعات');
+            }
         } finally {
-            setLoading(false);
+            if (!silent) {
+                setLoading(false);
+            }
         }
-    };
+    }, []);
 
-    // Auto-refresh هر 10 ثانیه
+    // بارگذاری اولیه
+    useEffect(() => {
+        fetchData();
+    }, []); // فقط یک بار در mount
+
+    // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
     useAutoRefresh({
-        refreshFn: fetchData,
-        interval: 10000, // 10 ثانیه
+        refreshFn: () => fetchData(true), // silent refresh
+        interval: 30000, // 30 ثانیه
         onlyWhenVisible: true,
-        immediate: true,
+        immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
         enabled: true,
+        silent: true, // silent mode برای جلوگیری از چشمک زدن
     });
 
     const handleAddTransaction = async (transaction: Omit<FreightTransaction, 'id'>) => {

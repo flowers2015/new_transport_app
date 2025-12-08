@@ -14,9 +14,11 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
     }), []);
 
-    const fetchAnnouncements = async () => {
+    const fetchAnnouncements = useCallback(async (silent: boolean = false) => {
         try {
-            setLoading(true);
+            if (!silent) {
+                setLoading(true);
+            }
             // includeLeftover=true برای نمایش بارهای مانده در برنامه ریزی
             const res = await fetch(getApiUrl('freight-announcements?includeLeftover=true'), { headers });
             if (!res.ok) throw new Error('Failed to fetch freight announcements');
@@ -108,17 +110,25 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         } catch (err) {
             console.error('[FreightPlanning] Failed to load announcements', err);
         } finally {
-            setLoading(false);
+            if (!silent) {
+                setLoading(false);
+            }
         }
-    };
+    }, [headers]);
 
-    // Auto-refresh هر 10 ثانیه
+    // بارگذاری اولیه
+    useEffect(() => {
+        fetchAnnouncements();
+    }, []); // فقط یک بار در mount
+
+    // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
     useAutoRefresh({
-        refreshFn: fetchAnnouncements,
-        interval: 10000, // 10 ثانیه
+        refreshFn: () => fetchAnnouncements(true), // silent refresh
+        interval: 30000, // 30 ثانیه
         onlyWhenVisible: true,
-        immediate: true,
+        immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
         enabled: true,
+        silent: true, // silent mode برای جلوگیری از چشمک زدن
     });
 
     const searchRouteSuggestions = useCallback(async (query: string): Promise<DispatchRouteSuggestion[]> => {

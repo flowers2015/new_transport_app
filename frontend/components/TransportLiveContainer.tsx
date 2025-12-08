@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import TransportLive from './TransportLive';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
@@ -15,9 +15,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [error, setError] = useState<string | null>(null);
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
 
-    const fetchData = async () => {
-            setLoading(true);
-            setError(null);
+    const fetchData = useCallback(async (silent: boolean = false) => {
+            if (!silent) {
+                setLoading(true);
+                setError(null);
+            }
             // console.log('🚀 [TransportLive] Starting data fetch...');
             try {
                 const token = localStorage.getItem('token');
@@ -164,19 +166,29 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 // console.log('✅ [TransportLive] Data successfully loaded and set in state');
             } catch (e: any) {
                 console.error('❌ [TransportLive] Error fetching data:', e);
-                setError(e.message);
+                if (!silent) {
+                    setError(e.message);
+                }
             } finally {
-                setLoading(false);
+                if (!silent) {
+                    setLoading(false);
+                }
             }
-        };
+        }, []);
 
-    // Auto-refresh هر 10 ثانیه
+    // بارگذاری اولیه
+    useEffect(() => {
+        fetchData();
+    }, []); // فقط یک بار در mount
+
+    // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
     useAutoRefresh({
-        refreshFn: fetchData,
-        interval: 10000, // 10 ثانیه
+        refreshFn: () => fetchData(true), // silent refresh
+        interval: 30000, // 30 ثانیه
         onlyWhenVisible: true,
-        immediate: true,
+        immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
         enabled: true,
+        silent: true, // silent mode برای جلوگیری از چشمک زدن
     });
 
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
