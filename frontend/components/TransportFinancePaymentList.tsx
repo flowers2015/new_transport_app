@@ -21,6 +21,8 @@ interface PaymentRecord {
     totalAmount: number; // هزینه کل پرداخت نشده
     mainDriverAmount: number; // هزینه راننده اصلی
     helperDriverAmount: number; // هزینه راننده کمکی
+    advancePayment: number; // کسور (پیش پرداخت)
+    payableAmount: number; // مبلغ قابل پرداخت (کل - پیش پرداخت)
     calculationDate: string;
     lastPaymentDate?: string;
     lastPaymentAmount?: number;
@@ -102,6 +104,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 // محاسبه هزینه راننده اصلی = هزینه کل - هزینه راننده کمکی
                 const mainDriverCost = totalCost - helperDriverCost;
                 
+                // پیش پرداخت (فقط برای راننده اصلی)
+                const advancePayment = parseFloat(calc.advance_payment || calc.advancePayment || 0);
+                
                 const existing = recordsMap.get(driverId);
                 const calculationDate = calc.calculation_date || calc.calculationDate || '';
                 
@@ -109,19 +114,25 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     existing.totalAmount += totalCost;
                     existing.mainDriverAmount += mainDriverCost;
                     existing.helperDriverAmount += helperDriverCost;
+                    existing.advancePayment += advancePayment;
+                    existing.payableAmount = existing.totalAmount - existing.advancePayment;
                     // استفاده از جدیدترین تاریخ محاسبه
                     if (calculationDate && (!existing.calculationDate || calculationDate > existing.calculationDate)) {
                         existing.calculationDate = calculationDate;
                     }
                 } else {
+                    const initialAdvancePayment = advancePayment;
+                    const initialTotal = totalCost;
                     recordsMap.set(driverId, {
                         driverId,
                         employeeId: driver.employee_id || driver.employeeId || '',
                         driverName: driver.name || '',
                         accountNumber: (driver as any).account_number || (driver as any).accountNumber || '',
-                        totalAmount: totalCost,
+                        totalAmount: initialTotal,
                         mainDriverAmount: mainDriverCost,
                         helperDriverAmount: helperDriverCost,
+                        advancePayment: initialAdvancePayment,
+                        payableAmount: initialTotal - initialAdvancePayment,
                         calculationDate,
                     });
                 }
@@ -220,7 +231,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }));
         
         const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره حساب مقصد', 'مبلغ هزینه راننده اصلی (ریال)', 'مبلغ هزینه راننده کمکی (ریال)', 'مبلغ کل (ریال)']
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره حساب مقصد', 'مبلغ هزینه راننده اصلی (ریال)', 'مبلغ هزینه راننده کمکی (ریال)', 'مبلغ کل (ریال)', 'کسور(پیش پرداخت) (ریال)', 'مبلغ قابل پرداخت (ریال)']
         ];
 
         filteredRecords.forEach((record, index) => {
@@ -246,6 +257,15 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 }
             });
             
+            // محاسبه پیش پرداخت برای این راننده
+            let totalAdvancePayment = 0;
+            calculations.forEach((calc: any) => {
+                const advancePayment = parseFloat(calc.advance_payment || calc.advancePayment || 0);
+                totalAdvancePayment += advancePayment;
+            });
+            
+            const payableAmount = record.totalAmount - totalAdvancePayment;
+            
             wsData.push([
                 index + 1,
                 record.employeeId || '',
@@ -253,7 +273,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 record.accountNumber || '',
                 mainDriverCost || 0,
                 helperDriverCost || 0,
-                record.totalAmount || 0
+                record.totalAmount || 0,
+                totalAdvancePayment || 0,
+                payableAmount || 0
             ]);
         });
 
@@ -271,8 +293,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 ws[cellAddress].s.alignment.horizontal = 'right';
                 ws[cellAddress].s.alignment.vertical = 'center';
                 
-                // فرمت اعداد برای ستون‌های مبلغ (ستون‌های 4، 5، 6)
-                if (R > 0 && (C === 4 || C === 5 || C === 6)) {
+                // فرمت اعداد برای ستون‌های مبلغ (ستون‌های 4، 5، 6، 7، 8)
+                if (R > 0 && (C === 4 || C === 5 || C === 6 || C === 7 || C === 8)) {
                     if (typeof wsData[R][C] === 'number') {
                         ws[cellAddress].z = '#,##0';
                     }
@@ -288,7 +310,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             { wch: 20 }, // شماره حساب
             { wch: 25 }, // مبلغ راننده اصلی
             { wch: 25 }, // مبلغ راننده کمکی
-            { wch: 18 }  // مبلغ کل
+            { wch: 18 }, // مبلغ کل
+            { wch: 25 }, // کسور(پیش پرداخت)
+            { wch: 25 }  // مبلغ قابل پرداخت
         ];
         
         const wb = XLSX.utils.book_new();
@@ -593,6 +617,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 <th className="p-3 text-right border-l border-slate-600">هزینه راننده اصلی (ریال)</th>
                                 <th className="p-3 text-right border-l border-slate-600">هزینه راننده کمکی (ریال)</th>
                                 <th className="p-3 text-right border-l border-slate-600">هزینه کل (ریال)</th>
+                                <th className="p-3 text-right border-l border-slate-600">کسور(پیش پرداخت) (ریال)</th>
+                                <th className="p-3 text-right border-l border-slate-600">مبلغ قابل پرداخت (ریال)</th>
                                 <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
                                 <th className="p-3 text-right border-l border-slate-600">آخرین پرداخت هزینه</th>
                                 <th className="p-3 text-right">عملیات</th>
@@ -615,6 +641,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     </td>
                                     <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
                                         {record.totalAmount.toLocaleString('fa-IR')}
+                                    </td>
+                                    <td className="p-3 border-l border-slate-200 text-left font-semibold text-orange-700">
+                                        {record.advancePayment.toLocaleString('fa-IR')}
+                                    </td>
+                                    <td className="p-3 border-l border-slate-200 text-left font-semibold text-blue-700">
+                                        {record.payableAmount.toLocaleString('fa-IR')}
                                     </td>
                                     <td className="p-3 border-l border-slate-200 text-xs">
                                         {record.calculationDate || '-'}
@@ -1072,41 +1104,68 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         )}
                                         
                                         {/* جمع کل نهایی */}
-                                        {invoiceCalculations.length > 0 && (
-                                            <div className="mt-4 p-4 bg-slate-200 rounded-lg border-2 border-slate-600">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-lg font-bold text-slate-900">جمع کل هزینه سفر:</span>
-                                                    <span className="text-xl font-bold text-green-700">
-                                                        {(() => {
-                                                            // محاسبه هزینه کل راننده اصلی (همه تورها - با و بدون راننده کمکی)
-                                                            const totalMainAll = invoiceCalculations.reduce((sum, calc) => {
-                                                                return sum + calculateMainDriverCost(calc);
-                                                            }, 0);
-                                                            // محاسبه هزینه کل راننده‌های کمکی
-                                                            const helperCostsByEmployee = new Map<string, number>();
-                                                            invoiceCalculations.forEach((calc: any) => {
-                                                                const helperId = calc.helper_driver_id || calc.helperDriverId;
-                                                                const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
-                                                                const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
-                                                                const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
-                                                                const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
-                                                                const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
-                                                                
-                                                                if (helperId && helperEmployeeId && helperTotal > 0) {
-                                                                    if (!helperCostsByEmployee.has(helperEmployeeId)) {
-                                                                        helperCostsByEmployee.set(helperEmployeeId, 0);
-                                                                    }
-                                                                    const existing = helperCostsByEmployee.get(helperEmployeeId)!;
-                                                                    helperCostsByEmployee.set(helperEmployeeId, existing + helperTotal);
-                                                                }
-                                                            });
-                                                            const totalHelper = Array.from(helperCostsByEmployee.values()).reduce((sum, h) => sum + h, 0);
-                                                            return (totalMainAll + totalHelper).toLocaleString('fa-IR');
-                                                        })()} ریال
-                                                    </span>
+                                        {invoiceCalculations.length > 0 && (() => {
+                                            // محاسبه هزینه کل راننده اصلی (همه تورها - با و بدون راننده کمکی)
+                                            const totalMainAll = invoiceCalculations.reduce((sum, calc) => {
+                                                return sum + calculateMainDriverCost(calc);
+                                            }, 0);
+                                            // محاسبه هزینه کل راننده‌های کمکی
+                                            const helperCostsByEmployee = new Map<string, number>();
+                                            invoiceCalculations.forEach((calc: any) => {
+                                                const helperId = calc.helper_driver_id || calc.helperDriverId;
+                                                const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+                                                const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+                                                const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+                                                const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+                                                const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+                                                
+                                                if (helperId && helperEmployeeId && helperTotal > 0) {
+                                                    if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                                                        helperCostsByEmployee.set(helperEmployeeId, 0);
+                                                    }
+                                                    const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+                                                    helperCostsByEmployee.set(helperEmployeeId, existing + helperTotal);
+                                                }
+                                            });
+                                            const totalHelper = Array.from(helperCostsByEmployee.values()).reduce((sum, h) => sum + h, 0);
+                                            const grandTotal = totalMainAll + totalHelper;
+                                            
+                                            // محاسبه کل پیش پرداخت برای راننده اصلی
+                                            const totalAdvancePayment = invoiceCalculations.reduce((sum, calc) => {
+                                                return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
+                                            }, 0);
+                                            
+                                            const payableAmount = grandTotal - totalAdvancePayment;
+                                            
+                                            return (
+                                                <div className="mt-4 p-4 bg-slate-200 rounded-lg border-2 border-slate-600">
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-lg font-bold text-slate-900">جمع کل هزینه سفر:</span>
+                                                            <span className="text-xl font-bold text-green-700">
+                                                                {grandTotal.toLocaleString('fa-IR')} ریال
+                                                            </span>
+                                                        </div>
+                                                        {totalAdvancePayment > 0 && (
+                                                            <div className="flex justify-between items-center border-t border-slate-400 pt-2 mt-2">
+                                                                <span className="text-base font-semibold text-slate-800">کسور (پیش پرداخت):</span>
+                                                                <span className="text-lg font-bold text-orange-700">
+                                                                    {totalAdvancePayment.toLocaleString('fa-IR')} ریال
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {totalAdvancePayment > 0 && (
+                                                            <div className="flex justify-between items-center border-t-2 border-slate-600 pt-2 mt-2">
+                                                                <span className="text-lg font-bold text-slate-900">مبلغ قابل پرداخت:</span>
+                                                                <span className="text-xl font-bold text-blue-700">
+                                                                    {payableAmount.toLocaleString('fa-IR')} ریال
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
                                     </>
                                 );
                             })()}
