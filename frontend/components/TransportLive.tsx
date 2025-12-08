@@ -421,12 +421,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }
 
     const liveAnnouncements = useMemo(() => {
-        console.log('🔍 [TransportLive] Filtering announcements:', {
-            total: announcements.length,
-            currentUserRole: currentUser.role,
-            sampleAnnouncement: announcements[0]
-        });
-        
         const filtered = announcements.filter(a => {
             // همه اعلام‌بارها نمایش داده می‌شوند (فیلتر تاریخ حذف شد)
 
@@ -451,16 +445,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
                 const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
                 
-                console.log('🔍 [TransportLive] Company user filter:', {
-                    id: a.id,
-                    lineType: a.lineType,
-                    status: a.status,
-                    assignmentType: a.assignmentType,
-                    isAllowed,
-                    isIceCream: a.lineType === FreightLineType.IceCream,
-                    isDairyAmbient: a.lineType === FreightLineType.Dairy || a.lineType === FreightLineType.Ambient
-                });
-                
                 // Exclude cancelled freight
                 if (a.status === FreightAnnouncementStatus.Cancelled) {
                     return false;
@@ -469,21 +453,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // قانون ارجاع خودکار: ترابری شرکت باید بستنی را ببیند و بتواند روی آن عمل کند
                 if (isAllowed && (a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی')) {
                     // بستنی: ترابری شرکت اولویت دارد - همیشه نمایش داده می‌شود
-                    console.log('✅ [TransportLive] Ice cream approved for company user:', a.id);
                     return true;
                 } else if (isAllowed && ((a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه') || (a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند'))) {
                     // پاستوریزه و لبنیات: ترابری شرکت باید ببیند اما عملیات غیرفعال باشد تا زمانی که ارجاع داده شود
-                    console.log('🔍 [TransportLive] Dairy/Ambient for company user:', {
-                        id: a.id,
-                        canSee: true,
-                        assignmentType: a.assignmentType,
-                        status: a.status,
-                        reason: 'Company user can see dairy/ambient but operations will be disabled'
-                    });
                     return true; // همیشه نمایش داده می‌شود
                 }
                 
-                console.log('❌ [TransportLive] Rejected for company user:', a.id);
                 return false;
             }
             if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
@@ -502,16 +477,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
                 const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
                 
-                console.log('🔍 [TransportLive] Personal user filter:', {
-                    id: a.id,
-                    lineType: a.lineType,
-                    status: a.status,
-                    assignmentType: a.assignmentType,
-                    isAllowed,
-                    isIceCream: a.lineType === FreightLineType.IceCream,
-                    isDairyAmbient: a.lineType === FreightLineType.Dairy || a.lineType === FreightLineType.Ambient
-                });
-                
                 // Exclude cancelled freight
                 if (a.status === FreightAnnouncementStatus.Cancelled) {
                     return false;
@@ -520,21 +485,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // قانون ارجاع خودکار: ترابری شخصی باید پاستوریزه و لبنیات را ببیند و بتواند روی آن عمل کند
                 if (isAllowed && ((a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه') || (a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند'))) {
                     // پاستوریزه و لبنیات: ترابری شخصی اولویت دارد - همیشه نمایش داده می‌شود
-                    console.log('✅ [TransportLive] Dairy/Ambient approved for personal user:', a.id);
                     return true;
                 } else if (isAllowed && (a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی')) {
                     // بستنی: ترابری شخصی باید ببیند اما عملیات غیرفعال باشد تا زمانی که ارجاع داده شود
-                    console.log('🔍 [TransportLive] Ice cream for personal user:', {
-                        id: a.id,
-                        canSee: true,
-                        assignmentType: a.assignmentType,
-                        status: a.status,
-                        reason: 'Personal user can see ice cream but operations will be disabled'
-                    });
                     return true; // همیشه نمایش داده می‌شود
                 }
                 
-                console.log('❌ [TransportLive] Rejected for personal user:', a.id);
                 return false;
             }
             if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
@@ -553,34 +509,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                    a.status !== FreightAnnouncementStatus.Cancelled;
         });
         
-        console.log('🔍 [TransportLive] Filtered result:', {
-            total: announcements.length,
-            filtered: filtered.length,
-            filteredIds: filtered.map(a => a.id),
-            filteredDetails: filtered.map(a => ({
-                id: a.id,
-                lineType: a.lineType,
-                status: a.status,
-                assignmentType: a.assignmentType
-            }))
-        });
-        
         return filtered.sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
     }, [announcements, currentUser]);
 
     const filteredAnnouncements = useMemo(() => {
         const filtered = liveAnnouncements.filter(a => a.lineType === activeLine);
-        console.log('🔍 [TransportLive] Filtered by active line:', {
-            activeLine,
-            liveAnnouncementsCount: liveAnnouncements.length,
-            filteredCount: filtered.length,
-            filteredDetails: filtered.map(a => ({
-                id: a.id,
-                lineType: a.lineType,
-                status: a.status,
-                assignmentType: a.assignmentType
-            }))
-        });
         return filtered;
     }, [liveAnnouncements, activeLine]);
     
@@ -1138,17 +1071,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 // ========================================================================
                                 let canTakeAction = false;
                                 
-                                console.log('🔍 [TransportLive] Action permission check:', {
-                                    id: ann.id,
-                                    lineType: ann.lineType,
-                                    status: ann.status,
-                                    assignmentType: ann.assignmentType,
-                                    userRole: currentUser.role,
-                                    isAnnLeftover,
-                                    loadingDate: ann.loadingDate,
-                                    today: today.toISOString(),
-                                    loadingDateString: loadingDate.toISOString(),
-                                    isLeftoverCheck: loadingDate < today,
+                                // Check action permissions
                                     statusCheck: [FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status)
                                 });
                                 
@@ -1161,38 +1084,20 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     if (ann.lineType === FreightLineType.IceCream || ann.lineType === 'IceCream' || ann.lineType === 'بستنی') {
                                         // بستنی: فعال است اگر assignmentType = 'company' باشد (در صف شرکت)
                                         canTakeAction = !isAnnLeftover && isCompanyAssigned;
-                                        console.log('✅ [TransportLive] Ice cream action allowed for company user:', ann.id, 'canTakeAction:', canTakeAction, 'assignmentType:', ann.assignmentType);
                                     } else if ((ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه') || (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند')) {
                                         // پاستوریزه/لبنیات: فعال است اگر assignmentType = 'company' باشد (ارجاع شده از ترابری شخصی به شرکت)
                                         // در غیر این صورت (assignmentType = 'personal') فقط مشاهده می‌شود، عملیات غیرفعال است
                                         canTakeAction = !isAnnLeftover && isCompanyAssigned;
-                                        console.log('🔍 [TransportLive] Dairy/Ambient action for company user:', {
-                                            id: ann.id,
-                                            canTakeAction,
-                                            assignmentType: ann.assignmentType,
-                                            status: ann.status,
-                                            reason: isCompanyAssigned ? 'Assigned to company queue - can take action' : 'Assigned to personal queue - view only'
-                                        });
                                     }
                                 } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
                                     // ترابری شخصی
                                     if ((ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه') || (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند')) {
                                         // پاستوریزه/لبنیات: فعال است اگر assignmentType = 'personal' باشد (در صف شخصی)
                                         canTakeAction = !isAnnLeftover && isPersonalAssigned;
-                                        console.log('✅ [TransportLive] Dairy/Ambient action allowed for personal user:', ann.id, 'canTakeAction:', canTakeAction, 'assignmentType:', ann.assignmentType);
                                     } else if (ann.lineType === FreightLineType.IceCream || ann.lineType === 'IceCream' || ann.lineType === 'بستنی') {
                                         // بستنی: فعال است اگر assignmentType = 'personal' باشد (ارجاع شده از ترابری شرکت به شخصی)
                                         // در غیر این صورت (assignmentType = 'company') فقط مشاهده می‌شود، عملیات غیرفعال است
                                         canTakeAction = !isAnnLeftover && isPersonalAssigned;
-                                        console.log('🔍 [TransportLive] Ice cream action for personal user:', {
-                                            id: ann.id,
-                                            canTakeAction,
-                                            assignmentType: ann.assignmentType,
-                                            isCompanyAssigned,
-                                            isPersonalAssigned,
-                                            status: ann.status,
-                                            reason: isPersonalAssigned ? 'Assigned to personal queue - can take action' : 'Assigned to company queue - view only'
-                                        });
                                     }
                                 } else {
                                     // سایر نقش‌ها

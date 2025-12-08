@@ -95,15 +95,6 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 };
 
                 const normalize = (a: any): FreightAnnouncement => {
-                    // لاگ برای بررسی representative_type
-                    if (a.representative_type || a.representativeType) {
-                        console.log('🔍 [normalize] Found representative_type:', {
-                            id: a.id,
-                            representative_type: a.representative_type,
-                            representativeType: a.representativeType,
-                            representative_name: a.representative_name || a.representativeName
-                        });
-                    }
                     return {
                         id: a.id,
                         announcementCode: a.announcement_code || a.announcementCode,

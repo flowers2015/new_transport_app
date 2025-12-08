@@ -355,7 +355,7 @@ async function importPersonalVehiclesFromExcel(req, res) {
     };
 
     // لیست انواع خودرو معتبر
-    const validVehicleTypes = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور', 'یخچالی سبک', 'یخچالی سنگین'];
+    const validVehicleTypes = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور', 'یخچالی سبک', 'یخچالی سنگین', 'سایر'];
 
     // پردازش هر ردیف
     for (let i = 0; i < data.length; i++) {
