@@ -1072,8 +1072,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 let canTakeAction = false;
                                 
                                 // Check action permissions
-                                    statusCheck: [FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status)
-                                });
                                 
                                 // Normalize assignmentType - هم English و هم Farsi را بررسی می‌کند
                                 const isCompanyAssigned = ann.assignmentType === 'company' || ann.assignmentType === 'شرکتی' || ann.status === FreightAnnouncementStatus.PendingCompanyAssignment;
@@ -1142,21 +1140,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     // سایر نقش‌ها: اگر canTakeAction فعال است و Pending است، می‌تواند ارجاع دهد
                                     canForward = canTakeAction && isPendingStatus;
                                 }
-
-                                console.log('🔍 [TransportLive] Forward button check:', {
-                                    id: ann.id,
-                                    lineType: ann.lineType,
-                                    assignmentType: ann.assignmentType,
-                                    status: ann.status,
-                                    userRole: currentUser.role,
-                                    canTakeAction,
-                                    canForward,
-                                    isCompanyAssigned,
-                                    isPersonalAssigned,
-                                    isPendingStatus,
-                                    isAnnLeftover,
-                                    statusCheck: [FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status)
-                                });
 
                                 // Determine row color based on assignment status
                                 const isAssigned = ann.status === FreightAnnouncementStatus.Assigned || ann.status === 'Assigned';
