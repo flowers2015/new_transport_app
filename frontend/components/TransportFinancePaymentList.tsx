@@ -374,9 +374,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         if (!invoiceRef.current || !selectedInvoiceRecord) return;
 
         try {
-            // استفاده از scale بالاتر برای کیفیت بهتر و خوانایی
+            // استفاده از scale متعادل برای کاهش حجم (در عین حفظ کیفیت)
             const canvas = await html2canvas(invoiceRef.current, {
-                scale: 2.5, // افزایش scale برای کیفیت بهتر
+                scale: 1.5, // کاهش scale برای کاهش حجم (از 2.5 به 1.5)
                 useCORS: true,
                 logging: false,
                 backgroundColor: '#ffffff',
@@ -384,8 +384,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 removeContainer: false,
             });
 
-            // استفاده از PNG برای کیفیت بهتر (به جای JPEG)
-            const imgData = canvas.toDataURL('image/png', 1.0);
+            // استفاده از JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
+            const imgData = canvas.toDataURL('image/jpeg', 0.85);
             
             // استفاده از landscape orientation برای A4
             const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' برای landscape
@@ -399,13 +399,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
             let position = 0;
 
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
             heightLeft -= pageHeight;
 
             while (heightLeft >= 0) {
                 position = heightLeft - imgHeight;
                 pdf.addPage('l'); // اضافه کردن صفحه جدید با landscape orientation
-                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
             }
 
@@ -864,7 +864,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                             
                                                             return (
                                                                 <tr key={calc.id || idx} className="border-b border-slate-300">
-                                                                    <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '12px' }}>{idx + 1}</td>
+                                                                    <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '12px' }}>{(idx + 1).toLocaleString('fa-IR')}</td>
                                                                     <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
                                                                     <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>{destinations}</td>
                                                                     <td className="p-2 border border-slate-300" style={{ fontSize: '12px' }}>
@@ -884,10 +884,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                         {(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}
                                                                     </td>
                                                                     <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
-                                                                        {calc.approved_mission_days || calc.approvedMissionDays || 0}
+                                                                        {(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}
                                                                     </td>
                                                                     <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
-                                                                        {calc.excess_mission_days || calc.excessMissionDays || 0}
+                                                                        {(calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR')}
                                                                     </td>
                                                                     <td className="p-2 border border-slate-300 text-left" style={{ fontSize: '12px' }}>
                                                                         {(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}

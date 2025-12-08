@@ -222,9 +222,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 // Render کردن HTML صورتحساب (مشابه TransportFinancePaymentList)
                 tempDiv.innerHTML = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
 
-                // تبدیل به canvas با کیفیت بالا
+                // تبدیل به canvas با کیفیت متعادل (برای کاهش حجم)
                 const canvas = await html2canvas(tempDiv, {
-                    scale: 2.5, // افزایش scale برای کیفیت بهتر
+                    scale: 1.5, // کاهش scale برای کاهش حجم (از 2.5 به 1.5)
                     useCORS: true,
                     logging: false,
                     backgroundColor: '#ffffff',
@@ -235,8 +235,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 // حذف div موقت
                 document.body.removeChild(tempDiv);
 
-                // تبدیل به PNG برای کیفیت بهتر
-                const imgData = canvas.toDataURL('image/png', 1.0);
+                // تبدیل به JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
+                const imgData = canvas.toDataURL('image/jpeg', 0.85);
                 const imgWidth = pageWidth;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                 let heightLeft = imgHeight;
@@ -247,14 +247,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 }
 
                 let position = 0;
-                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
 
                 // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
                 while (heightLeft >= 0) {
                     position = heightLeft - imgHeight;
                     pdf.addPage('l');
-                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                     heightLeft -= pageHeight;
                 }
             }
@@ -405,15 +405,15 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 
                 html += `
                     <tr style="border-bottom: 1px solid #cbd5e1;">
-                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${idx + 1}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${(idx + 1).toLocaleString('fa-IR')}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${destinations}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.calculation_date || calc.calculationDate || '-'}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${calc.approved_mission_days || calc.approvedMissionDays || 0}</td>
-                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${calc.excess_mission_days || calc.excessMissionDays || 0}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR')}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}</td>
                         <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}</td>
