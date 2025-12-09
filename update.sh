@@ -73,6 +73,43 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo -e "${YELLOW}⚙️  در حال تنظیم NGINX...${NC}"
+# بررسی و تنظیم client_max_body_size در NGINX
+NGINX_CONFIG="/etc/nginx/sites-available/default"
+if [ -f "$NGINX_CONFIG" ]; then
+    # Backup فایل NGINX
+    if [ ! -f "${NGINX_CONFIG}.backup" ]; then
+        sudo cp "$NGINX_CONFIG" "${NGINX_CONFIG}.backup"
+        echo -e "${GREEN}   ✓ Backup از فایل NGINX گرفته شد${NC}"
+    fi
+    
+    # بررسی وجود client_max_body_size
+    if ! grep -q "client_max_body_size" "$NGINX_CONFIG"; then
+        echo -e "${YELLOW}   ➕ اضافه کردن client_max_body_size به NGINX...${NC}"
+        # اضافه کردن در ابتدای server block
+        sudo sed -i '/^server {/a\    client_max_body_size 50M;' "$NGINX_CONFIG"
+        
+        # اضافه کردن در location /api/ اگر وجود دارد
+        if grep -q "location /api/" "$NGINX_CONFIG"; then
+            sudo sed -i '/location \/api\//a\        client_max_body_size 50M;' "$NGINX_CONFIG"
+        fi
+        
+        echo -e "${GREEN}   ✓ client_max_body_size اضافه شد${NC}"
+        
+        # تست و restart NGINX
+        if sudo nginx -t 2>/dev/null; then
+            sudo systemctl restart nginx
+            echo -e "${GREEN}   ✓ NGINX restart شد${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️  خطا در تست NGINX. لطفاً به صورت دستی بررسی کنید${NC}"
+        fi
+    else
+        echo -e "${GREEN}   ✓ تنظیمات NGINX از قبل وجود دارد${NC}"
+    fi
+else
+    echo -e "${YELLOW}   ⚠️  فایل NGINX یافت نشد. لطفاً به صورت دستی تنظیم کنید${NC}"
+fi
+
 echo -e "${YELLOW}🔄 در حال Restart کردن Backend...${NC}"
 cd ../backend
 
