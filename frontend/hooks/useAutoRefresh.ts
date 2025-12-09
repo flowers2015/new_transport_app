@@ -62,6 +62,14 @@ export const useAutoRefresh = ({
     const [isRefreshing, setIsRefreshing] = useState(false);
     
     // تابع refresh با جلوگیری از اجرای همزمان
+    // استفاده از useRef برای نگه‌داری آخرین refreshFn
+    const refreshFnRef = useRef(refreshFn);
+    
+    // به‌روزرسانی ref وقتی refreshFn تغییر می‌کند
+    useEffect(() => {
+        refreshFnRef.current = refreshFn;
+    }, [refreshFn]);
+    
     const refresh = useCallback(async () => {
         // اگر در حال refresh است، صبر کن
         if (isRefreshingRef.current) {
@@ -76,14 +84,14 @@ export const useAutoRefresh = ({
         try {
             isRefreshingRef.current = true;
             setIsRefreshing(true);
-            await refreshFn();
+            await refreshFnRef.current();
         } catch (error) {
             console.error('❌ [useAutoRefresh] Error during refresh:', error);
         } finally {
             isRefreshingRef.current = false;
             setIsRefreshing(false);
         }
-    }, [refreshFn, onlyWhenVisible]);
+    }, [onlyWhenVisible]);
     
     useEffect(() => {
         if (!enabled) {
