@@ -1088,6 +1088,21 @@ async function approveAnnouncement(req, res) {
     });
     
     await client.query('COMMIT');
+    
+    // ارسال real-time notification
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'approved',
+        { status: newStatus, assignmentType, announcementCode: code },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [approveAnnouncement] Error sending realtime notification:', realtimeError);
+      // خطا را ignore می‌کنیم تا approve موفق باشد
+    }
+    
     return res.status(200).json({ message: `Announcement approved and routed to ${assignmentType}.` });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -1699,6 +1714,21 @@ async function assignVehicleAndDriver(req, res) {
     });
 
     await client.query('COMMIT');
+    
+    // ارسال real-time notification
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'assigned',
+        { status: newStatus, assignmentType, vehicleId, driverId },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [assignVehicleAndDriver] Error sending realtime notification:', realtimeError);
+      // خطا را ignore می‌کنیم تا assignment موفق باشد
+    }
+    
     return res.status(200).json({ message: 'Assignment successful.' });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -2347,6 +2377,29 @@ async function finalizeAssignments(req, res) {
       finalizedIds,
       leftoverIds,
       creators: creatorMap
+    });
+    
+    await client.query('COMMIT');
+    
+    // ارسال real-time notification برای هر اعلام بار finalized شده
+    try {
+      const realtimeService = require('../services/realtimeService');
+      finalizedIds.forEach(annId => {
+        realtimeService.notifyAnnouncementUpdate(
+          annId,
+          'finalized',
+          { status: 'Finalized', lineType },
+          currentUserId
+        );
+      });
+    } catch (realtimeError) {
+      console.error('❌ [finalizeAssignments] Error sending realtime notifications:', realtimeError);
+      // خطا را ignore می‌کنیم تا finalize موفق باشد
+    }
+    
+    return res.status(200).json({ 
+      message: `${finalizedIds.length} announcement(s) finalized successfully.`,
+      finalizedIds 
     });
     
   } catch (error) {

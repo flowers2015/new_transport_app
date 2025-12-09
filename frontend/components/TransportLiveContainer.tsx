@@ -4,6 +4,8 @@ import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, 
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { getApiUrl } from '../utils/apiConfig';
 import { cachedFetch } from '../utils/apiCache';
+import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
+import { OptimisticUpdateManager, applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     console.log('🔄 [TransportLiveContainer] Component rendering', { 
@@ -355,12 +357,58 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [checkFinalizePermission, currentUser]);
 
+    // اتصال به Real-Time Updates (SSE)
+    useRealtimeUpdates({
+        onMessage: (message) => {
+            console.log('📨 [TransportLiveContainer] Real-time message received:', message);
+            
+            if (message.type === 'announcement_update') {
+                // به‌روزرسانی اعلام بار
+                const { announcementId, updateType, data } = message;
+                
+                // اعمال optimistic update
+                setAnnouncements(prev => {
+                    const index = prev.findIndex(a => a.id === announcementId);
+                    if (index === -1) {
+                        // اگر اعلام بار جدید است، باید fetch کنیم
+                        console.log('🔄 [TransportLiveContainer] New announcement detected, refreshing...');
+                        fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                        return prev;
+                    }
+                    
+                    // به‌روزرسانی اعلام بار موجود
+                    return applyOptimisticUpdate(prev, announcementId, {
+                        status: data.status as FreightAnnouncementStatus,
+                        assignmentType: data.assignmentType,
+                        ...data
+                    });
+                });
+            }
+        },
+        onConnect: () => {
+            console.log('✅ [TransportLiveContainer] Real-time connection established');
+        },
+        onDisconnect: () => {
+            console.log('❌ [TransportLiveContainer] Real-time connection lost');
+        },
+        onError: (error) => {
+            console.error('❌ [TransportLiveContainer] Real-time error:', error);
+        },
+        enabled: !!currentUser?.id
+    });
+
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
-        // console.log('🔄 [TransportLive] Assignment Update Request:', {
-        //     announcementId,
-        //     assignment,
-        //     timestamp: new Date().toISOString()
-        // });
+        // Optimistic Update: فوراً UI را به‌روزرسانی کن
+        const originalAnnouncements = [...announcements];
+        setAnnouncements(prev => applyOptimisticUpdate(prev, announcementId, {
+            status: FreightAnnouncementStatus.Assigned,
+            assignmentType: assignment.assignmentType,
+            assignedDriverId: assignment.driverId,
+            assignedVehicleId: assignment.vehicleId,
+            totalFreightCost: assignment.totalFreightCost,
+            billOfLadingNumber: assignment.billOfLadingNumber
+        }));
+
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/assignment`), {
@@ -369,13 +417,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 body: JSON.stringify(assignment),
             });
             
-            // console.log('📡 [TransportLive] Assignment API Response:', {
-            //     status: res.status,
-            //     statusText: res.statusText,
-            //     url: res.url
-            // });
-            
             if (!res.ok) {
+                // Rollback optimistic update در صورت خطا
+                setAnnouncements(originalAnnouncements);
                 const errorData = await res.text();
                 console.error('❌ [TransportLive] Assignment failed:', errorData);
                 throw new Error('ثبت تخصیص ناموفق بود');

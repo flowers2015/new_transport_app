@@ -1,0 +1,62 @@
+/**
+ * Routes برای Real-Time Updates (SSE و WebSocket)
+ */
+
+const express = require('express');
+const router = express.Router();
+const { authenticateToken } = require('../middleware/authMiddleware');
+const realtimeService = require('../services/realtimeService');
+
+/**
+ * SSE Endpoint برای real-time updates
+ * GET /api/v1/realtime/sse
+ */
+router.get('/sse', authenticateToken, (req, res) => {
+  const userId = req.user.userId || req.user.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  // تنظیمات SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // برای NGINX
+
+  // اضافه کردن client به service
+  realtimeService.addSSEClient(userId, res);
+
+  // ارسال heartbeat هر 30 ثانیه برای نگه داشتن connection
+  const heartbeatInterval = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch (error) {
+      clearInterval(heartbeatInterval);
+      realtimeService.removeSSEClient(userId, res);
+    }
+  }, 30000);
+
+  // Cleanup وقتی connection بسته می‌شود
+  res.on('close', () => {
+    clearInterval(heartbeatInterval);
+    realtimeService.removeSSEClient(userId, res);
+  });
+});
+
+/**
+ * WebSocket endpoint (نیاز به WebSocket server دارد)
+ * این endpoint فقط برای اطلاعات است
+ * WebSocket server در server.js راه‌اندازی می‌شود
+ */
+router.get('/ws/info', authenticateToken, (req, res) => {
+  const stats = realtimeService.getStats();
+  res.json({
+    message: 'WebSocket server is running',
+    stats,
+    wsUrl: '/api/v1/realtime/ws'
+  });
+});
+
+module.exports = router;
+
