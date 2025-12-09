@@ -229,7 +229,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     setLoading(false);
                 }
             }
-        }, []);
+        }, [currentUser]);
 
     // State برای track کردن اینکه آیا personal resources نیاز است یا نه
     const [needsPersonalResources, setNeedsPersonalResources] = useState(false);
@@ -260,11 +260,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     // بارگذاری اولیه
     useEffect(() => {
         fetchData();
-    }, []); // فقط یک بار در mount
+    }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
 
     // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
+    const refreshFn = useCallback(() => {
+        fetchData(true, needsPersonalResources); // silent refresh with personal if needed
+    }, [fetchData, needsPersonalResources]);
+    
     useAutoRefresh({
-        refreshFn: () => fetchData(true), // silent refresh
+        refreshFn,
         interval: 30000, // 30 ثانیه
         onlyWhenVisible: true,
         immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
