@@ -66,7 +66,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [currentUser]);
 
-    const fetchData = useCallback(async (silent: boolean = false) => {
+    const fetchData = useCallback(async (silent: boolean = false, includePersonal: boolean = false) => {
             if (!silent) {
                 setLoading(true);
                 setError(null);
@@ -75,24 +75,36 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             try {
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` } as any;
-                // console.log('📡 [TransportLive] Fetching from APIs:', {
-                //     freight: 'http://localhost:3000/api/v1/freight-announcements',
-                //     vehicles: 'http://localhost:3000/api/v1/vehicles',
-                //     drivers: 'http://localhost:3000/api/v1/drivers',
-                //     personalDrivers: 'http://localhost:3000/api/v1/personal-drivers',
-                //     personalVehicles: 'http://localhost:3000/api/v1/personal-vehicles'
-                // });
+                
+                // Lazy Loading: personal-drivers و personal-vehicles فقط وقتی که نیاز است لود می‌شوند
+                // این داده‌ها فقط وقتی لود می‌شوند که:
+                // 1. کاربر نقش "ترابری شخصی" دارد
+                // 2. یا includePersonal = true باشد (مثلاً وقتی dialog assignment باز می‌شود)
+                const shouldLoadPersonal = includePersonal || 
+                    currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
+                    currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
                 
                 // استفاده از cached fetch برای بهبود عملکرد
                 // TTL: 30 ثانیه برای freight-announcements (داده‌های زنده)
                 // TTL: 10 دقیقه برای vehicles, drivers (داده‌های static - افزایش یافت)
-                const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
+                const fetchPromises: Promise<any>[] = [
                     cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000),
                     cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
                     cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
-                    cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
-                    cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
-                ]);
+                ];
+                
+                // فقط اگر نیاز باشد، personal resources را لود کن
+                if (shouldLoadPersonal) {
+                    fetchPromises.push(
+                        cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
+                        cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000) // 10 minutes
+                    );
+                } else {
+                    // اگر لود نمی‌کنیم، empty arrays برگردان
+                    fetchPromises.push(Promise.resolve([]), Promise.resolve([]));
+                }
+                
+                const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all(fetchPromises);
                 
                 // console.log('📊 [TransportLive] API Response Status:', {
                 //     freight: faRes.status,
@@ -198,10 +210,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 // console.log('🧭 [TransportLive] Normalized Announcements:', filteredAnnouncements);
 
                 setAnnouncements(filteredAnnouncements);
-                setVehicles(vehiclesData);
-                setDrivers(driversData);
-                setPersonalDrivers(personalDriversData);
-                setPersonalVehicles(personalVehiclesData);
+                setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+                setDrivers(Array.isArray(driversData) ? driversData : []);
+                // فقط اگر personal resources لود شده باشند، set کن
+                if (shouldLoadPersonal) {
+                    setPersonalDrivers(Array.isArray(pdRes) ? pdRes : []);
+                    setPersonalVehicles(Array.isArray(pvRes) ? pvRes : []);
+                }
                 
                 // console.log('✅ [TransportLive] Data successfully loaded and set in state');
             } catch (e: any) {
@@ -216,6 +231,32 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
         }, []);
 
+    // State برای track کردن اینکه آیا personal resources نیاز است یا نه
+    const [needsPersonalResources, setNeedsPersonalResources] = useState(false);
+    
+    // بررسی اینکه آیا personal resources نیاز است
+    useEffect(() => {
+        const hasPersonalAssignment = announcements.some(ann => 
+            ann.assignmentType === 'personal' || 
+            ann.assignmentType === 'شخصی' ||
+            ann.status === FreightAnnouncementStatus.PendingPersonalAssignment
+        );
+        const isPersonalUser = currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
+            currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
+        
+        if (hasPersonalAssignment || isPersonalUser) {
+            setNeedsPersonalResources(true);
+        }
+    }, [announcements, currentUser]);
+    
+    // Lazy load personal resources وقتی که نیاز است
+    useEffect(() => {
+        if (needsPersonalResources && personalDrivers.length === 0 && personalVehicles.length === 0) {
+            console.log('🔄 [TransportLive] Lazy loading personal resources...');
+            fetchData(true, true); // silent fetch with personal resources
+        }
+    }, [needsPersonalResources, personalDrivers.length, personalVehicles.length, fetchData]);
+    
     // بارگذاری اولیه
     useEffect(() => {
         fetchData();
@@ -643,6 +684,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     //     sampleVehicle: vehicles[0]
     // });
 
+    // Callback برای لود کردن personal resources وقتی که dialog assignment باز می‌شود
+    const onOpenAssignmentDialog = useCallback((announcement: FreightAnnouncement) => {
+        // اگر assignmentType === 'personal' است، personal resources را لود کن
+        if (announcement.assignmentType === 'personal' || announcement.assignmentType === 'شخصی' || 
+            announcement.status === FreightAnnouncementStatus.PendingPersonalAssignment) {
+            if (personalDrivers.length === 0 || personalVehicles.length === 0) {
+                console.log('🔄 [TransportLive] Loading personal resources for assignment dialog...');
+                fetchData(true, true); // silent fetch with personal resources
+            }
+        }
+    }, [personalDrivers.length, personalVehicles.length, fetchData]);
+
     return (
         <>
             <TransportLive
@@ -659,6 +712,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onChangeRequest={onChangeRequest}
                 onChangeVehicleType={onChangeVehicleType}
                 onOpenHistory={onOpenHistory}
+                onOpenAssignmentDialog={onOpenAssignmentDialog}
                 currentUser={currentUser}
                 activeLine={activeLine}
                 setActiveLine={setActiveLine}

@@ -40,14 +40,17 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             console.log('🔍 [FreightHistoryContainer] Fetching:', historyUrl);
             
             // استفاده از cachedFetch برای بهبود عملکرد
+            // Lazy Loading: personal-drivers و personal-vehicles فقط وقتی که نیاز است لود می‌شوند
             const { cachedFetch } = await import('../utils/apiCache');
             
+            // بررسی اینکه آیا personal resources نیاز است (اگر announcement با assignmentType === 'personal' وجود دارد)
+            // برای تاریخچه، همیشه لود می‌کنیم چون ممکن است در تاریخچه assignment های personal وجود داشته باشد
             const [historyRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
                 cachedFetch(historyUrl, { headers }, 30 * 1000), // 30s cache for history
                 cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
                 cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
-                cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
-                cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
+                cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 min cache - lazy load
+                cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache - lazy load
             ]);
 
             console.log(`✅ [FreightHistoryContainer] Received ${Array.isArray(historyRaw) ? historyRaw.length : 0} announcements`);

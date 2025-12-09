@@ -39,6 +39,7 @@ interface TransportLiveProps {
     onChangeRequest: (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => void;
     onChangeVehicleType: (announcementId: string, vehicleType: string) => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
+    onOpenAssignmentDialog?: (announcement: FreightAnnouncement) => void;
     currentUser: User;
     activeLine: FreightLineType;
     setActiveLine: (line: FreightLineType) => void;
@@ -76,7 +77,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onChangeVehicleType, onOpenHistory, activeLine, setActiveLine, finalizePermissions = {} } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, activeLine, setActiveLine, finalizePermissions = {} } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -410,7 +411,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const handleOpenDialog = useCallback((type: 'assign' | 'transfer' | 'change', ann: FreightAnnouncement) => {
         setSelectedAnnouncement(ann);
         setDialog(type);
-    }, []);
+        // اگر dialog assignment باز می‌شود، personal resources را لود کن (اگر نیاز باشد)
+        if (type === 'assign' && onOpenAssignmentDialog) {
+            onOpenAssignmentDialog(ann);
+        }
+    }, [onOpenAssignmentDialog]);
     
     const handleCloseDialog = useCallback(() => {
         setSelectedAnnouncement(null);
