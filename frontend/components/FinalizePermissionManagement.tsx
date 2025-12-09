@@ -34,6 +34,7 @@ const FinalizePermissionManagement: React.FC<FinalizePermissionManagementProps> 
   const [selectedLineType, setSelectedLineType] = useState<FreightLineType>(FreightLineType.IceCream);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [transportTypeFilter, setTransportTypeFilter] = useState<'all' | 'company' | 'personal'>('all');
 
   const headers = useMemo(() => ({
     'Content-Type': 'application/json',

@@ -1667,34 +1667,17 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             <div className="flex items-center gap-4"><label><input type="radio" value="manual" checked={costMode==='manual'} onChange={e=>setCostMode(e.target.value as any)}/> دستی</label><label><input type="radio" value="auto" checked={costMode==='auto'} onChange={e=>setCostMode(e.target.value as any)}/> خودکار</label></div>
                             {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input 
                                 type="text" 
-                                value={(() => {
-                                    // اگر focus شده، عدد خام را نشان بده
-                                    if (isAutoTotalCostFocused) {
-                                        return autoTotalCost || '';
-                                    }
-                                    // در غیر این صورت، فرمت شده را نشان بده
-                                    if (displayAutoTotalCost) {
-                                        return displayAutoTotalCost;
-                                    }
-                                    // اگر هیچ کدام نیست، از autoTotalCost استفاده کن و فرمت کن
-                                    if (autoTotalCost) {
-                                        const num = Number(autoTotalCost);
-                                        if (!isNaN(num)) {
-                                            return num.toLocaleString('fa-IR');
-                                        }
-                                        return autoTotalCost;
-                                    }
-                                    return '';
-                                })()} 
+                                value={displayAutoTotalCost || ''}
                                 onChange={e=>{
-                                    // فقط اعداد را نگه دار
+                                    // فقط اعداد را نگه دار (از input که فرمت شده است)
                                     const cleaned = e.target.value.replace(/[^\d]/g, '');
                                     setAutoTotalCost(cleaned);
                                     
-                                    // فرمت real-time با جداکننده 3 رقمی فارسی - همیشه فرمت کن
+                                    // فرمت real-time با جداکننده 3 رقمی فارسی - حین تایپ
                                     if (cleaned) {
                                         const num = Number(cleaned);
                                         if (!isNaN(num)) {
+                                            // فرمت فارسی با جداکننده 3 رقمی - حین تایپ
                                             setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
                                         } else {
                                             setDisplayAutoTotalCost(cleaned);
@@ -1702,7 +1685,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     } else {
                                         setDisplayAutoTotalCost('');
                                     }
-                                }} 
+                                }}
                                 onBlur={e=>{
                                     // هنگام خروج از فیلد، focus را غیرفعال کن و فرمت را اعمال کن
                                     setIsAutoTotalCostFocused(false);
@@ -1724,6 +1707,17 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 onFocus={e=>{
                                     // هنگام ورود به فیلد، focus را track کن
                                     setIsAutoTotalCostFocused(true);
+                                    // عدد خام را استخراج کن و در autoTotalCost قرار بده
+                                    // اما displayAutoTotalCost را فرمت شده نگه دار تا حین تایپ فرمت شود
+                                    const currentValue = e.target.value.replace(/[^\d]/g, '');
+                                    if (currentValue) {
+                                        setAutoTotalCost(currentValue);
+                                        // فرمت را نگه دار تا حین تایپ فرمت شود
+                                        const num = Number(currentValue);
+                                        if (!isNaN(num)) {
+                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
+                                        }
+                                    }
                                 }} 
                                 className="input-style flex-grow" 
                                 autoComplete="off" 
