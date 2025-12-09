@@ -3,7 +3,6 @@ import TransportLive from './TransportLive';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { getApiUrl } from '../utils/apiConfig';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { cachedFetch } from '../utils/apiCache';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
@@ -257,24 +256,44 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [needsPersonalResources, personalDrivers.length, personalVehicles.length, fetchData]);
     
-    // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
-    const refreshFn = useCallback(() => {
-        fetchData(true, needsPersonalResources); // silent refresh with personal if needed
-    }, [fetchData, needsPersonalResources]);
-    
-    useAutoRefresh({
-        refreshFn,
-        interval: 30000, // 30 ثانیه
-        onlyWhenVisible: true,
-        immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
-        enabled: true,
-        silent: true, // silent mode برای جلوگیری از چشمک زدن
-    });
-
     // بارگذاری اولیه
     useEffect(() => {
         fetchData();
     }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
+
+    // Auto-refresh هر 30 ثانیه (ساده‌تر و بدون استفاده از useAutoRefresh)
+    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const fetchDataRef = useRef(fetchData);
+    const needsPersonalResourcesRef = useRef(needsPersonalResources);
+    
+    // به‌روزرسانی ref ها
+    useEffect(() => {
+        fetchDataRef.current = fetchData;
+        needsPersonalResourcesRef.current = needsPersonalResources;
+    }, [fetchData, needsPersonalResources]);
+    
+    useEffect(() => {
+        // پاک کردن interval قبلی
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+        }
+        
+        // تنظیم interval جدید
+        refreshIntervalRef.current = setInterval(() => {
+            // فقط اگر صفحه visible است
+            if (!document.hidden) {
+                fetchDataRef.current(true, needsPersonalResourcesRef.current);
+            }
+        }, 30000); // 30 ثانیه
+        
+        // Cleanup
+        return () => {
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+                refreshIntervalRef.current = null;
+            }
+        };
+    }, []); // فقط یک بار در mount
 
     // بررسی دسترسی‌ها برای همه تب‌ها
     useEffect(() => {
