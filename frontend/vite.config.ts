@@ -25,10 +25,8 @@ export default defineConfig(({ mode }) => {
             manualChunks: (id) => {
               // Vendor chunks - separate large libraries
               if (id.includes('node_modules')) {
-                // React and React DOM in separate chunk
-                if (id.includes('react') || id.includes('react-dom')) {
-                  return 'react-vendor';
-                }
+                // React and React DOM MUST stay together to avoid initialization errors
+                // Keep them in the main vendor chunk, not separate
                 // Recharts for charts
                 if (id.includes('recharts')) {
                   return 'charts-vendor';
@@ -41,7 +39,7 @@ export default defineConfig(({ mode }) => {
                 if (id.includes('jspdf') || id.includes('html2canvas')) {
                   return 'pdf-vendor';
                 }
-                // All other node_modules
+                // All other node_modules (including React and React-DOM)
                 return 'vendor';
               }
               
