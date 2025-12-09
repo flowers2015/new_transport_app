@@ -30,6 +30,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const userManagementRoutes = require('./routes/userManagementRoutes');
 const vehicleSpecsRoutes = require('./routes/vehicleSpecsRoutes');
 const financialPeriodRoutes = require('./routes/financialPeriodRoutes');
+const finalizePermissionRoutes = require('./routes/finalizePermissionRoutes');
 
 const app = express();
 
@@ -120,6 +121,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/admin', userManagementRoutes);
 app.use('/api/v1/vehicle-specs', vehicleSpecsRoutes);
 app.use('/api/v1/financial', financialPeriodRoutes);
+app.use('/api/v1/finalize-permissions', finalizePermissionRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));

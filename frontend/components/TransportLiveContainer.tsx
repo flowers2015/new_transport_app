@@ -14,6 +14,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
+    const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
 
     const fetchData = useCallback(async (silent: boolean = false) => {
             if (!silent) {
@@ -181,6 +182,21 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         enabled: true,
         silent: true, // silent mode برای جلوگیری از چشمک زدن
     });
+
+    // بررسی دسترسی‌ها برای همه تب‌ها
+    useEffect(() => {
+        const checkAllPermissions = async () => {
+            const permissions: Record<string, boolean> = {};
+            for (const lineType of Object.values(FreightLineType)) {
+                permissions[lineType] = await checkFinalizePermission(lineType);
+            }
+            setFinalizePermissions(permissions);
+        };
+        
+        if (currentUser) {
+            checkAllPermissions();
+        }
+    }, [checkFinalizePermission, currentUser]);
 
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
         // console.log('🔄 [TransportLive] Assignment Update Request:', {
@@ -621,6 +637,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 currentUser={currentUser}
                 activeLine={activeLine}
                 setActiveLine={setActiveLine}
+                finalizePermissions={finalizePermissions}
             />
             {historyDialog && (
                 <FreightHistoryDialog

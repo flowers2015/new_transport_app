@@ -249,12 +249,317 @@ async function deleteDriver(req, res) {
   }
 }
 
+/**
+ * Import رانندگان شرکتی از فایل اکسل
+ * POST /api/v1/drivers/import-excel
+ * Body (multipart/form-data):
+ *   - file: فایل اکسل (.xlsx, .xls)
+ */
+async function importCompanyDriversFromExcel(req, res) {
+  const XLSX = require('xlsx');
+  const fs = require('fs');
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'هیچ فایلی ارسال نشده است' });
+    }
+
+    // خواندن فایل اکسل
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0]; // اولین sheet
+    const worksheet = workbook.Sheets[sheetName];
+    
+    // خواندن به صورت array برای بررسی header
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    console.log('🔍 [ImportExcel] First 3 rows of raw data:', rawData.slice(0, 3));
+    
+    // خواندن به صورت object
+    const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    
+    console.log('🔍 [ImportExcel] Total rows:', data.length);
+    if (data.length > 0) {
+      console.log('🔍 [ImportExcel] First row keys:', Object.keys(data[0]));
+      console.log('🔍 [ImportExcel] First row values:', data[0]);
+    }
+
+    if (data.length === 0) {
+      // حذف فایل موقت
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'فایل اکسل خالی است' });
+    }
+
+    const results = {
+      total: data.length,
+      success: 0,
+      updated: 0,
+      skipped: 0,
+      errors: []
+    };
+
+    // پردازش هر ردیف
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowNumber = i + 2; // +2 چون header در ردیف 1 است و index از 0 شروع می‌شود
+
+      try {
+        // استخراج داده‌ها از اکسل (با نام‌های مختلف ممکن)
+        if (i === 0) {
+          console.log('🔍 [ImportExcel] Available columns in first row:', Object.keys(row));
+        }
+        
+        // استخراج کد پرسنلی - اجباری
+        let employeeId = '';
+        const employeeIdKeys = Object.keys(row).find(key => {
+          const normalized = key.trim().toLowerCase();
+          return normalized === 'کد پرسنلی' || 
+                 normalized === 'کدپرسنلی' || 
+                 normalized === 'کد پرسنلی' ||
+                 normalized === 'employee_id' ||
+                 normalized === 'employeeid' ||
+                 normalized === 'کد پرسنلی' ||
+                 normalized === 'کدپرسنلی';
+        });
+        if (employeeIdKeys) {
+          employeeId = String(row[employeeIdKeys] || '').trim();
+        }
+        
+        // استخراج نام - اجباری
+        let name = '';
+        const nameKeys = Object.keys(row).find(key => {
+          const normalized = key.trim().toLowerCase();
+          return normalized === 'نام' ||
+                 normalized === 'name';
+        });
+        if (nameKeys) {
+          name = String(row[nameKeys] || '').trim();
+        }
+        
+        // استخراج کد ملی - اجباری
+        let nationalId = '';
+        const nationalIdKeys = Object.keys(row).find(key => {
+          const normalized = key.trim().toLowerCase();
+          return normalized === 'کد ملی' || 
+                 normalized === 'کدملی' || 
+                 normalized === 'کد‌ملی' ||
+                 normalized === 'national_id' ||
+                 normalized === 'nationalid';
+        });
+        if (nationalIdKeys) {
+          nationalId = String(row[nationalIdKeys] || '').trim();
+        }
+        
+        // استخراج سایر فیلدها - اختیاری (با بررسی همه نام‌های ممکن)
+        const getFieldValue = (possibleNames) => {
+          for (const name of possibleNames) {
+            const key = Object.keys(row).find(k => k.trim().toLowerCase() === name.toLowerCase());
+            if (key && row[key]) {
+              const value = String(row[key] || '').trim();
+              if (value) return value;
+            }
+          }
+          return null;
+        };
+        
+        const fatherName = getFieldValue(['نام پدر', 'father_name', 'fatherName']) || null;
+        const mobile = getFieldValue(['موبایل', 'شماره موبایل', 'mobile']) || null;
+        const workPhone = getFieldValue(['تلفن محل کار', 'تلفن کار', 'work_phone', 'workPhone']) || null;
+        const homePhone = getFieldValue(['تلفن منزل', 'تلفن خانه', 'home_phone', 'homePhone']) || null;
+        const jobTitle = getFieldValue(['عنوان شغلی', 'شغل', 'job_title', 'jobTitle']) || null;
+        const workLocation = getFieldValue(['محل کار', 'work_location', 'workLocation']) || null;
+        const licenseNumber = getFieldValue(['شماره گواهینامه', 'گواهینامه', 'license_number', 'licenseNumber']) || null;
+        const licenseType = getFieldValue(['نوع گواهینامه', 'license_type', 'licenseType']) || null;
+        
+        // تاریخ‌ها - فقط پشتیبانی از تاریخ شمسی (YYYY/MM/DD)
+        const { jalaliToGregorian } = require('../utils/jalali');
+        const parseJalaliDate = (dateStr) => {
+          if (!dateStr) return null;
+          const str = String(dateStr).trim();
+          if (!str || str === '') return null;
+          
+          // اگر عدد است (مثل 45234 که تاریخ اکسل است) - تبدیل به تاریخ میلادی اکسل و سپس به شمسی
+          if (/^\d+$/.test(str)) {
+            try {
+              const excelDate = XLSX.SSF.parse_date_code(parseInt(str));
+              if (excelDate) {
+                // تبدیل تاریخ میلادی اکسل به شمسی
+                const [jy, jm, jd] = require('../utils/jalali').gregorianToJalali(excelDate.y, excelDate.m, excelDate.d);
+                // سپس شمسی را به میلادی تبدیل کنیم برای ذخیره در دیتابیس
+                const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
+                return new Date(gy, gm - 1, gd);
+              }
+            } catch (error) {
+              console.warn(`⚠️ [ImportExcel] Row ${rowNumber}: خطا در تبدیل تاریخ اکسل:`, error);
+            }
+          }
+          
+          // اگر تاریخ شمسی است (YYYY/MM/DD)
+          const jalaliMatch = str.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+          if (jalaliMatch) {
+            try {
+              const [, year, month, day] = jalaliMatch;
+              const jy = parseInt(year, 10);
+              const jm = parseInt(month, 10);
+              const jd = parseInt(day, 10);
+              
+              // تبدیل تاریخ شمسی به میلادی با استفاده از کتابخانه
+              const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
+              const date = new Date(gy, gm - 1, gd);
+              
+              if (!isNaN(date.getTime())) {
+                return date;
+              }
+            } catch (error) {
+              console.warn(`⚠️ [ImportExcel] Row ${rowNumber}: خطا در تبدیل تاریخ شمسی:`, error);
+            }
+          }
+          
+          return null;
+        };
+        
+        const hireDateValue = getFieldValue(['تاریخ استخدام', 'hire_date', 'hireDate']) || '';
+        const licenseExpiryDateValue = getFieldValue(['تاریخ انقضای گواهینامه', 'license_expiry_date', 'licenseExpiryDate']) || '';
+        
+        const hireDate = parseJalaliDate(hireDateValue);
+        const licenseExpiryDate = parseJalaliDate(licenseExpiryDateValue);
+
+        // Validation فیلدهای اجباری
+        const missingFields = [];
+        if (!employeeId) missingFields.push('کد پرسنلی');
+        if (!name) missingFields.push('نام');
+        
+        if (missingFields.length > 0) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: `فیلدهای اجباری خالی است: ${missingFields.join('، ')}`,
+            data: { employeeId, name, nationalId }
+          });
+          continue;
+        }
+
+        // Validation فرمت کد ملی (اگر وارد شده باشد، باید 10 رقم باشد)
+        if (nationalId && nationalId.trim() !== '' && !/^\d{10}$/.test(nationalId)) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: 'کد ملی باید 10 رقم باشد یا خالی باشد',
+            data: { nationalId }
+          });
+          continue;
+        }
+        
+        // اگر کد ملی خالی بود، null می‌گذاریم (نه موقت)
+        if (!nationalId || nationalId.trim() === '') {
+          nationalId = null;
+        }
+
+        // Validation فرمت موبایل (اگر وارد شده باشد)
+        if (mobile && !/^09\d{9}$/.test(mobile)) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: 'شماره موبایل باید 11 رقم و با 09 شروع شود (یا خالی باشد)',
+            data: { mobile }
+          });
+          continue;
+        }
+
+        // بررسی وجود راننده با این کد پرسنلی یا کد ملی (اگر کد ملی وارد شده باشد)
+        const existingByEmployeeId = await pool.query(
+          'SELECT id FROM drivers WHERE employee_id = $1 AND is_deleted = false',
+          [employeeId]
+        );
+        
+        let existingByNationalId = { rows: [] };
+        if (nationalId) {
+          existingByNationalId = await pool.query(
+            'SELECT id FROM drivers WHERE national_id = $1 AND is_deleted = false',
+            [nationalId]
+          );
+        }
+
+        if (existingByEmployeeId.rows.length > 0 || (nationalId && existingByNationalId.rows.length > 0)) {
+          // Update existing driver
+          const driverId = existingByEmployeeId.rows[0]?.id || (nationalId ? existingByNationalId.rows[0]?.id : null);
+          
+          await pool.query(
+            `UPDATE drivers SET 
+              name = $1, 
+              father_name = $2, 
+              national_id = $3, 
+              mobile = $4, 
+              work_phone = $5, 
+              home_phone = $6, 
+              job_title = $7, 
+              work_location = $8, 
+              license_number = $9, 
+              license_type = $10, 
+              hire_date = $11, 
+              license_expiry_date = $12, 
+              updated_at = NOW()
+            WHERE id = $13 AND is_deleted = false`,
+            [
+              name, fatherName, nationalId || null, mobile, workPhone, homePhone,
+              jobTitle, workLocation, licenseNumber, licenseType,
+              hireDate, licenseExpiryDate, driverId
+            ]
+          );
+          results.updated++;
+        } else {
+          // Create new driver
+          const id = crypto.randomUUID();
+          await pool.query(
+            `INSERT INTO drivers (
+              id, employee_id, name, father_name, national_id, mobile, 
+              work_phone, home_phone, job_title, work_location, 
+              license_number, license_type, hire_date, license_expiry_date,
+              created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())`,
+            [
+              id, employeeId, name, fatherName, nationalId || null, mobile,
+              workPhone, homePhone, jobTitle, workLocation,
+              licenseNumber, licenseType, hireDate, licenseExpiryDate
+            ]
+          );
+          results.success++;
+        }
+      } catch (error) {
+        results.skipped++;
+        results.errors.push({
+          row: rowNumber,
+          error: error.message || 'خطای نامشخص',
+          data: row
+        });
+      }
+    }
+
+    // حذف فایل موقت
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      message: 'Import با موفقیت انجام شد',
+      results
+    });
+  } catch (error) {
+    console.error('Error importing company drivers from Excel:', error);
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting temp file:', unlinkError);
+      }
+    }
+    res.status(500).json({ message: 'خطا در پردازش فایل اکسل: ' + error.message });
+  }
+}
+
 module.exports = {
   getDrivers,
   getDriverById,
   createDriver,
   updateDriver,
   deleteDriver,
+  importCompanyDriversFromExcel,
 };
 
 

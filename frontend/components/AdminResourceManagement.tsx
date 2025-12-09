@@ -704,12 +704,10 @@ const AdminResourceManagement: React.FC = () => {
             >
               + افزودن جدید
             </button>
-            {(activeTab === 'personal-drivers' || activeTab === 'personal-vehicles') && (
-              <ImportExcelButton 
-                type={activeTab} 
-                onImportSuccess={fetchData}
-              />
-            )}
+            <ImportExcelButton 
+              type={activeTab} 
+              onImportSuccess={fetchData}
+            />
             <button
               onClick={fetchData}
               disabled={loading}
@@ -1427,7 +1425,7 @@ const PersonalVehicleForm: React.FC<{
 // Import Excel Component
 // ============================================
 const ImportExcelButton: React.FC<{
-  type: 'personal-drivers' | 'personal-vehicles';
+  type: 'company-drivers' | 'company-vehicles' | 'personal-drivers' | 'personal-vehicles';
   onImportSuccess: () => void;
 }> = ({ type, onImportSuccess }) => {
   const [showDialog, setShowDialog] = useState(false);
@@ -1458,9 +1456,23 @@ const ImportExcelButton: React.FC<{
       const formData = new FormData();
       formData.append('file', file);
 
-      const endpoint = type === 'personal-drivers' 
-        ? 'personal-drivers/import-excel'
-        : 'personal-vehicles/import-excel';
+      let endpoint = '';
+      switch (type) {
+        case 'company-drivers':
+          endpoint = 'drivers/import-excel';
+          break;
+        case 'company-vehicles':
+          endpoint = 'vehicles/import-excel';
+          break;
+        case 'personal-drivers':
+          endpoint = 'personal-drivers/import-excel';
+          break;
+        case 'personal-vehicles':
+          endpoint = 'personal-vehicles/import-excel';
+          break;
+        default:
+          throw new Error('نوع نامعتبر');
+      }
 
       console.log('📡 [ImportExcel] Sending request to:', getApiUrl(endpoint));
 
@@ -1556,7 +1568,11 @@ const ImportExcelButton: React.FC<{
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">
-                Import {type === 'personal-drivers' ? 'رانندگان شخصی' : 'خودروهای شخصی'} از اکسل
+                Import {
+                  type === 'company-drivers' ? 'رانندگان شرکتی' :
+                  type === 'company-vehicles' ? 'خودروهای شرکتی' :
+                  type === 'personal-drivers' ? 'رانندگان شخصی' : 'خودروهای شخصی'
+                } از اکسل
               </h2>
               <button
                 onClick={() => { setShowDialog(false); setFile(null); setResult(null); }}
@@ -1584,6 +1600,56 @@ const ImportExcelButton: React.FC<{
                   </p>
                 )}
               </div>
+
+              {type === 'company-drivers' && (
+                <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                  <strong>ستون‌های مورد نیاز:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li><strong>کد پرسنلی</strong> (اجباری) - نام‌های قابل قبول: "کد پرسنلی", "کدپرسنلی", "employee_id", "employeeId"</li>
+                    <li><strong>نام</strong> (اجباری) - نام‌های قابل قبول: "نام", "name"</li>
+                    <li><strong>کد ملی</strong> (اختیاری) - نام‌های قابل قبول: "کد ملی", "کدملی", "national_id", "nationalId"</li>
+                    <li><strong>نام پدر</strong> (اختیاری) - نام‌های قابل قبول: "نام پدر", "father_name", "fatherName"</li>
+                    <li><strong>موبایل</strong> (اختیاری) - نام‌های قابل قبول: "موبایل", "شماره موبایل", "mobile"</li>
+                    <li><strong>تلفن محل کار</strong> (اختیاری) - نام‌های قابل قبول: "تلفن محل کار", "تلفن کار", "work_phone", "workPhone"</li>
+                    <li><strong>تلفن منزل</strong> (اختیاری) - نام‌های قابل قبول: "تلفن منزل", "تلفن خانه", "home_phone", "homePhone"</li>
+                    <li><strong>عنوان شغلی</strong> (اختیاری) - نام‌های قابل قبول: "عنوان شغلی", "شغل", "job_title", "jobTitle"</li>
+                    <li><strong>محل کار</strong> (اختیاری) - نام‌های قابل قبول: "محل کار", "work_location", "workLocation"</li>
+                    <li><strong>شماره گواهینامه</strong> (اختیاری) - نام‌های قابل قبول: "شماره گواهینامه", "گواهینامه", "license_number", "licenseNumber"</li>
+                    <li><strong>نوع گواهینامه</strong> (اختیاری) - نام‌های قابل قبول: "نوع گواهینامه", "license_type", "licenseType"</li>
+                    <li><strong>تاریخ استخدام</strong> (اختیاری) - نام‌های قابل قبول: "تاریخ استخدام", "hire_date", "hireDate"</li>
+                    <li><strong>تاریخ انقضای گواهینامه</strong> (اختیاری) - نام‌های قابل قبول: "تاریخ انقضای گواهینامه", "license_expiry_date", "licenseExpiryDate"</li>
+                  </ul>
+                  <p className="mt-2 text-xs text-blue-700">
+                    ⚠️ توجه: اگر راننده با کد پرسنلی یا کد ملی موجود باشد، اطلاعات به‌روزرسانی می‌شود
+                  </p>
+                </div>
+              )}
+
+              {type === 'company-vehicles' && (
+                <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                  <strong>ستون‌های مورد نیاز:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li><strong>مدل</strong> (اجباری) - نام‌های قابل قبول: "مدل", "model"</li>
+                    <li><strong>برند</strong> (اختیاری) - نام‌های قابل قبول: "برند", "brand"</li>
+                    <li><strong>نوع</strong> (اختیاری) - نام‌های قابل قبول: "نوع", "type", "vehicle_type", "vehicleType"</li>
+                    <li><strong>بخش اول پلاک</strong> (اختیاری) - نام‌های قابل قبول: "بخش اول پلاک", "پلاک بخش اول", "plate_part1", "platePart1"</li>
+                    <li><strong>حرف پلاک</strong> (اختیاری) - نام‌های قابل قبول: "حرف پلاک", "پلاک حرف", "plate_letter", "plateLetter"</li>
+                    <li><strong>بخش دوم پلاک</strong> (اختیاری) - نام‌های قابل قبول: "بخش دوم پلاک", "پلاک بخش دوم", "plate_part2", "platePart2"</li>
+                    <li><strong>کد شهر پلاک</strong> (اختیاری) - نام‌های قابل قبول: "کد شهر پلاک", "پلاک کد شهر", "plate_city_code", "plateCityCode"</li>
+                    <li><strong>VIN</strong> (اختیاری) - نام‌های قابل قبول: "VIN", "vin", "شماره VIN", "شمارهVIN"</li>
+                    <li><strong>شماره سریال</strong> (اختیاری) - نام‌های قابل قبول: "شماره سریال", "serial_number", "serialNumber"</li>
+                    <li><strong>کد خودرو</strong> (اختیاری) - نام‌های قابل قبول: "کد خودرو", "vehicle_code", "vehicleCode"</li>
+                    <li><strong>شرکت هولدینگ</strong> (اختیاری) - نام‌های قابل قبول: "شرکت هولدینگ", "holding_company", "holdingCompany"</li>
+                    <li><strong>شرکت میهن</strong> (اختیاری) - نام‌های قابل قبول: "شرکت میهن", "mihan_company", "mihanCompany"</li>
+                    <li><strong>دسته خودرو</strong> (اختیاری) - نام‌های قابل قبول: "دسته خودرو", "vehicle_category", "vehicleCategory"</li>
+                    <li><strong>سال</strong> (اختیاری) - نام‌های قابل قبول: "سال", "year"</li>
+                    <li><strong>وضعیت</strong> (اختیاری) - نام‌های قابل قبول: "وضعیت", "status"</li>
+                  </ul>
+                  <p className="mt-2 text-xs text-blue-700">
+                    ⚠️ توجه: اگر خودرو با VIN یا کد خودرو موجود باشد، اطلاعات به‌روزرسانی می‌شود
+                  </p>
+                </div>
+              )}
 
               {type === 'personal-drivers' && (
                 <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">

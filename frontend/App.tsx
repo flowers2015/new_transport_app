@@ -53,6 +53,7 @@ import CustomerManagement from './components/CustomerManagement';
 import UserManagement from './components/UserManagement';
 import FreightManagement from './components/FreightManagement';
 import AdminResourceManagement from './components/AdminResourceManagement';
+import FinalizePermissionManagement from './components/FinalizePermissionManagement';
 // Import other components as needed...
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
@@ -585,6 +586,11 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.AdminResourceManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <AdminResourceManagement />;
+            
+            case View.FinalizePermissionManagement:
+                console.log('[App] Render view:', View.FinalizePermissionManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <FinalizePermissionManagement currentUser={currentUser} />;
             
             // Add cases for other views here as they are implemented
             // e.g., case View.InvoiceDetail: ...

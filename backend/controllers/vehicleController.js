@@ -511,9 +511,229 @@ async function updateVehicle(req, res) {
   }
 }
 
+/**
+ * Import خودروهای شرکتی از فایل اکسل
+ * POST /api/v1/vehicles/import-excel
+ * Body (multipart/form-data):
+ *   - file: فایل اکسل (.xlsx, .xls)
+ */
+async function importCompanyVehiclesFromExcel(req, res) {
+  const XLSX = require('xlsx');
+  const fs = require('fs');
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'هیچ فایلی ارسال نشده است' });
+    }
+
+    // خواندن فایل اکسل
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0]; // اولین sheet
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+    if (data.length === 0) {
+      // حذف فایل موقت
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'فایل اکسل خالی است' });
+    }
+
+    const results = {
+      total: data.length,
+      success: 0,
+      updated: 0,
+      skipped: 0,
+      errors: []
+    };
+
+    // پردازش هر ردیف
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowNumber = i + 2; // +2 چون header در ردیف 1 است و index از 0 شروع می‌شود
+
+      try {
+        // استخراج داده‌ها از اکسل (با نام‌های مختلف ممکن)
+        const model = String(row['مدل'] || row['model'] || '').trim();
+        const brand = String(row['برند'] || row['brand'] || '').trim() || null;
+        const type = String(row['نوع'] || row['type'] || row['vehicle_type'] || row['vehicleType'] || '').trim() || null;
+        const platePart1 = String(row['بخش اول پلاک'] || row['پلاک بخش اول'] || row['plate_part1'] || row['platePart1'] || '').trim() || null;
+        const plateLetter = String(row['حرف پلاک'] || row['پلاک حرف'] || row['plate_letter'] || row['plateLetter'] || '').trim() || null;
+        const platePart2 = String(row['بخش دوم پلاک'] || row['پلاک بخش دوم'] || row['plate_part2'] || row['platePart2'] || '').trim() || null;
+        const plateCityCode = String(row['کد شهر پلاک'] || row['پلاک کد شهر'] || row['plate_city_code'] || row['plateCityCode'] || '').trim() || null;
+        const vin = String(row['VIN'] || row['vin'] || row['شماره VIN'] || row['شمارهVIN'] || '').trim() || null;
+        const serialNumber = String(row['شماره سریال'] || row['serial_number'] || row['serialNumber'] || '').trim() || null;
+        const vehicleCode = String(row['کد خودرو'] || row['vehicle_code'] || row['vehicleCode'] || '').trim() || null;
+        const holdingCompany = String(row['شرکت هولدینگ'] || row['holding_company'] || row['holdingCompany'] || '').trim() || null;
+        const mihanCompany = String(row['شرکت میهن'] || row['mihan_company'] || row['mihanCompany'] || '').trim() || null;
+        const vehicleCategory = String(row['دسته خودرو'] || row['vehicle_category'] || row['vehicleCategory'] || '').trim() || null;
+        const year = row['سال'] || row['year'] ? parseInt(row['سال'] || row['year']) : null;
+        const status = String(row['وضعیت'] || row['status'] || '').trim() || null;
+
+        // Validation فیلدهای اجباری
+        const missingFields = [];
+        if (!model) missingFields.push('مدل');
+        
+        if (missingFields.length > 0) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            error: `فیلدهای اجباری خالی است: ${missingFields.join('، ')}`,
+            data: { model }
+          });
+          continue;
+        }
+
+        // اگر VIN وارد شده باشد، بررسی تکراری بودن
+        if (vin) {
+          const existingVin = await pool.query(
+            'SELECT id FROM vehicles WHERE vin = $1',
+            [vin]
+          );
+          
+          if (existingVin.rows.length > 0) {
+            // Update existing vehicle
+            const vehicleId = existingVin.rows[0].id;
+            
+            const updateFields = [];
+            const updateValues = [];
+            let paramIndex = 1;
+            
+            if (model) { updateFields.push(`model = $${paramIndex++}`); updateValues.push(model); }
+            if (brand) { updateFields.push(`brand = $${paramIndex++}`); updateValues.push(brand); }
+            if (type) { updateFields.push(`type = $${paramIndex++}`); updateValues.push(type); }
+            if (platePart1) { updateFields.push(`plate_part1 = $${paramIndex++}`); updateValues.push(platePart1); }
+            if (plateLetter) { updateFields.push(`plate_letter = $${paramIndex++}`); updateValues.push(plateLetter); }
+            if (platePart2) { updateFields.push(`plate_part2 = $${paramIndex++}`); updateValues.push(platePart2); }
+            if (plateCityCode) { updateFields.push(`plate_city_code = $${paramIndex++}`); updateValues.push(plateCityCode); }
+            if (serialNumber) { updateFields.push(`serial_number = $${paramIndex++}`); updateValues.push(serialNumber); }
+            if (vehicleCode) { updateFields.push(`vehicle_code = $${paramIndex++}`); updateValues.push(vehicleCode); }
+            if (holdingCompany) { updateFields.push(`holding_company = $${paramIndex++}`); updateValues.push(holdingCompany); }
+            if (mihanCompany) { updateFields.push(`mihan_company = $${paramIndex++}`); updateValues.push(mihanCompany); }
+            if (vehicleCategory) { updateFields.push(`vehicle_category = $${paramIndex++}`); updateValues.push(vehicleCategory); }
+            if (year) { updateFields.push(`year = $${paramIndex++}`); updateValues.push(year); }
+            if (status) { updateFields.push(`status = $${paramIndex++}`); updateValues.push(status); }
+            
+            updateFields.push(`updated_at = NOW()`);
+            updateValues.push(vehicleId);
+            
+            if (updateFields.length > 1) {
+              await pool.query(
+                `UPDATE vehicles SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
+                updateValues
+              );
+              results.updated++;
+            } else {
+              results.skipped++;
+              results.errors.push({
+                row: rowNumber,
+                error: 'هیچ فیلدی برای به‌روزرسانی وجود ندارد',
+                data: { vin }
+              });
+            }
+            continue;
+          }
+        }
+
+        // اگر vehicleCode وارد شده باشد، بررسی تکراری بودن
+        if (vehicleCode) {
+          const existingCode = await pool.query(
+            'SELECT id FROM vehicles WHERE vehicle_code = $1',
+            [vehicleCode]
+          );
+          
+          if (existingCode.rows.length > 0) {
+            // Update existing vehicle
+            const vehicleId = existingCode.rows[0].id;
+            
+            const updateFields = [];
+            const updateValues = [];
+            let paramIndex = 1;
+            
+            if (model) { updateFields.push(`model = $${paramIndex++}`); updateValues.push(model); }
+            if (brand) { updateFields.push(`brand = $${paramIndex++}`); updateValues.push(brand); }
+            if (type) { updateFields.push(`type = $${paramIndex++}`); updateValues.push(type); }
+            if (platePart1) { updateFields.push(`plate_part1 = $${paramIndex++}`); updateValues.push(platePart1); }
+            if (plateLetter) { updateFields.push(`plate_letter = $${paramIndex++}`); updateValues.push(plateLetter); }
+            if (platePart2) { updateFields.push(`plate_part2 = $${paramIndex++}`); updateValues.push(platePart2); }
+            if (plateCityCode) { updateFields.push(`plate_city_code = $${paramIndex++}`); updateValues.push(plateCityCode); }
+            if (vin) { updateFields.push(`vin = $${paramIndex++}`); updateValues.push(vin); }
+            if (serialNumber) { updateFields.push(`serial_number = $${paramIndex++}`); updateValues.push(serialNumber); }
+            if (holdingCompany) { updateFields.push(`holding_company = $${paramIndex++}`); updateValues.push(holdingCompany); }
+            if (mihanCompany) { updateFields.push(`mihan_company = $${paramIndex++}`); updateValues.push(mihanCompany); }
+            if (vehicleCategory) { updateFields.push(`vehicle_category = $${paramIndex++}`); updateValues.push(vehicleCategory); }
+            if (year) { updateFields.push(`year = $${paramIndex++}`); updateValues.push(year); }
+            if (status) { updateFields.push(`status = $${paramIndex++}`); updateValues.push(status); }
+            
+            updateFields.push(`updated_at = NOW()`);
+            updateValues.push(vehicleId);
+            
+            if (updateFields.length > 1) {
+              await pool.query(
+                `UPDATE vehicles SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
+                updateValues
+              );
+              results.updated++;
+            } else {
+              results.skipped++;
+              results.errors.push({
+                row: rowNumber,
+                error: 'هیچ فیلدی برای به‌روزرسانی وجود ندارد',
+                data: { vehicleCode }
+              });
+            }
+            continue;
+          }
+        }
+
+        // Create new vehicle
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO vehicles (
+            id, model, brand, type, plate_part1, plate_letter, plate_part2, plate_city_code,
+            vin, serial_number, vehicle_code, holding_company, mihan_company, 
+            vehicle_category, year, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())`,
+          [
+            id, model, brand, type, platePart1, plateLetter, platePart2, plateCityCode,
+            vin, serialNumber, vehicleCode, holdingCompany, mihanCompany,
+            vehicleCategory, year, status
+          ]
+        );
+        results.success++;
+      } catch (error) {
+        results.skipped++;
+        results.errors.push({
+          row: rowNumber,
+          error: error.message || 'خطای نامشخص',
+          data: row
+        });
+      }
+    }
+
+    // حذف فایل موقت
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      message: 'Import با موفقیت انجام شد',
+      results
+    });
+  } catch (error) {
+    console.error('Error importing company vehicles from Excel:', error);
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting temp file:', unlinkError);
+      }
+    }
+    res.status(500).json({ message: 'خطا در پردازش فایل اکسل: ' + error.message });
+  }
+}
+
 module.exports = {
   getVehicles,
   getVehicleById,
   createVehicle,
   updateVehicle,
+  importCompanyVehiclesFromExcel,
 };
