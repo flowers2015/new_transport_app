@@ -78,8 +78,6 @@ export default defineConfig(({ mode }) => {
                 return 'types';
               }
             },
-            // Optimize chunk size
-            chunkSizeWarningLimit: 1000, // 1MB warning threshold
           },
         },
         // Optimize build output
@@ -91,6 +89,8 @@ export default defineConfig(({ mode }) => {
             drop_debugger: true,
           },
         },
+        // Chunk size warning limit (moved to build level in Vite 6)
+        chunkSizeWarningLimit: 1000, // 1MB warning threshold
         // Enable source maps for debugging (optional, can disable in production)
         sourcemap: mode !== 'production',
       },
