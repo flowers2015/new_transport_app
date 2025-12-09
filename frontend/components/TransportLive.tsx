@@ -1315,32 +1315,72 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         }
     }, [announcement, drivers, vehicles]);
     
-    // محاسبه خودکار کرایه هر مقصد بر اساس کرایه کل و تناژ
-    // این useEffect فقط وقتی اجرا می‌شود که کاربر کرایه کل را تغییر دهد (در حالت auto)
+    // محاسبه خودکار کرایه هر مقصد بر اساس کرایه کل و تناژ (در حالت auto)
     useEffect(() => {
         if(costMode === 'auto' && destinations.length > 0 && autoTotalCost) {
-            const totalCost = Number(autoTotalCost) || 0;
-            const totalTonnage = destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0);
-            if(totalTonnage > 0 && totalCost > 0) {
-                // محاسبه کرایه هر مقصد بر اساس نسبت تناژ
-                setDestinations(prevDests => {
-                    const updatedDests = prevDests.map(dest => {
-                        const tonnageRatio = (Number(dest.tonnage) || 0) / totalTonnage;
-                        return {...dest, freightCost: Math.round(totalCost * tonnageRatio)};
-                    });
-                    // به‌روزرسانی displayFreightCosts با فرمت
-                    const newDisplayCosts: { [key: string]: string } = {};
-                    updatedDests.forEach((dest: any) => {
-                        if (dest.freightCost && dest.freightCost > 0) {
-                            newDisplayCosts[dest.id] = Number(dest.freightCost).toLocaleString('fa-IR');
+            // تبدیل autoTotalCost از string با کاما به number
+            const cleanedCost = autoTotalCost.replace(/,/g, '');
+            const totalCost = cleanedCost ? Number(cleanedCost) : 0;
+            if(totalCost > 0) {
+                const totalTonnage = destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0);
+                if(totalTonnage > 0) {
+                    // محاسبه کرایه هر مقصد بر اساس نسبت تناژ
+                    setDestinations(prevDests => {
+                        // بررسی اینکه آیا کرایه‌ها قبلاً محاسبه شده‌اند یا نه (برای جلوگیری از حلقه)
+                        const currentTotal = prevDests.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
+                        const expectedTotal = totalCost;
+                        // اگر تفاوت کمتر از 1 ریال است، نیازی به محاسبه مجدد نیست
+                        if(Math.abs(currentTotal - expectedTotal) < 1) {
+                            return prevDests;
                         }
+                        
+                        const updatedDests = prevDests.map(dest => {
+                            const tonnageRatio = (Number(dest.tonnage) || 0) / totalTonnage;
+                            return {...dest, freightCost: Math.round(totalCost * tonnageRatio)};
+                        });
+                        
+                        // به‌روزرسانی displayFreightCosts با فرمت کاما (مثل فیلد کرایه کل)
+                        const newDisplayCosts: { [key: string]: string } = {};
+                        updatedDests.forEach((dest: any) => {
+                            if (dest.freightCost && dest.freightCost > 0) {
+                                const value = String(dest.freightCost);
+                                newDisplayCosts[dest.id] = value.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                            } else {
+                                newDisplayCosts[dest.id] = '';
+                            }
+                        });
+                        setDisplayFreightCosts(newDisplayCosts);
+                        return updatedDests;
                     });
-                    setDisplayFreightCosts(prev => ({ ...prev, ...newDisplayCosts }));
-                    return updatedDests;
-                });
+                }
             }
         }
     }, [autoTotalCost, costMode]);
+
+    // محاسبه مجموع کرایه‌های مقاصد (برای استفاده در حالت دستی)
+    const manualTotalCost = useMemo(() => {
+        if(costMode === 'manual' && destinations.length > 0) {
+            return destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
+        }
+        return 0;
+    }, [destinations, costMode]);
+
+    // به‌روزرسانی کرایه کل وقتی در حالت دستی کرایه‌های مقاصد تغییر می‌کنند
+    useEffect(() => {
+        if(costMode === 'manual' && destinations.length > 0) {
+            if(manualTotalCost > 0) {
+                // فرمت با کاما (مثل فیلد کرایه کل)
+                const formatted = manualTotalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                // فقط اگر مقدار تغییر کرده باشد، به‌روزرسانی کن (برای جلوگیری از حلقه)
+                const currentFormatted = autoTotalCost.replace(/,/g, '');
+                if(currentFormatted !== manualTotalCost.toString()) {
+                    setAutoTotalCost(formatted);
+                }
+            } else {
+                setAutoTotalCost('');
+            }
+        }
+    }, [manualTotalCost, costMode]);
 
     const handleCompanyDriverLookup = () => {
         // Search by employeeId first, then by name (partial match)
