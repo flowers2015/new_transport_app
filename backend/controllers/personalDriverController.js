@@ -209,17 +209,17 @@ async function updatePersonalDriver(req, res) {
  */
 async function getAllPersonalDrivers(req, res) {
   try {
+    // فقط فیلدهای ضروری برای dropdown/select را برگردان
+    // حذف updated_at برای کاهش حجم داده
     const { rows } = await pool.query(`
       SELECT 
         id,
         national_id AS "nationalId",
         name,
         mobile,
-        driver_smart_id AS "driverSmartId",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
+        driver_smart_id AS "driverSmartId"
       FROM personal_drivers 
-      ORDER BY created_at DESC
+      ORDER BY name ASC
     `);
 
     res.json(rows);

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const pool = require('./db'); // Import the pool
 
@@ -33,6 +34,18 @@ const financialPeriodRoutes = require('./routes/financialPeriodRoutes');
 const finalizePermissionRoutes = require('./routes/finalizePermissionRoutes');
 
 const app = express();
+
+// Compression middleware - باید قبل از routes اضافه شود
+app.use(compression({
+  level: 6, // سطح فشرده‌سازی (1-9، 6 بهینه است)
+  filter: (req, res) => {
+    // فقط JSON و text را فشرده کن
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
 
 // Middleware
 // تنظیمات CORS: 

@@ -231,6 +231,8 @@ async function updatePersonalVehicle(req, res) {
  */
 async function getAllPersonalVehicles(req, res) {
   try {
+    // فقط فیلدهای ضروری برای dropdown/select را برگردان
+    // حذف created_at و updated_at برای کاهش حجم داده
     const { rows } = await pool.query(`
       SELECT 
         id,
@@ -240,11 +242,9 @@ async function getAllPersonalVehicles(req, res) {
         plate_part2 AS "platePart2",
         plate_city_code AS "plateCityCode",
         vehicle_type AS "vehicleType",
-        vehicle_usage AS "vehicleUsage",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
+        vehicle_usage AS "vehicleUsage"
       FROM personal_vehicles 
-      ORDER BY created_at DESC
+      ORDER BY plate_part1 ASC, plate_part2 ASC
     `);
 
     // فرمت کردن پلاک
