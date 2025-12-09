@@ -94,8 +94,6 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         localStorage.setItem('freightHistoryViewMode', viewMode);
     }, [viewMode]);
     const [isRulesOpen, setIsRulesOpen] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(50);
     // فیلتر ستون‌ها - هر ستونی که در این Set باشد، نمایش داده می‌شود
     const [visibleColumnHeaders, setVisibleColumnHeaders] = useState<Set<string>>(new Set());
     
