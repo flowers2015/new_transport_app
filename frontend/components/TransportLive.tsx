@@ -1500,10 +1500,19 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // محاسبه totalFreightCost برای company user
             let companyTotalCost = 0;
             if (costMode === 'auto' && autoTotalCost) {
-                companyTotalCost = Number(autoTotalCost) || 0;
+                // تبدیل string به number - حذف جداکننده‌های فارسی
+                const cleanedCost = String(autoTotalCost).replace(/[^\d]/g, '');
+                companyTotalCost = cleanedCost ? Number(cleanedCost) : 0;
+                console.log('💰 [Company] Auto cost mode:', { autoTotalCost, cleanedCost, companyTotalCost });
             } else {
                 companyTotalCost = destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
+                console.log('💰 [Company] Manual cost mode:', { companyTotalCost, destinations: destinations.map(d => ({ city: d.city, freightCost: d.freightCost })) });
             }
+            if (companyTotalCost <= 0) {
+                alert('لطفاً کرایه را وارد کنید.');
+                return;
+            }
+            console.log('💾 [Company] Saving assignment with totalFreightCost:', companyTotalCost);
             onUpdateAssignment(announcement.id, {
                 driverId: foundCompanyDriver.id, vehicleId: foundVehicle.id, billOfLadingNumber: blNumber, assignmentType: 'company',
                 totalFreightCost: companyTotalCost,
@@ -1556,11 +1565,21 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // محاسبه totalFreightCost برای personal user
             let personalTotalCost = 0;
             if (costMode === 'auto' && autoTotalCost) {
-                personalTotalCost = Number(autoTotalCost) || 0;
+                // تبدیل string به number - حذف جداکننده‌های فارسی
+                const cleanedCost = String(autoTotalCost).replace(/[^\d]/g, '');
+                personalTotalCost = cleanedCost ? Number(cleanedCost) : 0;
+                console.log('💰 [Personal] Auto cost mode:', { autoTotalCost, cleanedCost, personalTotalCost });
             } else {
                 personalTotalCost = totalPersonalCost;
+                console.log('💰 [Personal] Manual cost mode:', { personalTotalCost, totalPersonalCost, destinations: destinations.map(d => ({ city: d.city, freightCost: d.freightCost })) });
             }
             
+            if (personalTotalCost <= 0) {
+                alert('لطفاً کرایه را وارد کنید.');
+                return;
+            }
+            
+            console.log('💾 [Personal] Saving assignment with totalFreightCost:', personalTotalCost);
             onUpdateAssignment(announcement.id, {
                 driverId: foundPersonalDriver?.id,
                 vehicleId: foundPersonalVehicle?.id,
@@ -1616,7 +1635,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     // فقط اعداد و جداکننده فارسی (،) را بپذیر
                                     let value = e.target.value.replace(/[^\d،]/g, '');
                                     // حذف جداکننده‌ها برای محاسبه
-                                    const numValue = value.replace(/،/g, '');
+                                    const numValue = value.replace(/،/g, '').replace(/\u200C/g, '').replace(/\u200D/g, ''); // حذف zero-width characters
                                     // اگر خالی است، مقدار خالی بگذار
                                     if (numValue === '') {
                                         setAutoTotalCost('');
@@ -1626,13 +1645,15 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     // اگر عدد معتبر است، فرمت سه رقم سه رقم فارسی اعمال کن
                                     if (/^\d+$/.test(numValue)) {
                                         const num = Number(numValue);
-                                        if (!isNaN(num)) {
+                                        if (!isNaN(num) && num > 0) {
+                                            // ذخیره به صورت string برای حفظ دقت
                                             setAutoTotalCost(numValue);
                                             // فرمت فارسی با جداکننده 3 رقمی - حین تایپ
                                             setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
+                                            console.log('💵 [Company AutoCost] onChange:', { numValue, num, formatted: num.toLocaleString('fa-IR'), autoTotalCost: numValue });
                                         } else {
-                                            setAutoTotalCost(numValue);
-                                            setDisplayAutoTotalCost(value);
+                                            setAutoTotalCost('');
+                                            setDisplayAutoTotalCost('');
                                         }
                                     }
                                 }}
