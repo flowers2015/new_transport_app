@@ -14,14 +14,17 @@ async function getTransportUsers(req, res) {
         role,
         employee_id
       FROM users 
-      WHERE role IN ('کاربر ترابری (شرکت)', 'کاربر ترابری (خودرو شخصی)', 'ترابری')
+      WHERE role IN ('کاربر ترابری (شرکت)', 'کاربر ترابری (خودرو شخصی)', 'ترابری', 'TransportationUser', 'Transportation_Personal_Vehicle_User')
       ORDER BY name
     `);
     
     res.json(rows);
   } catch (error) {
     console.error('Error getting transport users:', error);
-    res.status(500).json({ message: 'خطا در دریافت لیست کاربران' });
+    res.status(500).json({ 
+      message: 'خطا در دریافت لیست کاربران',
+      error: error.message 
+    });
   }
 }
 
@@ -30,6 +33,23 @@ async function getTransportUsers(req, res) {
  */
 async function getFinalizePermissions(req, res) {
   try {
+    // بررسی وجود جدول
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'finalize_permissions'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.error('Table finalize_permissions does not exist');
+      return res.status(500).json({ 
+        message: 'جدول دسترسی‌ها وجود ندارد. لطفاً migration را اجرا کنید.',
+        error: 'TABLE_NOT_FOUND'
+      });
+    }
+    
     const { rows } = await pool.query(`
       SELECT 
         fp.id,
@@ -48,7 +68,10 @@ async function getFinalizePermissions(req, res) {
     res.json(rows);
   } catch (error) {
     console.error('Error getting finalize permissions:', error);
-    res.status(500).json({ message: 'خطا در دریافت دسترسی‌ها' });
+    res.status(500).json({ 
+      message: 'خطا در دریافت دسترسی‌ها',
+      error: error.message 
+    });
   }
 }
 
@@ -61,6 +84,20 @@ async function checkFinalizePermission(req, res) {
     
     if (!userId || !lineType) {
       return res.status(400).json({ message: 'userId و lineType الزامی است' });
+    }
+    
+    // بررسی وجود جدول
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'finalize_permissions'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      // اگر جدول وجود ندارد، false برگردان (بدون خطا)
+      return res.json({ hasPermission: false });
     }
     
     // تبدیل lineType به فرمت استاندارد
@@ -84,7 +121,8 @@ async function checkFinalizePermission(req, res) {
     res.json({ hasPermission });
   } catch (error) {
     console.error('Error checking finalize permission:', error);
-    res.status(500).json({ message: 'خطا در بررسی دسترسی' });
+    // در صورت خطا، false برگردان (بدون خطا)
+    res.json({ hasPermission: false });
   }
 }
 

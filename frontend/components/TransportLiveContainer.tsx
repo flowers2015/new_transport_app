@@ -16,6 +16,55 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
 
+    // بررسی دسترسی اتمام تخصیص
+    const checkFinalizePermission = useCallback(async (lineType: FreightLineType): Promise<boolean> => {
+        // اگر کاربر وجود ندارد، false برگردان
+        if (!currentUser || !currentUser.id) {
+            return false;
+        }
+        
+        // ادمین همیشه دسترسی دارد
+        if (currentUser.role === 'ادمین' || currentUser.role === 'Admin') {
+            return true;
+        }
+        
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                return false;
+            }
+            
+            const headers = { 'Authorization': `Bearer ${token}` } as any;
+            
+            // تبدیل lineType به فرمت backend
+            let lineTypeForBackend = '';
+            if (lineType === FreightLineType.IceCream || lineType === 'بستنی') {
+                lineTypeForBackend = 'IceCream';
+            } else if (lineType === FreightLineType.Dairy || lineType === 'پاستوریزه') {
+                lineTypeForBackend = 'Dairy';
+            } else if (lineType === FreightLineType.Ambient || lineType === 'لبنیات-فروتلند') {
+                lineTypeForBackend = 'Ambient';
+            } else {
+                lineTypeForBackend = lineType;
+            }
+            
+            const response = await fetch(
+                getApiUrl(`finalize-permissions/check?userId=${currentUser.id}&lineType=${lineTypeForBackend}`),
+                { headers }
+            );
+            
+            if (!response.ok) {
+                return false;
+            }
+            
+            const data = await response.json();
+            return data.hasPermission || false;
+        } catch (error) {
+            console.error('Error checking finalize permission:', error);
+            return false;
+        }
+    }, [currentUser]);
+
     const fetchData = useCallback(async (silent: boolean = false) => {
             if (!silent) {
                 setLoading(true);

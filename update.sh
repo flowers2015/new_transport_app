@@ -49,6 +49,13 @@ if [ $? -ne 0 ]; then
     echo -e "${YELLOW}⚠️ هشدار: Migration driver_smart_id اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
 fi
 
+echo -e "${YELLOW}🔄 در حال اجرای Migration برای ایجاد جدول finalize_permissions...${NC}"
+node migrations/create_finalize_permissions_table.js
+
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}⚠️ هشدار: Migration finalize_permissions اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
+fi
+
 echo -e "${YELLOW}📦 در حال نصب وابستگی‌های Frontend...${NC}"
 cd ../frontend
 npm install
