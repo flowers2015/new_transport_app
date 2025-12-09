@@ -6,6 +6,12 @@ import { getApiUrl } from '../utils/apiConfig';
 import { cachedFetch } from '../utils/apiCache';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+    console.log('🔄 [TransportLiveContainer] Component rendering', { 
+        userId: currentUser?.id, 
+        role: currentUser?.role,
+        timestamp: new Date().toISOString()
+    });
+    
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -18,6 +24,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     // بررسی دسترسی اتمام تخصیص
     const checkFinalizePermission = useCallback(async (lineType: FreightLineType): Promise<boolean> => {
+        console.log('🔍 [checkFinalizePermission] Called', { lineType, userId: currentUser?.id });
         // اگر کاربر وجود ندارد، false برگردان
         if (!currentUser || !currentUser.id) {
             return false;
@@ -66,11 +73,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     }, [currentUser]);
 
     const fetchData = useCallback(async (silent: boolean = false, includePersonal: boolean = false) => {
+            console.log('🚀 [fetchData] Starting', { silent, includePersonal, userId: currentUser?.id });
             if (!silent) {
                 setLoading(true);
                 setError(null);
             }
-            // console.log('🚀 [TransportLive] Starting data fetch...');
             try {
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` } as any;
@@ -252,8 +259,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const fetchDataRef = useRef(fetchData);
     const needsPersonalResourcesRef = useRef(needsPersonalResources);
     
+    console.log('🔄 [TransportLiveContainer] Hooks initialized', {
+        needsPersonalResources,
+        fetchDataExists: !!fetchData,
+        timestamp: new Date().toISOString()
+    });
+    
     // به‌روزرسانی ref ها
     useEffect(() => {
+        console.log('🔄 [useEffect] Updating refs', { 
+            fetchDataExists: !!fetchData,
+            needsPersonalResources 
+        });
         fetchDataRef.current = fetchData;
         needsPersonalResourcesRef.current = needsPersonalResources;
     }, [fetchData, needsPersonalResources]);
@@ -275,16 +292,25 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     
     // Lazy load personal resources وقتی که نیاز است
     useEffect(() => {
+        console.log('🔄 [useEffect] Lazy load check', { 
+            needsPersonalResources, 
+            personalDriversLength: personalDrivers.length,
+            personalVehiclesLength: personalVehicles.length
+        });
         if (needsPersonalResources && personalDrivers.length === 0 && personalVehicles.length === 0) {
             console.log('🔄 [TransportLive] Lazy loading personal resources...');
-            fetchData(true, true); // silent fetch with personal resources
+            fetchDataRef.current(true, true); // استفاده از ref به جای مستقیم
         }
-    }, [needsPersonalResources, personalDrivers.length, personalVehicles.length, fetchData]);
+    }, [needsPersonalResources, personalDrivers.length, personalVehicles.length]);
     
     // بارگذاری اولیه
     useEffect(() => {
-        fetchData();
-    }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
+        console.log('🚀 [useEffect] Initial load', { 
+            fetchDataExists: !!fetchData,
+            currentUser: currentUser?.id 
+        });
+        fetchDataRef.current(); // استفاده از ref به جای مستقیم
+    }, [currentUser?.id]); // فقط وابسته به currentUser.id
     
     // Auto-refresh هر 30 ثانیه (ساده‌تر و بدون استفاده از useAutoRefresh)
     useEffect(() => {
