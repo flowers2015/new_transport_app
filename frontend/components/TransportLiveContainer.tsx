@@ -274,35 +274,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
             
             const responseData = await res.json();
-            // console.log('✅ [TransportLive] Assignment successful:', responseData);
-            
-            // Update the announcements state with the new assignment data
-            // Debug logs removed - total freight cost issue resolved
-            setAnnouncements(prev => {
-                const updated = prev.map(ann => 
-                    ann.id === announcementId 
-                        ? { 
-                            ...ann, 
-                            assignedDriverId: assignment.driverId,
-                            assignedVehicleId: assignment.vehicleId,
-                            billOfLadingNumber: assignment.billOfLadingNumber,
-                            totalFreightCost: assignment.totalFreightCost,
-                            destinations: assignment.destinations || ann.destinations,
-                            status: 'Assigned' as any
-                        }
-                        : ann
-                );
-                // console.log('🔄 [TransportLive] State updated:', {
-                //     announcementId,
-                //     updatedAnnouncement: updated.find(ann => ann.id === announcementId),
-                //     timestamp: new Date().toISOString()
-                // });
-                return updated;
-            });
+            console.log('✅ [TransportLive] Assignment successful:', responseData);
             
             alert('تخصیص با موفقیت ثبت شد');
             
-            // Refresh all data after successful assignment - REMOVED to prevent double refresh
+            // Refresh all data after successful assignment to show updated status and assignment info
+            await fetchData(true); // silent refresh
             // console.log('🔄 [TransportLive] Refreshing all data after assignment...');
             // await fetchData(); // Removed to prevent double refresh
         } catch (e) { 

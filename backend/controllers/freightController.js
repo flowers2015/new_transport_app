@@ -1485,14 +1485,16 @@ async function assignVehicleAndDriver(req, res) {
     vehicleId, 
     driverId, 
     assignmentType,
+    totalFreightCost,
+    billOfLadingNumber,
+    destinations,
     // Personal driver/vehicle info
     nationalId,
     driverName,
     driverContact,
     vehicleType,
     vehiclePlate,
-    truckSmartId,
-    destinations
+    truckSmartId
   } = req.body;
   const userId = req.user?.userId || req.user?.id;
   // ساخت userName به فرمت "username - name - role"
@@ -1635,10 +1637,52 @@ async function assignVehicleAndDriver(req, res) {
     }
 
     // آپدیت تخصیص و وضعیت
+    const updateFields = ['status = $1', 'assigned_vehicle_id = $2', 'assigned_driver_id = $3', 'updated_at = NOW()'];
+    const updateValues = [newStatus, vehicleId, driverId];
+    let paramIndex = 4;
+    
+    if (totalFreightCost !== undefined) {
+      updateFields.push(`total_freight_cost = $${paramIndex++}`);
+      updateValues.push(totalFreightCost);
+    }
+    
+    if (billOfLadingNumber !== undefined) {
+      updateFields.push(`bill_of_lading_number = $${paramIndex++}`);
+      updateValues.push(billOfLadingNumber || null);
+    }
+    
+    updateValues.push(announcementId);
+    
     await client.query(
-      'UPDATE freight_announcements SET status = $1, assigned_vehicle_id = $2, assigned_driver_id = $3, updated_at = NOW() WHERE id = $4',
-      [newStatus, vehicleId, driverId, announcementId]
+      `UPDATE freight_announcements SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
+      updateValues
     );
+    
+    // به‌روزرسانی مقاصد اگر ارسال شده باشند
+    if (Array.isArray(destinations) && destinations.length > 0) {
+      // حذف مقاصد قبلی
+      await client.query(
+        'DELETE FROM freight_destinations WHERE freight_announcement_id = $1',
+        [announcementId]
+      );
+      
+      // اضافه کردن مقاصد جدید
+      for (const dest of destinations) {
+        const destId = dest.id || require('crypto').randomUUID();
+        await client.query(
+          'INSERT INTO freight_destinations (id, freight_announcement_id, city, tonnage, freight_cost, representative_name, representative_type, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
+          [
+            destId,
+            announcementId,
+            dest.city || '',
+            dest.tonnage || null,
+            dest.freightCost || 0,
+            dest.representativeName || null,
+            dest.representativeType || null
+          ]
+        );
+      }
+    }
     
     // ثبت تاریخچه
     await logFreightHistory({
