@@ -1277,11 +1277,12 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         setDestinations(destsCopy);
         setBlNumber(announcement.billOfLadingNumber || '');
         
-        // مقداردهی اولیه displayFreightCosts با فرمت
+        // مقداردهی اولیه displayFreightCosts با فرمت (کاما مثل فیلد کرایه کل)
         const initialDisplayCosts: { [key: string]: string } = {};
         destsCopy.forEach((dest: any) => {
             if (dest.freightCost && dest.freightCost > 0) {
-                initialDisplayCosts[dest.id] = Number(dest.freightCost).toLocaleString('fa-IR');
+                const value = String(dest.freightCost);
+                initialDisplayCosts[dest.id] = value.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
             }
         });
         setDisplayFreightCosts(initialDisplayCosts);
@@ -1656,48 +1657,32 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                             <label className="text-xs">کرایه (ریال):</label>
                                             <input
                                                 type="text"
-                                                value={isFreightCostFocused[dest.id] ? (destinations.find(d => d.id === dest.id)?.freightCost || '') : displayFreightCosts[dest.id] || ''}
+                                                value={displayFreightCosts[dest.id] || ''}
                                                 onChange={e => {
-                                                    const cleaned = e.target.value.replace(/[^\d،]/g, '').replace(/،/g, '');
-                                                    const numValue = cleaned === '' ? 0 : Number(cleaned);
-                                                    setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: numValue } : d));
-                                                    if (cleaned) {
-                                                        const num = Number(cleaned);
-                                                        if (!isNaN(num)) {
-                                                            setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: num.toLocaleString('fa-IR') }));
-                                                        } else {
-                                                            setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: cleaned }));
-                                                        }
-                                                    } else {
-                                                        setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: '' }));
-                                                    }
-                                                }}
-                                                onBlur={e => {
-                                                    setIsFreightCostFocused(prev => ({ ...prev, [dest.id]: false }));
-                                                    const currentValue = e.target.value.replace(/[^\d،]/g, '').replace(/،/g, '');
-                                                    if (currentValue) {
-                                                        const num = Number(currentValue);
-                                                        if (!isNaN(num) && num > 0) {
-                                                            setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: num } : d));
-                                                            setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: num.toLocaleString('fa-IR') }));
-                                                        } else {
-                                                            setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: 0 } : d));
-                                                            setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: '' }));
-                                                        }
-                                                    } else {
+                                                    // فقط اعداد و کاما را بپذیر (مثل فیلد کرایه کل)
+                                                    let value = e.target.value.replace(/[^\d,]/g, '');
+                                                    const numValue = value.replace(/,/g, '');
+                                                    if (numValue === '') {
                                                         setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: 0 } : d));
                                                         setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: '' }));
+                                                        return;
+                                                    }
+                                                    if (/^\d+$/.test(numValue)) {
+                                                        const num = Number(numValue);
+                                                        setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: num } : d));
+                                                        const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                                        setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: formatted }));
                                                     }
                                                 }}
-                                                onFocus={e => {
-                                                    setIsFreightCostFocused(prev => ({ ...prev, [dest.id]: true }));
-                                                    const currentDest = destinations.find(d => d.id === dest.id);
-                                                    const rawValue = currentDest?.freightCost ? String(currentDest.freightCost) : '';
-                                                    setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: rawValue }));
+                                                onKeyPress={e => {
+                                                    if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+                                                        e.preventDefault();
+                                                    }
                                                 }}
                                                 className="input-style"
                                                 autoComplete="off"
-                                                dir="rtl"
+                                                dir="ltr"
+                                                placeholder="1,000,000"
                                             />
                                         </div>
                                     ))}
@@ -1823,48 +1808,35 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                                 // در غیر این صورت، مقدار از destinations را بگیر
                                                 const currentDest = destinations.find(d => d.id === dest.id);
                                                 if (currentDest?.freightCost && currentDest.freightCost > 0) {
-                                                    // اگر مقدار فرمت شده نیست، فرمت کن
+                                                    // فرمت با کاما (مثل فیلد کرایه کل)
                                                     const value = String(currentDest.freightCost);
                                                     if (/^\d+$/.test(value)) {
-                                                        return Number(value).toLocaleString('fa-IR');
+                                                        return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                                                     }
                                                     return value;
                                                 }
                                                 return '';
                                             })()} 
                                             onChange={e => {
-                                                // فقط اعداد را نگه دار
-                                                const cleaned = e.target.value.replace(/[^\d]/g, '');
-                                                const numValue = cleaned === '' ? 0 : Number(cleaned);
-                                                
-                                                // به‌روزرسانی مقدار در destinations
-                                                setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: numValue}: d));
-                                                
-                                                // نمایش عدد خام هنگام تایپ
-                                                setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: cleaned }));
-                                            }} 
-                                            onBlur={e=>{
-                                                // هنگام خروج از فیلد، فرمت را اعمال کن
-                                                const currentValue = e.target.value.replace(/[^\d]/g, '');
-                                                if (currentValue) {
-                                                    const num = Number(currentValue);
-                                                    if (!isNaN(num) && num > 0) {
-                                                        setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: num}: d));
-                                                        setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: num.toLocaleString('fa-IR') }));
-                                                    } else {
-                                                        setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: 0}: d));
-                                                        setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: '' }));
-                                                    }
-                                                } else {
+                                                // فقط اعداد و کاما را بپذیر (مثل فیلد کرایه کل)
+                                                let value = e.target.value.replace(/[^\d,]/g, '');
+                                                const numValue = value.replace(/,/g, '');
+                                                if (numValue === '') {
                                                     setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: 0}: d));
                                                     setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: '' }));
+                                                    return;
                                                 }
-                                            }} 
-                                            onFocus={e=>{
-                                                // هنگام ورود به فیلد، فرمت را بردار و فقط عدد نشان بده
-                                                const currentDest = destinations.find(d => d.id === dest.id);
-                                                const rawValue = currentDest?.freightCost ? String(currentDest.freightCost) : '';
-                                                setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: rawValue }));
+                                                if (/^\d+$/.test(numValue)) {
+                                                    const num = Number(numValue);
+                                                    setDestinations(dests => dests.map(d => d.id === dest.id ? {...d, freightCost: num}: d));
+                                                    const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                                    setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: formatted }));
+                                                }
+                                            }}
+                                            onKeyPress={e => {
+                                                if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+                                                    e.preventDefault();
+                                                }
                                             }} 
                                             className="input-style" 
                                             autoComplete="off" 
@@ -1873,7 +1845,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     </div>
                                 ))}
                             </div>
-                             <div className="text-right font-bold pt-2 border-t">کرایه کل: {typeof totalPersonalCost === 'number' ? totalPersonalCost.toLocaleString('fa-IR') : String(totalPersonalCost)} ریال</div>
+                             <div className="text-right font-bold pt-2 border-t">کرایه کل: {typeof totalPersonalCost === 'number' ? totalPersonalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : String(totalPersonalCost)} ریال</div>
                         </fieldset>
                         <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
                     </div>
