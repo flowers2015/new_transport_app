@@ -263,10 +263,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
 
     // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
+    const refreshFn = useCallback(() => {
+        fetchData(true, needsPersonalResources); // silent refresh with personal if needed
+    }, [fetchData, needsPersonalResources]);
+    
     useAutoRefresh({
-        refreshFn: () => {
-            fetchData(true, needsPersonalResources); // silent refresh with personal if needed
-        },
+        refreshFn,
         interval: 30000, // 30 ثانیه
         onlyWhenVisible: true,
         immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
