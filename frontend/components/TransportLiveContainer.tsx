@@ -726,27 +726,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
+    // همه hooks باید قبل از early returns باشند
     const [historyDialog, setHistoryDialog] = React.useState<{ isOpen: boolean; announcementId: string; announcementCode: string } | null>(null);
-
-    const onOpenHistory = (announcementId: string, announcementCode: string) => {
-        setHistoryDialog({ isOpen: true, announcementId, announcementCode });
-    };
-
-    const onCloseHistory = () => {
-        setHistoryDialog(null);
-    };
-
-    if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
-    if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
-
-    // Debug logging
-    // console.log('🔍 [TransportLiveContainer] Render data:', {
-    //     announcementsCount: announcements.length,
-    //     driversCount: drivers.length,
-    //     vehiclesCount: vehicles.length,
-    //     sampleDriver: drivers[0],
-    //     sampleVehicle: vehicles[0]
-    // });
 
     // Callback برای لود کردن personal resources وقتی که dialog assignment باز می‌شود
     const onOpenAssignmentDialog = useCallback((announcement: FreightAnnouncement) => {
@@ -755,10 +736,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             announcement.status === FreightAnnouncementStatus.PendingPersonalAssignment) {
             if (personalDrivers.length === 0 || personalVehicles.length === 0) {
                 console.log('🔄 [TransportLive] Loading personal resources for assignment dialog...');
-                fetchData(true, true); // silent fetch with personal resources
+                fetchDataRef.current(true, true); // استفاده از ref
             }
         }
-    }, [personalDrivers.length, personalVehicles.length, fetchData]);
+    }, [personalDrivers.length, personalVehicles.length]);
+
+    const onOpenHistory = useCallback((announcementId: string, announcementCode: string) => {
+        setHistoryDialog({ isOpen: true, announcementId, announcementCode });
+    }, []);
+
+    const onCloseHistory = useCallback(() => {
+        setHistoryDialog(null);
+    }, []);
+
+    // Early returns بعد از همه hooks
+    if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
+    if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
 
     return (
         <>
