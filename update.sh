@@ -101,6 +101,20 @@ else
     echo -e "${YELLOW}   ⚠️  اسکریپت optimize_nginx_performance.sh یافت نشد${NC}"
 fi
 
+# فعال کردن کامل Gzip Compression در NGINX
+echo -e "${YELLOW}🗜️  در حال فعال کردن کامل Gzip Compression در NGINX...${NC}"
+if [ -f "./fix_nginx_gzip.sh" ]; then
+    chmod +x ./fix_nginx_gzip.sh
+    sudo bash ./fix_nginx_gzip.sh
+    NGINX_GZIP_RESULT=$?
+    if [ $NGINX_GZIP_RESULT -ne 0 ]; then
+        echo -e "${YELLOW}   ⚠️  فعال کردن Gzip با خطا مواجه شد. لطفاً به صورت دستی اجرا کنید:${NC}"
+        echo -e "   ${YELLOW}sudo bash fix_nginx_gzip.sh${NC}"
+    fi
+else
+    echo -e "${YELLOW}   ⚠️  اسکریپت fix_nginx_gzip.sh یافت نشد${NC}"
+fi
+
 echo -e "${YELLOW}🔄 در حال Restart کردن Backend...${NC}"
 cd ../backend
 
