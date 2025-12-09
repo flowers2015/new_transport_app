@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { View, UserRole, User, Branch, Driver } from './types';
 import { getApiUrl, handleAuthError } from './utils/apiConfig';
+import { performanceMonitor } from './utils/performanceMonitor';
 
 /**
  * تابع برای decode کردن توکن JWT و بررسی انقضا
@@ -17,44 +18,46 @@ const isTokenExpired = (token: string): boolean => {
         return true; // اگر decode نشد، منقضی فرض کن
     }
 };
-import Header from './components/Header';
-import Dashboard from './components/Dashboard';
-import Login from './components/Login';
-import RepairOrderView from './components/RepairOrderView';
-import VehicleReport from './components/VehicleReport';
-import VehicleDocumentsManagement from './components/VehicleDocumentsManagement';
-import VehiclesPage from './components/VehiclesPage';
-import PurchasingPage from './components/PurchasingPage';
-import InsuranceManagement from './components/InsuranceManagement';
-import TechnicianManagement from './components/TechnicianManagement';
-import SupplierManagement from './components/SupplierManagement';
-import InventoryManagement from './components/InventoryManagement';
-import OutsourcingManagement from './components/OutsourcingManagement';
-import ContractManagement from './components/ContractManagement';
-import InvoiceManagement from './components/InvoiceManagement';
-import InvoiceForm from './components/InvoiceForm';
-import AlertsView from './components/AlertsView';
-import SupportTickets from './components/SupportTickets';
-import VehicleAllocationManagement from './components/VehicleAllocationManagement';
-import TransportLive from './components/TransportLive';
-import TransportLiveContainer from './components/TransportLiveContainer';
-import DispatchQueueManager from './components/DispatchQueueManager';
-import DispatchAssignmentManager from './components/DispatchAssignmentManager';
-import DispatchBoardView from './components/DispatchBoardView';
-import FreightHistoryContainer from './components/FreightHistoryContainer';
-import TransportDashboardContainer from './components/TransportDashboardContainer';
-import FreightDashboard from './components/FreightDashboard';
-import FreightFinanceContainer from './components/FreightFinanceContainer';
-import CentralFinanceContainer from './components/CentralFinanceContainer';
-import FreightPlanningContainer from './components/FreightPlanningContainer';
-import TransportFinanceContainer from './components/TransportFinanceContainer';
-import AuditTrailView from './components/AuditTrailView';
-import CustomerManagement from './components/CustomerManagement';
-import UserManagement from './components/UserManagement';
-import FreightManagement from './components/FreightManagement';
-import AdminResourceManagement from './components/AdminResourceManagement';
-import FinalizePermissionManagement from './components/FinalizePermissionManagement';
-// Import other components as needed...
+// Lazy Loading برای بهبود عملکرد - فقط کامپوننت‌های مورد نیاز لود می‌شوند
+import Header from './components/Header'; // Header همیشه نیاز است
+import Login from './components/Login'; // Login همیشه نیاز است
+
+// Lazy load همه کامپوننت‌های دیگر
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const RepairOrderView = React.lazy(() => import('./components/RepairOrderView'));
+const VehicleReport = React.lazy(() => import('./components/VehicleReport'));
+const VehicleDocumentsManagement = React.lazy(() => import('./components/VehicleDocumentsManagement'));
+const VehiclesPage = React.lazy(() => import('./components/VehiclesPage'));
+const PurchasingPage = React.lazy(() => import('./components/PurchasingPage'));
+const InsuranceManagement = React.lazy(() => import('./components/InsuranceManagement'));
+const TechnicianManagement = React.lazy(() => import('./components/TechnicianManagement'));
+const SupplierManagement = React.lazy(() => import('./components/SupplierManagement'));
+const InventoryManagement = React.lazy(() => import('./components/InventoryManagement'));
+const OutsourcingManagement = React.lazy(() => import('./components/OutsourcingManagement'));
+const ContractManagement = React.lazy(() => import('./components/ContractManagement'));
+const InvoiceManagement = React.lazy(() => import('./components/InvoiceManagement'));
+const InvoiceForm = React.lazy(() => import('./components/InvoiceForm'));
+const AlertsView = React.lazy(() => import('./components/AlertsView'));
+const SupportTickets = React.lazy(() => import('./components/SupportTickets'));
+const VehicleAllocationManagement = React.lazy(() => import('./components/VehicleAllocationManagement'));
+const TransportLive = React.lazy(() => import('./components/TransportLive'));
+const TransportLiveContainer = React.lazy(() => import('./components/TransportLiveContainer'));
+const DispatchQueueManager = React.lazy(() => import('./components/DispatchQueueManager'));
+const DispatchAssignmentManager = React.lazy(() => import('./components/DispatchAssignmentManager'));
+const DispatchBoardView = React.lazy(() => import('./components/DispatchBoardView'));
+const FreightHistoryContainer = React.lazy(() => import('./components/FreightHistoryContainer'));
+const TransportDashboardContainer = React.lazy(() => import('./components/TransportDashboardContainer'));
+const FreightDashboard = React.lazy(() => import('./components/FreightDashboard'));
+const FreightFinanceContainer = React.lazy(() => import('./components/FreightFinanceContainer'));
+const CentralFinanceContainer = React.lazy(() => import('./components/CentralFinanceContainer'));
+const FreightPlanningContainer = React.lazy(() => import('./components/FreightPlanningContainer'));
+const TransportFinanceContainer = React.lazy(() => import('./components/TransportFinanceContainer'));
+const AuditTrailView = React.lazy(() => import('./components/AuditTrailView'));
+const CustomerManagement = React.lazy(() => import('./components/CustomerManagement'));
+const UserManagement = React.lazy(() => import('./components/UserManagement'));
+const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
+const AdminResourceManagement = React.lazy(() => import('./components/AdminResourceManagement'));
+const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
@@ -83,6 +86,25 @@ const App: React.FC = () => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     // Remove other state variables that held mock data
+
+    // Performance Monitoring
+    useEffect(() => {
+        performanceMonitor.startMetric('app-init');
+        performanceMonitor.setEnabled(true);
+        
+        return () => {
+            performanceMonitor.endMetric('app-init');
+        };
+    }, []);
+
+    // Log performance summary when view changes
+    useEffect(() => {
+        if (currentView !== View.Login) {
+            setTimeout(() => {
+                performanceMonitor.logSummary();
+            }, 2000); // بعد از 2 ثانیه خلاصه را نمایش بده
+        }
+    }, [currentView]);
 
     const mapBackendRoleToUserRole = (role: string): UserRole | null => {
         switch ((role || '').toLowerCase()) {
@@ -412,6 +434,12 @@ const App: React.FC = () => {
             return <Login onLogin={handleLogin} />;
         }
 
+        // Performance monitoring for view rendering
+        performanceMonitor.startMetric(`view-render-${currentView}`);
+        setTimeout(() => {
+            performanceMonitor.endMetric(`view-render-${currentView}`);
+        }, 0);
+
         switch (currentView) {
             case View.Dashboard:
                 return <Dashboard 
@@ -621,7 +649,9 @@ const App: React.FC = () => {
                  />
              )}
             <main className="p-4 sm:p-6 lg:p-8">
-                {renderView()}
+                <Suspense fallback={<div className="flex items-center justify-center h-screen text-lg">در حال بارگذاری...</div>}>
+                    {renderView()}
+                </Suspense>
             </main>
         </div>
     );

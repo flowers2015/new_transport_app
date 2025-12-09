@@ -4,6 +4,7 @@ import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, 
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { getApiUrl } from '../utils/apiConfig';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { cachedFetch } from '../utils/apiCache';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -82,12 +83,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 //     personalVehicles: 'http://localhost:3000/api/v1/personal-vehicles'
                 // });
                 
+                // استفاده از cached fetch برای بهبود عملکرد
+                // TTL: 30 ثانیه برای freight-announcements (داده‌های زنده)
+                // TTL: 5 دقیقه برای vehicles, drivers (داده‌های static)
                 const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
-                    fetch(getApiUrl('freight-announcements'), { headers }),
-                    fetch(getApiUrl('vehicles'), { headers }),
-                    fetch(getApiUrl('drivers'), { headers }),
-                    fetch(getApiUrl('personal-drivers'), { headers }),
-                    fetch(getApiUrl('personal-vehicles'), { headers }),
+                    cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000),
+                    cachedFetch(getApiUrl('vehicles'), { headers }, 5 * 60 * 1000),
+                    cachedFetch(getApiUrl('drivers'), { headers }, 5 * 60 * 1000),
+                    cachedFetch(getApiUrl('personal-drivers'), { headers }, 5 * 60 * 1000),
+                    cachedFetch(getApiUrl('personal-vehicles'), { headers }, 5 * 60 * 1000),
                 ]);
                 
                 // console.log('📊 [TransportLive] API Response Status:', {
@@ -98,19 +102,14 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 //     personalVehicles: pvRes.status
                 // });
                 
-                if (!faRes.ok) throw new Error('خطا در دریافت اعلام بارها');
-                if (!vRes.ok) throw new Error('خطا در دریافت خودروها');
-                if (!dRes.ok) throw new Error('خطا در دریافت رانندگان');
-                if (!pdRes.ok) throw new Error('خطا در دریافت رانندگان شخصی');
-                if (!pvRes.ok) throw new Error('خطا در دریافت خودروهای شخصی');
-                
-                const [announcementsRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
-                    faRes.json(),
-                    vRes.json(),
-                    dRes.json(),
-                    pdRes.json(),
-                    pvRes.json()
-                ]);
+                // cachedFetch خودش JSON.parse می‌کند
+                const [announcementsRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = [
+                    faRes,
+                    vRes,
+                    dRes,
+                    pdRes,
+                    pvRes
+                ];
                 
                 // console.log('📋 [TransportLive] Raw Data Received:', {
                 //     announcements: announcementsRaw,
