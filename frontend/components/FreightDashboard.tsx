@@ -898,14 +898,21 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             // مدیر در حالت "در انتظار تایید": فقط PendingManagerApproval
             data = data.filter(a => a.status === FreightAnnouncementStatus.PendingManagerApproval);
         } else if (isManager && managerView === 'all') {
-            // مدیر در حالت "همه": همه وضعیت‌ها جز Finalized (Finalized در تاریخچه است)
-            data = data.filter(a => a.status !== FreightAnnouncementStatus.Finalized && a.status !== 'Finalized');
-        } else {
-            // برای planner: همه وضعیت‌ها نمایش داده می‌شوند جز Finalized
-            // planner باید بتواند روند اعلام بار را رصد کند تا زمانی که Finalized شود
+            // مدیر در حالت "همه": همه وضعیت‌ها جز Finalized و InTransit (این‌ها در تاریخچه هستند)
             data = data.filter(a => {
-                const isFinalized = a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized' || a.status === 'تکمیل شده';
-                return !isFinalized;
+                const statusStr = String(a.status);
+                const isFinalized = a.status === FreightAnnouncementStatus.Finalized || statusStr === 'Finalized' || statusStr === 'تکمیل شده';
+                const isInTransit = a.status === FreightAnnouncementStatus.InTransit || statusStr === 'InTransit' || statusStr === 'در حال حمل';
+                return !isFinalized && !isInTransit;
+            });
+        } else {
+            // برای planner: همه وضعیت‌ها نمایش داده می‌شوند جز Finalized و InTransit
+            // بارهایی که تخصیص داده شده‌اند و رفته‌اند به تاریخچه (Finalized یا InTransit) باید از کارتابل خارج شوند
+            data = data.filter(a => {
+                const statusStr = String(a.status);
+                const isFinalized = a.status === FreightAnnouncementStatus.Finalized || statusStr === 'Finalized' || statusStr === 'تکمیل شده';
+                const isInTransit = a.status === FreightAnnouncementStatus.InTransit || statusStr === 'InTransit' || statusStr === 'در حال حمل';
+                return !isFinalized && !isInTransit;
             });
         }
 

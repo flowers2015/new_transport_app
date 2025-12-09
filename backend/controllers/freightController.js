@@ -2162,14 +2162,13 @@ async function finalizeAssignments(req, res) {
       console.log(`🔍 [finalizeAssignments] Processing ${annId}: hasAssignment=${hasAssignment}, status=${ann.status}, line_type=${ann.line_type}`);
       
       if (hasAssignment) {
-        // تخصیص دارد → status را به InTransit تغییر می‌دهیم (اگر قبلاً InTransit نبود)
-        // این باعث می‌شود که از "پیگیری اعلام بار زنده" خارج شود
-        // اما در "تابلو اعلام بار" باقی می‌ماند (چون InTransit در getBoard نمایش داده می‌شود)
+        // تخصیص دارد → status را به Finalized تغییر می‌دهیم
+        // این باعث می‌شود که از کارتابل برنامه‌ریزی خارج شود و به تاریخچه برود
         const oldStatus = ann.status || 'Assigned';
-        const newStatus = 'InTransit';
+        const newStatus = 'Finalized';
         
-        // آپدیت status اعلام بار (فقط اگر قبلاً InTransit نبود)
-        if (oldStatus !== 'InTransit' && oldStatus !== 'in_transit') {
+        // آپدیت status اعلام بار (فقط اگر قبلاً Finalized نبود)
+        if (oldStatus !== 'Finalized' && oldStatus !== 'finalized') {
           await client.query(
             `UPDATE freight_announcements 
              SET status = $1, updated_at = NOW() 
@@ -2251,7 +2250,7 @@ async function finalizeAssignments(req, res) {
           action: 'ASSIGNMENT_FINALIZED',
           oldStatus: oldStatus,
           newStatus: newStatus,
-          description: `تخصیص نهایی شد - بار از پیگیری اعلام بار زنده خارج شد (در تابلو اعلام بار باقی می‌ماند)`,
+          description: `تخصیص نهایی شد - بار به تاریخچه منتقل شد و از کارتابل برنامه‌ریزی خارج شد`,
           ipAddress: req.ip,
           client: client
         });
