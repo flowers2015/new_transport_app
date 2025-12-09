@@ -8,6 +8,7 @@ interface TransportUser {
   full_name: string;
   role: string;
   employee_id?: string;
+  transport_type?: 'company' | 'personal' | 'other';
 }
 
 interface FinalizePermission {
@@ -156,9 +157,16 @@ const FinalizePermissionManagement: React.FC<FinalizePermissionManagementProps> 
 
   const filteredUsers = useMemo(() => {
     return transportUsers.filter(u => {
+      // فیلتر بر اساس نوع ترابری
+      const matchesTransportType = transportTypeFilter === 'all' || 
+        (transportTypeFilter === 'company' && u.transport_type === 'company') ||
+        (transportTypeFilter === 'personal' && u.transport_type === 'personal');
+      
+      // فیلتر بر اساس جستجو
       const matchesSearch = !searchQuery || 
         u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+        u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.employee_id && u.employee_id.toLowerCase().includes(searchQuery.toLowerCase()));
       
       // فقط کاربرانی که هنوز برای این تب دسترسی ندارند
       const hasPermission = permissions.some(p => 
@@ -169,9 +177,9 @@ const FinalizePermissionManagement: React.FC<FinalizePermissionManagementProps> 
          (selectedLineType === FreightLineType.Ambient && p.line_type === 'Ambient'))
       );
       
-      return matchesSearch && !hasPermission;
+      return matchesTransportType && matchesSearch && !hasPermission;
     });
-  }, [transportUsers, permissions, selectedLineType, searchQuery]);
+  }, [transportUsers, permissions, selectedLineType, searchQuery, transportTypeFilter]);
 
   if (loading) {
     return <div className="text-center p-8">در حال بارگذاری...</div>;
@@ -211,11 +219,23 @@ const FinalizePermissionManagement: React.FC<FinalizePermissionManagementProps> 
           </div>
         </div>
 
-        {/* جستجو */}
-        <div className="p-4 border-b">
+        {/* فیلتر و جستجو */}
+        <div className="p-4 border-b space-y-3">
+          <div className="flex gap-2 items-center">
+            <label className="text-sm font-medium">نوع ترابری:</label>
+            <select
+              value={transportTypeFilter}
+              onChange={(e) => setTransportTypeFilter(e.target.value as 'all' | 'company' | 'personal')}
+              className="px-3 py-2 border rounded-lg"
+            >
+              <option value="all">همه</option>
+              <option value="company">شرکتی</option>
+              <option value="personal">شخصی</option>
+            </select>
+          </div>
           <input
             type="text"
-            placeholder="جستجو بر اساس نام کاربری یا نام کامل..."
+            placeholder="جستجو بر اساس نام کاربری، نام کامل یا کد پرسنلی..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-4 py-2 border rounded-lg"
@@ -236,7 +256,7 @@ const FinalizePermissionManagement: React.FC<FinalizePermissionManagementProps> 
                 <option value="">-- انتخاب کاربر --</option>
                 {filteredUsers.map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.full_name} ({user.username}) - {user.role}
+                    {user.full_name} ({user.username}) - {user.transport_type === 'company' ? 'شرکتی' : user.transport_type === 'personal' ? 'شخصی' : user.role}
                   </option>
                 ))}
               </select>

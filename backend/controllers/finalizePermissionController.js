@@ -6,16 +6,44 @@ const crypto = require('crypto');
  */
 async function getTransportUsers(req, res) {
   try {
+    // بررسی اینکه کدام ستون name وجود دارد
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('name', 'full_name')
+    `);
+    
+    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
+    const nameColumn = hasFullName ? 'full_name' : 'name';
+    
+    // نقش‌های ترابری (هم انگلیسی و هم فارسی)
     const { rows } = await pool.query(`
       SELECT 
         id,
         username,
-        name as full_name,
+        ${nameColumn} as full_name,
         role,
-        employee_id
+        employee_id,
+        CASE 
+          WHEN role IN ('transport_user', 'کاربر ترابری (شرکت)', 'کاربر ترابری شرکت', 'TransportationUser') THEN 'company'
+          WHEN role IN ('personal_transport_user', 'کاربر ترابری (خودرو شخصی)', 'کاربر ترابری شخصی', 'کاربر ترابری (شخصی)', 'Transportation_Personal_Vehicle_User') THEN 'personal'
+          ELSE 'other'
+        END as transport_type
       FROM users 
-      WHERE role IN ('کاربر ترابری (شرکت)', 'کاربر ترابری (خودرو شخصی)', 'ترابری', 'TransportationUser', 'Transportation_Personal_Vehicle_User')
-      ORDER BY name
+      WHERE role IN (
+        'transport_user',
+        'personal_transport_user',
+        'کاربر ترابری (شرکت)',
+        'کاربر ترابری (خودرو شخصی)',
+        'کاربر ترابری شرکت',
+        'کاربر ترابری شخصی',
+        'کاربر ترابری (شخصی)',
+        'ترابری',
+        'TransportationUser',
+        'Transportation_Personal_Vehicle_User'
+      )
+      ORDER BY ${nameColumn}
     `);
     
     res.json(rows);

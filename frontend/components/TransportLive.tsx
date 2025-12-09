@@ -1236,6 +1236,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [autoTotalCost, setAutoTotalCost] = useState('');
     // State برای نمایش فرمت شده (فقط برای نمایش)
     const [displayAutoTotalCost, setDisplayAutoTotalCost] = useState('');
+    const [isAutoTotalCostFocused, setIsAutoTotalCostFocused] = useState(false);
     const [displayFreightCosts, setDisplayFreightCosts] = useState<{ [key: string]: string }>({});
     
     // States for search results
@@ -1664,36 +1665,74 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
                             <legend className="font-semibold px-1 text-sm">۲. تخصیص کرایه</legend>
                             <div className="flex items-center gap-4"><label><input type="radio" value="manual" checked={costMode==='manual'} onChange={e=>setCostMode(e.target.value as any)}/> دستی</label><label><input type="radio" value="auto" checked={costMode==='auto'} onChange={e=>setCostMode(e.target.value as any)}/> خودکار</label></div>
-                            {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input type="text" value={displayAutoTotalCost !== undefined ? displayAutoTotalCost : (autoTotalCost || '')} onChange={e=>{
-                                // فقط اعداد رو نگه دار - بدون فرمت هنگام تایپ
-                                const cleaned = e.target.value.replace(/[^\d]/g, '');
-                                setAutoTotalCost(cleaned);
-                                setDisplayAutoTotalCost(cleaned); // نمایش بدون فرمت هنگام تایپ
-                            }} onBlur={e=>{
-                                // هنگام خروج از فیلد، فرمت رو اعمال کن
-                                const currentValue = e.target.value.replace(/[^\d]/g, '');
-                                if (currentValue) {
-                                    const num = Number(currentValue);
-                                    if (!isNaN(num) && num > 0) {
-                                        setAutoTotalCost(String(num));
-                                        setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
+                            {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input 
+                                type="text" 
+                                value={(() => {
+                                    // اگر focus شده، عدد خام را نشان بده
+                                    if (isAutoTotalCostFocused) {
+                                        return autoTotalCost || '';
+                                    }
+                                    // در غیر این صورت، فرمت شده را نشان بده
+                                    if (displayAutoTotalCost) {
+                                        return displayAutoTotalCost;
+                                    }
+                                    // اگر هیچ کدام نیست، از autoTotalCost استفاده کن و فرمت کن
+                                    if (autoTotalCost) {
+                                        const num = Number(autoTotalCost);
+                                        if (!isNaN(num)) {
+                                            return num.toLocaleString('fa-IR');
+                                        }
+                                        return autoTotalCost;
+                                    }
+                                    return '';
+                                })()} 
+                                onChange={e=>{
+                                    // فقط اعداد را نگه دار
+                                    const cleaned = e.target.value.replace(/[^\d]/g, '');
+                                    setAutoTotalCost(cleaned);
+                                    
+                                    // فرمت real-time با جداکننده 3 رقمی فارسی - همیشه فرمت کن
+                                    if (cleaned) {
+                                        const num = Number(cleaned);
+                                        if (!isNaN(num)) {
+                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
+                                        } else {
+                                            setDisplayAutoTotalCost(cleaned);
+                                        }
+                                    } else {
+                                        setDisplayAutoTotalCost('');
+                                    }
+                                }} 
+                                onBlur={e=>{
+                                    // هنگام خروج از فیلد، focus را غیرفعال کن و فرمت را اعمال کن
+                                    setIsAutoTotalCostFocused(false);
+                                    const currentValue = e.target.value.replace(/[^\d]/g, '');
+                                    if (currentValue) {
+                                        const num = Number(currentValue);
+                                        if (!isNaN(num) && num > 0) {
+                                            setAutoTotalCost(String(num));
+                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
+                                        } else {
+                                            setAutoTotalCost('');
+                                            setDisplayAutoTotalCost('');
+                                        }
                                     } else {
                                         setAutoTotalCost('');
                                         setDisplayAutoTotalCost('');
                                     }
-                                } else {
-                                    setAutoTotalCost('');
-                                    setDisplayAutoTotalCost('');
-                                }
-                            }} onFocus={e=>{
-                                // هنگام ورود به فیلد، فرمت رو بردار و فقط عدد نشون بده
-                                const rawValue = autoTotalCost || e.target.value.replace(/[^\d]/g, '');
-                                setDisplayAutoTotalCost(rawValue);
-                            }} className="input-style flex-grow" autoComplete="off" dir="ltr"/></div>}
+                                }} 
+                                onFocus={e=>{
+                                    // هنگام ورود به فیلد، focus را track کن
+                                    setIsAutoTotalCostFocused(true);
+                                }} 
+                                className="input-style flex-grow" 
+                                autoComplete="off" 
+                                dir="rtl"
+                            /></div>}
                             <div className="space-y-2">
                                 {destinations.map((dest, i) => (
                                     <div key={dest.id} className="grid grid-cols-5 gap-2 items-center text-sm p-1">
-                                        <div className="col-span-2"><strong>مقصد {i+1}:</strong> {dest.city} ({dest.tonnage || 0} تن)</div>
+                                        <div className="col-span-2"><strong>مقصد {i+1}:</strong> {dest.city} ({dest.tonnage ? Number(dest.tonnage).toLocaleString('fa-IR') : 0} کیلوگرم)</div>
                                         <div className="col-span-3 flex items-center gap-2"><label>کرایه:</label><input 
                                             type="text" 
                                             value={(() => {
