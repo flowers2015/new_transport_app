@@ -87,6 +87,20 @@ else
     echo -e "${YELLOW}   ⚠️  اسکریپت fix_nginx.sh یافت نشد. لطفاً به صورت دستی تنظیم کنید${NC}"
 fi
 
+# بهینه‌سازی عملکرد NGINX
+echo -e "${YELLOW}🚀 در حال بهینه‌سازی عملکرد NGINX...${NC}"
+if [ -f "./optimize_nginx_performance.sh" ]; then
+    chmod +x ./optimize_nginx_performance.sh
+    sudo bash ./optimize_nginx_performance.sh
+    NGINX_OPTIMIZE_RESULT=$?
+    if [ $NGINX_OPTIMIZE_RESULT -ne 0 ]; then
+        echo -e "${YELLOW}   ⚠️  بهینه‌سازی NGINX با خطا مواجه شد. لطفاً به صورت دستی اجرا کنید:${NC}"
+        echo -e "   ${YELLOW}sudo bash optimize_nginx_performance.sh${NC}"
+    fi
+else
+    echo -e "${YELLOW}   ⚠️  اسکریپت optimize_nginx_performance.sh یافت نشد${NC}"
+fi
+
 echo -e "${YELLOW}🔄 در حال Restart کردن Backend...${NC}"
 cd ../backend
 

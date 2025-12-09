@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
+/* Google Fonts is now loaded asynchronously in index.html to avoid render blocking */
 
 @tailwind base;
 @tailwind components;
