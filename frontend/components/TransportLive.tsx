@@ -1234,10 +1234,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [foundPersonalVehicle, setFoundPersonalVehicle] = useState<any | null | 'not_found'>(null);
     const [destinations, setDestinations] = useState<Destination[]>([]);
     const [costMode, setCostMode] = useState<'manual' | 'auto'>('auto'); // پیش‌فرض: خودکار
-    const [autoTotalCost, setAutoTotalCost] = useState('');
-    // State برای نمایش فرمت شده (فقط برای نمایش)
-    const [displayAutoTotalCost, setDisplayAutoTotalCost] = useState('');
-    const [isAutoTotalCostFocused, setIsAutoTotalCostFocused] = useState(false);
+    const [autoTotalCost, setAutoTotalCost] = useState(''); // فقط string با فرمت (مثل "1,234,567")
     const [displayFreightCosts, setDisplayFreightCosts] = useState<{ [key: string]: string }>({});
     
     // States for search results
@@ -1296,8 +1293,9 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             
             if (existingTotalCost > 0) {
                 // اگر کرایه قبلاً ثبت شده، از آن استفاده کن و حالت خودکار را فعال کن
-                setAutoTotalCost(existingTotalCost.toString());
-                setDisplayAutoTotalCost(existingTotalCost.toLocaleString('fa-IR'));
+                // فرمت با کاما (مثل فیلد ارزش بار)
+                const formatted = existingTotalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                setAutoTotalCost(formatted);
                 setCostMode('auto');
                 // کرایه‌های مقاصد قبلاً در destsCopy هستند، نیازی به محاسبه مجدد نیست
             } else {
@@ -1305,7 +1303,6 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 // کاربر باید خودش کرایه را وارد کند
                 setCostMode('manual');
                 setAutoTotalCost('');
-                setDisplayAutoTotalCost('');
                 // همه کرایه‌ها را صفر کن
                 const updatedDests = destsCopy.map((dest: any) => ({...dest, freightCost: 0}));
                 setDestinations(updatedDests);
@@ -1500,19 +1497,16 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // محاسبه totalFreightCost برای company user
             let companyTotalCost = 0;
             if (costMode === 'auto' && autoTotalCost) {
-                // تبدیل string به number - حذف جداکننده‌های فارسی
-                const cleanedCost = String(autoTotalCost).replace(/[^\d]/g, '');
+                // تبدیل string به number - حذف کاماها (مثل فیلد ارزش بار)
+                const cleanedCost = autoTotalCost.replace(/,/g, '');
                 companyTotalCost = cleanedCost ? Number(cleanedCost) : 0;
-                console.log('💰 [Company] Auto cost mode:', { autoTotalCost, cleanedCost, companyTotalCost });
             } else {
                 companyTotalCost = destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
-                console.log('💰 [Company] Manual cost mode:', { companyTotalCost, destinations: destinations.map(d => ({ city: d.city, freightCost: d.freightCost })) });
             }
             if (companyTotalCost <= 0) {
                 alert('لطفاً کرایه را وارد کنید.');
                 return;
             }
-            console.log('💾 [Company] Saving assignment with totalFreightCost:', companyTotalCost);
             onUpdateAssignment(announcement.id, {
                 driverId: foundCompanyDriver.id, vehicleId: foundVehicle.id, billOfLadingNumber: blNumber, assignmentType: 'company',
                 totalFreightCost: companyTotalCost,
@@ -1565,21 +1559,17 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // محاسبه totalFreightCost برای personal user
             let personalTotalCost = 0;
             if (costMode === 'auto' && autoTotalCost) {
-                // تبدیل string به number - حذف جداکننده‌های فارسی
-                const cleanedCost = String(autoTotalCost).replace(/[^\d]/g, '');
+                // تبدیل string به number - حذف کاماها (مثل فیلد ارزش بار)
+                const cleanedCost = autoTotalCost.replace(/,/g, '');
                 personalTotalCost = cleanedCost ? Number(cleanedCost) : 0;
-                console.log('💰 [Personal] Auto cost mode:', { autoTotalCost, cleanedCost, personalTotalCost });
             } else {
                 personalTotalCost = totalPersonalCost;
-                console.log('💰 [Personal] Manual cost mode:', { personalTotalCost, totalPersonalCost, destinations: destinations.map(d => ({ city: d.city, freightCost: d.freightCost })) });
             }
             
             if (personalTotalCost <= 0) {
                 alert('لطفاً کرایه را وارد کنید.');
                 return;
             }
-            
-            console.log('💾 [Personal] Saving assignment with totalFreightCost:', personalTotalCost);
             onUpdateAssignment(announcement.id, {
                 driverId: foundPersonalDriver?.id,
                 vehicleId: foundPersonalVehicle?.id,
@@ -1630,31 +1620,21 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             <div className="flex items-center gap-4"><label><input type="radio" value="manual" checked={costMode==='manual'} onChange={e=>setCostMode(e.target.value as any)}/> دستی</label><label><input type="radio" value="auto" checked={costMode==='auto'} onChange={e=>setCostMode(e.target.value as any)}/> خودکار</label></div>
                             {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input 
                                 type="text" 
-                                value={displayAutoTotalCost || ''}
+                                value={autoTotalCost || ''}
                                 onChange={e => {
-                                    // فقط اعداد و جداکننده فارسی (،) را بپذیر
-                                    let value = e.target.value.replace(/[^\d،]/g, '');
-                                    // حذف جداکننده‌ها برای محاسبه
-                                    const numValue = value.replace(/،/g, '').replace(/\u200C/g, '').replace(/\u200D/g, ''); // حذف zero-width characters
+                                    // فقط اعداد و کاما را بپذیر (مثل فیلد ارزش بار)
+                                    let value = e.target.value.replace(/[^\d,]/g, '');
+                                    // حذف کاماها برای محاسبه
+                                    const numValue = value.replace(/,/g, '');
                                     // اگر خالی است، مقدار خالی بگذار
                                     if (numValue === '') {
                                         setAutoTotalCost('');
-                                        setDisplayAutoTotalCost('');
                                         return;
                                     }
-                                    // اگر عدد معتبر است، فرمت سه رقم سه رقم فارسی اعمال کن
+                                    // اگر عدد معتبر است، فرمت سه رقم سه رقم اعمال کن
                                     if (/^\d+$/.test(numValue)) {
-                                        const num = Number(numValue);
-                                        if (!isNaN(num) && num > 0) {
-                                            // ذخیره به صورت string برای حفظ دقت
-                                            setAutoTotalCost(numValue);
-                                            // فرمت فارسی با جداکننده 3 رقمی - حین تایپ
-                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
-                                            console.log('💵 [Company AutoCost] onChange:', { numValue, num, formatted: num.toLocaleString('fa-IR'), autoTotalCost: numValue });
-                                        } else {
-                                            setAutoTotalCost('');
-                                            setDisplayAutoTotalCost('');
-                                        }
+                                        const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                        setAutoTotalCost(formatted);
                                     }
                                 }}
                                 onKeyPress={e => {
@@ -1663,31 +1643,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                         e.preventDefault();
                                     }
                                 }}
-                                onBlur={e=>{
-                                    // هنگام خروج از فیلد، مطمئن شو که فرمت درست است
-                                    setIsAutoTotalCostFocused(false);
-                                    const currentValue = e.target.value.replace(/[^\d،]/g, '').replace(/،/g, '');
-                                    if (currentValue) {
-                                        const num = Number(currentValue);
-                                        if (!isNaN(num) && num > 0) {
-                                            setAutoTotalCost(String(num));
-                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
-                                        } else {
-                                            setAutoTotalCost('');
-                                            setDisplayAutoTotalCost('');
-                                        }
-                                    } else {
-                                        setAutoTotalCost('');
-                                        setDisplayAutoTotalCost('');
-                                    }
-                                }} 
-                                onFocus={e=>{
-                                    // هنگام ورود به فیلد، focus را track کن
-                                    setIsAutoTotalCostFocused(true);
-                                }} 
                                 className="input-style flex-grow" 
                                 autoComplete="off" 
-                                dir="rtl"
+                                dir="ltr"
+                                placeholder="1,000,000"
                             /></div>}
                             {costMode === 'manual' && destinations.length > 0 && (
                                 <div className="space-y-2">
@@ -1822,29 +1781,21 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             <div className="flex items-center gap-4"><label><input type="radio" value="manual" checked={costMode==='manual'} onChange={e=>setCostMode(e.target.value as any)}/> دستی</label><label><input type="radio" value="auto" checked={costMode==='auto'} onChange={e=>setCostMode(e.target.value as any)}/> خودکار</label></div>
                             {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input 
                                 type="text" 
-                                value={displayAutoTotalCost || ''}
+                                value={autoTotalCost || ''}
                                 onChange={e => {
-                                    // فقط اعداد و جداکننده فارسی (،) را بپذیر
-                                    let value = e.target.value.replace(/[^\d،]/g, '');
-                                    // حذف جداکننده‌ها برای محاسبه
-                                    const numValue = value.replace(/،/g, '');
+                                    // فقط اعداد و کاما را بپذیر (مثل فیلد ارزش بار)
+                                    let value = e.target.value.replace(/[^\d,]/g, '');
+                                    // حذف کاماها برای محاسبه
+                                    const numValue = value.replace(/,/g, '');
                                     // اگر خالی است، مقدار خالی بگذار
                                     if (numValue === '') {
                                         setAutoTotalCost('');
-                                        setDisplayAutoTotalCost('');
                                         return;
                                     }
-                                    // اگر عدد معتبر است، فرمت سه رقم سه رقم فارسی اعمال کن
+                                    // اگر عدد معتبر است، فرمت سه رقم سه رقم اعمال کن
                                     if (/^\d+$/.test(numValue)) {
-                                        const num = Number(numValue);
-                                        if (!isNaN(num)) {
-                                            setAutoTotalCost(numValue);
-                                            // فرمت فارسی با جداکننده 3 رقمی - حین تایپ
-                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
-                                        } else {
-                                            setAutoTotalCost(numValue);
-                                            setDisplayAutoTotalCost(value);
-                                        }
+                                        const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                        setAutoTotalCost(formatted);
                                     }
                                 }}
                                 onKeyPress={e => {
@@ -1853,31 +1804,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                         e.preventDefault();
                                     }
                                 }}
-                                onBlur={e=>{
-                                    // هنگام خروج از فیلد، مطمئن شو که فرمت درست است
-                                    setIsAutoTotalCostFocused(false);
-                                    const currentValue = e.target.value.replace(/[^\d،]/g, '').replace(/،/g, '');
-                                    if (currentValue) {
-                                        const num = Number(currentValue);
-                                        if (!isNaN(num) && num > 0) {
-                                            setAutoTotalCost(String(num));
-                                            setDisplayAutoTotalCost(num.toLocaleString('fa-IR'));
-                                        } else {
-                                            setAutoTotalCost('');
-                                            setDisplayAutoTotalCost('');
-                                        }
-                                    } else {
-                                        setAutoTotalCost('');
-                                        setDisplayAutoTotalCost('');
-                                    }
-                                }} 
-                                onFocus={e=>{
-                                    // هنگام ورود به فیلد، focus را track کن
-                                    setIsAutoTotalCostFocused(true);
-                                }} 
                                 className="input-style flex-grow" 
                                 autoComplete="off" 
-                                dir="rtl"
+                                dir="ltr"
+                                placeholder="1,000,000"
                             /></div>}
                             <div className="space-y-2">
                                 {destinations.map((dest, i) => (
