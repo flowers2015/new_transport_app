@@ -472,40 +472,40 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const routeSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
-    const handleOpenCreatePanel = () => {
+    const handleOpenCreatePanel = useCallback(() => {
         // Create mode: no preset data object to avoid accidental edit-mode
         setPanelData(null);
         setIsPanelOpen(true);
-    };
+    }, []);
 
-    const handleOpenEditPanel = (ann: FreightAnnouncement) => {
+    const handleOpenEditPanel = useCallback((ann: FreightAnnouncement) => {
         setPanelData(ann);
         setIsPanelOpen(true);
-    };
+    }, []);
     
-    const handleClosePanel = () => {
+    const handleClosePanel = useCallback(() => {
         setIsPanelOpen(false);
-    };
+    }, []);
 
-    const handleOpenHistory = (announcementId: string, announcementCode: string) => {
+    const handleOpenHistory = useCallback((announcementId: string, announcementCode: string) => {
         setHistoryDialog({ isOpen: true, announcementId, announcementCode });
-    };
+    }, []);
 
-    const handleCloseHistory = () => {
+    const handleCloseHistory = useCallback(() => {
         setHistoryDialog(null);
-    };
+    }, []);
 
-    const handleOpenRejectDialog = (id: string) => setRejectInfo({ id, reason: '' });
-    const handleCloseRejectDialog = () => setRejectInfo(null);
+    const handleOpenRejectDialog = useCallback((id: string) => setRejectInfo({ id, reason: '' }), []);
+    const handleCloseRejectDialog = useCallback(() => setRejectInfo(null), []);
     
-    const handleRejectSubmit = () => {
+    const handleRejectSubmit = useCallback(() => {
         if (rejectInfo && rejectInfo.reason) {
             onReject(rejectInfo.id, rejectInfo.reason);
             handleCloseRejectDialog();
         }
-    };
-    
-    const handleSendForApproval = (ann: FreightAnnouncement) => {
+    }, [rejectInfo, onReject, handleCloseRejectDialog]);
+
+    const handleSendForApproval = useCallback((ann: FreightAnnouncement) => {
         // اگر onSendForApproval از props ارسال شده، از آن استفاده می‌کنیم
         if (onSendForApproval) {
             onSendForApproval(ann);
@@ -513,15 +513,15 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             // fallback به onUpdateAnnouncement
             onUpdateAnnouncement({ ...ann, status: FreightAnnouncementStatus.PendingManagerApproval });
         }
-    };
+    }, [onSendForApproval, onUpdateAnnouncement]);
 
-    const handleToggleSelect = (id: string) => {
+    const handleToggleSelect = useCallback((id: string) => {
         setSelectedIds(prev => 
             prev.includes(id) 
                 ? prev.filter(selectedId => selectedId !== id)
                 : [...prev, id]
         );
-    };
+    }, []);
 
     const handleBulkSendForApproval = async () => {
         if (selectedIds.length === 0) {
@@ -2281,4 +2281,5 @@ const AnnouncementPanel: React.FC<{
     );
 }
 
-export default FreightDashboard;
+// Memoize the component to prevent unnecessary re-renders
+export default React.memo(FreightDashboard);

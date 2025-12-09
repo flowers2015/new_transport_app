@@ -93,8 +93,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     
     const [dialog, setDialog] = useState<'assign' | 'transfer' | 'change' | 'vehicle-type' | null>(null);
     
-    // Helper functions inside component to ensure proper re-rendering
-    const getDriverName = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
+    // Helper functions memoized with useCallback for performance
+    const getDriverName = useCallback((id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
         if (!id) return '-';
         // First search in company drivers
         let driver = drivers.find(d => d.id === id);
@@ -102,11 +102,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!driver) {
             driver = personalDrivers.find(d => d.id === id);
         }
-        // console.log('🔍 [getDriverName] Looking for driver:', id, 'Found:', driver?.name);
         return driver?.name || '-';
-    };
+    }, [drivers, personalDrivers]);
     
-    const getDriverContact = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
+    const getDriverContact = useCallback((id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
         if (!id) return '-';
         // First search in company drivers
         let driver = drivers.find(d => d.id === id);
@@ -114,11 +113,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!driver) {
             driver = personalDrivers.find(d => d.id === id);
         }
-        // console.log('🔍 [getDriverContact] Looking for driver:', id, 'Found:', driver?.mobile);
         return driver?.mobile || '-';
-    };
+    }, [drivers, personalDrivers]);
     
-    const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[], personalVehicles: any[] = []) => {
+    const getVehicleIdentifier = useCallback((id: string | undefined, vehicles: Vehicle[], personalVehicles: any[] = []) => {
         if (!id) return '-';
         // First search in company vehicles
         let v = vehicles.find(v => v.id === id);
@@ -128,7 +126,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             if (personalV) {
                 // Format personal vehicle plate
                 const plate = `${personalV.platePart1}${personalV.plateLetter}${personalV.platePart2}-${personalV.plateCityCode}`;
-                // console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found personal vehicle:', personalV.vehicleType, 'Plate:', plate);
                 return plate;
             }
         }
@@ -136,44 +133,40 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (!v) return 'نامشخص';
         
         const result = v.plateNumber ? formatPlateNumber(v.plateNumber) : v.serialNumber || 'نامشخص';
-        // console.log('🔍 [getVehicleIdentifier] Looking for vehicle:', id, 'Found vehicle:', v.model, 'Plate:', v.plateNumber, 'Serial:', v.serialNumber, 'Result:', result);
         return result;
-    };
+    }, [vehicles, personalVehicles]);
 
     // Helper functions for personal drivers and vehicles
-    const getPersonalDriverName = (driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
+    const getPersonalDriverName = useCallback((driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
         if (!driverId) return '-';
         const driver = personalDrivers.find(d => d.id === driverId);
-        // console.log('🔍 [getPersonalDriverName] Looking for driver:', driverId, 'Found:', driver?.name);
         return driver?.name || '-';
-    };
+    }, [personalDrivers]);
     
-    const getPersonalDriverContact = (driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
+    const getPersonalDriverContact = useCallback((driverId: string | undefined, personalDrivers: PersonalDriver[]) => {
         if (!driverId) return '-';
         const driver = personalDrivers.find(d => d.id === driverId);
-        // console.log('🔍 [getPersonalDriverContact] Looking for driver:', driverId, 'Found:', driver?.mobile);
         return driver?.mobile || '-';
-    };
+    }, [personalDrivers]);
     
-    const getPersonalVehicleIdentifier = (vehicleId: string | undefined, personalVehicles: PersonalVehicle[]) => {
+    const getPersonalVehicleIdentifier = useCallback((vehicleId: string | undefined, personalVehicles: PersonalVehicle[]) => {
         if (!vehicleId) return '-';
         const v = personalVehicles.find(v => v.id === vehicleId);
         if (!v) return 'نامشخص';
         
         const result = v.formattedPlate || 'نامشخص';
-        // console.log('🔍 [getPersonalVehicleIdentifier] Looking for vehicle:', vehicleId, 'Found vehicle:', v.vehicleType, 'Plate:', v.formattedPlate, 'Result:', result);
         return result;
-    };
+    }, [personalVehicles]);
     
-    const hasAccess = (allowedRoles: UserRole[]): boolean => {
+    const hasAccess = useCallback((allowedRoles: UserRole[]): boolean => {
         if (currentUser.role === UserRole.Admin) return true;
         return allowedRoles.includes(currentUser.role);
-    };
+    }, [currentUser.role]);
 
-    const canPerformActions = hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]);
+    const canPerformActions = useMemo(() => hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]), [hasAccess]);
 
-    // Helper function to check if user can edit announcement
-    const canEditAnnouncement = (ann: FreightAnnouncement): { canEdit: boolean; canTakeAction: boolean; isAssignedByOther: boolean } => {
+    // Helper function to check if user can edit announcement - memoized
+    const canEditAnnouncement = useCallback((ann: FreightAnnouncement): { canEdit: boolean; canTakeAction: boolean; isAssignedByOther: boolean } => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const loadingDate = new Date(ann.loadingDate);
@@ -208,10 +201,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         const canEdit = canPerformActions && canTakeAction && !isAssignedByOther;
 
         return { canEdit, canTakeAction, isAssignedByOther };
-    };
+    }, [currentUser.role, canPerformActions]);
     
-    // Move columnsConfig inside component to ensure proper re-rendering
-    const columnsConfig = (viewMode: 'compact' | 'full') => {
+    // Memoize columnsConfig to prevent unnecessary recalculations
+    const columnsConfig = useCallback((viewMode: 'compact' | 'full') => {
+        const { drivers, vehicles, personalDrivers, personalVehicles } = props;
         let columns = [
             // Common Columns
             { header: 'ردیف', align: 'center', display: () => viewMode === 'full', render: (_: any, idx: number) => idx + 1 },
@@ -409,18 +403,19 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         ];
 
         return columns;
-    };
+    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, onChangeVehicleType, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props]);
+    
     const [selectedAnnouncement, setSelectedAnnouncement] = useState<FreightAnnouncement | null>(null);
 
-    const handleOpenDialog = (type: 'assign' | 'transfer' | 'change', ann: FreightAnnouncement) => {
+    const handleOpenDialog = useCallback((type: 'assign' | 'transfer' | 'change', ann: FreightAnnouncement) => {
         setSelectedAnnouncement(ann);
         setDialog(type);
-    };
+    }, []);
     
-    const handleCloseDialog = () => {
+    const handleCloseDialog = useCallback(() => {
         setSelectedAnnouncement(null);
         setDialog(null);
-    }
+    }, [])
 
     const liveAnnouncements = useMemo(() => {
         const filtered = announcements.filter(a => {
@@ -2331,4 +2326,5 @@ const ChangeRequestDialog: React.FC<{ announcement: FreightAnnouncement, onClose
 };
 
 
-export default TransportLive;
+// Memoize the component to prevent unnecessary re-renders
+export default React.memo(TransportLive);
