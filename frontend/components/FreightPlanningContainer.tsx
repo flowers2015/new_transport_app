@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import FreightDashboard from './FreightDashboard';
 import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
 import { useCallback } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -121,15 +120,34 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         fetchAnnouncements();
     }, []); // فقط یک بار در mount
 
-    // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
-    useAutoRefresh({
-        refreshFn: () => fetchAnnouncements(true), // silent refresh
-        interval: 30000, // 30 ثانیه
-        onlyWhenVisible: true,
-        immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
-        enabled: true,
-        silent: true, // silent mode برای جلوگیری از چشمک زدن
-    });
+    // Auto-refresh هر 10 ثانیه برای real-time updates (silent refresh - بدون loading state)
+    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const fetchAnnouncementsRef = useRef(fetchAnnouncements);
+    fetchAnnouncementsRef.current = fetchAnnouncements;
+    
+    useEffect(() => {
+        // پاک کردن interval قبلی
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+        }
+        
+        // تنظیم interval جدید
+        refreshIntervalRef.current = setInterval(() => {
+            // فقط اگر صفحه visible است
+            if (!document.hidden) {
+                console.log('🔄 [FreightPlanning] Auto-refresh triggered');
+                fetchAnnouncementsRef.current(true); // silent = true (بدون loading state)
+            }
+        }, 10000); // 10 ثانیه برای real-time updates
+        
+        // Cleanup
+        return () => {
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+                refreshIntervalRef.current = null;
+            }
+        };
+    }, []); // فقط یک بار در mount
 
     const searchRouteSuggestions = useCallback(async (query: string): Promise<DispatchRouteSuggestion[]> => {
         const trimmed = query.trim();

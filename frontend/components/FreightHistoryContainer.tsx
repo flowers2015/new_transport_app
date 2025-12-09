@@ -51,13 +51,22 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             
             // بررسی اینکه آیا personal resources نیاز است (اگر announcement با assignmentType === 'personal' وجود دارد)
             // برای تاریخچه، همیشه لود می‌کنیم چون ممکن است در تاریخچه assignment های personal وجود داشته باشد
-            const [historyResponse, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
+            // استفاده از Pagination: فقط 100 رکورد اول
+            const [historyResponse, vehiclesData, driversData, personalDriversResponse, personalVehiclesResponse] = await Promise.all([
                 cachedFetch(historyUrl, { headers }, 30 * 1000), // 30s cache for history
                 cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
                 cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
-                cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 min cache - lazy load
-                cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache - lazy load
+                cachedFetch(getApiUrl('personal-drivers?page=1&limit=100'), { headers }, 10 * 60 * 1000), // 10 min cache - با Pagination
+                cachedFetch(getApiUrl('personal-vehicles?page=1&limit=100'), { headers }, 10 * 60 * 1000), // 10 min cache - با Pagination
             ]);
+            
+            // Handle paginated response for personal resources
+            const personalDriversData = (personalDriversResponse && typeof personalDriversResponse === 'object' && 'data' in personalDriversResponse) 
+                ? personalDriversResponse.data 
+                : (Array.isArray(personalDriversResponse) ? personalDriversResponse : []);
+            const personalVehiclesData = (personalVehiclesResponse && typeof personalVehiclesResponse === 'object' && 'data' in personalVehiclesResponse) 
+                ? personalVehiclesResponse.data 
+                : (Array.isArray(personalVehiclesResponse) ? personalVehiclesResponse : []);
 
             // Handle paginated response
             let historyRaw;

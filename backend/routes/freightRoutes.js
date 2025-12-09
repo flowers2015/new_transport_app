@@ -110,11 +110,11 @@ router.put(
 );
 
 // Route to approve a freight announcement
-// Accessible only by users with the 'PlanningManager' role.
+// Accessible by planner, planner_manager, and admin
 router.post(
   '/:id/approve',
   authenticateToken,
-  authorizeRole(['planner_manager', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'admin']),
   approveAnnouncement
 );
 

@@ -22,7 +22,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
 
-    // بررسی دسترسی اتمام تخصیص
+    // بررسی دسترسی اتمام تخصیص (با Cache برای جلوگیری از درخواست‌های تکراری)
     const checkFinalizePermission = useCallback(async (lineType: FreightLineType): Promise<boolean> => {
         console.log('🔍 [checkFinalizePermission] Called', { lineType, userId: currentUser?.id });
         // اگر کاربر وجود ندارد، false برگردان
@@ -55,17 +55,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 lineTypeForBackend = lineType;
             }
             
-            const response = await fetch(
-                getApiUrl(`finalize-permissions/check?userId=${currentUser.id}&lineType=${lineTypeForBackend}`),
-                { headers }
-            );
+            // استفاده از cachedFetch برای جلوگیری از درخواست‌های تکراری
+            // Cache برای 5 دقیقه (permissions معمولاً تغییر نمی‌کنند)
+            const cacheKey = `finalize-permissions/check?userId=${currentUser.id}&lineType=${lineTypeForBackend}`;
+            const data = await cachedFetch(getApiUrl(cacheKey), { headers }, 5 * 60 * 1000); // 5 minutes cache
             
-            if (!response.ok) {
-                return false;
-            }
-            
-            const data = await response.json();
-            return data.hasPermission || false;
+            return data?.hasPermission || false;
         } catch (error) {
             console.error('Error checking finalize permission:', error);
             return false;
@@ -234,8 +229,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 setDrivers(Array.isArray(driversData) ? driversData : []);
                 // فقط اگر personal resources لود شده باشند، set کن
                 if (shouldLoadPersonal) {
-                    setPersonalDrivers(Array.isArray(pdRes) ? pdRes : []);
-                    setPersonalVehicles(Array.isArray(pvRes) ? pvRes : []);
+                    setPersonalDrivers(Array.isArray(personalDriversData) ? personalDriversData : []);
+                    setPersonalVehicles(Array.isArray(personalVehiclesData) ? personalVehiclesData : []);
                 }
                 
                 // console.log('✅ [TransportLive] Data successfully loaded and set in state');
@@ -312,7 +307,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         fetchDataRef.current(); // استفاده از ref به جای مستقیم
     }, [currentUser?.id]); // فقط وابسته به currentUser.id
     
-    // Auto-refresh هر 30 ثانیه (ساده‌تر و بدون استفاده از useAutoRefresh)
+    // Auto-refresh هر 10 ثانیه برای real-time updates (بدون کاهش سرعت - silent refresh)
     useEffect(() => {
         // پاک کردن interval قبلی
         if (refreshIntervalRef.current) {
@@ -323,9 +318,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         refreshIntervalRef.current = setInterval(() => {
             // فقط اگر صفحه visible است
             if (!document.hidden) {
-                fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                console.log('🔄 [Auto-refresh] Silent refresh triggered');
+                fetchDataRef.current(true, needsPersonalResourcesRef.current); // silent = true (بدون loading state)
             }
-        }, 30000); // 30 ثانیه
+        }, 10000); // 10 ثانیه برای real-time updates
         
         // Cleanup
         return () => {
@@ -336,13 +332,21 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         };
     }, []); // فقط یک بار در mount
 
-    // بررسی دسترسی‌ها برای همه تب‌ها
+    // بررسی دسترسی‌ها برای همه تب‌ها (با Promise.all برای parallel requests)
     useEffect(() => {
         const checkAllPermissions = async () => {
+            console.log('🔍 [checkAllPermissions] Checking permissions for all lineTypes');
+            const lineTypes = Object.values(FreightLineType);
+            // استفاده از Promise.all برای parallel requests (با cache، درخواست‌های تکراری deduplicate می‌شوند)
+            const permissionPromises = lineTypes.map(lineType => 
+                checkFinalizePermission(lineType).then(hasPermission => ({ lineType, hasPermission }))
+            );
+            const results = await Promise.all(permissionPromises);
             const permissions: Record<string, boolean> = {};
-            for (const lineType of Object.values(FreightLineType)) {
-                permissions[lineType] = await checkFinalizePermission(lineType);
-            }
+            results.forEach(({ lineType, hasPermission }) => {
+                permissions[lineType] = hasPermission;
+            });
+            console.log('✅ [checkAllPermissions] Permissions checked:', permissions);
             setFinalizePermissions(permissions);
         };
         
