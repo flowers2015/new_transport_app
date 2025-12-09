@@ -65,10 +65,8 @@ export const useAutoRefresh = ({
     // استفاده از useRef برای نگه‌داری آخرین refreshFn
     const refreshFnRef = useRef(refreshFn);
     
-    // به‌روزرسانی ref وقتی refreshFn تغییر می‌کند
-    useEffect(() => {
-        refreshFnRef.current = refreshFn;
-    }, [refreshFn]);
+    // به‌روزرسانی ref وقتی refreshFn تغییر می‌کند (بدون useEffect برای جلوگیری از dependency issues)
+    refreshFnRef.current = refreshFn;
     
     const refresh = useCallback(async () => {
         // اگر در حال refresh است، صبر کن

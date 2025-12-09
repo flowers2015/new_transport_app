@@ -257,11 +257,6 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [needsPersonalResources, personalDrivers.length, personalVehicles.length, fetchData]);
     
-    // بارگذاری اولیه
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
-
     // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
     const refreshFn = useCallback(() => {
         fetchData(true, needsPersonalResources); // silent refresh with personal if needed
@@ -275,6 +270,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         enabled: true,
         silent: true, // silent mode برای جلوگیری از چشمک زدن
     });
+
+    // بارگذاری اولیه
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
 
     // بررسی دسترسی‌ها برای همه تب‌ها
     useEffect(() => {
