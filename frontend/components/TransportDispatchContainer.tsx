@@ -87,9 +87,8 @@ const TransportDispatchContainer: React.FC = () => {
 
     const fetchVehicles = async () => {
         try {
-            const res = await fetch(getApiUrl('vehicles'), { headers });
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
+            const { cachedFetch } = await import('../utils/apiCache');
+            const data = await cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000); // 10 min cache
             setVehicles(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to fetch vehicles', error);
@@ -99,9 +98,8 @@ const TransportDispatchContainer: React.FC = () => {
 
     const fetchDrivers = async () => {
         try {
-            const res = await fetch(getApiUrl('drivers'), { headers });
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
+            const { cachedFetch } = await import('../utils/apiCache');
+            const data = await cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000); // 10 min cache
             setDrivers(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to fetch drivers', error);

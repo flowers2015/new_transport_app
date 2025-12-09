@@ -85,13 +85,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 
                 // استفاده از cached fetch برای بهبود عملکرد
                 // TTL: 30 ثانیه برای freight-announcements (داده‌های زنده)
-                // TTL: 5 دقیقه برای vehicles, drivers (داده‌های static)
+                // TTL: 10 دقیقه برای vehicles, drivers (داده‌های static - افزایش یافت)
                 const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
                     cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000),
-                    cachedFetch(getApiUrl('vehicles'), { headers }, 5 * 60 * 1000),
-                    cachedFetch(getApiUrl('drivers'), { headers }, 5 * 60 * 1000),
-                    cachedFetch(getApiUrl('personal-drivers'), { headers }, 5 * 60 * 1000),
-                    cachedFetch(getApiUrl('personal-vehicles'), { headers }, 5 * 60 * 1000),
+                    cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
+                    cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
+                    cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
+                    cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
                 ]);
                 
                 // console.log('📊 [TransportLive] API Response Status:', {

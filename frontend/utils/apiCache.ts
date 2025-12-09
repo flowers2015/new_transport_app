@@ -146,14 +146,65 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Helper function برای fetch با cache
+ * Helper function برای fetch با cache و stale-while-revalidate
+ * اگر cache موجود باشد (حتی اگر منقضی شده باشد)، آن را فوراً برمی‌گرداند
+ * و در background داده جدید را fetch می‌کند
  */
 export async function cachedFetch<T>(
   url: string,
   options?: RequestInit,
-  ttl?: number
+  ttl?: number,
+  silent?: boolean // اگر true باشد، فقط cache را برمی‌گرداند و fetch نمی‌کند
 ): Promise<T> {
   const cacheKey = `${options?.method || 'GET'}:${url}`;
+  const cacheTTL = ttl || 5 * 60 * 1000;
+  
+  // دسترسی به cache داخلی
+  const cache = (apiCache as any).cache as Map<string, CacheEntry>;
+  
+  // بررسی cache (حتی اگر منقضی شده باشد)
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    // اگر cache هنوز fresh است
+    if (Date.now() < cached.expiresAt) {
+      if (!silent) {
+        console.log(`✅ [cachedFetch] Fresh cache: ${cacheKey}`);
+      }
+      return cached.data as T;
+    }
+    
+    // اگر cache stale است اما silent mode نیست، stale-while-revalidate
+    if (!silent) {
+      console.log(`🔄 [cachedFetch] Stale cache, revalidating: ${cacheKey}`);
+      // فوراً cache را برمی‌گردانیم
+      const staleData = cached.data as T;
+      
+      // در background داده جدید را fetch می‌کنیم (بدون await)
+      apiCache.get(
+        cacheKey,
+        async () => {
+          const response = await fetch(url, options);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json() as Promise<T>;
+        },
+        cacheTTL
+      ).catch(err => {
+        console.warn(`⚠️ [cachedFetch] Background revalidation failed: ${cacheKey}`, err);
+      });
+      
+      return staleData;
+    } else {
+      // در silent mode، فقط cache را برمی‌گردانیم
+      return cached.data as T;
+    }
+  }
+  
+  // اگر cache وجود ندارد و silent mode نیست، fetch می‌کنیم
+  if (silent) {
+    throw new Error('No cache available in silent mode');
+  }
   
   return apiCache.get(
     cacheKey,
@@ -164,7 +215,7 @@ export async function cachedFetch<T>(
       }
       return response.json() as Promise<T>;
     },
-    ttl
+    cacheTTL
   );
 }
 

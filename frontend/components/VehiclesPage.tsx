@@ -16,14 +16,13 @@ const VehiclesPage: React.FC = () => {
             try {
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` } as any;
-                const [vehRes, brRes] = await Promise.all([
-                    fetch(getApiUrl('vehicles'), { headers }),
-                    fetch(getApiUrl('branches'), { headers }),
+                const { cachedFetch } = await import('../utils/apiCache');
+                const [vehiclesData, branchesData] = await Promise.all([
+                    cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
+                    cachedFetch(getApiUrl('branches'), { headers }, 10 * 60 * 1000), // 10 min cache
                 ]);
-                if (!vehRes.ok) throw new Error('خطا در دریافت خودروها');
-                if (!brRes.ok) throw new Error('خطا در دریافت شعب');
-                setVehicles(await vehRes.json());
-                setBranches(await brRes.json());
+                setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+                setBranches(Array.isArray(branchesData) ? branchesData : []);
             } catch (e: any) {
                 setError(e.message);
             } finally {

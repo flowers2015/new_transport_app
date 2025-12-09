@@ -140,10 +140,9 @@ const AdminResourceManagement: React.FC = () => {
   // ============================================
   const fetchCompanyDrivers = async () => {
     try {
-      const res = await fetch(getApiUrl('drivers'), { headers });
-      if (!res.ok) throw new Error('خطا در دریافت رانندگان');
-      const data = await res.json();
-      setCompanyDrivers(data);
+      const { cachedFetch } = await import('../utils/apiCache');
+      const data = await cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000); // 10 min cache
+      setCompanyDrivers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message);
     }
@@ -151,10 +150,9 @@ const AdminResourceManagement: React.FC = () => {
 
   const fetchCompanyVehicles = async () => {
     try {
-      const res = await fetch(getApiUrl('vehicles'), { headers });
-      if (!res.ok) throw new Error('خطا در دریافت خودروها');
-      const data = await res.json();
-      setCompanyVehicles(data);
+      const { cachedFetch } = await import('../utils/apiCache');
+      const data = await cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000); // 10 min cache
+      setCompanyVehicles(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message);
     }
@@ -163,16 +161,10 @@ const AdminResourceManagement: React.FC = () => {
   const fetchPersonalDrivers = async () => {
     try {
       console.log('🔄 [fetchPersonalDrivers] Fetching personal drivers...');
-      const res = await fetch(getApiUrl('personal-drivers'), { headers });
-      console.log('📥 [fetchPersonalDrivers] Response status:', res.status);
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('❌ [fetchPersonalDrivers] Error response:', errorText);
-        throw new Error('خطا در دریافت رانندگان شخصی');
-      }
-      const data = await res.json();
-      console.log('✅ [fetchPersonalDrivers] Received data:', data.length, 'drivers');
-      setPersonalDrivers(data);
+      const { cachedFetch } = await import('../utils/apiCache');
+      const data = await cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000); // 10 min cache
+      console.log('✅ [fetchPersonalDrivers] Received data:', Array.isArray(data) ? data.length : 0, 'drivers');
+      setPersonalDrivers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('❌ [fetchPersonalDrivers] Error:', err);
       setError(err.message);
@@ -181,10 +173,9 @@ const AdminResourceManagement: React.FC = () => {
 
   const fetchPersonalVehicles = async () => {
     try {
-      const res = await fetch(getApiUrl('personal-vehicles'), { headers });
-      if (!res.ok) throw new Error('خطا در دریافت خودروهای شخصی');
-      const data = await res.json();
-      setPersonalVehicles(data);
+      const { cachedFetch } = await import('../utils/apiCache');
+      const data = await cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000); // 10 min cache
+      setPersonalVehicles(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message);
     }

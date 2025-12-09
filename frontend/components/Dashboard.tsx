@@ -70,26 +70,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectOrder, onSelectInvoice, o
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` };
 
-                // Fetch all data in parallel
-                const [repairOrdersRes, vehiclesRes, alertsRes, freightAnnouncementsRes, invoicesRes] = await Promise.all([
-                    fetch(getApiUrl('repair-orders'), { headers }),
-                    fetch(getApiUrl('vehicles'), { headers }), // Assuming this endpoint exists
-                    fetch(getApiUrl('alerts'), { headers }), // Assuming this endpoint exists
-                    fetch(getApiUrl('freight-announcements'), { headers }),
-                    fetch(getApiUrl('invoices'), { headers }) // Assuming this endpoint exists
+                // استفاده از cachedFetch برای بهبود عملکرد
+                const { cachedFetch } = await import('../utils/apiCache');
+                
+                // Fetch all data in parallel with caching
+                const [repairOrdersData, vehiclesData, alertsData, freightAnnouncementsData, invoicesData] = await Promise.all([
+                    cachedFetch(getApiUrl('repair-orders'), { headers }, 30 * 1000), // 30s cache
+                    cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
+                    cachedFetch(getApiUrl('alerts'), { headers }, 30 * 1000), // 30s cache
+                    cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000), // 30s cache
+                    cachedFetch(getApiUrl('invoices'), { headers }, 5 * 60 * 1000), // 5 min cache
                 ]);
 
-                if (!repairOrdersRes.ok) throw new Error('Failed to fetch repair orders');
-                if (!vehiclesRes.ok) throw new Error('Failed to fetch vehicles');
-                if (!alertsRes.ok) throw new Error('Failed to fetch alerts');
-                if (!freightAnnouncementsRes.ok) throw new Error('Failed to fetch freight announcements');
-                if (!invoicesRes.ok) throw new Error('Failed to fetch invoices');
-
-                setRepairOrders(await repairOrdersRes.json());
-                setVehicles(await vehiclesRes.json());
-                setAlerts(await alertsRes.json());
-                setFreightAnnouncements(await freightAnnouncementsRes.json());
-                setInvoices(await invoicesRes.json());
+                setRepairOrders(Array.isArray(repairOrdersData) ? repairOrdersData : []);
+                setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+                setAlerts(Array.isArray(alertsData) ? alertsData : []);
+                setFreightAnnouncements(Array.isArray(freightAnnouncementsData) ? freightAnnouncementsData : []);
+                setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
 
             } catch (err: any) {
                 setError(err.message);

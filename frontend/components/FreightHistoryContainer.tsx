@@ -39,30 +39,15 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             
             console.log('🔍 [FreightHistoryContainer] Fetching:', historyUrl);
             
-            const [historyRes, vRes, dRes, pdRes, pvRes] = await Promise.all([
-                fetch(historyUrl, { headers }),
-                fetch(getApiUrl('vehicles'), { headers }),
-                fetch(getApiUrl('drivers'), { headers }),
-                fetch(getApiUrl('personal-drivers'), { headers }),
-                fetch(getApiUrl('personal-vehicles'), { headers }),
-            ]);
-            
-            if (!historyRes.ok) {
-                const errorText = await historyRes.text();
-                console.error('❌ [FreightHistoryContainer] History response error:', errorText);
-                throw new Error('خطا در دریافت تاریخچه اعلام بارها');
-            }
-            if (!vRes.ok) throw new Error('خطا در دریافت خودروها');
-            if (!dRes.ok) throw new Error('خطا در دریافت رانندگان');
-            if (!pdRes.ok) throw new Error('خطا در دریافت رانندگان شخصی');
-            if (!pvRes.ok) throw new Error('خطا در دریافت خودروهای شخصی');
+            // استفاده از cachedFetch برای بهبود عملکرد
+            const { cachedFetch } = await import('../utils/apiCache');
             
             const [historyRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
-                historyRes.json(),
-                vRes.json(),
-                dRes.json(),
-                pdRes.json(),
-                pvRes.json()
+                cachedFetch(historyUrl, { headers }, 30 * 1000), // 30s cache for history
+                cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
+                cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
+                cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
+                cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
             ]);
 
             console.log(`✅ [FreightHistoryContainer] Received ${Array.isArray(historyRaw) ? historyRaw.length : 0} announcements`);
