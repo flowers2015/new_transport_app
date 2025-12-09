@@ -19,8 +19,12 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     const [filterDestination, setFilterDestination] = useState<string>('');
     const [filterBillOfLading, setFilterBillOfLading] = useState<string>(''); // شماره بارنامه
     const [filterDriverName, setFilterDriverName] = useState<string>(''); // نام راننده
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
 
-    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, lineType?: FreightLineType) => {
+    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50) => {
         setLoading(true);
         setError(null);
         try {
@@ -34,6 +38,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             if (billOfLading && billOfLading.trim()) params.append('billOfLading', billOfLading.trim());
             if (driverName && driverName.trim()) params.append('driverName', driverName.trim());
             if (lineType) params.append('lineType', lineType);
+            params.append('page', page.toString());
+            params.append('limit', limit.toString());
             
             const historyUrl = getApiUrl(`freight-announcements/history${params.toString() ? '?' + params.toString() : ''}`);
             
@@ -45,7 +51,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             
             // بررسی اینکه آیا personal resources نیاز است (اگر announcement با assignmentType === 'personal' وجود دارد)
             // برای تاریخچه، همیشه لود می‌کنیم چون ممکن است در تاریخچه assignment های personal وجود داشته باشد
-            const [historyRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
+            const [historyResponse, vehiclesData, driversData, personalDriversData, personalVehiclesData] = await Promise.all([
                 cachedFetch(historyUrl, { headers }, 30 * 1000), // 30s cache for history
                 cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
                 cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
@@ -53,7 +59,21 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                 cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache - lazy load
             ]);
 
-            console.log(`✅ [FreightHistoryContainer] Received ${Array.isArray(historyRaw) ? historyRaw.length : 0} announcements`);
+            // Handle paginated response
+            let historyRaw;
+            if (historyResponse && typeof historyResponse === 'object' && 'data' in historyResponse) {
+                // New paginated response format
+                historyRaw = historyResponse.data;
+                setTotalCount(historyResponse.pagination?.total || 0);
+                setTotalPages(historyResponse.pagination?.totalPages || 0);
+            } else {
+                // Old format (backward compatibility)
+                historyRaw = Array.isArray(historyResponse) ? historyResponse : [];
+                setTotalCount(historyRaw.length);
+                setTotalPages(1);
+            }
+
+            console.log(`✅ [FreightHistoryContainer] Received ${Array.isArray(historyRaw) ? historyRaw.length : 0} announcements (page ${page}, total: ${totalCount})`);
 
             const statusMap: Record<string, FreightAnnouncementStatus> = {
                 Draft: FreightAnnouncementStatus.Draft,
@@ -128,17 +148,21 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
 
     // جستجو - فقط یک بار در mount برای بارگذاری اولیه
     useEffect(() => {
-        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine); // بارگذاری اولیه بدون فیلتر اما با activeLine
+        setCurrentPage(1); // Reset to first page when line changes
+        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage); // بارگذاری اولیه بدون فیلتر اما با activeLine
     }, [activeLine]); // وقتی activeLine تغییر می‌کند، دوباره fetch کن
     
     // جستجو دستی با دکمه - فقط برای تب فعلی
     const handleSearch = () => {
+        setCurrentPage(1); // Reset to first page on search
         fetchHistoryData(
             filterDate || undefined, 
             filterDestination?.trim() || undefined,
             filterBillOfLading?.trim() || undefined,
             filterDriverName?.trim() || undefined,
-            activeLine // فقط برای تب فعلی
+            activeLine, // فقط برای تب فعلی
+            1, // Reset to first page
+            itemsPerPage
         );
     };
 
@@ -147,7 +171,35 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
         setFilterDestination('');
         setFilterBillOfLading('');
         setFilterDriverName('');
-        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine);
+        setCurrentPage(1);
+        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage);
+    };
+    
+    const handlePageChange = (newPage: number) => {
+        setCurrentPage(newPage);
+        fetchHistoryData(
+            filterDate || undefined,
+            filterDestination?.trim() || undefined,
+            filterBillOfLading?.trim() || undefined,
+            filterDriverName?.trim() || undefined,
+            activeLine,
+            newPage,
+            itemsPerPage
+        );
+    };
+    
+    const handleItemsPerPageChange = (newLimit: number) => {
+        setItemsPerPage(newLimit);
+        setCurrentPage(1);
+        fetchHistoryData(
+            filterDate || undefined,
+            filterDestination?.trim() || undefined,
+            filterBillOfLading?.trim() || undefined,
+            filterDriverName?.trim() || undefined,
+            activeLine,
+            1,
+            newLimit
+        );
     };
 
     if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
@@ -173,6 +225,12 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setFilterDriverName={setFilterDriverName}
             onSearch={handleSearch}
             onClearFilters={handleClearFilters}
+            currentPage={currentPage}
+            itemsPerPage={itemsPerPage}
+            totalCount={totalCount}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
         />
     );
 };

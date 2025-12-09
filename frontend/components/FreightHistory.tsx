@@ -30,6 +30,12 @@ interface FreightHistoryProps {
     onSearch: () => void;
     onClearFilters: () => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
+    currentPage?: number;
+    itemsPerPage?: number;
+    totalCount?: number;
+    totalPages?: number;
+    onPageChange?: (page: number) => void;
+    onItemsPerPageChange?: (limit: number) => void;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
@@ -68,7 +74,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, onSearch, onClearFilters, onOpenHistory } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -241,16 +247,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         return filtered;
     }, [liveAnnouncements, activeLine]);
     
-    // محاسبه صفحه‌بندی
-    const totalPages = Math.ceil(filteredAnnouncements.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginatedAnnouncements = filteredAnnouncements.slice(startIndex, endIndex);
-    
-    // وقتی activeLine تغییر می‌کند، به صفحه اول برگرد
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [activeLine]);
+    // استفاده از props برای pagination (اگر موجود باشد) یا fallback به local state
+    const paginatedAnnouncements = filteredAnnouncements; // Backend pagination handles this
 
     // Initialize visible columns on mount - همه ستون‌ها به صورت پیش‌فرض نمایش داده می‌شوند
     useEffect(() => {
@@ -554,44 +552,45 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         </div>
         
         {/* صفحه‌بندی */}
-        <div className="flex items-center justify-between mt-4 px-4 py-3 bg-slate-50 rounded-lg">
-            <div className="flex items-center gap-2">
-                <label className="text-sm text-slate-700">تعداد در هر صفحه:</label>
-                <select 
-                    value={itemsPerPage} 
-                    onChange={e => {
-                        setItemsPerPage(Number(e.target.value));
-                        setCurrentPage(1);
-                    }}
-                    className="px-2 py-1 text-sm border rounded"
-                >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={200}>200</option>
-                </select>
+        {onPageChange && onItemsPerPageChange && (
+            <div className="flex items-center justify-between mt-4 px-4 py-3 bg-slate-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                    <label className="text-sm text-slate-700">تعداد در هر صفحه:</label>
+                    <select 
+                        value={itemsPerPage} 
+                        onChange={e => {
+                            onItemsPerPageChange(Number(e.target.value));
+                        }}
+                        className="px-2 py-1 text-sm border rounded"
+                    >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={200}>200</option>
+                    </select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-700">
+                        صفحه {currentPage} از {totalPages} ({totalCount} ردیف)
+                    </span>
+                    <button
+                        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 text-sm bg-white border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        قبلی
+                    </button>
+                    <button
+                        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 text-sm bg-white border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        بعدی
+                    </button>
+                </div>
             </div>
-            
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-700">
-                    صفحه {currentPage} از {totalPages} ({filteredAnnouncements.length} ردیف)
-                </span>
-                <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 text-sm bg-white border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    قبلی
-                </button>
-                <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 text-sm bg-white border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    بعدی
-                </button>
-            </div>
-        </div>
+        )}
             </div>
              {/* دیالوگ‌های تخصیص و انتقال در تاریخچه نیازی نیست */}
              {isRulesOpen && (

@@ -93,10 +93,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 ];
                 
                 // فقط اگر نیاز باشد، personal resources را لود کن
+                // اما برای بهبود عملکرد، فقط وقتی که واقعاً نیاز است (مثلاً برای نمایش در جدول)
+                // برای dropdown ها از Search API استفاده می‌شود
                 if (shouldLoadPersonal) {
+                    // فقط برای نمایش داده‌های موجود در جدول، personal resources را لود کن (با Pagination)
+                    // برای dropdown ها از Search API استفاده می‌شود (در AssignmentDialog)
+                    // فقط 100 رکورد اول را لود کن (برای نمایش در جدول)
                     fetchPromises.push(
-                        cachedFetch(getApiUrl('personal-drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
-                        cachedFetch(getApiUrl('personal-vehicles'), { headers }, 10 * 60 * 1000) // 10 minutes
+                        cachedFetch(getApiUrl('personal-drivers?page=1&limit=100'), { headers }, 10 * 60 * 1000), // 10 minutes
+                        cachedFetch(getApiUrl('personal-vehicles?page=1&limit=100'), { headers }, 10 * 60 * 1000) // 10 minutes
                     );
                 } else {
                     // اگر لود نمی‌کنیم، empty arrays برگردان
@@ -113,13 +118,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 //     personalVehicles: pvRes.status
                 // });
                 
+                // Handle paginated response for personal resources
+                let personalDriversData, personalVehiclesData;
+                if (shouldLoadPersonal) {
+                    // Check if response is paginated
+                    personalDriversData = (pdRes && typeof pdRes === 'object' && 'data' in pdRes) ? pdRes.data : (Array.isArray(pdRes) ? pdRes : []);
+                    personalVehiclesData = (pvRes && typeof pvRes === 'object' && 'data' in pvRes) ? pvRes.data : (Array.isArray(pvRes) ? pvRes : []);
+                } else {
+                    personalDriversData = [];
+                    personalVehiclesData = [];
+                }
+                
                 // cachedFetch خودش JSON.parse می‌کند
-                const [announcementsRaw, vehiclesData, driversData, personalDriversData, personalVehiclesData] = [
+                const [announcementsRaw, vehiclesData, driversData] = [
                     faRes,
                     vRes,
-                    dRes,
-                    pdRes,
-                    pvRes
+                    dRes
                 ];
                 
                 // console.log('📋 [TransportLive] Raw Data Received:', {
@@ -233,6 +247,17 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     // State برای track کردن اینکه آیا personal resources نیاز است یا نه
     const [needsPersonalResources, setNeedsPersonalResources] = useState(false);
     
+    // Auto-refresh refs (باید قبل از useEffect ها باشند)
+    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const fetchDataRef = useRef(fetchData);
+    const needsPersonalResourcesRef = useRef(needsPersonalResources);
+    
+    // به‌روزرسانی ref ها
+    useEffect(() => {
+        fetchDataRef.current = fetchData;
+        needsPersonalResourcesRef.current = needsPersonalResources;
+    }, [fetchData, needsPersonalResources]);
+    
     // بررسی اینکه آیا personal resources نیاز است
     useEffect(() => {
         const hasPersonalAssignment = announcements.some(ann => 
@@ -260,18 +285,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     useEffect(() => {
         fetchData();
     }, [fetchData]); // وابسته به fetchData که خودش وابسته به currentUser است
-
+    
     // Auto-refresh هر 30 ثانیه (ساده‌تر و بدون استفاده از useAutoRefresh)
-    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const fetchDataRef = useRef(fetchData);
-    const needsPersonalResourcesRef = useRef(needsPersonalResources);
-    
-    // به‌روزرسانی ref ها
-    useEffect(() => {
-        fetchDataRef.current = fetchData;
-        needsPersonalResourcesRef.current = needsPersonalResources;
-    }, [fetchData, needsPersonalResources]);
-    
     useEffect(() => {
         // پاک کردن interval قبلی
         if (refreshIntervalRef.current) {

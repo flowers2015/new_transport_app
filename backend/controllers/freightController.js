@@ -1906,7 +1906,12 @@ async function getFreightAnnouncementHistory(req, res) {
  */
 async function getFreightHistory(req, res) {
   try {
-    const { date, destination, billOfLading, driverName, lineType } = req.query;
+    const { date, destination, billOfLading, driverName, lineType, page = 1, limit = 50 } = req.query;
+    
+    // Pagination parameters
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = Math.min(parseInt(limit, 10) || 50, 100); // حداکثر 100 رکورد در هر صفحه
+    const offset = (pageNum - 1) * limitNum;
     
     let query = `
       SELECT 
@@ -1971,49 +1976,72 @@ async function getFreightHistory(req, res) {
       console.log(`📅 [getFreightHistory] No date filter - showing all Finalized announcements`);
     }
     
+    // فیلتر بر اساس شماره بارنامه (در query)
+    if (billOfLading && billOfLading.trim()) {
+      query += ` AND fa.bill_of_lading_number ILIKE $${paramIndex}`;
+      params.push(`%${billOfLading.trim()}%`);
+      paramIndex += 1;
+    }
+    
+    // فیلتر بر اساس نام راننده (در query)
+    if (driverName && driverName.trim()) {
+      query += ` AND (COALESCE(fa.assigned_driver_name, d.name, pd.name) ILIKE $${paramIndex})`;
+      params.push(`%${driverName.trim()}%`);
+      paramIndex += 1;
+    }
+    
+    // Count total records for pagination (before LIMIT/OFFSET)
+    // برای فیلتر destination، باید از subquery استفاده کنیم
+    let countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(DISTINCT fa.id) as total FROM');
+    if (destination && destination.trim()) {
+      // اگر فیلتر destination داریم، باید در count query هم لحاظ شود
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM freight_destinations fd 
+        WHERE fd.freight_announcement_id = fa.id 
+        AND fd.city ILIKE $${paramIndex}
+      )`;
+    }
+    const countParams = [...params];
+    if (destination && destination.trim()) {
+      countParams.push(`%${destination.trim()}%`);
+    }
+    const countResult = await pool.query(countQuery, countParams);
+    const totalCount = parseInt(countResult.rows[0].total, 10);
+    
+    // فیلتر destination در query اصلی (با EXISTS)
+    if (destination && destination.trim()) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM freight_destinations fd 
+        WHERE fd.freight_announcement_id = fa.id 
+        AND fd.city ILIKE $${paramIndex}
+      )`;
+      params.push(`%${destination.trim()}%`);
+      paramIndex += 1;
+    }
+    
     query += ' ORDER BY fa.loading_date DESC, fa.created_at DESC';
+    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limitNum, offset);
     
     console.log(`🔍 [getFreightHistory] Query:`, query);
     console.log(`🔍 [getFreightHistory] Params:`, params);
+    console.log(`📊 [getFreightHistory] Pagination: page=${pageNum}, limit=${limitNum}, offset=${offset}, total=${totalCount}`);
     
     const { rows } = await pool.query(query, params);
     
-    console.log(`📊 [getFreightHistory] Found ${rows.length} Finalized/InTransit announcements`);
+    console.log(`📊 [getFreightHistory] Found ${rows.length} Finalized/InTransit announcements (page ${pageNum})`);
     
     // Fetch destinations for each announcement and convert dates
     const filteredRows = [];
     for (let announcement of rows) {
-      // فیلتر بر اساس شماره بارنامه
-      if (billOfLading && billOfLading.trim()) {
-        const billOfLadingValue = (announcement.bill_of_lading_number || '').toString().toLowerCase();
-        if (!billOfLadingValue.includes(billOfLading.trim().toLowerCase())) {
-          continue; // skip این announcement
-        }
-      }
-      
-      // فیلتر بر اساس نام راننده
-      if (driverName && driverName.trim()) {
-        const driverNameValue = (announcement.assigned_driver_name || '').toString().toLowerCase();
-        if (!driverNameValue.includes(driverName.trim().toLowerCase())) {
-          continue; // skip این announcement
-        }
-      }
-      
       // همیشه همه destinations را بگیر
       const allDestRows = await pool.query('SELECT * FROM freight_destinations WHERE freight_announcement_id = $1', [announcement.id]);
       
-      // اگر فیلتر مقصد داریم، بررسی کن که آیا حداقل یک destination matching دارد
+      // اگر فیلتر مقصد داریم، فقط destinations matching را نگه دار
       if (destination && destination.trim()) {
         const matchingDests = allDestRows.rows.filter(d => 
           d.city && d.city.toLowerCase().includes(destination.trim().toLowerCase())
         );
-        
-        // اگر هیچ destination matching نداشت، این announcement را skip کن
-        if (matchingDests.length === 0) {
-          continue;
-        }
-        
-        // فقط destinations matching را نگه دار
         announcement.destinations = matchingDests;
       } else {
         // اگر فیلتر نداریم، همه destinations را بگیر
@@ -2033,7 +2061,17 @@ async function getFreightHistory(req, res) {
     }
     
     console.log(`✅ [getFreightHistory] Returning ${filteredRows.length} filtered announcements`);
-    res.json(filteredRows);
+    
+    // Return paginated response
+    res.json({
+      data: filteredRows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum)
+      }
+    });
   } catch (error) {
     console.error('❌ [getFreightHistory] Failed to get freight history:', error);
     res.status(500).json({ message: 'Internal server error while fetching freight history.' });
