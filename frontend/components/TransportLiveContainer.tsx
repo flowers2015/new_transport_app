@@ -309,30 +309,37 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         fetchDataRef.current(); // استفاده از ref به جای مستقیم
     }, [currentUser?.id]); // فقط وابسته به currentUser.id
     
-    // Auto-refresh هر 10 ثانیه برای real-time updates (بدون کاهش سرعت - silent refresh)
+    // Auto-refresh به عنوان fallback (فقط وقتی SSE قطع است)
     useEffect(() => {
-        // پاک کردن interval قبلی
+        // اگر SSE متصل است، auto-refresh را خاموش کن
+        if (sseConnected) {
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+                refreshIntervalRef.current = null;
+            }
+            return;
+        }
+        
+        // اگر SSE قطع است، auto-refresh را فعال کن (fallback)
         if (refreshIntervalRef.current) {
             clearInterval(refreshIntervalRef.current);
         }
         
-        // تنظیم interval جدید
         refreshIntervalRef.current = setInterval(() => {
-            // فقط اگر صفحه visible است
-            if (!document.hidden) {
-                console.log('🔄 [Auto-refresh] Silent refresh triggered');
-                fetchDataRef.current(true, needsPersonalResourcesRef.current); // silent = true (بدون loading state)
+            // فقط اگر صفحه visible است و داده‌ها وجود دارند
+            if (!document.hidden && announcements.length > 0) {
+                console.log('🔄 [Auto-refresh Fallback] SSE disconnected, using fallback refresh');
+                fetchDataRef.current(true, needsPersonalResourcesRef.current);
             }
-        }, 10000); // 10 ثانیه برای real-time updates
+        }, 30000); // 30 seconds fallback (فقط وقتی SSE قطع است)
         
-        // Cleanup
         return () => {
             if (refreshIntervalRef.current) {
                 clearInterval(refreshIntervalRef.current);
                 refreshIntervalRef.current = null;
             }
         };
-    }, []); // فقط یک بار در mount
+    }, [sseConnected, announcements.length]);
 
     // بررسی دسترسی‌ها برای همه تب‌ها (با Promise.all برای parallel requests)
     useEffect(() => {
@@ -387,9 +394,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         },
         onConnect: () => {
             console.log('✅ [TransportLiveContainer] Real-time connection established');
+            setSseConnected(true);
         },
         onDisconnect: () => {
             console.log('❌ [TransportLiveContainer] Real-time connection lost');
+            setSseConnected(false);
         },
         onError: (error) => {
             console.error('❌ [TransportLiveContainer] Real-time error:', error);
@@ -422,21 +431,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 setAnnouncements(originalAnnouncements);
                 const errorData = await res.text();
                 console.error('❌ [TransportLive] Assignment failed:', errorData);
-                throw new Error('ثبت تخصیص ناموفق بود');
+                throw new Error(errorData || 'ثبت تخصیص ناموفق بود');
             }
             
             const responseData = await res.json();
             console.log('✅ [TransportLive] Assignment successful:', responseData);
             
-            alert('تخصیص با موفقیت ثبت شد');
-            
-            // Refresh all data after successful assignment to show updated status and assignment info
-            await fetchData(true); // silent refresh
+            // Real-time update will handle the UI update, no need for alert or refresh
             // console.log('🔄 [TransportLive] Refreshing all data after assignment...');
             // await fetchData(); // Removed to prevent double refresh
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
-            alert((e as any).message); 
+            console.error('❌ [TransportLive] Assignment error:', e); 
         }
     };
 
@@ -449,7 +455,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         });
         
         if (announcementIds.length === 0) {
-            alert('هیچ اعلام باری انتخاب نشده است');
+            console.warn('⚠️ [TransportLive] No announcements selected for finalize');
             return;
         }
         
@@ -496,6 +502,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }, 1000);
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
+            // فقط alert برای خطا (نه موفقیت - آن را نگه می‌داریم)
             alert(error.message || 'خطا در اتمام تخصیص');
         }
     };
@@ -618,7 +625,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // بدون refresh - state به‌روزرسانی شده است
         } catch (error: any) {
             console.error('❌ [TransportLive] Transfer error:', error);
-            alert(error.message || 'خطا در انتقال مقصد');
+            console.error('❌ [TransportLive] Transfer destination error:', error);
         }
     };
 
@@ -627,7 +634,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const token = localStorage.getItem('token');
             const current = announcements.find(a => a.id === announcementId);
             if (!current) { 
-                alert('اعلام بار پیدا نشد'); 
+                console.warn('⚠️ [TransportLive] Announcement not found'); 
                 return; 
             }
             
@@ -655,7 +662,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const result = await res.json();
             console.log('✅ [TransportLive] Forward successful:', result);
             
-            alert('ارجاع با موفقیت انجام شد');
+            // Real-time update will handle the UI update
             
             // بعد از ارجاع، باید داده‌ها را refresh کنیم
             // چون assignment_type تغییر کرده، اعلام بار از لیست ترابری فعلی حذف می‌شود
@@ -665,7 +672,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             console.log('🔄 [TransportLive] Data refreshed after forward');
         } catch (e: any) {
             console.error('❌ [TransportLive] Forward error:', e);
-            alert(e.message || 'ارجاع ناموفق بود');
+            console.error('❌ [TransportLive] Forward error:', e);
         }
     };
 
@@ -690,11 +697,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
             const data = await res.json();
             console.log('✅ [TransportLive] Cancelled:', data);
-            alert('تخصیص با موفقیت لغو شد. امکان ارجاع مجدد فعال شد.');
+            // Real-time update will handle the UI update
             // Refresh data to reflect new status (should now be Pending* and show "ارجاع" button)
             await fetchData();
         } catch (e: any) {
-            alert(e.message || 'لغو ناموفق بود');
+            console.error('❌ [TransportLive] Cancel error:', e);
         }
     };
 
@@ -741,13 +748,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const result = await res.json();
             console.log('✅ [TransportLive] Change Vehicle Type successful:', result);
             
-            alert('نوع خودرو با موفقیت تغییر یافت');
+            // Real-time update will handle the UI update
             
             // Refresh data after successful change
             await fetchData();
         } catch (error: any) {
             console.error('❌ [TransportLive] Change Vehicle Type error:', error);
-            alert(error.message || 'خطا در تغییر نوع خودرو');
+            console.error('❌ [TransportLive] Change vehicle type error:', error);
         }
     };
 
@@ -767,10 +774,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 console.error('❌ [TransportLive] ChangeRequest API error:', text);
                 throw new Error(JSON.parse(text)?.message || 'خطا در ثبت درخواست تغییر');
             }
-            alert('درخواست تغییر/تقسیم ثبت شد و بار از کارتابل خارج شد.');
+            // Real-time update will handle the UI update
             await fetchData();
         } catch (e: any) {
-            alert(e.message || 'ثبت درخواست ناموفق بود');
+            console.error('❌ [TransportLive] Change request error:', e);
         }
     };
 

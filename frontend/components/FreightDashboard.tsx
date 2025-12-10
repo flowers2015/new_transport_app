@@ -2126,7 +2126,14 @@ const AnnouncementPanel: React.FC<{
                                     </>
                                 )}
                             </div>
-                            <div><label className="text-xs">ساعت حضور در سکو</label><input type="time" value={multiDestState.platformArrivalTime} onChange={e=>setMultiDestState(s=>({...s, platformArrivalTime: e.target.value}))} className="input-style mt-1" /></div>
+                            <div><label className="text-xs">ساعت حضور در سکو</label>
+                                <select value={multiDestState.platformArrivalTime} onChange={e=>setMultiDestState(s=>({...s, platformArrivalTime: e.target.value}))} className="input-style mt-1">
+                                    <option value="">-- انتخاب کنید --</option>
+                                    {Array.from({ length: 24 }, (_, i) => (
+                                        <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}:00</option>
+                                    ))}
+                                </select>
+                            </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">برند محصول</legend>
@@ -2246,7 +2253,14 @@ const AnnouncementPanel: React.FC<{
                                                     }
                                                 }
                                             }} className="input-style" placeholder="1404/09/18" dir="ltr" pattern="\d{4}\/\d{2}\/\d{2}" title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)" required maxLength={10}/></div>
-                                            <div><label className="text-xs">ساعت تخلیه</label><input type="time" value={dest.unloadTime || ''} onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)} className="input-style"/></div>
+                                            <div><label className="text-xs">ساعت تخلیه</label>
+                                                <select value={dest.unloadTime || ''} onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)} className="input-style">
+                                                    <option value="">-- انتخاب کنید --</option>
+                                                    {Array.from({ length: 24 }, (_, i) => (
+                                                        <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}:00</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

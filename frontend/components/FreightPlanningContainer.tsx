@@ -117,6 +117,9 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     }, [headers]);
 
+    // Auto-refresh به عنوان fallback (فقط وقتی SSE قطع است)
+    const [sseConnected, setSseConnected] = useState(false);
+    
     // اتصال به Real-Time Updates (SSE)
     useRealtimeUpdates({
         onMessage: (message) => {
@@ -146,9 +149,11 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         },
         onConnect: () => {
             console.log('✅ [FreightPlanningContainer] Real-time connection established');
+            setSseConnected(true);
         },
         onDisconnect: () => {
             console.log('❌ [FreightPlanningContainer] Real-time connection lost');
+            setSseConnected(false);
         },
         onError: (error) => {
             console.error('❌ [FreightPlanningContainer] Real-time error:', error);
@@ -238,7 +243,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
         } catch (err) {
             console.error('[FreightPlanning] Create announcement failed', err);
-            alert('ثبت اعلام بار ناموفق بود.');
+            console.error('❌ [FreightPlanning] Create announcement failed');
         }
     };
 
@@ -305,7 +310,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
         } catch (e) {
             console.error('❌ [FreightPlanning] Update failed:', e);
-            alert('به‌روزرسانی ناموفق بود');
+            console.error('❌ [FreightPlanning] Update failed');
         }
     };
 
@@ -320,7 +325,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
         } catch (e) {
             console.error('❌ [FreightPlanning] Approve failed:', e);
-            alert('تایید ناموفق بود');
+            console.error('❌ [FreightPlanning] Approve failed');
         }
     };
 
@@ -336,7 +341,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
         } catch (e) {
             console.error('❌ [FreightPlanning] Reject failed:', e);
-            alert('رد کردن ناموفق بود');
+            console.error('❌ [FreightPlanning] Reject failed');
         }
     };
 
@@ -352,7 +357,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
         } catch (e) {
             console.error('❌ [FreightPlanning] Switch queue failed:', e);
-            alert('تغییر صف تخصیص ناموفق بود');
+            console.error('❌ [FreightPlanning] Switch queue failed');
         }
     };
 
@@ -365,10 +370,10 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             });
             if (!res.ok) throw new Error(await res.text());
             await fetchAnnouncements();
-            try { alert('آیتم با موفقیت حذف شد.'); } catch {}
+            // Real-time update will handle the UI update
         } catch (e) {
             console.error('❌ [FreightPlanning] Delete failed:', e);
-            alert('حذف ناموفق بود');
+            console.error('❌ [FreightPlanning] Delete failed');
         }
     };
 
@@ -378,7 +383,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             // پیدا کردن اعلام بار
             const announcement = announcements.find(a => a.id === id);
             if (!announcement) {
-                alert('اعلام بار یافت نشد');
+                console.warn('⚠️ [FreightPlanning] Announcement not found');
                 return;
             }
 
@@ -411,10 +416,10 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 throw new Error(errorText || 'خطا در اعلام مجدد');
             }
             await fetchAnnouncements();
-            alert('اعلام بار با موفقیت برای تایید مجدد مدیر ارسال شد');
+            // Real-time update will handle the UI update
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Re-announce failed:', e);
-            alert(e.message || 'اعلام مجدد ناموفق بود');
+            console.error('❌ [FreightPlanning] Re-announce failed:', e);
         }
     };
 
@@ -448,14 +453,10 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 throw new Error(errorText || 'خطا در ارجاع');
             }
             await fetchAnnouncements();
-            if (showNotification) {
-                alert('اعلام بار با موفقیت برای تایید ارسال شد');
-            }
+            // Real-time update will handle the UI update
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Send for approval failed:', e);
-            if (showNotification) {
-                alert(e.message || 'ارجاع ناموفق بود');
-            }
+            console.error('❌ [FreightPlanning] Send for approval failed:', e);
             throw e; // پرتاب خطا برای مدیریت در bulk operation
         }
     };
@@ -490,12 +491,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 body: JSON.stringify({ newAnnouncements }),
             });
             if (!res.ok) throw new Error(await res.text());
-            alert('درخواست با موفقیت تأیید شد');
+            // Real-time update will handle the UI update
             await fetchChangeRequests();
             await fetchAnnouncements();
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Approve change request failed:', e);
-            alert(e.message || 'تأیید ناموفق بود');
+            console.error('❌ [FreightPlanning] Approve change request failed:', e);
         }
     };
 
@@ -507,12 +508,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 body: JSON.stringify({ reviewNote }),
             });
             if (!res.ok) throw new Error(await res.text());
-            alert('درخواست رد شد');
+            // Real-time update will handle the UI update
             await fetchChangeRequests();
             await fetchAnnouncements();
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Reject change request failed:', e);
-            alert(e.message || 'رد ناموفق بود');
+            console.error('❌ [FreightPlanning] Reject change request failed:', e);
         }
     };
 
@@ -523,12 +524,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 headers,
             });
             if (!res.ok) throw new Error(await res.text());
-            alert('درخواست از کارتابل خارج شد');
+            // Real-time update will handle the UI update
             await fetchChangeRequests();
             await fetchAnnouncements();
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Archive change request failed:', e);
-            alert(e.message || 'خارج کردن از کارتابل ناموفق بود');
+            console.error('❌ [FreightPlanning] Archive change request failed:', e);
         }
     };
 

@@ -715,6 +715,19 @@ async function updateFreightAnnouncement(req, res) {
 
       await client.query('COMMIT');
 
+      // ارسال real-time notification برای update
+      try {
+        const realtimeService = require('../services/realtimeService');
+        realtimeService.notifyAnnouncementUpdate(
+          id,
+          'updated',
+          { status: newRecord.status, lineType: newRecord.lineType },
+          userId
+        );
+      } catch (realtimeError) {
+        console.error('❌ [updateFreightAnnouncement] Error sending realtime notification:', realtimeError);
+      }
+
       // 7. برگرداندن رکورد آپدیت شده
       const { rows } = await pool.query('SELECT * FROM freight_announcements WHERE id = $1', [id]);
       const updated = rows[0];
@@ -1004,6 +1017,19 @@ async function createFreightAnnouncement(req, res) {
       ipAddress: req.ip
     });
 
+    // ارسال real-time notification برای create
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        id,
+        'created',
+        { status: status, lineType, announcementCode },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [createFreightAnnouncement] Error sending realtime notification:', realtimeError);
+    }
+
     return res.status(201).json(created);
   } catch (error) {
     console.error('Failed to create freight announcement:', error);
@@ -1179,6 +1205,20 @@ async function rejectAnnouncement(req, res) {
     });
     
     await client.query('COMMIT');
+    
+    // ارسال real-time notification
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'rejected',
+        { status: newStatus, rejectionReason: reason },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [rejectAnnouncement] Error sending realtime notification:', realtimeError);
+    }
+    
     return res.status(200).json({ message: 'Announcement rejected and returned to planner.' });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -1804,6 +1844,20 @@ async function setAssignmentQueue(req, res) {
     });
     
     await client.query('COMMIT');
+    
+    // ارسال real-time notification
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'queue_changed',
+        { status: newStatus, assignmentType: nextQueue },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [setAssignmentQueue] Error sending realtime notification:', realtimeError);
+    }
+    
     return res.status(200).json({ message: 'Queue changed successfully.' });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -2370,18 +2424,7 @@ async function finalizeAssignments(req, res) {
     
     await client.query('COMMIT');
     
-    res.json({
-      message: 'اتمام تخصیص با موفقیت انجام شد',
-      finalized: finalizedIds.length,
-      leftover: leftoverIds.length,
-      finalizedIds,
-      leftoverIds,
-      creators: creatorMap
-    });
-    
-    await client.query('COMMIT');
-    
-    // ارسال real-time notification برای هر اعلام بار finalized شده
+    // ارسال real-time notification برای هر اعلام بار finalized شده (بعد از COMMIT)
     try {
       const realtimeService = require('../services/realtimeService');
       finalizedIds.forEach(annId => {
@@ -2392,14 +2435,27 @@ async function finalizeAssignments(req, res) {
           currentUserId
         );
       });
+      // همچنین برای leftover ها هم notification بفرست
+      leftoverIds.forEach(annId => {
+        realtimeService.notifyAnnouncementUpdate(
+          annId,
+          'leftover',
+          { status: 'Leftover', lineType },
+          currentUserId
+        );
+      });
     } catch (realtimeError) {
       console.error('❌ [finalizeAssignments] Error sending realtime notifications:', realtimeError);
       // خطا را ignore می‌کنیم تا finalize موفق باشد
     }
     
-    return res.status(200).json({ 
-      message: `${finalizedIds.length} announcement(s) finalized successfully.`,
-      finalizedIds 
+    return res.status(200).json({
+      message: 'اتمام تخصیص با موفقیت انجام شد',
+      finalized: finalizedIds.length,
+      leftover: leftoverIds.length,
+      finalizedIds,
+      leftoverIds,
+      creators: creatorMap
     });
     
   } catch (error) {
