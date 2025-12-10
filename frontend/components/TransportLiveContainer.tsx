@@ -383,33 +383,27 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         fetchDataRef.current(); // استفاده از ref به جای مستقیم
     }, [currentUser?.id]); // فقط وابسته به currentUser.id
     
-    // Auto-refresh به عنوان fallback (فقط وقتی SSE قطع است)
+    // Auto-refresh به عنوان fallback (همیشه فعال برای اطمینان از دریافت اعلام بارهای جدید)
     useEffect(() => {
         console.log('🔄 [Auto-refresh] Effect triggered', { sseConnected, announcementsCount: announcements.length });
         
-        // اگر SSE متصل است، auto-refresh را خاموش کن
-        if (sseConnected) {
-            if (refreshIntervalRef.current) {
-                console.log('🔄 [Auto-refresh] SSE connected, clearing auto-refresh interval');
-                clearInterval(refreshIntervalRef.current);
-                refreshIntervalRef.current = null;
-            }
-            return;
-        }
+        // اگر SSE متصل است، interval را کاهش می‌دهیم (60 ثانیه) برای fallback
+        // اگر SSE قطع است، interval را کاهش می‌دهیم (15 ثانیه) برای fallback قوی‌تر
+        const interval = sseConnected ? 60000 : 15000; // 60s if SSE connected, 15s if disconnected
         
-        // اگر SSE قطع است، auto-refresh را فعال کن (fallback)
         if (refreshIntervalRef.current) {
             clearInterval(refreshIntervalRef.current);
         }
         
-        console.log('🔄 [Auto-refresh] SSE disconnected, setting up fallback interval (30s)');
+        console.log(`🔄 [Auto-refresh] Setting up refresh interval: ${interval}ms (SSE: ${sseConnected ? 'connected' : 'disconnected'})`);
+        
         refreshIntervalRef.current = setInterval(() => {
-            // فقط اگر صفحه visible است و داده‌ها وجود دارند
-            if (!document.hidden && announcements.length > 0) {
-                console.log('🔄 [Auto-refresh Fallback] SSE disconnected, using fallback refresh');
+            // فقط اگر صفحه visible است
+            if (!document.hidden) {
+                console.log(`🔄 [Auto-refresh] Periodic refresh (SSE: ${sseConnected ? 'connected' : 'disconnected'})`);
                 fetchDataRef.current(true, needsPersonalResourcesRef.current);
             }
-        }, 30000); // 30 seconds fallback (فقط وقتی SSE قطع است)
+        }, interval);
         
         return () => {
             if (refreshIntervalRef.current) {
@@ -445,7 +439,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     // اتصال به Real-Time Updates (SSE)
     useRealtimeUpdates({
         onMessage: (message) => {
-            console.log('📨 [TransportLiveContainer] Real-time message received:', message);
+            console.log('📨 [TransportLiveContainer] ===== REAL-TIME MESSAGE RECEIVED =====');
+            console.log('📨 [TransportLiveContainer] Full message:', JSON.stringify(message, null, 2));
             
             if (message.type === 'announcement_update') {
                 // به‌روزرسانی اعلام بار
@@ -635,17 +630,21 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
         },
         onConnect: () => {
-            console.log('✅ [TransportLiveContainer] Real-time connection established');
+            console.log('✅ [TransportLiveContainer] ===== SSE CONNECTION ESTABLISHED =====');
+            console.log('✅ [TransportLiveContainer] User:', currentUser?.id, currentUser?.role);
             setSseConnected(true);
-            console.log('🔄 [TransportLiveContainer] SSE connected, auto-refresh will be disabled');
+            console.log('🔄 [TransportLiveContainer] SSE connected, periodic refresh will use 60s interval');
         },
         onDisconnect: () => {
-            console.log('❌ [TransportLiveContainer] Real-time connection lost');
+            console.log('❌ [TransportLiveContainer] ===== SSE CONNECTION LOST =====');
+            console.log('❌ [TransportLiveContainer] User:', currentUser?.id);
             setSseConnected(false);
-            console.log('🔄 [TransportLiveContainer] SSE disconnected, auto-refresh fallback will be enabled');
+            console.log('🔄 [TransportLiveContainer] SSE disconnected, periodic refresh will use 15s interval');
         },
         onError: (error) => {
-            console.error('❌ [TransportLiveContainer] Real-time error:', error);
+            console.error('❌ [TransportLiveContainer] ===== REAL-TIME ERROR =====');
+            console.error('❌ [TransportLiveContainer] Error details:', error);
+            console.error('❌ [TransportLiveContainer] Stack:', error?.stack);
         },
         enabled: !!currentUser?.id
     });
@@ -1084,6 +1083,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     return (
         <>
+            {/* نمایش وضعیت اتصال SSE */}
+            <div className={`mb-4 p-2 rounded-md text-sm flex items-center gap-2 ${sseConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></span>
+                <span>
+                    {sseConnected 
+                        ? '✓ اتصال زنده فعال - به‌روزرسانی‌ها به صورت لحظه‌ای دریافت می‌شوند' 
+                        : '⚠ اتصال زنده غیرفعال - از به‌روزرسانی دوره‌ای استفاده می‌شود'}
+                </span>
+            </div>
             <TransportLive
                 announcements={announcements}
                 vehicles={vehicles}
