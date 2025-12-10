@@ -23,6 +23,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [error, setError] = useState<string | null>(null);
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
+    const [sseConnected, setSseConnected] = useState(false);
 
     // بررسی دسترسی اتمام تخصیص (با Cache برای جلوگیری از درخواست‌های تکراری)
     const checkFinalizePermission = useCallback(async (lineType: FreightLineType): Promise<boolean> => {
@@ -311,9 +312,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     
     // Auto-refresh به عنوان fallback (فقط وقتی SSE قطع است)
     useEffect(() => {
+        console.log('🔄 [Auto-refresh] Effect triggered', { sseConnected, announcementsCount: announcements.length });
+        
         // اگر SSE متصل است، auto-refresh را خاموش کن
         if (sseConnected) {
             if (refreshIntervalRef.current) {
+                console.log('🔄 [Auto-refresh] SSE connected, clearing auto-refresh interval');
                 clearInterval(refreshIntervalRef.current);
                 refreshIntervalRef.current = null;
             }
@@ -325,6 +329,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             clearInterval(refreshIntervalRef.current);
         }
         
+        console.log('🔄 [Auto-refresh] SSE disconnected, setting up fallback interval (30s)');
         refreshIntervalRef.current = setInterval(() => {
             // فقط اگر صفحه visible است و داده‌ها وجود دارند
             if (!document.hidden && announcements.length > 0) {
@@ -395,10 +400,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         onConnect: () => {
             console.log('✅ [TransportLiveContainer] Real-time connection established');
             setSseConnected(true);
+            console.log('🔄 [TransportLiveContainer] SSE connected, auto-refresh will be disabled');
         },
         onDisconnect: () => {
             console.log('❌ [TransportLiveContainer] Real-time connection lost');
             setSseConnected(false);
+            console.log('🔄 [TransportLiveContainer] SSE disconnected, auto-refresh fallback will be enabled');
         },
         onError: (error) => {
             console.error('❌ [TransportLiveContainer] Real-time error:', error);

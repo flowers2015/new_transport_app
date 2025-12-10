@@ -150,10 +150,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         onConnect: () => {
             console.log('✅ [FreightPlanningContainer] Real-time connection established');
             setSseConnected(true);
+            console.log('🔄 [FreightPlanningContainer] SSE connected, auto-refresh will be disabled');
         },
         onDisconnect: () => {
             console.log('❌ [FreightPlanningContainer] Real-time connection lost');
             setSseConnected(false);
+            console.log('🔄 [FreightPlanningContainer] SSE disconnected, auto-refresh fallback will be enabled');
         },
         onError: (error) => {
             console.error('❌ [FreightPlanningContainer] Real-time error:', error);
