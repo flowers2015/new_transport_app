@@ -221,11 +221,29 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 };
 
                 const announcementsData: FreightAnnouncement[] = Array.isArray(announcementsRaw) ? announcementsRaw.map(normalize) : [];
-                // فیلتر کردن ChangeRequested از TransportLive (فقط برای planner نمایش داده می‌شود)
-                const filteredAnnouncements = announcementsData.filter(a => 
-                    a.status !== FreightAnnouncementStatus.ChangeRequested && a.status !== 'ChangeRequested'
-                );
-                // console.log('🧭 [TransportLive] Normalized Announcements:', filteredAnnouncements);
+                // فیلتر کردن ChangeRequested و Finalized از TransportLive
+                // همچنین فیلتر کردن اعلام‌بارهایی که assignment_finalized_at دارند (دیگر در کارتابل نیستند)
+                const filteredAnnouncements = announcementsData.filter(a => {
+                    // حذف ChangeRequested (فقط برای planner نمایش داده می‌شود)
+                    if (a.status === FreightAnnouncementStatus.ChangeRequested || a.status === 'ChangeRequested') {
+                        return false;
+                    }
+                    // حذف Finalized (دیگر در کارتابل نیست)
+                    if (a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized') {
+                        return false;
+                    }
+                    // حذف اعلام‌بارهایی که assignment_finalized_at دارند (تخصیص نهایی شده)
+                    if (a.assignmentFinalizedAt) {
+                        return false;
+                    }
+                    return true;
+                });
+                console.log('🧭 [TransportLive] Filtered Announcements:', {
+                    total: announcementsData.length,
+                    filtered: filteredAnnouncements.length,
+                    removed: announcementsData.length - filteredAnnouncements.length,
+                    removedFinalized: announcementsData.filter(a => a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized' || a.assignmentFinalizedAt).length
+                });
 
                 setAnnouncements(filteredAnnouncements);
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
@@ -406,6 +424,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     if (index === -1) {
                         // اگر اعلام بار جدید است، باید fetch کنیم
                         console.log('🔄 [TransportLiveContainer] New announcement detected, fetching immediately...');
+                        
+                        // Invalidate cache برای freight-announcements
+                        import('../utils/apiCache').then(({ apiCache }) => {
+                            const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
+                            apiCache.invalidate(cacheKey);
+                            console.log('🗑️ [TransportLiveContainer] Cache invalidated for new announcement');
+                        }).catch(err => {
+                            console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
+                        });
+                        
                         // فوراً fetch کن (بدون await - async)
                         fetchDataRef.current(true, needsPersonalResourcesRef.current).catch(err => {
                             console.error('❌ [TransportLiveContainer] Error fetching new announcement:', err);
@@ -553,11 +581,24 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // نمایش پیام موفقیت
             alert(`اتمام تخصیص انجام شد:\n${result.finalized} مورد نهایی شد\n${result.leftover} مورد به بارهای مانده برگشت`);
             
+            // Invalidate cache برای freight-announcements تا داده جدید fetch شود
+            try {
+                const { apiCache } = await import('../utils/apiCache');
+                const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
+                apiCache.invalidate(cacheKey);
+                console.log('🗑️ [TransportLiveContainer] Cache invalidated after finalize');
+            } catch (err) {
+                console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
+            }
+            
             // Real-time updates باید finalized ها را از لیست حذف کنند
             // اما برای leftover ها، ممکن است نیاز به refresh باشد
             if (result.leftover && result.leftover > 0) {
                 console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover announcements...');
-                await fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                // با کمی تاخیر برای اطمینان از به‌روزرسانی backend
+                setTimeout(async () => {
+                    await fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                }, 500);
             }
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
