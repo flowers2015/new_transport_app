@@ -381,9 +381,17 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 console.log('📨 [TransportLiveContainer] Processing update', { announcementId, updateType, data });
                 
                 // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
-                if (updateType === 'finalized' || data.status === 'Finalized') {
-                    console.log('🗑️ [TransportLiveContainer] Announcement finalized, removing from list');
-                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+                if (updateType === 'finalized' || data.status === 'Finalized' || data.status === 'finalized') {
+                    console.log('🗑️ [TransportLiveContainer] Announcement finalized, removing from list', { announcementId, updateType, data });
+                    setAnnouncements(prev => {
+                        const filtered = prev.filter(a => a.id !== announcementId);
+                        console.log('🗑️ [TransportLiveContainer] Removed finalized announcement', { 
+                            before: prev.length, 
+                            after: filtered.length,
+                            removedId: announcementId 
+                        });
+                        return filtered;
+                    });
                     return;
                 }
                 
@@ -402,11 +410,20 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     
                     // به‌روزرسانی اعلام بار موجود
                     console.log('✅ [TransportLiveContainer] Updating existing announcement in list');
-                    return applyOptimisticUpdate(prev, announcementId, {
+                    const updated = applyOptimisticUpdate(prev, announcementId, {
                         status: data.status as FreightAnnouncementStatus,
                         assignmentType: data.assignmentType,
+                        assignmentFinalizedAt: data.assignmentFinalizedAt, // اضافه کردن assignmentFinalizedAt
                         ...data
                     });
+                    
+                    // اگر assignmentFinalizedAt set شده، از لیست حذف کن (فیلتر TransportLive آن را حذف می‌کند)
+                    if (data.assignmentFinalizedAt) {
+                        console.log('🗑️ [TransportLiveContainer] assignmentFinalizedAt set, removing from list');
+                        return updated.filter(a => a.id !== announcementId);
+                    }
+                    
+                    return updated;
                 });
             }
         },

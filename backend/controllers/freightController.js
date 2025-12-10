@@ -2428,15 +2428,21 @@ async function finalizeAssignments(req, res) {
     try {
       const realtimeService = require('../services/realtimeService');
       finalizedIds.forEach(annId => {
+        console.log(`📢 [finalizeAssignments] Sending finalized notification for ${annId}`);
         realtimeService.notifyAnnouncementUpdate(
           annId,
           'finalized',
-          { status: 'Finalized', lineType },
+          { 
+            status: 'Finalized', 
+            lineType,
+            assignmentFinalizedAt: new Date().toISOString() // اضافه کردن assignmentFinalizedAt
+          },
           currentUserId
         );
       });
       // همچنین برای leftover ها هم notification بفرست
       leftoverIds.forEach(annId => {
+        console.log(`📢 [finalizeAssignments] Sending leftover notification for ${annId}`);
         realtimeService.notifyAnnouncementUpdate(
           annId,
           'leftover',
