@@ -91,6 +91,27 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 // استفاده از cached fetch برای بهبود عملکرد
                 // TTL: 30 ثانیه برای freight-announcements (داده‌های زنده)
                 // TTL: 10 دقیقه برای vehicles, drivers (داده‌های static - افزایش یافت)
+                
+                // برای اطمینان از دریافت داده جدید، اگر cache fresh است، invalidate می‌کنیم
+                // (فقط برای force refresh وقتی که نیاز است)
+                if (!silent) {
+                    try {
+                        const { apiCache } = await import('../utils/apiCache');
+                        const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
+                        const cache = (apiCache as any).cache;
+                        if (cache && cache.has(cacheKey)) {
+                            const entry = cache.get(cacheKey);
+                            // اگر cache fresh است (کمتر از 10 ثانیه)، invalidate کن برای force refresh
+                            if (entry && Date.now() < entry.expiresAt && (Date.now() - entry.timestamp) < 10000) {
+                                apiCache.invalidate(cacheKey);
+                                console.log('🗑️ [fetchData] Cache invalidated for force refresh');
+                            }
+                        }
+                    } catch (err) {
+                        // ignore
+                    }
+                }
+                
                 const fetchPromises: Promise<any>[] = [
                     cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000),
                     cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
@@ -422,8 +443,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 setAnnouncements(prev => {
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
-                        // اگر اعلام بار جدید است، باید fetch کنیم
-                        console.log('🔄 [TransportLiveContainer] New announcement detected, fetching immediately...');
+                        // اگر اعلام بار جدید است (approved, created, یا هر update type دیگر)
+                        console.log('🔄 [TransportLiveContainer] New announcement detected, fetching immediately...', { announcementId, updateType, data });
                         
                         // Invalidate cache برای freight-announcements
                         import('../utils/apiCache').then(({ apiCache }) => {
@@ -435,9 +456,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         });
                         
                         // فوراً fetch کن (بدون await - async)
-                        fetchDataRef.current(true, needsPersonalResourcesRef.current).catch(err => {
-                            console.error('❌ [TransportLiveContainer] Error fetching new announcement:', err);
-                        });
+                        // برای approved/created، delay کمتر (50ms) برای نمایش فوری‌تر
+                        // برای سایر update types، delay بیشتر (100ms)
+                        const delay = (updateType === 'approved' || updateType === 'created') ? 50 : 100;
+                        setTimeout(() => {
+                            console.log(`🔄 [TransportLiveContainer] Fetching after ${delay}ms delay for ${updateType}`);
+                            fetchDataRef.current(true, needsPersonalResourcesRef.current).catch(err => {
+                                console.error('❌ [TransportLiveContainer] Error fetching new announcement:', err);
+                            });
+                        }, delay);
+                        
                         return prev;
                     }
                     

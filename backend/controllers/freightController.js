@@ -1115,15 +1115,17 @@ async function approveAnnouncement(req, res) {
     
     await client.query('COMMIT');
     
-    // ارسال real-time notification
+    // ارسال real-time notification (بعد از COMMIT)
     try {
       const realtimeService = require('../services/realtimeService');
+      console.log(`📢 [approveAnnouncement] Sending approved notification for ${announcementId}`, { newStatus, assignmentType, code });
       realtimeService.notifyAnnouncementUpdate(
         announcementId,
         'approved',
         { status: newStatus, assignmentType, announcementCode: code },
         userId
       );
+      console.log(`✅ [approveAnnouncement] Notification sent successfully`);
     } catch (realtimeError) {
       console.error('❌ [approveAnnouncement] Error sending realtime notification:', realtimeError);
       // خطا را ignore می‌کنیم تا approve موفق باشد
