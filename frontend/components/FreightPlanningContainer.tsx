@@ -131,6 +131,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 
                 console.log('📨 [FreightPlanningContainer] Processing update', { announcementId, updateType, data });
                 
+                // اگر change_requested است، درخواست‌های تغییر را refresh کن
+                if (updateType === 'change_requested' || data.status === 'ChangeRequested') {
+                    console.log('🔄 [FreightPlanningContainer] Change request detected, refreshing change requests...');
+                    fetchChangeRequests();
+                }
+                
                 // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
                 if (updateType === 'finalized' || data.status === 'Finalized') {
                     console.log('🗑️ [FreightPlanningContainer] Announcement finalized, removing from list');
@@ -142,11 +148,27 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
                         // اگر اعلام بار جدید است، باید fetch کنیم
-                        console.log('🔄 [FreightPlanningContainer] New announcement detected, fetching immediately...');
-                        // فوراً fetch کن (بدون await - async)
-                        fetchAnnouncements(true).catch(err => {
-                            console.error('❌ [FreightPlanningContainer] Error fetching new announcement:', err);
+                        console.log('🔄 [FreightPlanningContainer] New announcement detected, fetching immediately...', { announcementId, updateType, data });
+                        
+                        // Invalidate cache برای freight-announcements
+                        import('../utils/apiCache').then(({ apiCache }) => {
+                            const cacheKey = `GET:${getApiUrl('freight-announcements?includeLeftover=true')}`;
+                            apiCache.invalidate(cacheKey);
+                            console.log('🗑️ [FreightPlanningContainer] Cache invalidated for new announcement');
+                        }).catch(err => {
+                            console.warn('⚠️ [FreightPlanningContainer] Failed to invalidate cache:', err);
                         });
+                        
+                        // فوراً fetch کن (بدون await - async)
+                        // با کمی تاخیر برای اطمینان از به‌روزرسانی backend
+                        const delay = (updateType === 'approved' || updateType === 'created') ? 50 : 100;
+                        setTimeout(() => {
+                            console.log(`🔄 [FreightPlanningContainer] Fetching after ${delay}ms delay for ${updateType}`);
+                            fetchAnnouncements(true).catch(err => {
+                                console.error('❌ [FreightPlanningContainer] Error fetching new announcement:', err);
+                            });
+                        }, delay);
+                        
                         return prev;
                     }
                     
@@ -493,10 +515,21 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
-    // دریافت خودکار درخواست‌های تغییر هنگام بارگذاری
+    // دریافت خودکار درخواست‌های تغییر هنگام بارگذاری و بعد از هر update
     useEffect(() => {
         fetchChangeRequests();
     }, []);
+    
+    // دریافت مجدد درخواست‌های تغییر وقتی که اعلام بار update می‌شود
+    useRealtimeUpdates({
+        onMessage: (message) => {
+            if (message.type === 'announcement_update' && message.updateType === 'change_requested') {
+                console.log('🔄 [FreightPlanningContainer] Change request detected, refreshing change requests...');
+                fetchChangeRequests();
+            }
+        },
+        enabled: !!currentUser?.id
+    });
 
     const handleApproveChangeRequest = async (requestId: string, newAnnouncements?: any[]) => {
         try {
