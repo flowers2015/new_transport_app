@@ -129,16 +129,29 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 // به‌روزرسانی اعلام بار
                 const { announcementId, updateType, data } = message;
                 
+                console.log('📨 [FreightPlanningContainer] Processing update', { announcementId, updateType, data });
+                
+                // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
+                if (updateType === 'finalized' || data.status === 'Finalized') {
+                    console.log('🗑️ [FreightPlanningContainer] Announcement finalized, removing from list');
+                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+                    return;
+                }
+                
                 setAnnouncements(prev => {
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
                         // اگر اعلام بار جدید است، باید fetch کنیم
-                        console.log('🔄 [FreightPlanningContainer] New announcement detected, refreshing...');
-                        fetchAnnouncements(true); // silent refresh
+                        console.log('🔄 [FreightPlanningContainer] New announcement detected, fetching immediately...');
+                        // فوراً fetch کن (بدون await - async)
+                        fetchAnnouncements(true).catch(err => {
+                            console.error('❌ [FreightPlanningContainer] Error fetching new announcement:', err);
+                        });
                         return prev;
                     }
                     
                     // به‌روزرسانی اعلام بار موجود
+                    console.log('✅ [FreightPlanningContainer] Updating existing announcement in list');
                     return applyOptimisticUpdate(prev, announcementId, {
                         status: data.status as FreightAnnouncementStatus,
                         assignmentType: data.assignmentType,

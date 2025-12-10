@@ -378,17 +378,30 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 // به‌روزرسانی اعلام بار
                 const { announcementId, updateType, data } = message;
                 
+                console.log('📨 [TransportLiveContainer] Processing update', { announcementId, updateType, data });
+                
+                // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
+                if (updateType === 'finalized' || data.status === 'Finalized') {
+                    console.log('🗑️ [TransportLiveContainer] Announcement finalized, removing from list');
+                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+                    return;
+                }
+                
                 // اعمال optimistic update
                 setAnnouncements(prev => {
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
                         // اگر اعلام بار جدید است، باید fetch کنیم
-                        console.log('🔄 [TransportLiveContainer] New announcement detected, refreshing...');
-                        fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                        console.log('🔄 [TransportLiveContainer] New announcement detected, fetching immediately...');
+                        // فوراً fetch کن (بدون await - async)
+                        fetchDataRef.current(true, needsPersonalResourcesRef.current).catch(err => {
+                            console.error('❌ [TransportLiveContainer] Error fetching new announcement:', err);
+                        });
                         return prev;
                     }
                     
                     // به‌روزرسانی اعلام بار موجود
+                    console.log('✅ [TransportLiveContainer] Updating existing announcement in list');
                     return applyOptimisticUpdate(prev, announcementId, {
                         status: data.status as FreightAnnouncementStatus,
                         assignmentType: data.assignmentType,
@@ -503,10 +516,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // نمایش پیام موفقیت
             alert(`اتمام تخصیص انجام شد:\n${result.finalized} مورد نهایی شد\n${result.leftover} مورد به بارهای مانده برگشت`);
             
-            // Refresh data - با کمی تاخیر برای اطمینان از به‌روزرسانی backend
-            setTimeout(async () => {
-                await fetchData();
-            }, 1000);
+            // Real-time updates باید فوراً finalized ها را از لیست حذف کنند
+            // اما برای اطمینان، یک refresh هم می‌کنیم (silent)
+            console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing data...');
+            await fetchDataRef.current(true, needsPersonalResourcesRef.current);
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
             // فقط alert برای خطا (نه موفقیت - آن را نگه می‌داریم)
