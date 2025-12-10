@@ -232,7 +232,17 @@ async function getFreightAnnouncements(req, res) {
     const finalizedCount = rows.filter(r => r.status === 'Finalized').length;
     const inTransitCount = rows.filter(r => r.status === 'InTransit').length;
     const leftoverCount = rows.filter(r => r.status === 'Leftover').length;
-    console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Leftover: ${leftoverCount}, Finalized: ${finalizedCount}, InTransit: ${inTransitCount}`);
+    const pendingPersonalCount = rows.filter(r => r.status === 'PendingPersonalAssignment').length;
+    const pendingCompanyCount = rows.filter(r => r.status === 'PendingCompanyAssignment').length;
+    console.log(`📊 [getFreightAnnouncements] Found ${rows.length} announcements. Status breakdown:`, {
+      PendingPersonalAssignment: pendingPersonalCount,
+      PendingCompanyAssignment: pendingCompanyCount,
+      Leftover: leftoverCount,
+      Finalized: finalizedCount,
+      InTransit: inTransitCount,
+      userRole: req.user?.role || req.user?.userRole,
+      userId: req.user?.id || req.user?.userId
+    });
     
     // Fetch destinations for each announcement and convert dates
     const allDestinationsStats = {
@@ -1094,10 +1104,16 @@ async function approveAnnouncement(req, res) {
     const description = `بار به مقصد ${destinationLabel} توسط ${userName} تایید شد و به صف ${assignmentType === 'company' ? 'شرکتی' : 'شخصی'} ارجاع شد`;
 
     // آپدیت وضعیت و نوع تخصیص
-    await client.query(
-      'UPDATE freight_announcements SET status = $1, assignment_type = $2, updated_at = NOW() WHERE id = $3',
+    const updateResult = await client.query(
+      'UPDATE freight_announcements SET status = $1, assignment_type = $2, updated_at = NOW() WHERE id = $3 RETURNING id, status, assignment_type',
       [newStatus, assignmentType, announcementId]
     );
+    console.log(`✅ [approveAnnouncement] Updated announcement ${announcementId}:`, {
+      newStatus,
+      assignmentType,
+      updatedRows: updateResult.rowCount,
+      returnedData: updateResult.rows[0]
+    });
     
     // ثبت تاریخچه
     await logFreightHistory({

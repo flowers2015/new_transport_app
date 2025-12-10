@@ -263,7 +263,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     total: announcementsData.length,
                     filtered: filteredAnnouncements.length,
                     removed: announcementsData.length - filteredAnnouncements.length,
-                    removedFinalized: announcementsData.filter(a => a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized' || a.assignmentFinalizedAt).length
+                    removedFinalized: announcementsData.filter(a => a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized' || a.assignmentFinalizedAt).length,
+                    statusBreakdown: {
+                        PendingPersonalAssignment: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.PendingPersonalAssignment || a.status === 'PendingPersonalAssignment').length,
+                        PendingCompanyAssignment: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.PendingCompanyAssignment || a.status === 'PendingCompanyAssignment').length,
+                        Assigned: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.Assigned || a.status === 'Assigned').length,
+                        InTransit: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.InTransit || a.status === 'InTransit').length,
+                    },
+                    lineTypeBreakdown: {
+                        Dairy: filteredAnnouncements.filter(a => a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه').length,
+                        Ambient: filteredAnnouncements.filter(a => a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند').length,
+                        IceCream: filteredAnnouncements.filter(a => a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی').length,
+                    }
                 });
 
                 setAnnouncements(filteredAnnouncements);
