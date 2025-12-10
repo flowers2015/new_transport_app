@@ -3,6 +3,8 @@ import FreightDashboard from './FreightDashboard';
 import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
 import { useCallback } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
+import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
+import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -114,6 +116,45 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             }
         }
     }, [headers]);
+
+    // اتصال به Real-Time Updates (SSE)
+    useRealtimeUpdates({
+        onMessage: (message) => {
+            console.log('📨 [FreightPlanningContainer] Real-time message received:', message);
+            
+            if (message.type === 'announcement_update') {
+                // به‌روزرسانی اعلام بار
+                const { announcementId, updateType, data } = message;
+                
+                setAnnouncements(prev => {
+                    const index = prev.findIndex(a => a.id === announcementId);
+                    if (index === -1) {
+                        // اگر اعلام بار جدید است، باید fetch کنیم
+                        console.log('🔄 [FreightPlanningContainer] New announcement detected, refreshing...');
+                        fetchAnnouncements(true); // silent refresh
+                        return prev;
+                    }
+                    
+                    // به‌روزرسانی اعلام بار موجود
+                    return applyOptimisticUpdate(prev, announcementId, {
+                        status: data.status as FreightAnnouncementStatus,
+                        assignmentType: data.assignmentType,
+                        ...data
+                    });
+                });
+            }
+        },
+        onConnect: () => {
+            console.log('✅ [FreightPlanningContainer] Real-time connection established');
+        },
+        onDisconnect: () => {
+            console.log('❌ [FreightPlanningContainer] Real-time connection lost');
+        },
+        onError: (error) => {
+            console.error('❌ [FreightPlanningContainer] Real-time error:', error);
+        },
+        enabled: !!currentUser?.id
+    });
 
     // بارگذاری اولیه
     useEffect(() => {

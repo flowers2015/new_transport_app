@@ -94,7 +94,8 @@ export const useRealtimeUpdates = ({
         eventSourceRef.current.close();
       }
 
-      const url = getApiUrl('realtime/sse');
+      // EventSource نمی‌تواند header ارسال کند، پس token را در query parameter می‌فرستیم
+      const url = `${getApiUrl('realtime/sse')}?token=${encodeURIComponent(token)}`;
       const eventSource = new EventSource(url, {
         withCredentials: true
       });

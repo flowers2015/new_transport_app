@@ -5,13 +5,16 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/authMiddleware');
+const { authenticateSSE } = require('../middleware/sseAuthMiddleware');
 const realtimeService = require('../services/realtimeService');
 
 /**
  * SSE Endpoint برای real-time updates
- * GET /api/v1/realtime/sse
+ * GET /api/v1/realtime/sse?token=xxx
+ * 
+ * نکته: EventSource نمی‌تواند header ارسال کند، پس از query parameter استفاده می‌کنیم
  */
-router.get('/sse', authenticateToken, (req, res) => {
+router.get('/sse', authenticateSSE, (req, res) => {
   const userId = req.user.userId || req.user.id;
 
   if (!userId) {
