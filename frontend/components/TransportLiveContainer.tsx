@@ -112,6 +112,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     }
                 }
                 
+                // Force invalidate cache برای اطمینان از دریافت داده جدید
+                try {
+                    const { apiCache } = await import('../utils/apiCache');
+                    const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
+                    apiCache.invalidate(cacheKey);
+                    console.log('🗑️ [fetchData] Cache invalidated for fresh data');
+                } catch (err) {
+                    // ignore
+                }
+                
                 const fetchPromises: Promise<any>[] = [
                     cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000),
                     cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
@@ -259,12 +269,23 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     }
                     return true;
                 });
+                // Log breakdown قبل از فیلتر
+                const beforeFilterBreakdown = {
+                    PendingPersonalAssignment: announcementsData.filter(a => a.status === FreightAnnouncementStatus.PendingPersonalAssignment || a.status === 'PendingPersonalAssignment').length,
+                    PendingCompanyAssignment: announcementsData.filter(a => a.status === FreightAnnouncementStatus.PendingCompanyAssignment || a.status === 'PendingCompanyAssignment').length,
+                    Assigned: announcementsData.filter(a => a.status === FreightAnnouncementStatus.Assigned || a.status === 'Assigned').length,
+                    InTransit: announcementsData.filter(a => a.status === FreightAnnouncementStatus.InTransit || a.status === 'InTransit').length,
+                    Finalized: announcementsData.filter(a => a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized').length,
+                    ChangeRequested: announcementsData.filter(a => a.status === FreightAnnouncementStatus.ChangeRequested || a.status === 'ChangeRequested').length,
+                    withAssignmentFinalizedAt: announcementsData.filter(a => a.assignmentFinalizedAt).length,
+                };
+                
                 console.log('🧭 [TransportLive] Filtered Announcements:', {
                     total: announcementsData.length,
                     filtered: filteredAnnouncements.length,
                     removed: announcementsData.length - filteredAnnouncements.length,
-                    removedFinalized: announcementsData.filter(a => a.status === FreightAnnouncementStatus.Finalized || a.status === 'Finalized' || a.assignmentFinalizedAt).length,
-                    statusBreakdown: {
+                    beforeFilter: beforeFilterBreakdown,
+                    afterFilter: {
                         PendingPersonalAssignment: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.PendingPersonalAssignment || a.status === 'PendingPersonalAssignment').length,
                         PendingCompanyAssignment: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.PendingCompanyAssignment || a.status === 'PendingCompanyAssignment').length,
                         Assigned: filteredAnnouncements.filter(a => a.status === FreightAnnouncementStatus.Assigned || a.status === 'Assigned').length,
@@ -274,7 +295,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         Dairy: filteredAnnouncements.filter(a => a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه').length,
                         Ambient: filteredAnnouncements.filter(a => a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند').length,
                         IceCream: filteredAnnouncements.filter(a => a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی').length,
-                    }
+                    },
+                    userRole: currentUser?.role,
+                    userId: currentUser?.id
                 });
 
                 setAnnouncements(filteredAnnouncements);
