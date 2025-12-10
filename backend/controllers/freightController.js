@@ -1027,15 +1027,57 @@ async function createFreightAnnouncement(req, res) {
       ipAddress: req.ip
     });
 
-    // ارسال real-time notification برای create
+    // ارسال real-time notification برای create (بعد از ذخیره کامل)
+    // ارسال notification با داده کامل برای نمایش فوری در کارتابل
     try {
       const realtimeService = require('../services/realtimeService');
+      
+      // آماده‌سازی داده کامل برای optimistic update
+      const notificationData = {
+        status: status,
+        lineType: lineType,
+        announcementCode: announcementCode,
+        vehicleType: vehicleType,
+        originCity: originCity,
+        brand: brand,
+        representativeType: representativeType,
+        representativeName: representativeName,
+        cartonCount: cartonCount,
+        priority: priority,
+        products: products,
+        platformArrivalTime: platformArrivalTime,
+        cargoValue: cargoValue || 0,
+        loadingDate: normalizedLoadingDate,
+        deliveryDate: deliveryDate || null,
+        destinations: destRows.rows.map(d => ({
+          id: d.id,
+          city: d.city,
+          representativeName: d.representative_name,
+          tonnage: d.tonnage,
+          freightCost: d.freight_cost,
+          unloadTime: d.unload_time,
+          deliveryDate: d.delivery_date,
+          representativeType: d.representative_type
+        })),
+        createdAt: created.created_at,
+        id: id
+      };
+      
+      console.log(`📢 [createFreightAnnouncement] Sending created notification for ${id}`, { 
+        status, 
+        lineType, 
+        announcementCode,
+        hasDestinations: notificationData.destinations?.length > 0
+      });
+      
       realtimeService.notifyAnnouncementUpdate(
         id,
         'created',
-        { status: status, lineType, announcementCode },
+        notificationData,
         userId
       );
+      
+      console.log(`✅ [createFreightAnnouncement] Notification sent successfully`);
     } catch (realtimeError) {
       console.error('❌ [createFreightAnnouncement] Error sending realtime notification:', realtimeError);
     }
@@ -1132,16 +1174,92 @@ async function approveAnnouncement(req, res) {
     await client.query('COMMIT');
     
     // ارسال real-time notification (بعد از COMMIT)
+    // دریافت داده کامل اعلام بار برای ارسال در notification
     try {
       const realtimeService = require('../services/realtimeService');
-      console.log(`📢 [approveAnnouncement] Sending approved notification for ${announcementId}`, { newStatus, assignmentType, code });
-      realtimeService.notifyAnnouncementUpdate(
-        announcementId,
-        'approved',
-        { status: newStatus, assignmentType, announcementCode: code },
-        userId
+      
+      // Fetch کامل announcement با destinations برای ارسال در notification
+      const fullAnnouncementResult = await pool.query(
+        `SELECT 
+           fa.*,
+           d.name as assigned_driver_name,
+           d.employee_id as assigned_driver_employee_id,
+           v.model as assigned_vehicle_model,
+           v.brand as assigned_vehicle_brand,
+           v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
+         FROM freight_announcements fa
+         LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+         LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+         WHERE fa.id = $1`,
+        [announcementId]
       );
-      console.log(`✅ [approveAnnouncement] Notification sent successfully`);
+      
+      const fullAnnouncement = fullAnnouncementResult.rows[0];
+      if (fullAnnouncement) {
+        // دریافت destinations
+        const destResult = await pool.query(
+          'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          [announcementId]
+        );
+        
+        // آماده‌سازی داده کامل برای optimistic update
+        const notificationData = {
+          id: announcementId,
+          status: newStatus,
+          assignmentType: assignmentType,
+          announcementCode: code,
+          lineType: lineType,
+          vehicleType: fullAnnouncement.vehicle_type,
+          originCity: fullAnnouncement.origin_city,
+          brand: fullAnnouncement.brand,
+          representativeType: fullAnnouncement.representative_type,
+          representativeName: fullAnnouncement.representative_name,
+          cartonCount: fullAnnouncement.carton_count,
+          priority: fullAnnouncement.priority,
+          products: fullAnnouncement.products ? (typeof fullAnnouncement.products === 'string' ? JSON.parse(fullAnnouncement.products) : fullAnnouncement.products) : [],
+          platformArrivalTime: fullAnnouncement.platform_arrival_time,
+          cargoValue: fullAnnouncement.cargo_value || 0,
+          loadingDate: normalizeJalaliDate(fullAnnouncement.loading_date),
+          deliveryDate: fullAnnouncement.delivery_date ? normalizeJalaliDate(fullAnnouncement.delivery_date) : null,
+          destinations: destResult.rows.map(d => ({
+            id: d.id,
+            city: d.city,
+            representativeName: d.representative_name,
+            tonnage: d.tonnage,
+            freightCost: d.freight_cost,
+            unloadTime: d.unload_time,
+            deliveryDate: d.delivery_date,
+            representativeType: d.representative_type
+          })),
+          createdAt: fullAnnouncement.created_at,
+          updatedAt: fullAnnouncement.updated_at
+        };
+        
+        console.log(`📢 [approveAnnouncement] Sending approved notification for ${announcementId}`, { 
+          newStatus, 
+          assignmentType, 
+          code,
+          hasDestinations: notificationData.destinations?.length > 0
+        });
+        
+        realtimeService.notifyAnnouncementUpdate(
+          announcementId,
+          'approved',
+          notificationData,
+          userId
+        );
+        
+        console.log(`✅ [approveAnnouncement] Notification sent successfully`);
+      } else {
+        console.warn(`⚠️ [approveAnnouncement] Could not fetch full announcement data for ${announcementId}`);
+        // Fallback به notification ساده
+        realtimeService.notifyAnnouncementUpdate(
+          announcementId,
+          'approved',
+          { status: newStatus, assignmentType, announcementCode: code },
+          userId
+        );
+      }
     } catch (realtimeError) {
       console.error('❌ [approveAnnouncement] Error sending realtime notification:', realtimeError);
       // خطا را ignore می‌کنیم تا approve موفق باشد

@@ -478,7 +478,97 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
                         // اگر اعلام بار جدید است (approved, created, یا هر update type دیگر)
-                        console.log('🔄 [TransportLiveContainer] New announcement detected, fetching immediately...', { announcementId, updateType, data });
+                        console.log('🔄 [TransportLiveContainer] New announcement detected', { announcementId, updateType, data });
+                        
+                        // اگر داده کامل در notification موجود است، optimistic update انجام بده
+                        if (data && data.id && data.status && (updateType === 'created' || updateType === 'approved')) {
+                            try {
+                                // Normalize data برای اضافه کردن به state
+                                const statusMap: Record<string, FreightAnnouncementStatus> = {
+                                    Draft: FreightAnnouncementStatus.Draft,
+                                    PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
+                                    Rejected: FreightAnnouncementStatus.Rejected,
+                                    PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
+                                    PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
+                                    Assigned: FreightAnnouncementStatus.Assigned,
+                                    InTransit: FreightAnnouncementStatus.InTransit,
+                                    Finalized: FreightAnnouncementStatus.Finalized,
+                                    Cancelled: FreightAnnouncementStatus.Cancelled,
+                                    ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+                                    ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
+                                };
+                                
+                                const normalizedAnnouncement: FreightAnnouncement = {
+                                    id: data.id || announcementId,
+                                    announcementCode: data.announcementCode || data.announcement_code || `ANN-${Date.now()}`,
+                                    createdAt: data.createdAt ? new Date(data.createdAt) : new Date(data.created_at || Date.now()),
+                                    loadingDate: (typeof data.loadingDate === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(data.loadingDate))
+                                        ? (data.loadingDate.replace(/-/g, '/') as any)
+                                        : (data.loading_date ? (typeof data.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(data.loading_date) ? data.loading_date.replace(/-/g, '/') as any : new Date(data.loading_date)) : new Date()),
+                                    lineType: data.lineType || data.line_type,
+                                    status: statusMap[data.status] || data.status,
+                                    cargoValue: Number(data.cargoValue ?? data.cargo_value ?? 0),
+                                    vehicleType: data.vehicleType || data.vehicle_type || '',
+                                    notes: data.notes || null,
+                                    assignmentType: data.assignmentType || data.assignment_type || null,
+                                    assignedDriverId: data.assignedDriverId || data.assigned_driver_id || null,
+                                    assignedVehicleId: data.assignedVehicleId || data.assigned_vehicle_id || null,
+                                    totalFreightCost: data.totalFreightCost ?? data.total_freight_cost ?? null,
+                                    billOfLadingNumber: data.billOfLadingNumber || data.bill_of_lading_number || null,
+                                    originCity: data.originCity || data.origin_city || null,
+                                    brand: data.brand || null,
+                                    representativeType: data.representativeType || data.representative_type || null,
+                                    representativeName: data.representativeName || data.representative_name || null,
+                                    cartonCount: data.cartonCount ?? data.carton_count ?? null,
+                                    priority: data.priority || null,
+                                    products: Array.isArray(data.products) ? data.products : (data.products ? [data.products] : []),
+                                    platformArrivalTime: data.platformArrivalTime || data.platform_arrival_time || null,
+                                    deliveryDate: data.deliveryDate || data.delivery_date || null,
+                                    destinations: Array.isArray(data.destinations) ? data.destinations.map((d: any) => ({
+                                        id: d.id,
+                                        city: d.city,
+                                        representativeName: d.representativeName || d.representative_name,
+                                        tonnage: d.tonnage,
+                                        unloadTime: d.unloadTime || d.unload_time,
+                                        freightCost: d.freightCost ?? d.freight_cost,
+                                        deliveryDate: d.deliveryDate || d.delivery_date,
+                                        representativeType: d.representativeType || d.representative_type,
+                                    })) : [],
+                                    history: [],
+                                    assignmentFinalizedAt: data.assignmentFinalizedAt || data.assignment_finalized_at || null,
+                                    creator_full_name: data.creator_full_name || data.creatorFullName || null,
+                                    creator_username: data.creator_username || data.creatorUsername || null,
+                                    creator_user_id: data.creator_user_id || data.creatorUserId || null,
+                                };
+                                
+                                // بررسی اینکه آیا باید در کارتابل نمایش داده شود
+                                const shouldShow = !(
+                                    normalizedAnnouncement.status === FreightAnnouncementStatus.ChangeRequested ||
+                                    normalizedAnnouncement.status === FreightAnnouncementStatus.Finalized ||
+                                    normalizedAnnouncement.status === 'ChangeRequested' ||
+                                    normalizedAnnouncement.status === 'Finalized' ||
+                                    normalizedAnnouncement.assignmentFinalizedAt
+                                );
+                                
+                                if (shouldShow) {
+                                    console.log('✨ [TransportLiveContainer] Adding announcement optimistically', { 
+                                        announcementId, 
+                                        status: normalizedAnnouncement.status,
+                                        lineType: normalizedAnnouncement.lineType 
+                                    });
+                                    
+                                    // اضافه کردن به ابتدای لیست برای نمایش فوری
+                                    return [normalizedAnnouncement, ...prev];
+                                } else {
+                                    console.log('⚠️ [TransportLiveContainer] Announcement should not be shown in tracking dashboard', { 
+                                        announcementId, 
+                                        status: normalizedAnnouncement.status 
+                                    });
+                                }
+                            } catch (normalizeError) {
+                                console.error('❌ [TransportLiveContainer] Error normalizing announcement data:', normalizeError);
+                            }
+                        }
                         
                         // Invalidate cache برای freight-announcements
                         import('../utils/apiCache').then(({ apiCache }) => {
@@ -489,16 +579,38 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
                         });
                         
-                        // فوراً fetch کن (بدون await - async)
-                        // برای approved/created، delay کمتر (50ms) برای نمایش فوری‌تر
-                        // برای سایر update types، delay بیشتر (100ms)
-                        const delay = (updateType === 'approved' || updateType === 'created') ? 50 : 100;
-                        setTimeout(() => {
-                            console.log(`🔄 [TransportLiveContainer] Fetching after ${delay}ms delay for ${updateType}`);
-                            fetchDataRef.current(true, needsPersonalResourcesRef.current).catch(err => {
-                                console.error('❌ [TransportLiveContainer] Error fetching new announcement:', err);
-                            });
-                        }, delay);
+                        // Retry logic برای اطمینان از دریافت اعلام بار جدید
+                        // افزایش delay و اضافه کردن retry mechanism
+                        const fetchWithRetry = async (attempt: number = 1, maxAttempts: number = 3) => {
+                            try {
+                                // برای approved/created، delay بیشتر (200ms برای اولین تلاش) برای اطمینان از commit تراکنش
+                                // برای سایر update types، delay بیشتر (300ms)
+                                const baseDelay = (updateType === 'approved' || updateType === 'created') ? 200 : 300;
+                                const delay = baseDelay * attempt; // exponential backoff
+                                
+                                await new Promise(resolve => setTimeout(resolve, delay));
+                                console.log(`🔄 [TransportLiveContainer] Fetching attempt ${attempt}/${maxAttempts} after ${delay}ms delay for ${updateType}`);
+                                
+                                await fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                                
+                                // بررسی اینکه آیا اعلام بار دریافت شد
+                                // این بررسی در fetchData انجام می‌شود، اما می‌توانیم retry کنیم اگر نیاز باشد
+                                console.log(`✅ [TransportLiveContainer] Fetch completed for attempt ${attempt}`);
+                            } catch (err) {
+                                console.error(`❌ [TransportLiveContainer] Error fetching new announcement (attempt ${attempt}/${maxAttempts}):`, err);
+                                
+                                // Retry اگر تعداد تلاش‌ها کمتر از maxAttempts است
+                                if (attempt < maxAttempts) {
+                                    console.log(`🔄 [TransportLiveContainer] Retrying fetch (attempt ${attempt + 1}/${maxAttempts})...`);
+                                    fetchWithRetry(attempt + 1, maxAttempts);
+                                } else {
+                                    console.error(`❌ [TransportLiveContainer] Failed to fetch after ${maxAttempts} attempts`);
+                                }
+                            }
+                        };
+                        
+                        // شروع fetch با retry (برای اطمینان از sync با backend)
+                        fetchWithRetry();
                         
                         return prev;
                     }
