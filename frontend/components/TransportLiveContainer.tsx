@@ -381,9 +381,14 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 console.log('📨 [TransportLiveContainer] Processing update', { announcementId, updateType, data });
                 
                 // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
-                if (updateType === 'finalized' || data.status === 'Finalized' || data.status === 'finalized') {
+                if (updateType === 'finalized' || data.status === 'Finalized' || data.status === 'finalized' || data.assignmentFinalizedAt) {
                     console.log('🗑️ [TransportLiveContainer] Announcement finalized, removing from list', { announcementId, updateType, data });
                     setAnnouncements(prev => {
+                        const exists = prev.some(a => a.id === announcementId);
+                        if (!exists) {
+                            console.log('⚠️ [TransportLiveContainer] Announcement already removed from list');
+                            return prev;
+                        }
                         const filtered = prev.filter(a => a.id !== announcementId);
                         console.log('🗑️ [TransportLiveContainer] Removed finalized announcement', { 
                             before: prev.length, 
@@ -410,18 +415,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     
                     // به‌روزرسانی اعلام بار موجود
                     console.log('✅ [TransportLiveContainer] Updating existing announcement in list');
+                    
+                    // اگر assignmentFinalizedAt set شده، فوراً از لیست حذف کن (قبل از update)
+                    if (data.assignmentFinalizedAt) {
+                        console.log('🗑️ [TransportLiveContainer] assignmentFinalizedAt set, removing from list immediately');
+                        return prev.filter(a => a.id !== announcementId);
+                    }
+                    
                     const updated = applyOptimisticUpdate(prev, announcementId, {
                         status: data.status as FreightAnnouncementStatus,
                         assignmentType: data.assignmentType,
-                        assignmentFinalizedAt: data.assignmentFinalizedAt, // اضافه کردن assignmentFinalizedAt
                         ...data
                     });
-                    
-                    // اگر assignmentFinalizedAt set شده، از لیست حذف کن (فیلتر TransportLive آن را حذف می‌کند)
-                    if (data.assignmentFinalizedAt) {
-                        console.log('🗑️ [TransportLiveContainer] assignmentFinalizedAt set, removing from list');
-                        return updated.filter(a => a.id !== announcementId);
-                    }
                     
                     return updated;
                 });
@@ -508,6 +513,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             lineTypeForBackend = activeLine;
         }
         
+        // Optimistic Update: فوراً از لیست حذف کن (قبل از API call)
+        const originalAnnouncements = [...announcements];
+        setAnnouncements(prev => {
+            const filtered = prev.filter(a => !announcementIds.includes(a.id));
+            console.log('🗑️ [TransportLiveContainer] Optimistic: Removing finalized announcements immediately', {
+                before: prev.length,
+                after: filtered.length,
+                removedIds: announcementIds
+            });
+            return filtered;
+        });
+        
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(getApiUrl('freight-announcements/finalize-assignments'), {
@@ -523,6 +540,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             });
             
             if (!response.ok) {
+                // Rollback در صورت خطا
+                console.log('❌ [TransportLiveContainer] Finalize failed, rolling back optimistic update');
+                setAnnouncements(originalAnnouncements);
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'خطا در اتمام تخصیص');
             }
@@ -533,10 +553,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // نمایش پیام موفقیت
             alert(`اتمام تخصیص انجام شد:\n${result.finalized} مورد نهایی شد\n${result.leftover} مورد به بارهای مانده برگشت`);
             
-            // Real-time updates باید فوراً finalized ها را از لیست حذف کنند
-            // اما برای اطمینان، یک refresh هم می‌کنیم (silent)
-            console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing data...');
-            await fetchDataRef.current(true, needsPersonalResourcesRef.current);
+            // Real-time updates باید finalized ها را از لیست حذف کنند
+            // اما برای leftover ها، ممکن است نیاز به refresh باشد
+            if (result.leftover && result.leftover > 0) {
+                console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover announcements...');
+                await fetchDataRef.current(true, needsPersonalResourcesRef.current);
+            }
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
             // فقط alert برای خطا (نه موفقیت - آن را نگه می‌داریم)
