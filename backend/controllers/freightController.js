@@ -256,7 +256,7 @@ async function getFreightAnnouncements(req, res) {
           END
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-        da.assignment_finalized_at as assignment_finalized_at,
+        COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) as assignment_finalized_at,
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
         CASE 
           WHEN pd.id IS NOT NULL THEN 'personal'

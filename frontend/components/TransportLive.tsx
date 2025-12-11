@@ -63,6 +63,24 @@ const formatCurrency = (amount?: number | string | null) => {
     }).format(numAmount) + ' تومان';
 };
 
+// تابع برای فرمت کرایه کل (واحد: ریال)
+const formatTotalFreightCost = (amount?: number | string | null) => {
+    if (amount === null || amount === undefined || amount === '') {
+        return '-';
+    }
+    // تبدیل به number اگر string است
+    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : Number(amount);
+    if (isNaN(numAmount) || numAmount === 0) {
+        return '-';
+    }
+    // استفاده از Intl.NumberFormat برای فرمت فارسی با جداکننده 3 رقمی و بدون اعشار
+    return new Intl.NumberFormat('fa-IR', {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+        useGrouping: true
+    }).format(Math.round(numAmount)) + ' ریال';
+};
+
 // تابع برای فرمت کرایه مقاصد (واحد: ریال)
 const formatDestinationFreightCost = (amount?: number | string | null) => {
     if (amount === null || amount === undefined || amount === '') {
@@ -435,7 +453,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
                 return result;
             }},
-            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatTotalFreightCost(ann.totalFreightCost)}</span> },
             
             // Full View Specific - Ice Cream
             { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
@@ -590,7 +608,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)}</span> },
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
-            { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatTotalFreightCost(ann.totalFreightCost)}</span> },
             { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
 
