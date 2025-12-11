@@ -183,7 +183,7 @@ async function getFreightAnnouncements(req, res) {
       // اگر branchCity در JWT نیست، از دیتابیس بگیر
       if (!branchCity && userId) {
         try {
-          const userRow = await pool.query('SELECT branch_city, branch_id FROM users WHERE id = $1', [userId]);
+          const userRow = await pool.query('SELECT branch_city FROM users WHERE id = $1', [userId]);
           if (userRow.rows.length > 0) {
             const user = userRow.rows[0];
             branchCity = user.branch_city;
@@ -191,12 +191,6 @@ async function getFreightAnnouncements(req, res) {
             // اگر branch_city یک UUID است، از branches table نام شهر را بگیر
             if (branchCity && branchCity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
               const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchCity]);
-              if (branchResult.rows.length > 0) {
-                branchCity = branchResult.rows[0].name;
-              }
-            } else if (user.branch_id) {
-              // اگر branch_id وجود دارد، از branches table نام شهر را بگیر
-              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_id]);
               if (branchResult.rows.length > 0) {
                 branchCity = branchResult.rows[0].name;
               }
@@ -2600,7 +2594,7 @@ async function getFreightHistory(req, res) {
       // اگر branchCity در JWT نیست، از دیتابیس بگیر
       if (!branchCity && userId) {
         try {
-          const userRow = await pool.query('SELECT branch_city, branch_id FROM users WHERE id = $1', [userId]);
+          const userRow = await pool.query('SELECT branch_city FROM users WHERE id = $1', [userId]);
           if (userRow.rows.length > 0) {
             const user = userRow.rows[0];
             branchCity = user.branch_city;
@@ -2608,12 +2602,6 @@ async function getFreightHistory(req, res) {
             // اگر branch_city یک UUID است، از branches table نام شهر را بگیر
             if (branchCity && branchCity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
               const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchCity]);
-              if (branchResult.rows.length > 0) {
-                branchCity = branchResult.rows[0].name;
-              }
-            } else if (user.branch_id) {
-              // اگر branch_id وجود دارد، از branches table نام شهر را بگیر
-              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_id]);
               if (branchResult.rows.length > 0) {
                 branchCity = branchResult.rows[0].name;
               }
