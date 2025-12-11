@@ -2930,50 +2930,56 @@ async function finalizeAssignments(req, res) {
       });
       
       // تشخیص assignment_type اگر null باشد
+      // اولویت: 1) assigned_vehicle_id در vehicles (company) یا personal_vehicles (personal)
+      //         2) assigned_driver_id در drivers (company) یا personal_drivers (personal)
+      //         3) line_type (IceCream -> company, دیگران -> personal)
       let assignmentType = ann.assignment_type;
       if (!assignmentType) {
-        // اگر assignment_type null است، از vehicle_id تشخیص بده
-        // اگر vehicle_id در vehicles (شرکتی) است، company است
-        // اگر vehicle_id در personal_vehicles (شخصی) است، personal است
+        // اولویت 1: از vehicle_id تشخیص بده
         if (ann.assigned_vehicle_id) {
+          // ابتدا بررسی کن که آیا در vehicles (شرکتی) است
           const companyVehicleCheck = await client.query('SELECT id FROM vehicles WHERE id = $1', [ann.assigned_vehicle_id]);
           if (companyVehicleCheck.rowCount > 0) {
             assignmentType = 'company';
-            console.log(`🔍 [finalizeAssignments] Detected assignment_type=company for ${annId} (vehicle found in vehicles table)`);
+            console.log(`✅ [finalizeAssignments] Detected assignment_type=company for ${annId} (vehicle found in vehicles table)`);
           } else {
+            // اگر در vehicles نیست، بررسی کن که آیا در personal_vehicles است
             const personalVehicleCheck = await client.query('SELECT id FROM personal_vehicles WHERE id = $1', [ann.assigned_vehicle_id]);
             if (personalVehicleCheck.rowCount > 0) {
               assignmentType = 'personal';
-              console.log(`🔍 [finalizeAssignments] Detected assignment_type=personal for ${annId} (vehicle found in personal_vehicles table)`);
+              console.log(`✅ [finalizeAssignments] Detected assignment_type=personal for ${annId} (vehicle found in personal_vehicles table)`);
             }
           }
         }
         
-        // اگر هنوز تشخیص داده نشد، از driver_id استفاده کن
+        // اولویت 2: اگر هنوز تشخیص داده نشد، از driver_id استفاده کن
         if (!assignmentType && ann.assigned_driver_id) {
-          const personalDriverCheck = await client.query('SELECT id FROM personal_drivers WHERE id = $1', [ann.assigned_driver_id]);
-          if (personalDriverCheck.rowCount > 0) {
-            assignmentType = 'personal';
-            console.log(`🔍 [finalizeAssignments] Detected assignment_type=personal for ${annId} (driver found in personal_drivers)`);
+          // ابتدا بررسی کن که آیا در drivers (شرکتی) است
+          const companyDriverCheck = await client.query('SELECT id FROM drivers WHERE id = $1', [ann.assigned_driver_id]);
+          if (companyDriverCheck.rowCount > 0) {
+            assignmentType = 'company';
+            console.log(`✅ [finalizeAssignments] Detected assignment_type=company for ${annId} (driver found in drivers table)`);
           } else {
-            const companyDriverCheck = await client.query('SELECT id FROM drivers WHERE id = $1', [ann.assigned_driver_id]);
-            if (companyDriverCheck.rowCount > 0) {
-              assignmentType = 'company';
-              console.log(`🔍 [finalizeAssignments] Detected assignment_type=company for ${annId} (driver found in drivers)`);
+            // اگر در drivers نیست، بررسی کن که آیا در personal_drivers است
+            const personalDriverCheck = await client.query('SELECT id FROM personal_drivers WHERE id = $1', [ann.assigned_driver_id]);
+            if (personalDriverCheck.rowCount > 0) {
+              assignmentType = 'personal';
+              console.log(`✅ [finalizeAssignments] Detected assignment_type=personal for ${annId} (driver found in personal_drivers table)`);
             }
           }
         }
         
-        // اگر هنوز تشخیص داده نشد، از line_type استفاده کن
+        // اولویت 3: اگر هنوز تشخیص داده نشد، از line_type استفاده کن
         if (!assignmentType) {
           const iceCreamMatches = ['IceCream', 'بستنی'];
           if (iceCreamMatches.includes(ann.line_type)) {
             assignmentType = 'company';
+            console.log(`⚠️ [finalizeAssignments] Detected assignment_type=company for ${annId} (inferred from line_type=${ann.line_type})`);
           } else {
             // برای Dairy و Ambient، معمولاً personal است
             assignmentType = 'personal';
+            console.log(`⚠️ [finalizeAssignments] Detected assignment_type=personal for ${annId} (inferred from line_type=${ann.line_type})`);
           }
-          console.log(`🔍 [finalizeAssignments] Detected assignment_type=${assignmentType} for ${annId} (was null, inferred from line_type=${ann.line_type})`);
         }
       }
       
