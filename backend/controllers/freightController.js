@@ -1909,18 +1909,23 @@ async function assignVehicleAndDriver(req, res) {
     }
     
     // ثبت تاریخچه
-    await logFreightHistory({
-      announcementId,
-      userId,
-      userName,
-      action,
-      oldStatus,
-      newStatus,
-      fieldChanges,
-      description,
-      ipAddress: req.ip,
-      client
-    });
+    try {
+      await logFreightHistory({
+        announcementId,
+        userId,
+        userName,
+        action,
+        oldStatus,
+        newStatus,
+        fieldChanges,
+        description,
+        ipAddress: req.ip,
+        client
+      });
+    } catch (historyError) {
+      console.error('❌ [assignVehicleAndDriver] Error logging history (non-fatal):', historyError);
+      // تاریخچه را ignore می‌کنیم تا assignment موفق باشد
+    }
 
     // برای تخصیص‌های شرکت، باید رکورد در dispatch_assignments ایجاد کنیم تا در تابلو اعلام بار نمایش داده شود
     // اگر reassignment باشد، ابتدا dispatch_assignments قبلی را cancel می‌کنیم
@@ -2011,36 +2016,72 @@ async function assignVehicleAndDriver(req, res) {
           }
 
           // گرفتن vehicle_category از vehicle
-          const { rows: vehicleRows } = await client.query(
-            'SELECT vehicle_category FROM vehicles WHERE id = $1',
-            [vehicleId]
-          );
-          const vehicleCategory = vehicleRows[0]?.vehicle_category || null;
+          let vehicleCategory = null;
+          try {
+            const { rows: vehicleRows } = await client.query(
+              'SELECT vehicle_category FROM vehicles WHERE id = $1',
+              [vehicleId]
+            );
+            vehicleCategory = vehicleRows[0]?.vehicle_category || null;
+          } catch (vehicleError) {
+            console.error(`❌ [assignVehicleAndDriver] Error fetching vehicle category for vehicle ${vehicleId}:`, vehicleError);
+            // ادامه می‌دهیم با vehicleCategory = null
+          }
 
           // گرفتن timestampToJalaliDate
-          const { timestampToJalaliDate } = require('../utils/jalali');
-          const now = new Date();
+          let assignedAtJalali = null;
+          try {
+            const { timestampToJalaliDate } = require('../utils/jalali');
+            const now = new Date();
+            assignedAtJalali = timestampToJalaliDate(now);
+          } catch (jalaliError) {
+            console.error('❌ [assignVehicleAndDriver] Error converting date to Jalali:', jalaliError);
+            // ادامه می‌دهیم با assignedAtJalali = null
+          }
 
           // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
           for (const dest of allDestRows.rows) {
-            await client.query(
-              `INSERT INTO dispatch_assignments
-                (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11)`,
-              [
+            try {
+              // تعیین queue_type بر اساس route یا stage
+              let queueType = null;
+              if (route && route.distance_category) {
+                queueType = route.distance_category;
+              } else {
+                queueType = stage === 'stage1' ? 'far' : 'near';
+              }
+              
+              await client.query(
+                `INSERT INTO dispatch_assignments
+                  (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11)`,
+                [
+                  announcementId,
+                  dest.id,
+                  vehicleId,
+                  driverId,
+                  stage,
+                  route ? route.id : null,
+                  route ? route.round_trip_km : null,
+                  userId || null,
+                  assignedAtJalali,
+                  queueType,
+                  vehicleCategory
+                ]
+              );
+            } catch (insertError) {
+              console.error(`❌ [assignVehicleAndDriver] Error inserting dispatch_assignments for destination ${dest.id}:`, insertError);
+              console.error(`❌ [assignVehicleAndDriver] Insert error details:`, {
                 announcementId,
-                dest.id,
+                destinationId: dest.id,
                 vehicleId,
                 driverId,
                 stage,
-                route ? route.id : null,
-                route ? route.round_trip_km : null,
-                userId || null,
-                timestampToJalaliDate(now),
-                route && route.distance_category ? route.distance_category : (stage === 'stage1' ? 'far' : 'near'),
-                vehicleCategory
-              ]
-            );
+                routeId: route ? route.id : null,
+                errorMessage: insertError.message,
+                errorCode: insertError.code
+              });
+              throw insertError; // خطا را throw می‌کنیم تا transaction rollback شود
+            }
           }
 
           console.log(`✅ [assignVehicleAndDriver] Created ${allDestRows.rows.length} dispatch_assignments records for announcement ${announcementId}`);
