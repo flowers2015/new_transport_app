@@ -41,9 +41,13 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
         setFormData({ name: '', location: '' });
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('آیا از حذف این شعبه اطمینان دارید؟')) {
-            onDeleteBranch(id);
+            try {
+                await onDeleteBranch(id);
+            } catch (error) {
+                console.error('Error deleting branch:', error);
+            }
         }
     };
     

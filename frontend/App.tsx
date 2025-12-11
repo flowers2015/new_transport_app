@@ -295,24 +295,36 @@ const App: React.FC = () => {
                 alert('لطفاً دوباره وارد شوید');
                 return;
             }
-            const response = await fetch(getApiUrl(`branches/${id}`), {
+            console.log('Deleting branch with id:', id);
+            const url = getApiUrl(`branches/${id}`);
+            console.log('Delete URL:', url);
+            const response = await fetch(url, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
             });
+            console.log('Delete response status:', response.status);
             if (response.ok) {
+                const result = await response.json().catch(() => ({}));
+                console.log('Delete success:', result);
                 await fetchBranches();
-                alert('شعبه با موفقیت حذف شد');
+                // alert('شعبه با موفقیت حذف شد'); // Remove alert for better UX
             } else {
-                const errorData = await response.json().catch(() => ({ message: 'خطای نامشخص' }));
-                console.error('Delete branch error:', errorData);
-                alert(errorData.message || 'خطا در حذف شعبه');
+                const errorText = await response.text();
+                console.error('Delete branch error:', response.status, errorText);
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch {
+                    errorData = { message: errorText || 'خطای نامشخص' };
+                }
+                alert(errorData.message || `خطا در حذف شعبه (کد: ${response.status})`);
             }
         } catch (error: any) {
             console.error('Failed to delete branch:', error);
-            alert(error?.message || 'خطا در حذف شعبه');
+            alert(error?.message || 'خطا در حذف شعبه - لطفاً دوباره تلاش کنید');
         }
     };
 

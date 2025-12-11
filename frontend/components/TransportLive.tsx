@@ -384,8 +384,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             // Full View Specific - Ice Cream
             { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
             { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
-            { header: 'توضیحات', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
-            
             // Full View Specific - Dairy/Ambient
             { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
             { header: 'ارزش بار', align: 'center', display: () => viewMode === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
@@ -537,12 +535,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
-            { header: 'نهایی شده', render: (ann: FreightAnnouncement) => ann.assignmentFinalizedAt ? (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
-                    <CheckCircleIcon className="w-4 h-4" />
-                    {formatJalaliDateTime(new Date(ann.assignmentFinalizedAt))}
-                </span>
-            ) : '-' },
+            { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
 
         // Ice Cream: mirror planner order, then extras
@@ -561,7 +554,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'تاریخ تحویل بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap text-green-600">{(ann as any).deliveryDate || '-'}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
@@ -681,7 +673,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
@@ -801,7 +792,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
@@ -866,7 +856,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
@@ -931,7 +920,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
                 { header: 'علت رد', render: (ann: FreightAnnouncement) => ann.rejectionReason || '-' },
             ];
@@ -1551,22 +1539,13 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const handleSave = async () => {
         if (currentUser.role === UserRole.TransportationUser) {
             if (!foundCompanyDriver || !foundVehicle) { alert('لطفا راننده و خودروی شرکتی را با جستجو مشخص کنید.'); return; }
-            // محاسبه totalFreightCost برای company user
-            let companyTotalCost = 0;
-            if (costMode === 'auto' && autoTotalCost) {
-                // تبدیل string به number - حذف کاماها (مثل فیلد ارزش بار)
-                const cleanedCost = autoTotalCost.replace(/,/g, '');
-                companyTotalCost = cleanedCost ? Number(cleanedCost) : 0;
-            } else {
-                companyTotalCost = destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
-            }
-            if (companyTotalCost <= 0) {
-                alert('لطفاً کرایه را وارد کنید.');
-                return;
-            }
+            // برای کاربر ترابری شرکت، کرایه وجود ندارد (null)
             onUpdateAssignment(announcement.id, {
-                driverId: foundCompanyDriver.id, vehicleId: foundVehicle.id, billOfLadingNumber: blNumber, assignmentType: 'company',
-                totalFreightCost: companyTotalCost,
+                driverId: foundCompanyDriver.id, 
+                vehicleId: foundVehicle.id, 
+                billOfLadingNumber: blNumber, 
+                assignmentType: 'company',
+                totalFreightCost: null, // برای شرکت کرایه نداریم - null می‌فرستیم تا backend آن را ignore کند
                 destinations: destinations.length > 0 ? destinations : undefined,
                 notes: notes,
             });
@@ -1674,79 +1653,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             </div>
                             {foundVehicle && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles)} | <strong>کد:</strong> {foundVehicle.vehicleCode || 'ندارد'} | <strong>نوع:</strong> {foundVehicle.type}</div>}
                         </div>
-                        <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
-                            <legend className="font-semibold px-1 text-sm">تخصیص کرایه</legend>
-                            <div className="flex items-center gap-4"><label><input type="radio" value="manual" checked={costMode==='manual'} onChange={e=>setCostMode(e.target.value as any)}/> دستی</label><label><input type="radio" value="auto" checked={costMode==='auto'} onChange={e=>setCostMode(e.target.value as any)}/> خودکار</label></div>
-                            {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input 
-                                type="text" 
-                                value={autoTotalCost || ''}
-                                onChange={e => {
-                                    // فقط اعداد و کاما را بپذیر (مثل فیلد ارزش بار)
-                                    let value = e.target.value.replace(/[^\d,]/g, '');
-                                    // حذف کاماها برای محاسبه
-                                    const numValue = value.replace(/,/g, '');
-                                    // اگر خالی است، مقدار خالی بگذار
-                                    if (numValue === '') {
-                                        setAutoTotalCost('');
-                                        return;
-                                    }
-                                    // اگر عدد معتبر است، فرمت سه رقم سه رقم اعمال کن
-                                    if (/^\d+$/.test(numValue)) {
-                                        const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                                        setAutoTotalCost(formatted);
-                                    }
-                                }}
-                                onKeyPress={e => {
-                                    // فقط اعداد را بپذیر
-                                    if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
-                                        e.preventDefault();
-                                    }
-                                }}
-                                className="input-style flex-grow" 
-                                autoComplete="off" 
-                                dir="ltr"
-                                placeholder="1,000,000"
-                            /></div>}
-                            {costMode === 'manual' && destinations.length > 0 && (
-                                <div className="space-y-2">
-                                    {destinations.map((dest, i) => (
-                                        <div key={dest.id} className="grid grid-cols-4 gap-2 items-center">
-                                            <div className="col-span-2"><strong>مقصد {i+1}:</strong> {dest.city} ({dest.tonnage ? Number(dest.tonnage).toLocaleString('fa-IR') : 0} کیلوگرم)</div>
-                                            <label className="text-xs">کرایه (ریال):</label>
-                                            <input
-                                                type="text"
-                                                value={displayFreightCosts[dest.id] || ''}
-                                                onChange={e => {
-                                                    // فقط اعداد و کاما را بپذیر (مثل فیلد کرایه کل)
-                                                    let value = e.target.value.replace(/[^\d,]/g, '');
-                                                    const numValue = value.replace(/,/g, '');
-                                                    if (numValue === '') {
-                                                        setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: 0 } : d));
-                                                        setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: '' }));
-                                                        return;
-                                                    }
-                                                    if (/^\d+$/.test(numValue)) {
-                                                        const num = Number(numValue);
-                                                        setDestinations(dests => dests.map(d => d.id === dest.id ? { ...d, freightCost: num } : d));
-                                                        const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                                                        setDisplayFreightCosts(prev => ({ ...prev, [dest.id]: formatted }));
-                                                    }
-                                                }}
-                                                onKeyPress={e => {
-                                                    if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
-                                                        e.preventDefault();
-                                                    }
-                                                }}
-                                                className="input-style"
-                                                autoComplete="off"
-                                                dir="ltr"
-                                                placeholder="1,000,000"
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </fieldset>
+                        {/* برای کاربر ترابری شرکت، فیلد کرایه نمایش داده نمی‌شود */}
                          <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
                          <div><label className="text-sm">توضیحات</label><textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-style mt-1 min-h-[80px]" placeholder="توضیحات اختیاری..." /></div>
                     </div>

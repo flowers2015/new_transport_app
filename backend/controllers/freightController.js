@@ -1849,7 +1849,13 @@ async function assignVehicleAndDriver(req, res) {
     const updateValues = [newStatus, vehicleId, driverId];
     let paramIndex = 4;
     
-    if (totalFreightCost !== undefined) {
+    // برای تخصیص شرکت، totalFreightCost باید null باشد (کرایه نداریم)
+    // برای تخصیص شخصی، totalFreightCost باید مقدار داشته باشد
+    if (assignmentType === 'company') {
+      // برای company assignment، همیشه null set می‌کنیم (کرایه نداریم)
+      updateFields.push(`total_freight_cost = NULL`);
+    } else if (totalFreightCost !== undefined && totalFreightCost !== null) {
+      // برای personal assignment، totalFreightCost را set می‌کنیم
       updateFields.push(`total_freight_cost = $${paramIndex++}`);
       updateValues.push(totalFreightCost);
     }
@@ -1915,6 +1921,119 @@ async function assignVehicleAndDriver(req, res) {
       ipAddress: req.ip,
       client
     });
+
+    // برای تخصیص‌های شرکت، باید رکورد در dispatch_assignments ایجاد کنیم تا در تابلو اعلام بار نمایش داده شود
+    // اگر reassignment باشد، ابتدا dispatch_assignments قبلی را cancel می‌کنیم
+    if (assignmentType === 'company') {
+      try {
+        // اگر reassignment باشد، dispatch_assignments قبلی را cancel می‌کنیم
+        if (isReassignment) {
+          await client.query(
+            `UPDATE dispatch_assignments
+             SET is_cancelled = TRUE
+             WHERE freight_announcement_id = $1 
+               AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
+            [announcementId]
+          );
+          console.log(`✅ [assignVehicleAndDriver] Cancelled previous dispatch_assignments for reassignment ${announcementId}`);
+        }
+        
+        // گرفتن همه مقاصد
+        const allDestRows = await client.query(
+          'SELECT id, city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          [announcementId]
+        );
+
+        if (allDestRows.rows.length > 0) {
+          // پیدا کردن route برای primary destination (آخرین مقصد یا مقصد با بیشترین کیلومتر)
+          let route = null;
+          let primaryDestination = null;
+          
+          // ابتدا سعی می‌کنیم route را از مقصد با بیشترین کیلومتر پیدا کنیم
+          for (const dest of allDestRows.rows) {
+            const { rows: routeRows } = await client.query(
+              `SELECT id, city, province, route_category, round_trip_km, distance_category
+               FROM dispatch_routes
+               WHERE is_active = TRUE AND city = $1
+               ORDER BY round_trip_km DESC, route_category DESC
+               LIMIT 1`,
+              [dest.city]
+            );
+            if (routeRows.length > 0 && (!route || (routeRows[0].round_trip_km || 0) > (route.round_trip_km || 0))) {
+              route = routeRows[0];
+              primaryDestination = dest;
+            }
+          }
+          
+          // اگر route پیدا نشد، از آخرین مقصد استفاده کن
+          if (!route && allDestRows.rows.length > 0) {
+            const lastDest = allDestRows.rows[allDestRows.rows.length - 1];
+            const { rows: routeRows } = await client.query(
+              `SELECT id, city, province, route_category, round_trip_km, distance_category
+               FROM dispatch_routes
+               WHERE is_active = TRUE AND city = $1
+               ORDER BY route_category DESC
+               LIMIT 1`,
+              [lastDest.city]
+            );
+            if (routeRows.length > 0) {
+              route = routeRows[0];
+              primaryDestination = lastDest;
+            }
+          }
+
+          // تعیین stage بر اساس route
+          let stage = 'stage1'; // پیش‌فرض
+          if (route) {
+            // اگر route وجود دارد، stage را بر اساس distance_category یا round_trip_km تعیین می‌کنیم
+            if (route.distance_category === 'near' || (route.round_trip_km && route.round_trip_km < 500)) {
+              stage = 'stage2';
+            } else {
+              stage = 'stage1';
+            }
+          }
+
+          // گرفتن vehicle_category از vehicle
+          const { rows: vehicleRows } = await client.query(
+            'SELECT vehicle_category FROM vehicles WHERE id = $1',
+            [vehicleId]
+          );
+          const vehicleCategory = vehicleRows[0]?.vehicle_category || null;
+
+          // گرفتن timestampToJalaliDate
+          const { timestampToJalaliDate } = require('../utils/jalali');
+          const now = new Date();
+
+          // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
+          for (const dest of allDestRows.rows) {
+            await client.query(
+              `INSERT INTO dispatch_assignments
+                (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11)`,
+              [
+                announcementId,
+                dest.id,
+                vehicleId,
+                driverId,
+                stage,
+                route ? route.id : null,
+                route ? route.round_trip_km : null,
+                userId || null,
+                timestampToJalaliDate(now),
+                route && route.distance_category ? route.distance_category : (stage === 'stage1' ? 'far' : 'near'),
+                vehicleCategory
+              ]
+            );
+          }
+
+          console.log(`✅ [assignVehicleAndDriver] Created ${allDestRows.rows.length} dispatch_assignments records for announcement ${announcementId}`);
+        }
+      } catch (dispatchError) {
+        console.error('❌ [assignVehicleAndDriver] Error creating dispatch_assignments:', dispatchError);
+        // خطا را ignore نمی‌کنیم - اگر dispatch_assignments ایجاد نشود، در تابلو نمایش داده نمی‌شود
+        // اما assignment را rollback نمی‌کنیم چون ممکن است کاربر بخواهد از طریق ثبت نوبت این کار را انجام دهد
+      }
+    }
 
     await client.query('COMMIT');
     

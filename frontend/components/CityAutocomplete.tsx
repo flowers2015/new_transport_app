@@ -49,7 +49,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(
-                getApiUrl(`freight-announcements/search-routes?q=${encodeURIComponent(query)}&limit=10`),
+                getApiUrl(`freight-announcements/routes/search?q=${encodeURIComponent(query)}&limit=10`),
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -60,22 +60,30 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('City search response:', data);
                 // استخراج شهرهای منحصر به فرد از نتایج
                 const uniqueCities = new Map<string, CityOption>();
-                data.forEach((item: any) => {
-                    if (item.city && !uniqueCities.has(item.city)) {
-                        uniqueCities.set(item.city, {
-                            id: item.id || item.city,
-                            city: item.city,
-                            province: item.province,
-                            roundTripKm: item.roundTripKm,
-                            expectedDays: item.expectedDays
-                        });
-                    }
-                });
-                setSuggestions(Array.from(uniqueCities.values()));
-                setShowSuggestions(true);
+                if (Array.isArray(data)) {
+                    data.forEach((item: any) => {
+                        if (item.city && !uniqueCities.has(item.city)) {
+                            uniqueCities.set(item.city, {
+                                id: item.id || item.city,
+                                city: item.city,
+                                province: item.province,
+                                roundTripKm: item.roundTripKm,
+                                expectedDays: item.expectedDays
+                            });
+                        }
+                    });
+                    setSuggestions(Array.from(uniqueCities.values()));
+                    setShowSuggestions(uniqueCities.size > 0);
+                } else {
+                    setSuggestions([]);
+                    setShowSuggestions(false);
+                }
             } else {
+                const errorText = await response.text();
+                console.error('City search error:', response.status, errorText);
                 setSuggestions([]);
                 setShowSuggestions(false);
             }
@@ -83,7 +91,6 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
             console.error('Error fetching cities:', error);
             setSuggestions([]);
             setShowSuggestions(false);
-        } finally {
             setIsLoading(false);
         }
     };
