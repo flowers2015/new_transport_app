@@ -141,6 +141,17 @@ function calculateMode(values, precision = 2) {
  */
 async function getFreightAnnouncements(req, res) {
   try {
+    // بررسی و اضافه کردن ستون assignment_finalized_at به freight_announcements اگر وجود ندارد
+    try {
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
+      `);
+    } catch (alterError) {
+      // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
+      console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment_finalized_at column exists:', alterError.message);
+    }
+    
     // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
     // ChangeRequested باید نمایش داده شود تا planner بتواند آن را ببیند و تأیید/رد کند
     // اگر includeFinalized=true باشد، Finalized و InTransit را هم شامل می‌کند (برای Freight Finance)
@@ -245,7 +256,7 @@ async function getFreightAnnouncements(req, res) {
           END
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-        COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) as assignment_finalized_at,
+        da.assignment_finalized_at as assignment_finalized_at,
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
         CASE 
           WHEN pd.id IS NOT NULL THEN 'personal'
