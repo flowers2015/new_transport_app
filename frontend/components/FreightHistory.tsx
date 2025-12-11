@@ -10,6 +10,8 @@ import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import * as XLSX from 'xlsx';
+// برای استایل‌ها، از ExcelJS استفاده می‌کنیم
+import ExcelJS from 'exceljs';
 
 interface FreightHistoryProps {
     announcements: FreightAnnouncement[];
@@ -476,28 +478,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         });
         ws['!cols'] = colWidths;
         
-        // تنظیم فرمت اعداد برای ستون‌های عددی و استایل‌ها
-        const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-        
-        // رنگ‌بندی headerها (ردیف اول)
+        // تنظیم فرمت اعداد برای ستون‌های عددی
         headers.forEach((header, colIdx) => {
-            const headerCell = XLSX.utils.encode_cell({ r: 0, c: colIdx });
-            if (!ws[headerCell]) {
-                ws[headerCell] = { v: header, t: 's' };
-            }
-            // استایل header: background آبی تیره، متن سفید، bold
-            ws[headerCell].s = {
-                fill: { fgColor: { rgb: '4472C4' } }, // آبی تیره
-                font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
-                alignment: { horizontal: 'center', vertical: 'center' },
-                border: {
-                    top: { style: 'thin', color: { rgb: '000000' } },
-                    bottom: { style: 'thin', color: { rgb: '000000' } },
-                    left: { style: 'thin', color: { rgb: '000000' } },
-                    right: { style: 'thin', color: { rgb: '000000' } }
-                }
-            };
-            
             const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
             if (isNumericColumn) {
                 for (let row = 1; row <= filteredAnnouncements.length; row++) {
@@ -517,60 +499,220 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             }
         });
         
-        // رنگ‌بندی ردیف‌ها (zebra striping) - ردیف‌های زوج و فرد
-        for (let row = 1; row <= filteredAnnouncements.length; row++) {
-            const isEvenRow = row % 2 === 0;
-            const rowColor = isEvenRow ? 'F2F2F2' : 'FFFFFF'; // خاکستری روشن برای زوج، سفید برای فرد
-            
-            headers.forEach((header, colIdx) => {
-                const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
-                if (!ws[cellAddress]) {
-                    ws[cellAddress] = { v: '', t: 's' };
-                }
-                
-                // اگر استایل وجود ندارد، ایجاد کن
-                if (!ws[cellAddress].s) {
-                    ws[cellAddress].s = {};
-                }
-                
-                // تنظیم background color
-                ws[cellAddress].s.fill = { fgColor: { rgb: rowColor } };
-                
-                // تنظیم border
-                if (!ws[cellAddress].s.border) {
-                    ws[cellAddress].s.border = {
-                        top: { style: 'thin', color: { rgb: 'D0D0D0' } },
-                        bottom: { style: 'thin', color: { rgb: 'D0D0D0' } },
-                        left: { style: 'thin', color: { rgb: 'D0D0D0' } },
-                        right: { style: 'thin', color: { rgb: 'D0D0D0' } }
-                    };
-                }
-                
-                // تنظیم alignment برای اعداد
-                const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
-                if (isNumericColumn) {
-                    ws[cellAddress].s.alignment = { horizontal: 'right', vertical: 'center' };
-                } else {
-                    ws[cellAddress].s.alignment = { horizontal: 'right', vertical: 'center' };
-                }
-            });
-        }
-        
         // اضافه کردن worksheet به workbook
         XLSX.utils.book_append_sheet(wb, ws, 'تاریخچه اعلام بار');
         
         return wb;
     };
 
-    // Function to download Excel
-    const downloadExcel = (mode: 'compact' | 'full' = viewMode) => {
-        const wb = generateExcelExport(mode);
+    // Function to download Excel with styling
+    const downloadExcel = async (mode: 'compact' | 'full' = viewMode) => {
         const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
                             activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
                             'لبنیات-فروتلند';
         const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
         const dateStr = new Date().toISOString().split('T')[0];
         const fileName = `تاریخچه_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
+        
+        // استفاده از ExcelJS برای استایل‌ها
+        try {
+            try {
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet('تاریخچه اعلام بار');
+                
+                // Get headers and data
+                const cols = mode === viewMode ? visibleColumns : columnsConfig(mode);
+                const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+                
+                const headers: string[] = [];
+                const seenHeaders = new Set<string>();
+                
+                cols.forEach(col => {
+                    if (!seenHeaders.has(col.header) && col.header !== 'عملیات') {
+                        headers.push(col.header);
+                        seenHeaders.add(col.header);
+                    }
+                });
+                
+                if (!seenHeaders.has('کرایه کل')) {
+                    headers.push('کرایه کل');
+                }
+                if (!seenHeaders.has('ارزش بار') && !seenHeaders.has('ارزش بار (ریال)')) {
+                    headers.push('ارزش بار');
+                }
+                
+                if (isFullDairyAmbientMode) {
+                    for (let i = 1; i <= 4; i++) {
+                        headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                    }
+                }
+                
+                // Add headers with styling
+                const headerRow = worksheet.addRow(headers);
+                headerRow.eachCell((cell: any, colNumber: number) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF4472C4' } // آبی تیره
+                    };
+                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FF000000' } },
+                        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                        left: { style: 'thin', color: { argb: 'FF000000' } },
+                        right: { style: 'thin', color: { argb: 'FF000000' } }
+                    };
+                });
+                
+                // Helper to get value for header
+                const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
+                    const isNumericColumn = numericHeaders.some(h => header.includes(h));
+                    
+                    if (header === 'کرایه کل') {
+                        return ann.totalFreightCost || 0;
+                    }
+                    if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
+                        return ann.cargoValue || 0;
+                    }
+                    if (header === 'اولویت') {
+                        const priorityMap: { [key: string]: string } = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
+                        return priorityMap[ann.priority || 'normal'] || ann.priority || 'عادی';
+                    }
+                    if (header === 'کل تناژ (کیلوگرم)') {
+                        return ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
+                    }
+                    
+                    const col = cols.find(c => c.header === header);
+                    if (!col) return '';
+                    
+                    let value: any = '';
+                    if (col.render) {
+                        const rendered = col.render(ann, idx);
+                        if (typeof rendered === 'string') {
+                            value = rendered;
+                        } else if (typeof rendered === 'number') {
+                            value = rendered;
+                        } else if (React.isValidElement(rendered)) {
+                            value = extractTextFromElement(rendered);
+                            value = value.replace(/[📅🕐]/g, '').trim();
+                        } else if (Array.isArray(rendered)) {
+                            value = rendered.map((item: any) => {
+                                if (React.isValidElement(item)) {
+                                    let text = extractTextFromElement(item);
+                                    text = text.replace(/[📅🕐]/g, '').trim();
+                                    return text;
+                                }
+                                return String(item || '');
+                            }).join('، ');
+                        } else {
+                            value = String(rendered || '');
+                        }
+                    } else {
+                        value = (ann as any)[col.header] || '';
+                    }
+                    
+                    if (typeof value === 'string') {
+                        value = value.replace(/<[^>]*>/g, '').trim();
+                    }
+                    
+                    if (isNumericColumn && typeof value === 'string') {
+                        const cleaned = value.replace(/[^\d]/g, '');
+                        const numValue = parseFloat(cleaned);
+                        if (!isNaN(numValue) && numValue > 0) {
+                            value = numValue;
+                        } else {
+                            value = '';
+                        }
+                    }
+                    
+                    return value;
+                };
+                
+                // Add data rows with zebra striping
+                filteredAnnouncements.forEach((ann, idx) => {
+                    const rowData: any[] = [];
+                    headers.forEach(header => {
+                        if (!header.startsWith('مقصد')) {
+                            rowData.push(getValueForHeader(header, ann, idx));
+                        }
+                    });
+                    
+                    if (isFullDairyAmbientMode) {
+                        for (let i = 0; i < 4; i++) {
+                            const dest = ann.destinations[i];
+                            if (dest) {
+                                const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
+                                               (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
+                                               (dest.representativeName || '').includes('پخش') ? 'پخش' : 
+                                               (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                                const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
+                                const deliveryDate = (dest as any).deliveryDate || '';
+                                const unloadTime = dest.unloadTime || '';
+                                const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
+                                rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                            } else {
+                                rowData.push('', '', '', '', '', '');
+                            }
+                        }
+                    }
+                    
+                    const row = worksheet.addRow(rowData);
+                    const isEvenRow = (idx + 1) % 2 === 0;
+                    const rowColor = isEvenRow ? 'FFF2F2F2' : 'FFFFFFFF';
+                    
+                    row.eachCell((cell: any, colNumber: number) => {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: rowColor }
+                        };
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                            right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                        };
+                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                        
+                        // Format numbers
+                        const header = headers[colNumber - 1];
+                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
+                        if (isNumericColumn && typeof cell.value === 'number') {
+                            cell.numFmt = '#,##0';
+                        }
+                    });
+                });
+                
+                // Set column widths
+                headers.forEach((header, idx) => {
+                    let maxLength = header.length;
+                    filteredAnnouncements.forEach(ann => {
+                        const value = getValueForHeader(header, ann, 0);
+                        const cellValue = String(value || '');
+                        maxLength = Math.max(maxLength, cellValue.length);
+                    });
+                    worksheet.getColumn(idx + 1).width = Math.min(Math.max(maxLength + 2, 10), 50);
+                });
+                
+                // Download
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                link.click();
+                window.URL.revokeObjectURL(url);
+                return;
+        } catch (error) {
+            console.error('Error creating Excel with ExcelJS:', error);
+            // Fallback to basic xlsx
+        }
+        
+        // Fallback: استفاده از xlsx بدون استایل
+        const wb = generateExcelExport(mode);
         XLSX.writeFile(wb, fileName);
     };
 

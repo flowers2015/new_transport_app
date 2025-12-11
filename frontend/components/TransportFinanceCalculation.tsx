@@ -84,6 +84,18 @@ interface AllowanceInputDialogData {
     helperDriverExcessMissionDays?: number; // ماموریت مازاد راننده کمکی
     helperDriverExcessMissionCost?: number; // هزینه ماموریت مازاد راننده کمکی
     helperDriverExcessKilometers?: number; // پیمایش مازاد راننده کمکی
+    
+    // فیلدهای محاسبات دپو
+    depotMissionDays?: number; // تعداد روز ماموریت دپو
+    depotShipmentCount?: number; // تعداد بار ارسالی
+    depotCargoHandlingCost?: number; // هزینه جابجایی بار در دپو
+    depotKilometerRate?: number; // اجرت کیلومتر دپو
+    depotRows?: Array<{ // ردیف‌های جدول محاسبات دپو
+        id: string;
+        destination: string; // مقاصد اعزامی دپو
+        mileage: number; // پیمایش حمل دپو
+        notes: string; // توضیحات
+    }>;
 }
 
 const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = ({ currentUser }) => {
@@ -1413,6 +1425,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
                 helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
+                // فیلدهای محاسبات دپو
+                depotMissionDays: (tour as any).depotMissionDays || 0,
+                depotShipmentCount: (tour as any).depotShipmentCount || 0,
+                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
+                depotKilometerRate: (tour as any).depotKilometerRate || 0,
+                depotRows: (tour as any).depotRows || undefined,
             });
         }
         
@@ -2411,7 +2429,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، ماموریت مازاد */}
-                            <div className="grid grid-cols-6 gap-4 items-start">
+                            <div className="grid grid-cols-6 gap-4">
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         ماموریت مصوب (روز)
@@ -2437,6 +2455,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد</p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2459,7 +2478,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (تعداد مقاصد - 1) × بخشنامه</p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار</p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2477,7 +2496,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2504,7 +2523,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر</p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: (کل پیمایش / (100) × درصد</p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2526,6 +2545,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
                             </div>
                             
@@ -2886,6 +2906,257 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     className="input-style w-full"
                                     rows={15}
                                 />
+                            </div>
+                        </div>
+                        
+                        {/* بخش چهارم: محاسبات دپو */}
+                        <div className="space-y-4 mt-6">
+                            {/* Separator: محاسبات دپو */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                                    🏢 محاسبات دپو
+                                </h3>
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                            </div>
+                            
+                            {/* فیلدهای محاسبات دپو */}
+                            <div className="grid grid-cols-4 gap-4">
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        تعداد روز ماموریت دپو
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.depotMissionDays ? String(inputDialogData.depotMissionDays) : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value;
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                depotMissionDays: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        تعداد بار ارسالی
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.depotShipmentCount ? String(inputDialogData.depotShipmentCount) : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value;
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                depotShipmentCount: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        هزینه جابجایی بار در دپو (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.depotCargoHandlingCost ? String(inputDialogData.depotCargoHandlingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                depotCargoHandlingCost: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        اجرت کیلومتر دپو (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={inputDialogData.depotKilometerRate ? String(inputDialogData.depotKilometerRate).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value.replace(/,/g, '');
+                                            const cleaned = inputValue.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                depotKilometerRate: numValue
+                                            });
+                                        }}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        placeholder="0"
+                                    />
+                                </div>
+                            </div>
+                            
+                            {/* جدول محاسبات دپو */}
+                            <div className="mt-4">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h4 className="text-sm font-semibold text-slate-700">جدول محاسبات دپو</h4>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newRow = {
+                                                id: `depot-${Date.now()}-${Math.random()}`,
+                                                destination: '',
+                                                mileage: 0,
+                                                notes: ''
+                                            };
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                depotRows: [...(inputDialogData.depotRows || []), newRow]
+                                            });
+                                        }}
+                                        className="px-3 py-1.5 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 transition-colors"
+                                    >
+                                        + افزودن ردیف
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto border border-slate-300 rounded-md">
+                                    <table className="w-full text-sm text-right border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-100 border-b border-slate-300">
+                                                <th className="p-2 border-l border-slate-300 text-center min-w-[60px]">شماره ردیف</th>
+                                                <th className="p-2 border-l border-slate-300 min-w-[200px]">مقاصد اعزامی دپو</th>
+                                                <th className="p-2 border-l border-slate-300 min-w-[150px]">پیمایش حمل دپو (کیلومتر)</th>
+                                                <th className="p-2 min-w-[200px]">توضیحات</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(inputDialogData.depotRows && inputDialogData.depotRows.length > 0 ? inputDialogData.depotRows : Array.from({ length: 4 }, (_, i) => ({
+                                                id: `depot-default-${i}`,
+                                                destination: '',
+                                                mileage: 0,
+                                                notes: ''
+                                            }))).map((row, index) => (
+                                                <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
+                                                    <td className="p-2 border-l border-slate-200 text-center">
+                                                        {index + 1}
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <input
+                                                            type="text"
+                                                            value={row.destination}
+                                                            onChange={(e) => {
+                                                                const updatedRows = (inputDialogData.depotRows || []).map(r => 
+                                                                    r.id === row.id ? { ...r, destination: e.target.value } : r
+                                                                );
+                                                                // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
+                                                                if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
+                                                                    const defaultRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                        id: `depot-default-${i}`,
+                                                                        destination: '',
+                                                                        mileage: 0,
+                                                                        notes: ''
+                                                                    }));
+                                                                    defaultRows[index].destination = e.target.value;
+                                                                    setInputDialogData({
+                                                                        ...inputDialogData,
+                                                                        depotRows: defaultRows
+                                                                    });
+                                                                } else {
+                                                                    setInputDialogData({
+                                                                        ...inputDialogData,
+                                                                        depotRows: updatedRows
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                            placeholder="مقصد"
+                                                        />
+                                                    </td>
+                                                    <td className="p-2 border-l border-slate-200">
+                                                        <input
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            value={row.mileage ? String(row.mileage).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                            onChange={(e) => {
+                                                                const inputValue = e.target.value.replace(/,/g, '');
+                                                                const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                                const numValue = cleaned ? Number(cleaned) : 0;
+                                                                const updatedRows = (inputDialogData.depotRows || []).map(r => 
+                                                                    r.id === row.id ? { ...r, mileage: numValue } : r
+                                                                );
+                                                                // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
+                                                                if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
+                                                                    const defaultRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                        id: `depot-default-${i}`,
+                                                                        destination: '',
+                                                                        mileage: 0,
+                                                                        notes: ''
+                                                                    }));
+                                                                    defaultRows[index].mileage = numValue;
+                                                                    setInputDialogData({
+                                                                        ...inputDialogData,
+                                                                        depotRows: defaultRows
+                                                                    });
+                                                                } else {
+                                                                    setInputDialogData({
+                                                                        ...inputDialogData,
+                                                                        depotRows: updatedRows
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                            placeholder="0"
+                                                        />
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <input
+                                                            type="text"
+                                                            value={row.notes}
+                                                            onChange={(e) => {
+                                                                const updatedRows = (inputDialogData.depotRows || []).map(r => 
+                                                                    r.id === row.id ? { ...r, notes: e.target.value } : r
+                                                                );
+                                                                // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
+                                                                if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
+                                                                    const defaultRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                        id: `depot-default-${i}`,
+                                                                        destination: '',
+                                                                        mileage: 0,
+                                                                        notes: ''
+                                                                    }));
+                                                                    defaultRows[index].notes = e.target.value;
+                                                                    setInputDialogData({
+                                                                        ...inputDialogData,
+                                                                        depotRows: defaultRows
+                                                                    });
+                                                                } else {
+                                                                    setInputDialogData({
+                                                                        ...inputDialogData,
+                                                                        depotRows: updatedRows
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                            placeholder="توضیحات"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                         </div>
