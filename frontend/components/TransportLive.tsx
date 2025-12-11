@@ -1260,6 +1260,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
             });
             
+            // اطمینان از وجود "کرایه کل" و "ارزش بار" در headers
+            if (!headers.includes('کرایه کل') && !headers.some(h => h.includes('کرایه کل'))) {
+                headers.push('کرایه کل');
+            }
+            if (mode === 'full' && !headers.includes('ارزش بار') && !headers.includes('ارزش بار (ریال)') && !headers.some(h => h.includes('ارزش بار'))) {
+                headers.push('ارزش بار');
+            }
+            
             if (isFullDairyAmbientMode) {
                 for (let i = 1; i <= 4; i++) {
                     headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
@@ -1291,6 +1299,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 
                 if (header === 'انتخاب') {
                     return '';
+                }
+                
+                // Handle special columns directly - اولویت با اینهاست
+                if (header === 'کرایه کل') {
+                    const value = ann.totalFreightCost || 0;
+                    return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
+                }
+                if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
+                    const value = ann.cargoValue || 0;
+                    return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
                 }
                 
                 const col = visibleCols.find((c: any) => c.header === header);
@@ -1358,10 +1376,29 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     for (let i = 0; i < 4; i++) {
                         const dest = ann.destinations[i];
                         if (dest) {
-                            const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
-                                           (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
-                                           (dest.representativeName || '').includes('پخش') ? 'پخش' : 
-                                           (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                            // منطق تشخیص نوع نماینده - بهبود یافته
+                            let repType = '';
+                            const repTypeValue = (dest as any).representativeType;
+                            const repName = (dest.representativeName || '').toString().trim();
+                            
+                            // اول از representativeType بررسی کن
+                            if (repTypeValue === 'distributor' || repTypeValue === 'پخش' || repTypeValue === 'agent') {
+                                repType = 'پخش';
+                            } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
+                                repType = 'نماینده';
+                            } else if (repName) {
+                                // اگر representativeType نبود، از representativeName استفاده کن
+                                const repNameLower = repName.toLowerCase();
+                                if (repNameLower.includes('پخش') || repNameLower === 'پخش') {
+                                    repType = 'پخش';
+                                } else if (repNameLower.includes('نماینده') || repNameLower === 'نماینده') {
+                                    repType = 'نماینده';
+                                } else if (repName && repName.trim() !== '') {
+                                    // اگر نام وجود دارد اما پخش یا نماینده نیست، همان نام را نمایش بده
+                                    repType = repName;
+                                }
+                            }
+                            
                             const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                             const deliveryDate = (dest as any).deliveryDate || '';
                             const unloadTime = dest.unloadTime || '';

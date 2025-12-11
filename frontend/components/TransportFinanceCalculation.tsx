@@ -2265,402 +2265,365 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </div>
                             </div>
                             
-                            {/* ردیف اول: کد پرسنلی راننده، نام راننده، تاریخ محاسبه */}
-                            <div className="grid grid-cols-3 gap-4 items-start">
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        کد پرسنلی راننده
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.driverEmployeeId || ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
-                                        placeholder="کد پرسنلی"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        نام راننده
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.driverName || ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
-                                        placeholder="نام راننده"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        تاریخ محاسبه *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.calculationDate || ''}
-                                        onChange={(e) => setInputDialogData({
-                                            ...inputDialogData,
-                                            calculationDate: e.target.value
-                                        })}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                                        placeholder="1403/01/01"
-                                    />
-                                </div>
+                            {/* جدول اطلاعات اصلی */}
+                            <div className="overflow-x-auto border border-slate-300 rounded-md">
+                                <table className="w-full text-sm text-right border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-100 border-b border-slate-300">
+                                            <th className="p-2 border-l border-slate-300 min-w-[200px]">فیلد</th>
+                                            <th className="p-2 border-l border-slate-300 min-w-[250px]">مقدار</th>
+                                            <th className="p-2 border-l border-slate-300 min-w-[200px]">فیلد</th>
+                                            <th className="p-2 min-w-[250px]">مقدار</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {/* ردیف 1: کد پرسنلی راننده، نام راننده */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">کد پرسنلی راننده</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.driverEmployeeId || ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">نام راننده</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.driverName || ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 2: تاریخ محاسبه، شماره بارنامه */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">تاریخ محاسبه *</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.calculationDate || ''}
+                                                    onChange={(e) => setInputDialogData({
+                                                        ...inputDialogData,
+                                                        calculationDate: e.target.value
+                                                    })}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                    placeholder="1403/01/01"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">شماره بارنامه</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.billOfLadingNumber}
+                                                    onChange={(e) => setInputDialogData({
+                                                        ...inputDialogData,
+                                                        billOfLadingNumber: e.target.value
+                                                    })}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                    placeholder="شماره بارنامه"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 3: تاریخ صدور بارنامه، کد خودرو */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">تاریخ صدور بارنامه</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.billOfLadingDate || ''}
+                                                    onChange={(e) => setInputDialogData({
+                                                        ...inputDialogData,
+                                                        billOfLadingDate: e.target.value
+                                                    })}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                    placeholder="1403/01/01"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">کد خودرو</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.vehicleCode || ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 4: پلاک خودرو، نوع خودرو */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">پلاک خودرو</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.vehiclePlate || ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">نوع خودرو</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.vehicleType || ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 5: مقاصد، پیمایش مصوب */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">مقاصد</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    value={inputDialogData.destinations || ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">پیمایش مصوب (کیلومتر)</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.approvedKilometers ? String(inputDialogData.approvedKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 6: پیمایش مازاد، ماموریت مصوب */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">پیمایش مازاد (کیلومتر) *</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.excessKilometers ? String(inputDialogData.excessKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                    onChange={(e) => {
+                                                        const inputValue = e.target.value.replace(/,/g, '');
+                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                                        setInputDialogData({
+                                                            ...inputDialogData,
+                                                            excessKilometers: numValue
+                                                        });
+                                                    }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">ماموریت مصوب (روز)</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.approvedMissionDays ? String(inputDialogData.approvedMissionDays) : ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 7: تعداد چندجا تخلیه، هزینه چند جا تخلیه */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">
+                                                تعداد چندجا تخلیه
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار: تعداد</p>
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.multiUnloadCount ? String(inputDialogData.multiUnloadCount) : ''}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed text-left"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">
+                                                هزینه چند جا تخلیه (ریال)
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار</p>
+                                            </td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={(() => {
+                                                        const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+                                                        if (!calc) return '0';
+                                                        const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+                                                        if (!tour) return '0';
+                                                        const destinationsCount = tour.destinations?.length || 0;
+                                                        const multiUnloadUnits = Math.max(0, destinationsCount - 1);
+                                                        const cost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
+                                                        return cost.toLocaleString('fa-IR');
+                                                    })()}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 8: هزینه غذا، هزینه سوخت */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">
+                                                هزینه غذا (ریال)
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={(() => {
+                                                        const approvedDays = Number(inputDialogData.approvedMissionDays) || 0;
+                                                        const cost = Math.round(approvedDays * (Number(foodCostPerDay) || 0)) || 0;
+                                                        return cost.toLocaleString('fa-IR');
+                                                    })()}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">
+                                                هزینه سوخت (ریال)
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار: (کل پیمایش / 100) × درصد × قیمت</p>
+                                            </td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={(() => {
+                                                        const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                                                        const vehicleType = inputDialogData.vehicleType || '';
+                                                        const fuelReg = fuelConsumptionRegulations[vehicleType] || { consumptionPercentage: 0, fuelPrice: 0 };
+                                                        const consumption = (totalKm / 100) * (fuelReg.consumptionPercentage || 0);
+                                                        const cost = Math.round(consumption * (fuelReg.fuelPrice || 0)) || 0;
+                                                        return cost.toLocaleString('fa-IR');
+                                                    })()}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 9: ماموریت مازاد، حق ماموریت (ماموریت مازاد) */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">ماموریت مازاد (روز) *</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
+                                                    onChange={(e) => {
+                                                        const inputValue = e.target.value;
+                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                                        setInputDialogData({
+                                                            ...inputDialogData,
+                                                            excessMissionDays: numValue
+                                                        });
+                                                    }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">
+                                                حق ماموریت (ماموریت مازاد) (ریال)
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
+                                            </td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={(() => {
+                                                        const excessDays = Number(inputDialogData.excessMissionDays) || 0;
+                                                        const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+                                                        return cost.toLocaleString('fa-IR');
+                                                    })()}
+                                                    readOnly
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 10: هزینه عوارض آزاد راهی، هزینه بار برگشتی */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">هزینه عوارض آزاد راهی (ریال) *</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.tollCost ? String(inputDialogData.tollCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                    onChange={(e) => {
+                                                        const inputValue = e.target.value.replace(/,/g, '');
+                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                                        setInputDialogData({
+                                                            ...inputDialogData,
+                                                            tollCost: numValue
+                                                        });
+                                                    }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">هزینه بار برگشتی (ریال)</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.returnCargoCost ? String(inputDialogData.returnCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                    onChange={(e) => {
+                                                        const inputValue = e.target.value.replace(/,/g, '');
+                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                                        setInputDialogData({
+                                                            ...inputDialogData,
+                                                            returnCargoCost: numValue
+                                                        });
+                                                    }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                        {/* ردیف 11: هزینه بارنامه، پیش پرداخت */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="p-2 border-l border-slate-200 font-medium">هزینه بارنامه (لندی گراف و ..) (ریال)</td>
+                                            <td className="p-2 border-l border-slate-200">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.billOfLadingCost ? String(inputDialogData.billOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                    onChange={(e) => {
+                                                        const inputValue = e.target.value.replace(/,/g, '');
+                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                                        setInputDialogData({
+                                                            ...inputDialogData,
+                                                            billOfLadingCost: numValue
+                                                        });
+                                                    }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                />
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">پیش پرداخت (ریال)</td>
+                                            <td className="p-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={inputDialogData.advancePayment ? String(inputDialogData.advancePayment).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                    onChange={(e) => {
+                                                        const inputValue = e.target.value.replace(/,/g, '');
+                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                                        setInputDialogData({
+                                                            ...inputDialogData,
+                                                            advancePayment: numValue
+                                                        });
+                                                    }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                />
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                             
-                            {/* ردیف دوم: شماره بارنامه، تاریخ صدور بارنامه، کد خودرو، پلاک خودرو، نوع خودرو */}
-                            <div className="grid grid-cols-5 gap-4 items-start">
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        شماره بارنامه
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.billOfLadingNumber}
-                                        onChange={(e) => setInputDialogData({
-                                            ...inputDialogData,
-                                            billOfLadingNumber: e.target.value
-                                        })}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                                        placeholder="شماره بارنامه"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        تاریخ صدور بارنامه
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.billOfLadingDate || ''}
-                                        onChange={(e) => setInputDialogData({
-                                            ...inputDialogData,
-                                            billOfLadingDate: e.target.value
-                                        })}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                                        placeholder="1403/01/01"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        کد خودرو
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.vehicleCode || ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
-                                        placeholder="کد خودرو"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        پلاک خودرو
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.vehiclePlate || ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
-                                        placeholder="پلاک خودرو"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        نوع خودرو
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.vehicleType || ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
-                                        placeholder="نوع خودرو"
-                                    />
-                                </div>
-                            </div>
-                            
-                            {/* ردیف سوم: فیلد مقاصد، پیمایش مصوب، پیمایش مازاد */}
-                            <div className="grid grid-cols-3 gap-4 items-start">
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        مقاصد
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inputDialogData.destinations || ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed"
-                                        placeholder="مقاصد"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        پیمایش مصوب (کیلومتر)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.approvedKilometers ? String(inputDialogData.approvedKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        پیمایش مازاد (کیلومتر) *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.excessKilometers ? String(inputDialogData.excessKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                excessKilometers: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                            </div>
-                            
-                            {/* ردیف چهارم: ماموریت مصوب، تعداد چندجا تخلیه، هزینه چند جا تخلیه، هزینه غذا، هزینه سوخت، ماموریت مازاد */}
-                            <div className="grid grid-cols-6 gap-4">
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        ماموریت مصوب (روز)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.approvedMissionDays ? String(inputDialogData.approvedMissionDays) : ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        تعداد چندجا تخلیه
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.multiUnloadCount ? String(inputDialogData.multiUnloadCount) : ''}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-slate-600 cursor-not-allowed text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد</p>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه چند جا تخلیه (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={(() => {
-                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
-                                            if (!calc) return '0';
-                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
-                                            if (!tour) return '0';
-                                            const destinationsCount = tour.destinations?.length || 0;
-                                            const multiUnloadUnits = Math.max(0, destinationsCount - 1);
-                                            const cost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
-                                            return cost.toLocaleString('fa-IR');
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار</p>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه غذا (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={(() => {
-                                            const approvedDays = Number(inputDialogData.approvedMissionDays) || 0;
-                                            const cost = Math.round(approvedDays * (Number(foodCostPerDay) || 0)) || 0;
-                                            return cost.toLocaleString('fa-IR');
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: ماموریت مصوب × بخشنامه غذا</p>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه سوخت (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={(() => {
-                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
-                                            if (!calc) return '0';
-                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
-                                            if (!tour) return '0';
-                                            const vehicleType = tour.vehicleType || '';
-                                            const fuelReg = fuelConsumptionRegulations[vehicleType];
-                                            if (fuelReg) {
-                                                const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
-                                                const cost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
-                                                return cost.toLocaleString('fa-IR');
-                                            }
-                                            return '0';
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: (کل پیمایش / (100) × درصد</p>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        ماموریت مازاد (روز) *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.excessMissionDays ? String(inputDialogData.excessMissionDays) : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value;
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                excessMissionDays: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
-                                </div>
-                            </div>
-                            
-                            {/* ردیف پنجم: حق ماموریت (ماموریت مازاد) */}
-                            <div className="grid grid-cols-6 gap-4 items-start">
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        حق ماموریت (ماموریت مازاد) (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={(() => {
-                                            const excessDays = Number(inputDialogData.excessMissionDays) || 0;
-                                            const cost = Math.round(excessDays * (Number(excessMissionCostPerDay) || 0)) || 0;
-                                            return cost.toLocaleString('fa-IR');
-                                        })()}
-                                        readOnly
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">محاسبه خودکار: ماموریت مازاد × بخشنامه</p>
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                        
-                        {/* بخش دوم: هزینه بارگیری (بدون عنوان) */}
-                        <div className="space-y-4 mb-6">
-                            <div className="grid grid-cols-4 gap-4 items-start">
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه عوارض آزاد راهی (ریال) *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.tollCost ? String(inputDialogData.tollCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                tollCost: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه بار برگشتی (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.returnCargoCost ? String(inputDialogData.returnCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                returnCargoCost: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه بارنامه (لندی گراف و ..) (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.billOfLadingCost ? String(inputDialogData.billOfLadingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                billOfLadingCost: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        پیش پرداخت (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.advancePayment ? String(inputDialogData.advancePayment).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                advancePayment: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                </div>
-                            </div>
                             
                             {/* بخش سوم: راننده کمکی */}
                             <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-300">

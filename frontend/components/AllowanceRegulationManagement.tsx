@@ -121,6 +121,24 @@ interface FixedAllowanceRegulation {
     updatedByName?: string;
 }
 
+interface ReturnCargoRegulation {
+    id?: string;
+    vehicleType: 'تریلی' | 'ده چرخ';
+    cargoType: 'full_product' | 'full_box_pallet_basket' | 'half'; // هزینه بار کامل (محصول) | هزینه بار کامل (باکس پالت و سبد) | هزینه بارهای نصفه
+    cost: number; // مبلغ بخشنامه (ریال)
+    approvalDate: string;
+    documentPath?: string;
+    startDate: string;
+    endDate: string;
+    isActive?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+    createdBy?: string;
+    createdByName?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+}
+
 interface AllowanceRegulationManagementProps {
     currentUser: User;
 }
@@ -152,7 +170,7 @@ const jalaliToGregorianDateInput = (jalaliStr: string): string => {
 };
 
 const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps> = ({ currentUser }) => {
-    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'fixed-allowance' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption'>('food');
+    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'fixed-allowance' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption' | 'return-cargo'>('food');
     
     // Food Regulations
     const [foodRegulations, setFoodRegulations] = useState<FoodRegulation[]>([]);
@@ -253,6 +271,21 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         isActive: true,
     });
     
+    // Return Cargo Regulations (اجرت بار برگشتی)
+    const [returnCargoRegulations, setReturnCargoRegulations] = useState<ReturnCargoRegulation[]>([]);
+    const [showReturnCargoDialog, setShowReturnCargoDialog] = useState(false);
+    const [editingReturnCargo, setEditingReturnCargo] = useState<ReturnCargoRegulation | null>(null);
+    const [returnCargoFormData, setReturnCargoFormData] = useState<ReturnCargoRegulation>({
+        vehicleType: 'تریلی',
+        cargoType: 'full_product',
+        cost: 0,
+        approvalDate: getTodayJalali(),
+        documentPath: '',
+        startDate: getTodayJalali(),
+        endDate: getTodayJalali(),
+        isActive: true,
+    });
+    
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [uploadingFile, setUploadingFile] = useState(false);
@@ -271,7 +304,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 'Content-Type': 'application/json',
             };
             
-            const [foodRes, helperRes, fixedAllowanceRes, mileageRes, excessMissionRes, multiUnloadRes, fuelConsumptionRes] = await Promise.all([
+            const [foodRes, helperRes, fixedAllowanceRes, mileageRes, excessMissionRes, multiUnloadRes, fuelConsumptionRes, returnCargoRes] = await Promise.all([
                 fetch(getApiUrl('allowance-regulations/food'), { headers }),
                 fetch(getApiUrl('allowance-regulations/helper'), { headers }),
                 fetch(getApiUrl('allowance-regulations/fixed-allowance'), { headers }),
@@ -279,9 +312,10 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
                 fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
                 fetch(getApiUrl('allowance-regulations/fuel-consumption'), { headers }),
+                fetch(getApiUrl('allowance-regulations/return-cargo'), { headers }),
             ]);
             
-            if (foodRes.ok && helperRes.ok && fixedAllowanceRes.ok && mileageRes.ok && excessMissionRes.ok && multiUnloadRes.ok && fuelConsumptionRes.ok) {
+            if (foodRes.ok && helperRes.ok && fixedAllowanceRes.ok && mileageRes.ok && excessMissionRes.ok && multiUnloadRes.ok && fuelConsumptionRes.ok && returnCargoRes.ok) {
                 const foodData = await foodRes.json();
                 const helperData = await helperRes.json();
                 const fixedAllowanceData = await fixedAllowanceRes.json();
@@ -289,6 +323,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 const excessMissionData = await excessMissionRes.json();
                 const multiUnloadData = await multiUnloadRes.json();
                 const fuelConsumptionData = await fuelConsumptionRes.json();
+                const returnCargoData = await returnCargoRes.json();
                 
                 setFoodRegulations(foodData);
                 setHelperRegulations(helperData);
@@ -297,6 +332,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                 setExcessMissionRegulations(excessMissionData);
                 setMultiUnloadRegulations(multiUnloadData);
                 setFuelConsumptionRegulations(fuelConsumptionData);
+                setReturnCargoRegulations(returnCargoData || []);
             } else {
                 throw new Error('خطا در دریافت بخشنامه‌ها');
             }
@@ -1034,6 +1070,100 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         }
     };
 
+    // Return Cargo Regulation Handlers
+    const handleAddReturnCargo = (vehicleType: 'تریلی' | 'ده چرخ', cargoType: 'full_product' | 'full_box_pallet_basket' | 'half') => {
+        setEditingReturnCargo(null);
+        setReturnCargoFormData({
+            vehicleType,
+            cargoType,
+            cost: 0,
+            approvalDate: getTodayJalali(),
+            documentPath: '',
+            startDate: getTodayJalali(),
+            endDate: getTodayJalali(),
+            isActive: true,
+        });
+        setShowReturnCargoDialog(true);
+    };
+
+    const handleEditReturnCargo = (regulation: ReturnCargoRegulation) => {
+        setEditingReturnCargo(regulation);
+        setReturnCargoFormData(regulation);
+        setShowReturnCargoDialog(true);
+    };
+
+    const handleDeleteReturnCargo = async (id: string) => {
+        if (!confirm('آیا مطمئن هستید که می‌خواهید این بخشنامه را حذف کنید؟')) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const response = await fetch(getApiUrl(`allowance-regulations/return-cargo/${id}`), {
+                method: 'DELETE',
+                headers,
+            });
+
+            if (!response.ok) {
+                throw new Error('خطا در حذف بخشنامه');
+            }
+
+            await fetchAllRegulations();
+            alert('بخشنامه با موفقیت حذف شد.');
+        } catch (err: any) {
+            console.error('❌ [handleDeleteReturnCargo] Error:', err);
+            alert(`خطا در حذف بخشنامه: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    const handleSaveReturnCargo = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const userId = currentUser?.id || currentUser?.userId || '';
+            const payload = {
+                ...(editingReturnCargo?.id && { id: editingReturnCargo.id }),
+                vehicleType: returnCargoFormData.vehicleType,
+                cargoType: returnCargoFormData.cargoType,
+                cost: Number(returnCargoFormData.cost),
+                approvalDate: returnCargoFormData.approvalDate,
+                documentPath: returnCargoFormData.documentPath || null,
+                startDate: returnCargoFormData.startDate,
+                endDate: returnCargoFormData.endDate,
+                isActive: returnCargoFormData.isActive !== false,
+                userId,
+            };
+
+            const response = await fetch(getApiUrl('allowance-regulations/return-cargo'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'خطا در ذخیره بخشنامه');
+            }
+
+            await fetchAllRegulations();
+            setShowReturnCargoDialog(false);
+            setEditingReturnCargo(null);
+            alert(editingReturnCargo ? 'بخشنامه با موفقیت به‌روزرسانی شد.' : 'بخشنامه با موفقیت ثبت شد.');
+        } catch (err: any) {
+            console.error('❌ [handleSaveReturnCargo] Error:', err);
+            alert(`خطا در ذخیره بخشنامه: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -1131,6 +1261,16 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                             }`}
                         >
                             بخشنامه مصرف سوخت
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('return-cargo')}
+                            className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+                                activeTab === 'return-cargo'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                        >
+                            بخشنامه اجرت بار برگشتی
                         </button>
                     </div>
                 </div>
@@ -1922,6 +2062,244 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'return-cargo' && (
+                    <div className="space-y-6">
+                        {/* دسته تریلی */}
+                        <div className="bg-white rounded-lg border border-slate-300 p-6">
+                            <h2 className="text-lg font-bold text-slate-800 mb-4">تریلی</h2>
+                            <div className="grid grid-cols-3 gap-4">
+                                {/* هزینه بار کامل (محصول) */}
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بار کامل (محصول)</h3>
+                                    {returnCargoRegulations
+                                        .filter(r => r.vehicleType === 'تریلی' && r.cargoType === 'full_product')
+                                        .map((regulation, idx) => (
+                                            <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
+                                                <div className="text-xs text-slate-600 mb-1">
+                                                    {regulation.startDate} تا {regulation.endDate}
+                                                </div>
+                                                <div className="text-sm font-bold text-green-700 mb-2">
+                                                    {regulation.cost.toLocaleString('fa-IR')} ریال
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEditReturnCargo(regulation)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                    <button
+                                                        onClick={() => regulation.id && handleDeleteReturnCargo(regulation.id)}
+                                                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                                    >
+                                                        حذف
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    <button
+                                        onClick={() => handleAddReturnCargo('تریلی', 'full_product')}
+                                        className="w-full px-3 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors mt-2"
+                                    >
+                                        + افزودن بخشنامه
+                                    </button>
+                                </div>
+
+                                {/* هزینه بار کامل (باکس پالت و سبد) */}
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بار کامل (باکس پالت و سبد)</h3>
+                                    {returnCargoRegulations
+                                        .filter(r => r.vehicleType === 'تریلی' && r.cargoType === 'full_box_pallet_basket')
+                                        .map((regulation, idx) => (
+                                            <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
+                                                <div className="text-xs text-slate-600 mb-1">
+                                                    {regulation.startDate} تا {regulation.endDate}
+                                                </div>
+                                                <div className="text-sm font-bold text-green-700 mb-2">
+                                                    {regulation.cost.toLocaleString('fa-IR')} ریال
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEditReturnCargo(regulation)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                    <button
+                                                        onClick={() => regulation.id && handleDeleteReturnCargo(regulation.id)}
+                                                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                                    >
+                                                        حذف
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    <button
+                                        onClick={() => handleAddReturnCargo('تریلی', 'full_box_pallet_basket')}
+                                        className="w-full px-3 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors mt-2"
+                                    >
+                                        + افزودن بخشنامه
+                                    </button>
+                                </div>
+
+                                {/* هزینه بارهای نصفه */}
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بارهای نصفه</h3>
+                                    {returnCargoRegulations
+                                        .filter(r => r.vehicleType === 'تریلی' && r.cargoType === 'half')
+                                        .map((regulation, idx) => (
+                                            <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
+                                                <div className="text-xs text-slate-600 mb-1">
+                                                    {regulation.startDate} تا {regulation.endDate}
+                                                </div>
+                                                <div className="text-sm font-bold text-green-700 mb-2">
+                                                    {regulation.cost.toLocaleString('fa-IR')} ریال
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEditReturnCargo(regulation)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                    <button
+                                                        onClick={() => regulation.id && handleDeleteReturnCargo(regulation.id)}
+                                                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                                    >
+                                                        حذف
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    <button
+                                        onClick={() => handleAddReturnCargo('تریلی', 'half')}
+                                        className="w-full px-3 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors mt-2"
+                                    >
+                                        + افزودن بخشنامه
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* دسته ده چرخ */}
+                        <div className="bg-white rounded-lg border border-slate-300 p-6">
+                            <h2 className="text-lg font-bold text-slate-800 mb-4">ده چرخ</h2>
+                            <div className="grid grid-cols-3 gap-4">
+                                {/* هزینه بار کامل (محصول) */}
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بار کامل (محصول)</h3>
+                                    {returnCargoRegulations
+                                        .filter(r => r.vehicleType === 'ده چرخ' && r.cargoType === 'full_product')
+                                        .map((regulation, idx) => (
+                                            <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
+                                                <div className="text-xs text-slate-600 mb-1">
+                                                    {regulation.startDate} تا {regulation.endDate}
+                                                </div>
+                                                <div className="text-sm font-bold text-green-700 mb-2">
+                                                    {regulation.cost.toLocaleString('fa-IR')} ریال
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEditReturnCargo(regulation)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                    <button
+                                                        onClick={() => regulation.id && handleDeleteReturnCargo(regulation.id)}
+                                                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                                    >
+                                                        حذف
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    <button
+                                        onClick={() => handleAddReturnCargo('ده چرخ', 'full_product')}
+                                        className="w-full px-3 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors mt-2"
+                                    >
+                                        + افزودن بخشنامه
+                                    </button>
+                                </div>
+
+                                {/* هزینه بار کامل (باکس پالت و سبد) */}
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بار کامل (باکس پالت و سبد)</h3>
+                                    {returnCargoRegulations
+                                        .filter(r => r.vehicleType === 'ده چرخ' && r.cargoType === 'full_box_pallet_basket')
+                                        .map((regulation, idx) => (
+                                            <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
+                                                <div className="text-xs text-slate-600 mb-1">
+                                                    {regulation.startDate} تا {regulation.endDate}
+                                                </div>
+                                                <div className="text-sm font-bold text-green-700 mb-2">
+                                                    {regulation.cost.toLocaleString('fa-IR')} ریال
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEditReturnCargo(regulation)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                    <button
+                                                        onClick={() => regulation.id && handleDeleteReturnCargo(regulation.id)}
+                                                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                                    >
+                                                        حذف
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    <button
+                                        onClick={() => handleAddReturnCargo('ده چرخ', 'full_box_pallet_basket')}
+                                        className="w-full px-3 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors mt-2"
+                                    >
+                                        + افزودن بخشنامه
+                                    </button>
+                                </div>
+
+                                {/* هزینه بارهای نصفه */}
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بارهای نصفه</h3>
+                                    {returnCargoRegulations
+                                        .filter(r => r.vehicleType === 'ده چرخ' && r.cargoType === 'half')
+                                        .map((regulation, idx) => (
+                                            <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
+                                                <div className="text-xs text-slate-600 mb-1">
+                                                    {regulation.startDate} تا {regulation.endDate}
+                                                </div>
+                                                <div className="text-sm font-bold text-green-700 mb-2">
+                                                    {regulation.cost.toLocaleString('fa-IR')} ریال
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEditReturnCargo(regulation)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                    <button
+                                                        onClick={() => regulation.id && handleDeleteReturnCargo(regulation.id)}
+                                                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                                    >
+                                                        حذف
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    <button
+                                        onClick={() => handleAddReturnCargo('ده چرخ', 'half')}
+                                        className="w-full px-3 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700 transition-colors mt-2"
+                                    >
+                                        + افزودن بخشنامه
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -2915,6 +3293,166 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
                             >
                                 {editingFuelConsumption ? 'به‌روزرسانی' : 'ثبت'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* دیالوگ بخشنامه اجرت بار برگشتی */}
+            {showReturnCargoDialog && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-xl font-bold text-slate-800 mb-4">
+                            {editingReturnCargo ? 'ویرایش بخشنامه اجرت بار برگشتی' : 'افزودن بخشنامه اجرت بار برگشتی'}
+                        </h2>
+                        
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        نوع خودرو *
+                                    </label>
+                                    <select
+                                        value={returnCargoFormData.vehicleType}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, vehicleType: e.target.value as 'تریلی' | 'ده چرخ' })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                    >
+                                        <option value="تریلی">تریلی</option>
+                                        <option value="ده چرخ">ده چرخ</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        نوع بار *
+                                    </label>
+                                    <select
+                                        value={returnCargoFormData.cargoType}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, cargoType: e.target.value as 'full_product' | 'full_box_pallet_basket' | 'half' })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                    >
+                                        <option value="full_product">هزینه بار کامل (محصول)</option>
+                                        <option value="full_box_pallet_basket">هزینه بار کامل (باکس پالت و سبد)</option>
+                                        <option value="half">هزینه بارهای نصفه</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    مبلغ بخشنامه (ریال) *
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={returnCargoFormData.cost ? String(returnCargoFormData.cost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                    onChange={(e) => {
+                                        const inputValue = e.target.value.replace(/,/g, '');
+                                        const cleaned = inputValue.replace(/[^\d]/g, '');
+                                        const numValue = cleaned ? Number(cleaned) : 0;
+                                        setReturnCargoFormData({ ...returnCargoFormData, cost: numValue });
+                                    }}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                    placeholder="0"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ مصوبه (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={returnCargoFormData.approvalDate}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, approvalDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/01/01"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ شروع (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={returnCargoFormData.startDate}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, startDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/01/01"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        تاریخ پایان (شمسی) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={returnCargoFormData.endDate}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, endDate: e.target.value })}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                        placeholder="1403/12/29"
+                                        pattern="\d{4}/\d{2}/\d{2}"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">فرمت: YYYY/MM/DD</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    آپلود بخشنامه
+                                </label>
+                                <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const filePath = await handleFileUpload(file);
+                                            if (filePath) {
+                                                setReturnCargoFormData({ ...returnCargoFormData, documentPath: filePath });
+                                            }
+                                        }
+                                    }}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                />
+                                {returnCargoFormData.documentPath && (
+                                    <p className="text-xs text-green-600 mt-1">✓ فایل آپلود شد</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={returnCargoFormData.isActive !== false}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, isActive: e.target.checked })}
+                                        className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                    />
+                                    <span className="text-sm font-medium text-slate-700">فعال</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    setShowReturnCargoDialog(false);
+                                    setEditingReturnCargo(null);
+                                }}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300"
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                onClick={handleSaveReturnCargo}
+                                className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
+                            >
+                                {editingReturnCargo ? 'به‌روزرسانی' : 'ثبت'}
                             </button>
                         </div>
                     </div>

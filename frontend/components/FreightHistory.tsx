@@ -639,22 +639,41 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     });
                     
                     if (isFullDairyAmbientMode) {
-                        for (let i = 0; i < 4; i++) {
-                            const dest = ann.destinations[i];
-                            if (dest) {
-                                const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
-                                               (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
-                                               (dest.representativeName || '').includes('پخش') ? 'پخش' : 
-                                               (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
-                                const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
-                                const deliveryDate = (dest as any).deliveryDate || '';
-                                const unloadTime = dest.unloadTime || '';
-                                const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
-                                rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
-                            } else {
-                                rowData.push('', '', '', '', '', '');
+                    for (let i = 0; i < 4; i++) {
+                        const dest = ann.destinations[i];
+                        if (dest) {
+                            // منطق تشخیص نوع نماینده - بهبود یافته
+                            let repType = '';
+                            const repTypeValue = (dest as any).representativeType;
+                            const repName = (dest.representativeName || '').toString().trim();
+                            
+                            // اول از representativeType بررسی کن
+                            if (repTypeValue === 'distributor' || repTypeValue === 'پخش' || repTypeValue === 'agent') {
+                                repType = 'پخش';
+                            } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
+                                repType = 'نماینده';
+                            } else if (repName) {
+                                // اگر representativeType نبود، از representativeName استفاده کن
+                                const repNameLower = repName.toLowerCase();
+                                if (repNameLower.includes('پخش') || repNameLower === 'پخش') {
+                                    repType = 'پخش';
+                                } else if (repNameLower.includes('نماینده') || repNameLower === 'نماینده') {
+                                    repType = 'نماینده';
+                                } else if (repName && repName.trim() !== '') {
+                                    // اگر نام وجود دارد اما پخش یا نماینده نیست، همان نام را نمایش بده
+                                    repType = repName;
+                                }
                             }
+                            
+                            const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
+                            const deliveryDate = (dest as any).deliveryDate || '';
+                            const unloadTime = dest.unloadTime || '';
+                            const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
+                            rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                        } else {
+                            rowData.push('', '', '', '', '', '');
                         }
+                    }
                     }
                     
                     const row = worksheet.addRow(rowData);

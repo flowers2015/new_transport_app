@@ -240,6 +240,25 @@ async function createAllowanceRegulationTables() {
       )
     `);
 
+    // جدول بخشنامه اجرت بار برگشتی
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS allowance_regulations_return_cargo (
+        id VARCHAR(255) PRIMARY KEY,
+        vehicle_type VARCHAR(50) NOT NULL, -- 'تریلی' یا 'ده چرخ'
+        cargo_type VARCHAR(50) NOT NULL, -- 'full_product', 'full_box_pallet_basket', 'half'
+        cost DECIMAL(15, 2) NOT NULL, -- مبلغ بخشنامه (ریال)
+        approval_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        document_path VARCHAR(500),
+        start_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        end_date VARCHAR(10), -- تاریخ شمسی YYYY/MM/DD
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by VARCHAR(255),
+        updated_by VARCHAR(255)
+      )
+    `);
+
     // اضافه کردن ستون‌های جدید به جداول موجود (اگر وجود دارند)
     try {
       // بررسی و اضافه کردن ستون‌های جدید به جدول mileage
@@ -1843,6 +1862,190 @@ async function deleteFixedAllowanceRegulation(req, res) {
   }
 }
 
+/**
+ * دریافت بخشنامه‌های اجرت بار برگشتی
+ */
+async function getReturnCargoRegulations(req, res) {
+  try {
+    await createAllowanceRegulationTables();
+
+    // بررسی وجود جدول users
+    let query = `
+      SELECT ar.*
+      FROM allowance_regulations_return_cargo ar
+      WHERE (ar.is_active IS NULL OR ar.is_active = TRUE)
+      ORDER BY ar.created_at DESC
+    `;
+    
+    try {
+      // اگر جدول users وجود دارد، JOIN را اضافه کن
+      const usersTableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'users'
+        )
+      `);
+      
+      if (usersTableCheck.rows[0]?.exists) {
+        query = `
+          SELECT 
+            ar.*,
+            u1.name as created_by_name,
+            u2.name as updated_by_name
+          FROM allowance_regulations_return_cargo ar
+          LEFT JOIN users u1 ON ar.created_by = u1.id
+          LEFT JOIN users u2 ON ar.updated_by = u2.id
+          WHERE (ar.is_active IS NULL OR ar.is_active = TRUE)
+          ORDER BY ar.created_at DESC
+        `;
+      }
+    } catch (joinError) {
+      console.warn('⚠️ [getReturnCargoRegulations] جدول users وجود ندارد، بدون JOIN ادامه می‌دهیم:', joinError.message);
+    }
+
+    const result = await pool.query(query);
+    console.log('✅ [getReturnCargoRegulations] تعداد رکوردها:', result.rows.length);
+    
+    const regulations = result.rows.map(row => ({
+      id: row.id,
+      vehicleType: row.vehicle_type || null,
+      cargoType: row.cargo_type || null,
+      cost: parseFloat(row.cost || 0),
+      approvalDate: row.approval_date || null,
+      documentPath: row.document_path || null,
+      startDate: row.start_date || null,
+      endDate: row.end_date || null,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      createdBy: row.created_by || null,
+      createdByName: row.created_by_name || null,
+      updatedBy: row.updated_by || null,
+      updatedByName: row.updated_by_name || null,
+    }));
+
+    res.json(regulations);
+  } catch (error) {
+    console.error('❌ [getReturnCargoRegulations] Error:', error);
+    console.error('❌ [getReturnCargoRegulations] Error Stack:', error.stack);
+    res.status(500).json({ message: 'خطا در دریافت بخشنامه اجرت بار برگشتی: ' + error.message });
+  }
+}
+
+/**
+ * ذخیره بخشنامه اجرت بار برگشتی
+ */
+async function saveReturnCargoRegulation(req, res) {
+  try {
+    await createAllowanceRegulationTables();
+
+    const {
+      id,
+      vehicleType,
+      cargoType,
+      cost,
+      approvalDate,
+      documentPath,
+      startDate,
+      endDate,
+      isActive,
+      userId,
+    } = req.body;
+
+    if (!vehicleType || !cargoType || !cost || !approvalDate || !startDate || !endDate) {
+      return res.status(400).json({ message: 'تمام فیلدهای الزامی را پر کنید.' });
+    }
+
+    if (startDate > endDate) {
+      return res.status(400).json({ message: 'تاریخ شروع باید قبل از تاریخ پایان باشد.' });
+    }
+
+    const costValue = parseFloat(cost);
+    if (isNaN(costValue) || costValue < 0) {
+      return res.status(400).json({ message: 'مبلغ بخشنامه باید عدد مثبت باشد.' });
+    }
+
+    if (id) {
+      // به‌روزرسانی
+      await pool.query(`
+        UPDATE allowance_regulations_return_cargo SET
+          vehicle_type = $1,
+          cargo_type = $2,
+          cost = $3,
+          approval_date = $4,
+          document_path = $5,
+          start_date = $6,
+          end_date = $7,
+          is_active = $8,
+          updated_by = $9,
+          updated_at = NOW()
+        WHERE id = $10
+      `, [
+        vehicleType,
+        cargoType,
+        costValue,
+        approvalDate || null,
+        documentPath || null,
+        startDate || null,
+        endDate || null,
+        isActive !== false,
+        userId || null,
+        id,
+      ]);
+
+      res.json({ message: 'بخشنامه اجرت بار برگشتی به‌روزرسانی شد.', id });
+    } else {
+      // ایجاد جدید
+      const newId = crypto.randomUUID();
+      await pool.query(`
+        INSERT INTO allowance_regulations_return_cargo (
+          id, vehicle_type, cargo_type, cost, approval_date, document_path,
+          start_date, end_date, is_active, created_by, updated_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        newId,
+        vehicleType,
+        cargoType,
+        costValue,
+        approvalDate || null,
+        documentPath || null,
+        startDate || null,
+        endDate || null,
+        isActive !== false,
+        userId || null,
+        userId || null,
+      ]);
+
+      res.json({ message: 'بخشنامه اجرت بار برگشتی ایجاد شد.', id: newId });
+    }
+  } catch (error) {
+    console.error('❌ [saveReturnCargoRegulation] Error:', error);
+    res.status(500).json({ message: 'خطا در ذخیره بخشنامه اجرت بار برگشتی.' });
+  }
+}
+
+/**
+ * حذف بخشنامه اجرت بار برگشتی
+ */
+async function deleteReturnCargoRegulation(req, res) {
+  try {
+    const { id } = req.params;
+    await createAllowanceRegulationTables();
+
+    await pool.query(`
+      UPDATE allowance_regulations_return_cargo 
+      SET is_active = FALSE, updated_at = NOW()
+      WHERE id = $1
+    `, [id]);
+
+    res.json({ message: 'بخشنامه اجرت بار برگشتی حذف شد.' });
+  } catch (error) {
+    console.error('❌ [deleteReturnCargoRegulation] Error:', error);
+    res.status(500).json({ message: 'خطا در حذف بخشنامه اجرت بار برگشتی.' });
+  }
+}
+
 module.exports = {
   getFoodRegulations,
   getHelperRegulations,
@@ -1851,6 +2054,7 @@ module.exports = {
   getMultiUnloadRegulations,
   getFuelConsumptionRegulations,
   getFixedAllowanceRegulations,
+  getReturnCargoRegulations,
   saveFoodRegulation,
   saveHelperRegulation,
   saveMileageRegulation,
@@ -1858,6 +2062,7 @@ module.exports = {
   saveMultiUnloadRegulation,
   saveFuelConsumptionRegulation,
   saveFixedAllowanceRegulation,
+  saveReturnCargoRegulation,
   deleteFoodRegulation,
   deleteHelperRegulation,
   deleteMileageRegulation,
@@ -1865,6 +2070,7 @@ module.exports = {
   deleteMultiUnloadRegulation,
   deleteFuelConsumptionRegulation,
   deleteFixedAllowanceRegulation,
+  deleteReturnCargoRegulation,
   calculateAllowance,
   uploadRegulationDocument,
   createAllowanceRegulationTables,

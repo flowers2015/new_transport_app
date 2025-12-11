@@ -9,6 +9,7 @@ const {
   getMultiUnloadRegulations,
   getFuelConsumptionRegulations,
   getFixedAllowanceRegulations,
+  getReturnCargoRegulations,
   saveFoodRegulation,
   saveHelperRegulation,
   saveMileageRegulation,
@@ -16,6 +17,7 @@ const {
   saveMultiUnloadRegulation,
   saveFuelConsumptionRegulation,
   saveFixedAllowanceRegulation,
+  saveReturnCargoRegulation,
   deleteFoodRegulation,
   deleteHelperRegulation,
   deleteMileageRegulation,
@@ -23,6 +25,7 @@ const {
   deleteMultiUnloadRegulation,
   deleteFuelConsumptionRegulation,
   deleteFixedAllowanceRegulation,
+  deleteReturnCargoRegulation,
   calculateAllowance,
   uploadRegulationDocument,
 } = require('../controllers/allowanceRegulationController');
