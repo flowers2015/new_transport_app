@@ -292,10 +292,20 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         const cols = visibleColumns;
         const isFullDairyAmbientMode = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
         
+        // Helper function to check if column should be displayed
+        const shouldDisplayColumn = (col: any): boolean => {
+            if (col.header === 'عملیات') return false;
+            if (!col.display) return true; // اگر display نداشت، نمایش بده
+            if (typeof col.display === 'function') {
+                return col.display(activeLine);
+            }
+            return Boolean(col.display);
+        };
+        
         // Get headers
         const headers: string[] = [];
         cols.forEach(col => {
-            if (col.header !== 'عملیات' && col.display(activeLine)) {
+            if (shouldDisplayColumn(col)) {
                 headers.push(col.header);
             }
         });
@@ -319,7 +329,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             const row: any[] = [];
             
             cols.forEach(col => {
-                if (col.header !== 'عملیات' && col.display(activeLine)) {
+                if (shouldDisplayColumn(col)) {
                     let value: any = '';
                     
                     // بررسی اینکه آیا این ستون عددی است
