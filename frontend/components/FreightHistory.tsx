@@ -9,6 +9,7 @@ import { PencilIcon } from './icons/PencilIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import * as XLSX from 'xlsx';
 
 interface FreightHistoryProps {
     announcements: FreightAnnouncement[];
@@ -255,6 +256,213 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         }
     }, []);
 
+    // Helper function to extract text from React element
+    const extractTextFromElement = (element: React.ReactElement | React.ReactNode): string => {
+        if (typeof element === 'string') return element;
+        if (typeof element === 'number') return String(element);
+        if (element === null || element === undefined) return '';
+        if (!React.isValidElement(element)) return String(element || '');
+        
+        if (element.props && element.props.children !== undefined) {
+            const children = element.props.children;
+            
+            if (typeof children === 'string') {
+                return children;
+            }
+            if (typeof children === 'number') {
+                return String(children);
+            }
+            if (Array.isArray(children)) {
+                return children.map(child => extractTextFromElement(child)).join(' ');
+            }
+            if (React.isValidElement(children)) {
+                return extractTextFromElement(children);
+            }
+        }
+        
+        if (element.props && element.props.value !== undefined) {
+            return String(element.props.value);
+        }
+        
+        return '';
+    };
+
+    // Function to generate Excel export based on filtered data
+    const generateExcelExport = () => {
+        const cols = visibleColumns;
+        const isFullDairyAmbientMode = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+        
+        // Get headers
+        const headers: string[] = [];
+        cols.forEach(col => {
+            if (col.header !== 'عملیات' && col.display(activeLine)) {
+                headers.push(col.header);
+            }
+        });
+        
+        // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم
+        if (isFullDairyAmbientMode) {
+            for (let i = 1; i <= 4; i++) {
+                headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+            }
+        }
+        
+        // ایجاد workbook و worksheet
+        const wb = XLSX.utils.book_new();
+        const wsData: any[][] = [];
+        
+        // اضافه کردن headers
+        wsData.push(headers);
+        
+        // Generate rows from filtered announcements
+        filteredAnnouncements.forEach((ann, idx) => {
+            const row: any[] = [];
+            
+            cols.forEach(col => {
+                if (col.header !== 'عملیات' && col.display(activeLine)) {
+                    let value: any = '';
+                    
+                    // بررسی اینکه آیا این ستون عددی است
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                    const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
+                    
+                    if (col.render) {
+                        const rendered = col.render(ann, idx);
+                        if (typeof rendered === 'string') {
+                            value = rendered;
+                        } else if (typeof rendered === 'number') {
+                            value = rendered;
+                        } else if (React.isValidElement(rendered)) {
+                            value = extractTextFromElement(rendered);
+                            value = value.replace(/[📅🕐]/g, '').trim();
+                        } else if (Array.isArray(rendered)) {
+                            value = rendered.map((item: any) => {
+                                if (React.isValidElement(item)) {
+                                    let text = extractTextFromElement(item);
+                                    text = text.replace(/[📅🕐]/g, '').trim();
+                                    return text;
+                                }
+                                return String(item || '');
+                            }).join('، ');
+                        } else {
+                            value = String(rendered || '');
+                        }
+                    } else {
+                        value = (ann as any)[col.header] || '';
+                    }
+                    
+                    // Clean up
+                    if (typeof value === 'string') {
+                        value = value.replace(/<[^>]*>/g, '').trim();
+                    }
+                    
+                    // برای ستون‌های عددی، مقدار عددی را استخراج کن
+                    if (isNumericColumn) {
+                        if (typeof value === 'number') {
+                            value = value;
+                        } else if (typeof value === 'string') {
+                            const cleaned = value.replace(/[^\d]/g, '');
+                            const numValue = parseFloat(cleaned);
+                            if (!isNaN(numValue) && numValue > 0) {
+                                value = numValue;
+                            } else {
+                                value = '';
+                            }
+                        } else {
+                            value = '';
+                        }
+                    }
+                    
+                    row.push(value);
+                }
+            });
+            
+            // برای Full Dairy/Ambient، مقاصد را اضافه می‌کنیم
+            if (isFullDairyAmbientMode) {
+                for (let i = 0; i < 4; i++) {
+                    const dest = ann.destinations[i];
+                    if (dest) {
+                        const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
+                                       (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
+                                       (dest.representativeName || '').includes('پخش') ? 'پخش' : 
+                                       (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                        const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
+                        const deliveryDate = (dest as any).deliveryDate || '';
+                        const unloadTime = dest.unloadTime || '';
+                        const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
+                        row.push(
+                            repType,
+                            dest.city || '',
+                            tonnage,
+                            deliveryDate,
+                            unloadTime,
+                            freightCost
+                        );
+                    } else {
+                        row.push('', '', '', '', '', '');
+                    }
+                }
+            }
+            
+            wsData.push(row);
+        });
+        
+        // ایجاد worksheet از data
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // تنظیم عرض ستون‌ها
+        const colWidths = headers.map((header, idx) => {
+            let maxLength = header.length;
+            wsData.forEach((row, rowIdx) => {
+                if (rowIdx > 0 && row[idx] !== undefined) {
+                    const cellValue = String(row[idx] || '');
+                    maxLength = Math.max(maxLength, cellValue.length);
+                }
+            });
+            return { wch: Math.min(Math.max(maxLength + 2, 10), 50) };
+        });
+        ws['!cols'] = colWidths;
+        
+        // تنظیم فرمت اعداد برای ستون‌های عددی
+        const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        headers.forEach((header, colIdx) => {
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
+            if (isNumericColumn) {
+                for (let row = 1; row <= filteredAnnouncements.length; row++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
+                    if (ws[cellAddress] && ws[cellAddress].v) {
+                        const cellValue = ws[cellAddress].v;
+                        if (typeof cellValue === 'string' && /^[\d,]+$/.test(cellValue.replace(/,/g, ''))) {
+                            const numValue = parseFloat(cellValue.replace(/,/g, ''));
+                            if (!isNaN(numValue)) {
+                                ws[cellAddress].v = numValue;
+                                ws[cellAddress].t = 'n';
+                                ws[cellAddress].z = '#,##0';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // اضافه کردن worksheet به workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'تاریخچه اعلام بار');
+        
+        return wb;
+    };
+
+    // Function to download Excel
+    const downloadExcel = () => {
+        const wb = generateExcelExport();
+        const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
+                            activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
+                            'لبنیات-فروتلند';
+        const modeName = viewMode === 'compact' ? 'فشرده' : 'کامل';
+        const dateStr = new Date().toISOString().split('T')[0];
+        const fileName = `تاریخچه_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+    };
+
     const visibleColumns = useMemo(() => {
         // Extra transport columns (for both modes, position differs)
         const extraCols = [
@@ -454,6 +662,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
+                        <button onClick={downloadExcel} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
+                            {viewMode === 'compact' ? 'اکسل فشرده' : 'اکسل کامل'}
+                        </button>
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg">
                             {Object.values(FreightLineType).map(lt => (
