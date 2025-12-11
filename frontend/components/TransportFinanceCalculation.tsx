@@ -2623,7 +2623,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     </tbody>
                                 </table>
                             </div>
-                            
+                            </div>
                             
                             {/* بخش سوم: راننده کمکی */}
                             <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-300">
