@@ -11,6 +11,7 @@ import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 interface TransportLiveProps {
     announcements: FreightAnnouncement[];
@@ -1229,16 +1230,204 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return '';
     };
 
-    // Function to download Excel
-    const downloadExcel = (mode: 'compact' | 'full') => {
-        const wb = generateExcelExport(mode);
+    // Function to download Excel with styling
+    const downloadExcel = async (mode: 'compact' | 'full') => {
         const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
                             activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
                             'لبنیات-فروتلند';
         const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
-        const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const dateStr = new Date().toISOString().split('T')[0];
+        const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
         
-        // نوشتن فایل Excel
+        // استفاده از ExcelJS برای استایل‌ها
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('اعلام بار');
+            
+            // Get headers and data - استفاده از همان منطق generateExcelExport
+            const cols = columnsConfig(mode);
+            const visibleCols = cols.filter((c: any) => c.display(activeLine));
+            const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+            
+            const headers: string[] = [];
+            if (canPerformActions) {
+                headers.push('انتخاب');
+            }
+            
+            visibleCols.forEach((col: any) => {
+                if (col.header !== 'عملیات') {
+                    headers.push(col.header);
+                }
+            });
+            
+            if (isFullDairyAmbientMode) {
+                for (let i = 1; i <= 4; i++) {
+                    headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                }
+            }
+            
+            // Add headers with styling
+            const headerRow = worksheet.addRow(headers);
+            headerRow.eachCell((cell: any, colNumber: number) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF4472C4' } // آبی تیره
+                };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FF000000' } },
+                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                    left: { style: 'thin', color: { argb: 'FF000000' } },
+                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+            });
+            
+            // Helper to get value for header - استفاده از همان منطق generateExcelExport
+            const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                const isNumericColumn = numericHeaders.some(h => header.includes(h));
+                
+                if (header === 'انتخاب') {
+                    return '';
+                }
+                
+                const col = visibleCols.find((c: any) => c.header === header);
+                if (!col) return '';
+                
+                let value: any = '';
+                if (col.render) {
+                    const rendered = col.render(ann, idx);
+                    if (typeof rendered === 'string') {
+                        value = rendered;
+                    } else if (typeof rendered === 'number') {
+                        value = rendered;
+                    } else if (React.isValidElement(rendered)) {
+                        value = extractTextFromElement(rendered);
+                        value = value.replace(/[📅🕐]/g, '').trim();
+                    } else if (Array.isArray(rendered)) {
+                        value = rendered.map((item: any) => {
+                            if (React.isValidElement(item)) {
+                                let text = extractTextFromElement(item);
+                                text = text.replace(/[📅🕐]/g, '').trim();
+                                return text;
+                            }
+                            return String(item || '');
+                        }).join('، ');
+                    } else {
+                        value = String(rendered || '');
+                    }
+                } else {
+                    value = (ann as any)[col.header] || '';
+                }
+                
+                if (typeof value === 'string') {
+                    value = value.replace(/<[^>]*>/g, '').trim();
+                }
+                
+                if (isNumericColumn && typeof value === 'string') {
+                    const cleaned = value.replace(/[^\d]/g, '');
+                    const numValue = parseFloat(cleaned);
+                    if (!isNaN(numValue) && numValue > 0) {
+                        value = numValue;
+                    } else {
+                        value = '';
+                    }
+                }
+                
+                return value;
+            };
+            
+            // Add data rows with zebra striping
+            filteredAnnouncements.forEach((ann, idx) => {
+                const rowData: any[] = [];
+                
+                // اضافه کردن ستون انتخاب اگر وجود دارد
+                if (canPerformActions) {
+                    rowData.push('');
+                }
+                
+                headers.forEach(header => {
+                    if (header !== 'انتخاب' && !header.startsWith('مقصد')) {
+                        rowData.push(getValueForHeader(header, ann, idx));
+                    }
+                });
+                
+                if (isFullDairyAmbientMode) {
+                    for (let i = 0; i < 4; i++) {
+                        const dest = ann.destinations[i];
+                        if (dest) {
+                            const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
+                                           (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
+                                           (dest.representativeName || '').includes('پخش') ? 'پخش' : 
+                                           (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                            const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
+                            const deliveryDate = (dest as any).deliveryDate || '';
+                            const unloadTime = dest.unloadTime || '';
+                            const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
+                            rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                        } else {
+                            rowData.push('', '', '', '', '', '');
+                        }
+                    }
+                }
+                
+                const row = worksheet.addRow(rowData);
+                const isEvenRow = (idx + 1) % 2 === 0;
+                const rowColor = isEvenRow ? 'FFF2F2F2' : 'FFFFFFFF';
+                
+                row.eachCell((cell: any, colNumber: number) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: rowColor }
+                    };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                        right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                    };
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                    
+                    // Format numbers
+                    const header = headers[colNumber - 1];
+                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
+                    if (isNumericColumn && typeof cell.value === 'number') {
+                        cell.numFmt = '#,##0';
+                    }
+                });
+            });
+            
+            // Set column widths
+            headers.forEach((header, idx) => {
+                let maxLength = header.length;
+                filteredAnnouncements.forEach(ann => {
+                    const value = getValueForHeader(header, ann, 0);
+                    const cellValue = String(value || '');
+                    maxLength = Math.max(maxLength, cellValue.length);
+                });
+                worksheet.getColumn(idx + 1).width = Math.min(Math.max(maxLength + 2, 10), 50);
+            });
+            
+            // Download
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            link.click();
+            window.URL.revokeObjectURL(url);
+            return;
+        } catch (error) {
+            console.error('Error creating Excel with ExcelJS:', error);
+            // Fallback to basic xlsx
+        }
+        
+        // Fallback: استفاده از xlsx بدون استایل
+        const wb = generateExcelExport(mode);
         XLSX.writeFile(wb, fileName);
     };
 

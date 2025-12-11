@@ -2882,34 +2882,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                         </div>
                         
-                        {/* بخش سوم: توضیحات */}
-                        <div className="space-y-4">
-                            {/* Separator: توضیحات */}
-                            <div className="flex items-center gap-3 mb-4 mt-6">
-                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
-                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-                                    📝 توضیحات
-                                </h3>
-                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    توضیحات
-                                </label>
-                                <textarea
-                                    value={inputDialogData.notes}
-                                    onChange={(e) => setInputDialogData({
-                                        ...inputDialogData,
-                                        notes: e.target.value
-                                    })}
-                                    className="input-style w-full"
-                                    rows={15}
-                                />
-                            </div>
-                        </div>
-                        
-                        {/* بخش چهارم: محاسبات دپو */}
+                        {/* بخش سوم: محاسبات دپو */}
                         <div className="space-y-4 mt-6">
                             {/* Separator: محاسبات دپو */}
                             <div className="flex items-center gap-3 mb-4">
@@ -2921,7 +2894,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* فیلدهای محاسبات دپو */}
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-4 gap-4 items-start">
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         تعداد روز ماموریت دپو
@@ -2942,6 +2915,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2963,6 +2937,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2984,6 +2959,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -3005,6 +2981,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                         placeholder="0"
                                     />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
                             </div>
                             
@@ -3015,6 +2992,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     <button
                                         type="button"
                                         onClick={() => {
+                                            // اگر ردیف‌های پیش‌فرض وجود دارند، ابتدا آن‌ها را به depotRows تبدیل کن
+                                            let currentRows = inputDialogData.depotRows || [];
+                                            if (currentRows.length === 0) {
+                                                // اگر هیچ ردیفی وجود ندارد، ابتدا 4 ردیف پیش‌فرض را ایجاد کن
+                                                currentRows = Array.from({ length: 4 }, (_, i) => ({
+                                                    id: `depot-default-${i}`,
+                                                    destination: '',
+                                                    mileage: 0,
+                                                    notes: ''
+                                                }));
+                                            }
+                                            
+                                            // حالا ردیف جدید را اضافه کن
                                             const newRow = {
                                                 id: `depot-${Date.now()}-${Math.random()}`,
                                                 destination: '',
@@ -3023,7 +3013,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             };
                                             setInputDialogData({
                                                 ...inputDialogData,
-                                                depotRows: [...(inputDialogData.depotRows || []), newRow]
+                                                depotRows: [...currentRows, newRow]
                                             });
                                         }}
                                         className="px-3 py-1.5 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 transition-colors"
@@ -3157,6 +3147,33 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+                        
+                        {/* بخش چهارم: توضیحات */}
+                        <div className="space-y-4 mt-6">
+                            {/* Separator: توضیحات */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                                    📝 توضیحات
+                                </h3>
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    توضیحات
+                                </label>
+                                <textarea
+                                    value={inputDialogData.notes}
+                                    onChange={(e) => setInputDialogData({
+                                        ...inputDialogData,
+                                        notes: e.target.value
+                                    })}
+                                    className="input-style w-full"
+                                    rows={15}
+                                />
                             </div>
                         </div>
                         </div>
