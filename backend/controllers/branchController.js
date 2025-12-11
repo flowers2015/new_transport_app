@@ -87,9 +87,9 @@ async function updateBranch(req, res) {
  * Deletes a branch.
  */
 async function deleteBranch(req, res) {
+  const { id } = req.params;
+  
   try {
-    const { id } = req.params;
-    
     console.log('🗑️ [deleteBranch] Attempting to delete branch with id:', id);
 
     // بررسی اینکه آیا شعبه وجود دارد
@@ -113,7 +113,7 @@ async function deleteBranch(req, res) {
     console.log('✅ [deleteBranch] Branch deleted successfully:', rows[0].name);
     res.json({ message: 'Branch deleted successfully.' });
   } catch (error) {
-    console.error(`❌ [deleteBranch] Failed to delete branch ${id}:`, error);
+    console.error(`❌ [deleteBranch] Failed to delete branch ${id || req.params?.id || 'unknown'}:`, error);
     console.error(`❌ [deleteBranch] Error stack:`, error.stack);
     res.status(500).json({ 
       message: 'Internal server error while deleting branch.',

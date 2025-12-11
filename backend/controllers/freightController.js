@@ -2882,9 +2882,11 @@ async function finalizeAssignments(req, res) {
     const creatorMap = {}; // Map announcementId to creatorUserId
     
     // بررسی هر اعلام بار
+    const missingBillOfLadingIds = []; // لیست اعلام بارهایی که شماره بارنامه ندارند (فقط personal)
+    
     for (const annId of announcementIds) {
       const annResult = await client.query(
-        'SELECT id, assigned_vehicle_id, assigned_driver_id, line_type, status FROM freight_announcements WHERE id = $1',
+        'SELECT id, assigned_vehicle_id, assigned_driver_id, line_type, status, assignment_type, bill_of_lading_number FROM freight_announcements WHERE id = $1',
         [annId]
       );
       
@@ -2894,6 +2896,17 @@ async function finalizeAssignments(req, res) {
       }
       
       const ann = annResult.rows[0];
+      
+      // بررسی شماره بارنامه برای خودروهای شخصی
+      if (ann.assignment_type === 'personal') {
+        const billOfLadingNumber = ann.bill_of_lading_number;
+        if (!billOfLadingNumber || billOfLadingNumber.trim() === '') {
+          console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} missing bill_of_lading_number`);
+          missingBillOfLadingIds.push(annId);
+          continue; // این اعلام بار را finalize نکن
+        }
+      }
+      // برای خودروهای شرکتی نیازی به بررسی نیست
       
       // تبدیل lineType انگلیسی به فارسی برای مقایسه
       const lineTypeMap = {
@@ -3054,7 +3067,39 @@ async function finalizeAssignments(req, res) {
       }
     }
     
-    console.log(`📊 [finalizeAssignments] Summary: finalized=${finalizedIds.length}, leftover=${leftoverIds.length}`);
+    console.log(`📊 [finalizeAssignments] Summary: finalized=${finalizedIds.length}, leftover=${leftoverIds.length}, missingBillOfLading=${missingBillOfLadingIds.length}`);
+    
+    // اگر اعلام بارهایی با شماره بارنامه خالی وجود دارند، خطا برگردان
+    if (missingBillOfLadingIds.length > 0) {
+      await client.query('ROLLBACK');
+      
+      // ارسال notification برای اعلام بارهایی که شماره بارنامه ندارند
+      try {
+        const realtimeService = require('../services/realtimeService');
+        missingBillOfLadingIds.forEach(annId => {
+          console.log(`📢 [finalizeAssignments] Sending missing bill of lading notification for ${annId}`);
+          realtimeService.notifyAnnouncementUpdate(
+            annId,
+            'finalize_error',
+            { 
+              status: 'Assigned', // وضعیت را تغییر نمی‌دهیم
+              lineType,
+              error: 'missing_bill_of_lading',
+              message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`
+            },
+            currentUserId
+          );
+        });
+      } catch (notifError) {
+        console.error('❌ [finalizeAssignments] Error sending notification:', notifError);
+      }
+      
+      return res.status(400).json({ 
+        message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`,
+        missingBillOfLadingCount: missingBillOfLadingIds.length,
+        missingBillOfLadingIds: missingBillOfLadingIds
+      });
+    }
     
     await client.query('COMMIT');
     

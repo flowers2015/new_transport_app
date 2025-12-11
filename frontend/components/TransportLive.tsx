@@ -46,7 +46,39 @@ interface TransportLiveProps {
 }
 
 // Move helper functions inside component to ensure proper re-rendering
-const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')} تومان` : '-';
+const formatCurrency = (amount?: number | string | null) => {
+    if (amount === null || amount === undefined || amount === '') {
+        return '-';
+    }
+    // تبدیل به number اگر string است
+    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : Number(amount);
+    if (isNaN(numAmount)) {
+        return '-';
+    }
+    // استفاده از Intl.NumberFormat برای فرمت فارسی با جداکننده
+    return new Intl.NumberFormat('fa-IR', {
+        maximumFractionDigits: 0,
+        useGrouping: true
+    }).format(numAmount) + ' تومان';
+};
+
+// تابع برای فرمت کرایه مقاصد (واحد: ریال)
+const formatDestinationFreightCost = (amount?: number | string | null) => {
+    if (amount === null || amount === undefined || amount === '') {
+        return '-';
+    }
+    // تبدیل به number اگر string است
+    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : Number(amount);
+    if (isNaN(numAmount) || numAmount === 0) {
+        return '-';
+    }
+    // استفاده از Intl.NumberFormat برای فرمت فارسی با جداکننده 3 رقمی و بدون اعشار
+    return new Intl.NumberFormat('fa-IR', {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+        useGrouping: true
+    }).format(Math.round(numAmount)) + ' ریال';
+};
 
 const isToday = (someDate: any) => {
     if (!someDate) return false;
@@ -1165,7 +1197,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                         <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
                                                         <td className="p-2 text-center border">{(dest as any)?.deliveryDate || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
-                                                        <td className="p-2 text-center border font-mono">{formatCurrency(dest?.freightCost)}</td>
+                                                        <td className="p-2 text-center border font-mono">{formatDestinationFreightCost(dest?.freightCost)}</td>
                                                     </React.Fragment>
                                                 );
                                             })}
