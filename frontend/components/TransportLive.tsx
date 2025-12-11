@@ -990,42 +990,37 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
-    // Function to generate CSV/Excel export
+    // Function to generate CSV/Excel export - دقیقاً مطابق جدول frontend
     const generateExcelExport = (mode: 'compact' | 'full') => {
         const cols = columnsConfig(mode);
         const visibleCols = cols.filter(c => c.display(activeLine));
         const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
         
-        // Get headers
+        // Get headers - دقیقاً همان ترتیب frontend
         const headers: string[] = [];
         if (canPerformActions) {
             headers.push('انتخاب');
         }
         
+        // اضافه کردن headers به ترتیب دقیق frontend
+        visibleCols.forEach(col => {
+            if (col.header !== 'عملیات') {
+                headers.push(col.header);
+            }
+        });
+        
+        // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم
         if (isFullDairyAmbientMode) {
-            // Full Dairy/Ambient view - special handling
-            visibleCols.forEach(col => {
-                if (col.header !== 'عملیات') {
-                    headers.push(col.header);
-                }
-            });
-            // Add destination headers
             for (let i = 1; i <= 4; i++) {
                 headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
             }
-        } else {
-            visibleCols.forEach(col => {
-                if (col.header !== 'عملیات') {
-                    headers.push(col.header);
-                }
-            });
         }
         
         // Generate CSV content
         let csv = '\uFEFF'; // BOM for UTF-8
         csv += headers.map(h => escapeCSV(h)).join(',') + '\n';
         
-        // Generate rows
+        // Generate rows - دقیقاً همان ترتیب و محتوای frontend
         filteredAnnouncements.forEach((ann, idx) => {
             const row: string[] = [];
             
@@ -1033,49 +1028,47 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 row.push(''); // Checkbox column
             }
             
+            // استفاده از render functions برای استخراج دقیق داده‌ها
+            visibleCols.forEach(col => {
+                if (col.header !== 'عملیات') {
+                    let value = '';
+                    if (col.render) {
+                        const rendered = col.render(ann, idx);
+                        if (typeof rendered === 'string') {
+                            value = rendered;
+                        } else if (typeof rendered === 'number') {
+                            value = String(rendered);
+                        } else if (React.isValidElement(rendered)) {
+                            // Extract text from React element - دقیق‌تر
+                            value = extractTextFromElement(rendered);
+                            // حذف emojis و کاراکترهای خاص
+                            value = value.replace(/[📅🕐]/g, '').trim();
+                        } else if (Array.isArray(rendered)) {
+                            // Handle array of elements (like destinations)
+                            value = rendered.map((item: any) => {
+                                if (React.isValidElement(item)) {
+                                    let text = extractTextFromElement(item);
+                                    text = text.replace(/[📅🕐]/g, '').trim();
+                                    return text;
+                                }
+                                return String(item || '');
+                            }).join('، ');
+                        } else {
+                            value = String(rendered || '');
+                        }
+                    } else {
+                        value = String((ann as any)[col.header] || '');
+                    }
+                    
+                    // Clean up: فقط HTML tags و emojis را حذف کن، اما فارسی و اعداد را نگه دار
+                    value = value.replace(/<[^>]*>/g, '').trim();
+                    // تبدیل به انگلیسی برای اکسل (اما محتوا را حفظ کن)
+                    row.push(toEnglishDigits(value));
+                }
+            });
+            
+            // برای Full Dairy/Ambient، مقاصد را اضافه می‌کنیم
             if (isFullDairyAmbientMode) {
-                // Full Dairy/Ambient view - extract data directly from announcement object
-                // ردیف
-                row.push(String(idx + 1));
-                // کد اعلام بار
-                row.push(toEnglishDigits(ann.announcementCode || ''));
-                // کارمند اعلام‌کننده
-                row.push(toEnglishDigits((ann as any).creator_full_name || (ann as any).creator_username || '-'));
-                // تاریخ بارگیری
-                row.push(toEnglishDigits(formatJalali(ann.loadingDate)));
-                // مبدا بارگیری
-                row.push(toEnglishDigits(ann.originCity || '-'));
-                // برند
-                row.push(toEnglishDigits(ann.brand || '-'));
-                // نوع خودرو
-                row.push(toEnglishDigits(ann.vehicleType || '-'));
-                // ساعت حضور
-                row.push(toEnglishDigits(ann.platformArrivalTime || '-'));
-                // ارزش بار
-                row.push(toEnglishDigits((ann.cargoValue || 0).toString()));
-                // نام راننده
-                const driverName = ann.assignmentType === 'company' 
-                    ? getDriverName(ann.assignedDriverId, props.drivers, props.personalDrivers)
-                    : getPersonalDriverName(ann.assignedDriverId, props.personalDrivers);
-                row.push(toEnglishDigits(driverName));
-                // تماس راننده
-                const driverContact = ann.assignmentType === 'company' 
-                    ? getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)
-                    : getPersonalDriverContact(ann.assignedDriverId, props.personalDrivers);
-                row.push(toEnglishDigits(driverContact));
-                // پلاک خودرو
-                const vehiclePlate = ann.assignmentType === 'company' 
-                    ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)
-                    : getPersonalVehicleIdentifier(ann.assignedVehicleId, props.personalVehicles);
-                row.push(toEnglishDigits(vehiclePlate));
-                // شماره بارنامه
-                row.push(toEnglishDigits(ann.billOfLadingNumber || '-'));
-                // کرایه کل
-                row.push(toEnglishDigits(formatCurrency(ann.totalFreightCost).replace(/[^\d]/g, '')));
-                // توضیحات
-                row.push(toEnglishDigits(ann.notes || '-'));
-                
-                // Add destinations (up to 4)
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
@@ -1083,52 +1076,22 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                        (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
                                        (dest.representativeName || '').includes('پخش') ? 'پخش' : 
                                        (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                        const tonnage = dest.tonnage ? String(dest.tonnage) : '';
+                        const deliveryDate = (dest as any).deliveryDate || '';
+                        const unloadTime = dest.unloadTime || '';
+                        const freightCost = dest.freightCost ? formatDestinationFreightCost(dest.freightCost) : '';
                         row.push(
                             toEnglishDigits(repType),
                             toEnglishDigits(dest.city || ''),
-                            toEnglishDigits(dest.tonnage ? String(dest.tonnage) : ''),
-                            toEnglishDigits((dest as any).deliveryDate || ''),
-                            toEnglishDigits(dest.unloadTime || ''),
-                            toEnglishDigits(dest.freightCost ? formatDestinationFreightCost(dest.freightCost).replace(/[^\d]/g, '') : '')
+                            toEnglishDigits(tonnage),
+                            toEnglishDigits(deliveryDate),
+                            toEnglishDigits(unloadTime),
+                            toEnglishDigits(freightCost)
                         );
                     } else {
                         row.push('', '', '', '', '', '');
                     }
                 }
-            } else {
-                // Compact or other full views - use column render functions
-                visibleCols.forEach(col => {
-                    if (col.header !== 'عملیات') {
-                        let value = '';
-                        if (col.render) {
-                            const rendered = col.render(ann, idx);
-                            if (typeof rendered === 'string') {
-                                value = rendered;
-                            } else if (typeof rendered === 'number') {
-                                value = String(rendered);
-                            } else if (React.isValidElement(rendered)) {
-                                // Extract text from React element
-                                const text = extractTextFromElement(rendered);
-                                value = text;
-                            } else if (Array.isArray(rendered)) {
-                                // Handle array of elements (like destinations)
-                                value = rendered.map((item: any) => {
-                                    if (React.isValidElement(item)) {
-                                        return extractTextFromElement(item);
-                                    }
-                                    return String(item || '');
-                                }).join('، ');
-                            } else {
-                                value = String(rendered || '');
-                            }
-                        } else {
-                            value = String((ann as any)[col.header] || '');
-                        }
-                        // Clean up value: remove HTML tags, emojis, and format numbers
-                        value = value.replace(/<[^>]*>/g, '').replace(/[^\d\s\w\u0600-\u06FF،]/g, '');
-                        row.push(toEnglishDigits(value));
-                    }
-                });
             }
             
             csv += row.map(cell => escapeCSV(cell)).join(',') + '\n';
@@ -1137,24 +1100,35 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return csv;
     };
 
-    // Helper function to extract text from React element
+    // Helper function to extract text from React element - بهبود یافته برای استخراج دقیق
     const extractTextFromElement = (element: React.ReactElement | React.ReactNode): string => {
         if (typeof element === 'string') return element;
         if (typeof element === 'number') return String(element);
-        if (!React.isValidElement(element)) return '';
+        if (element === null || element === undefined) return '';
+        if (!React.isValidElement(element)) return String(element || '');
         
-        if (element.props && element.props.children) {
-            if (typeof element.props.children === 'string') {
-                return element.props.children;
+        // اگر element یک span یا div است، children را استخراج کن
+        if (element.props && element.props.children !== undefined) {
+            const children = element.props.children;
+            
+            if (typeof children === 'string') {
+                return children;
             }
-            if (typeof element.props.children === 'number') {
-                return String(element.props.children);
+            if (typeof children === 'number') {
+                return String(children);
             }
-            if (Array.isArray(element.props.children)) {
-                return element.props.children.map((child: any) => extractTextFromElement(child)).join('');
+            if (Array.isArray(children)) {
+                return children.map((child: any) => extractTextFromElement(child)).join('').trim();
             }
-            return extractTextFromElement(element.props.children);
+            // اگر children یک element دیگر است، بازگشتی استخراج کن
+            return extractTextFromElement(children);
         }
+        
+        // اگر props.value وجود دارد (مثل input)
+        if (element.props && element.props.value !== undefined) {
+            return String(element.props.value || '');
+        }
+        
         return '';
     };
 

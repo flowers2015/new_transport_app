@@ -2897,6 +2897,15 @@ async function finalizeAssignments(req, res) {
       
       const ann = annResult.rows[0];
       
+      console.log(`🔍 [finalizeAssignments] Processing announcement ${annId}:`, {
+        assignment_type: ann.assignment_type,
+        assigned_vehicle_id: ann.assigned_vehicle_id,
+        assigned_driver_id: ann.assigned_driver_id,
+        line_type: ann.line_type,
+        bill_of_lading_number: ann.bill_of_lading_number,
+        status: ann.status
+      });
+      
       // تشخیص assignment_type اگر null باشد
       let assignmentType = ann.assignment_type;
       if (!assignmentType) {
@@ -2945,14 +2954,20 @@ async function finalizeAssignments(req, res) {
         }
       }
       
+      console.log(`✅ [finalizeAssignments] Final assignment_type for ${annId}: ${assignmentType}`);
+      
       // بررسی شماره بارنامه فقط برای خودروهای شخصی
       if (assignmentType === 'personal') {
         const billOfLadingNumber = ann.bill_of_lading_number;
         if (!billOfLadingNumber || billOfLadingNumber.trim() === '') {
-          console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} missing bill_of_lading_number`);
+          console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} missing bill_of_lading_number - SKIPPING finalization`);
           missingBillOfLadingIds.push(annId);
           continue; // این اعلام بار را finalize نکن
+        } else {
+          console.log(`✅ [finalizeAssignments] Personal assignment ${annId} has bill_of_lading_number: ${billOfLadingNumber}`);
         }
+      } else {
+        console.log(`✅ [finalizeAssignments] Company assignment ${annId} - no bill of lading check needed`);
       }
       // برای خودروهای شرکتی نیازی به بررسی شماره بارنامه نیست - باید finalize شوند
       
@@ -2985,13 +3000,24 @@ async function finalizeAssignments(req, res) {
         const newStatus = 'Finalized';
         
         // آپدیت status اعلام بار (فقط اگر قبلاً Finalized نبود)
+        // همچنین assignment_finalized_at را set می‌کنیم تا در frontend فیلتر شود
         if (oldStatus !== 'Finalized' && oldStatus !== 'finalized') {
           await client.query(
             `UPDATE freight_announcements 
-             SET status = $1, updated_at = NOW() 
+             SET status = $1, assignment_finalized_at = NOW(), updated_at = NOW() 
              WHERE id = $2`,
             [newStatus, annId]
           );
+          console.log(`✅ [finalizeAssignments] Updated freight_announcements for ${annId}: status=${newStatus}, assignment_finalized_at=NOW()`);
+        } else {
+          // اگر status قبلاً Finalized بود، فقط assignment_finalized_at را set می‌کنیم
+          await client.query(
+            `UPDATE freight_announcements 
+             SET assignment_finalized_at = NOW(), updated_at = NOW() 
+             WHERE id = $1 AND assignment_finalized_at IS NULL`,
+            [annId]
+          );
+          console.log(`✅ [finalizeAssignments] Updated assignment_finalized_at for already finalized ${annId}`);
         }
         
         // آپدیت dispatch_assignments برای ثبت زمان نهایی‌سازی

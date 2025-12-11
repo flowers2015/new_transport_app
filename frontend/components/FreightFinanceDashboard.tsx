@@ -89,6 +89,28 @@ const dateInputToJalali = (dateInput: string): string => {
     return `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
 };
 
+// تابع برای فرمت کرایه مقصد (ریال)
+const formatDestinationFreightCost = (amount?: number | string | null): string => {
+    if (amount === null || amount === undefined || amount === '') return '-';
+    
+    let numAmount: number;
+    if (typeof amount === 'string') {
+        // حذف کاما و کاراکترهای غیر عددی
+        const cleaned = amount.replace(/[^\d]/g, '');
+        numAmount = cleaned ? parseFloat(cleaned) : 0;
+    } else {
+        numAmount = Number(amount);
+    }
+    
+    if (isNaN(numAmount) || numAmount === 0) return '-';
+    
+    return new Intl.NumberFormat('fa-IR', {
+        useGrouping: true,
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0
+    }).format(numAmount) + ' ریال';
+};
+
 const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) => {
     const { announcements, currentUser, onAddTransaction, transactions, onRefresh } = props;
     
@@ -378,25 +400,16 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                 }
                 
                 // اعمال فیلتر نماینده/پخش
-                if (filters.representativeType === 'پخش' && !isPakhsh) {
+                // همیشه فقط پخش‌ها را نمایش می‌دهیم (نماینده‌ها نمایش داده نمی‌شوند)
+                if (!isPakhsh) {
                     filteredByRepresentative++;
                     if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
-                        console.log(`🚫 [FreightFinance] Namayande destination filtered: filter is 'پخش' but this is namayande`);
+                        console.log(`🚫 [FreightFinance] Namayande destination filtered: only pakhsh destinations are shown`);
                     }
-                    return; // فقط پخش می‌خواهیم
+                    return; // فقط پخش می‌خواهیم - نماینده‌ها نمایش داده نمی‌شوند
                 }
-                if (filters.representativeType === 'نماینده' && !isNamayande) {
-                    filteredByRepresentative++;
-                    if (normalizedRepName !== 'پخش' && normalizedRepName !== '' && (ann.announcementCode === 'ANN-1762947572815' || normalizedRepName === 'نماینده')) {
-                        console.log(`🚫 [FreightFinance] Namayande destination filtered: filter is 'نماینده' but isNamayande = ${isNamayande}`, {
-                            repName,
-                            normalizedRepName,
-                            isPakhsh
-                        });
-                    }
-                    return; // فقط نماینده می‌خواهیم
-                }
-                // اگر filters.representativeType خالی است، همه را نشان می‌دهیم
+                // اگر filters.representativeType خالی است یا 'پخش' است، فقط پخش‌ها را نشان می‌دهیم
+                // اگر filters.representativeType 'نماینده' است، هیچ چیزی نمایش داده نمی‌شود (چون نماینده‌ها فیلتر می‌شوند)
 
                 // فیلتر شهر
                 if (enforcedCity && dest.city !== enforcedCity) {
@@ -1222,11 +1235,33 @@ const TransactionDialog: React.FC<{
         }
     }
     
+    // جمع‌آوری اطلاعات تمام مقاصد
+    const allDestinationsInfo = announcement.destinations.map((dest, idx) => {
+        const repName = dest.representativeName || dest.representative_name || '';
+        const normalizedRepName = repName === 'NULL' || repName === null || repName === '' ? 'پخش' : repName;
+        const tonnage = dest.tonnage ? `${Number(dest.tonnage).toLocaleString('fa-IR')}` : '-';
+        const deliveryDate = (dest as any).deliveryDate || '-';
+        const unloadTime = dest.unloadTime || '-';
+        const freightCost = dest.freightCost ? formatDestinationFreightCost(dest.freightCost) : '-';
+        return `${idx + 1}. ${normalizedRepName} - ${dest.city} (تناژ: ${tonnage}، تاریخ تحویل: ${deliveryDate}، ساعت تخلیه: ${unloadTime}، کرایه: ${freightCost})`;
+    }).join('\n');
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl" onClick={e=>e.stopPropagation()}>
                 <div className="p-4 border-b"><h3>تراکنش برای بار #{announcement.announcementCode}</h3></div>
                 <div className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">اطلاعات مقاصد</label>
+                        <textarea
+                            value={allDestinationsInfo}
+                            readOnly
+                            disabled
+                            className="input-style w-full bg-slate-50 text-slate-700 cursor-not-allowed"
+                            rows={Math.min(announcement.destinations.length * 2, 8)}
+                            style={{ resize: 'none' }}
+                        />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label>مبلغ تراکنش (ریال) <span className="text-red-500">*</span></label>
