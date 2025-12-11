@@ -1034,31 +1034,48 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }
             
             if (isFullDairyAmbientMode) {
-                // Full Dairy/Ambient view
-                visibleCols.forEach(col => {
-                    if (col.header !== 'عملیات') {
-                        let value = '';
-                        if (col.render) {
-                            const rendered = col.render(ann, idx);
-                            if (typeof rendered === 'string') {
-                                value = rendered;
-                            } else if (typeof rendered === 'number') {
-                                value = String(rendered);
-                            } else if (React.isValidElement(rendered)) {
-                                // Extract text from React element
-                                const text = extractTextFromElement(rendered);
-                                value = text;
-                            } else {
-                                value = String(rendered || '');
-                            }
-                        } else {
-                            value = String((ann as any)[col.header] || '');
-                        }
-                        row.push(toEnglishDigits(value));
-                    }
-                });
+                // Full Dairy/Ambient view - extract data directly from announcement object
+                // ردیف
+                row.push(String(idx + 1));
+                // کد اعلام بار
+                row.push(toEnglishDigits(ann.announcementCode || ''));
+                // کارمند اعلام‌کننده
+                row.push(toEnglishDigits((ann as any).creator_full_name || (ann as any).creator_username || '-'));
+                // تاریخ بارگیری
+                row.push(toEnglishDigits(formatJalali(ann.loadingDate)));
+                // مبدا بارگیری
+                row.push(toEnglishDigits(ann.originCity || '-'));
+                // برند
+                row.push(toEnglishDigits(ann.brand || '-'));
+                // نوع خودرو
+                row.push(toEnglishDigits(ann.vehicleType || '-'));
+                // ساعت حضور
+                row.push(toEnglishDigits(ann.platformArrivalTime || '-'));
+                // ارزش بار
+                row.push(toEnglishDigits((ann.cargoValue || 0).toString()));
+                // نام راننده
+                const driverName = ann.assignmentType === 'company' 
+                    ? getDriverName(ann.assignedDriverId, props.drivers, props.personalDrivers)
+                    : getPersonalDriverName(ann.assignedDriverId, props.personalDrivers);
+                row.push(toEnglishDigits(driverName));
+                // تماس راننده
+                const driverContact = ann.assignmentType === 'company' 
+                    ? getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)
+                    : getPersonalDriverContact(ann.assignedDriverId, props.personalDrivers);
+                row.push(toEnglishDigits(driverContact));
+                // پلاک خودرو
+                const vehiclePlate = ann.assignmentType === 'company' 
+                    ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)
+                    : getPersonalVehicleIdentifier(ann.assignedVehicleId, props.personalVehicles);
+                row.push(toEnglishDigits(vehiclePlate));
+                // شماره بارنامه
+                row.push(toEnglishDigits(ann.billOfLadingNumber || '-'));
+                // کرایه کل
+                row.push(toEnglishDigits(formatCurrency(ann.totalFreightCost).replace(/[^\d]/g, '')));
+                // توضیحات
+                row.push(toEnglishDigits(ann.notes || '-'));
                 
-                // Add destinations
+                // Add destinations (up to 4)
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
@@ -1072,14 +1089,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             toEnglishDigits(dest.tonnage ? String(dest.tonnage) : ''),
                             toEnglishDigits((dest as any).deliveryDate || ''),
                             toEnglishDigits(dest.unloadTime || ''),
-                            toEnglishDigits(dest.freightCost ? String(dest.freightCost) : '')
+                            toEnglishDigits(dest.freightCost ? formatDestinationFreightCost(dest.freightCost).replace(/[^\d]/g, '') : '')
                         );
                     } else {
                         row.push('', '', '', '', '', '');
                     }
                 }
             } else {
-                // Compact or other full views
+                // Compact or other full views - use column render functions
                 visibleCols.forEach(col => {
                     if (col.header !== 'عملیات') {
                         let value = '';
@@ -1107,6 +1124,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         } else {
                             value = String((ann as any)[col.header] || '');
                         }
+                        // Clean up value: remove HTML tags, emojis, and format numbers
+                        value = value.replace(/<[^>]*>/g, '').replace(/[^\d\s\w\u0600-\u06FF،]/g, '');
                         row.push(toEnglishDigits(value));
                     }
                 });

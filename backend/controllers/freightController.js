@@ -2900,15 +2900,49 @@ async function finalizeAssignments(req, res) {
       // تشخیص assignment_type اگر null باشد
       let assignmentType = ann.assignment_type;
       if (!assignmentType) {
-        // اگر assignment_type null است، از line_type تشخیص بده
-        const iceCreamMatches = ['IceCream', 'بستنی'];
-        if (iceCreamMatches.includes(ann.line_type)) {
-          assignmentType = 'company';
-        } else {
-          // برای Dairy و Ambient، معمولاً personal است
-          assignmentType = 'personal';
+        // اگر assignment_type null است، از vehicle_id تشخیص بده
+        // اگر vehicle_id در vehicles (شرکتی) است، company است
+        // اگر vehicle_id در personal_vehicles (شخصی) است، personal است
+        if (ann.assigned_vehicle_id) {
+          const companyVehicleCheck = await client.query('SELECT id FROM vehicles WHERE id = $1', [ann.assigned_vehicle_id]);
+          if (companyVehicleCheck.rowCount > 0) {
+            assignmentType = 'company';
+            console.log(`🔍 [finalizeAssignments] Detected assignment_type=company for ${annId} (vehicle found in vehicles table)`);
+          } else {
+            const personalVehicleCheck = await client.query('SELECT id FROM personal_vehicles WHERE id = $1', [ann.assigned_vehicle_id]);
+            if (personalVehicleCheck.rowCount > 0) {
+              assignmentType = 'personal';
+              console.log(`🔍 [finalizeAssignments] Detected assignment_type=personal for ${annId} (vehicle found in personal_vehicles table)`);
+            }
+          }
         }
-        console.log(`🔍 [finalizeAssignments] Detected assignment_type=${assignmentType} for ${annId} (was null, inferred from line_type=${ann.line_type})`);
+        
+        // اگر هنوز تشخیص داده نشد، از driver_id استفاده کن
+        if (!assignmentType && ann.assigned_driver_id) {
+          const personalDriverCheck = await client.query('SELECT id FROM personal_drivers WHERE id = $1', [ann.assigned_driver_id]);
+          if (personalDriverCheck.rowCount > 0) {
+            assignmentType = 'personal';
+            console.log(`🔍 [finalizeAssignments] Detected assignment_type=personal for ${annId} (driver found in personal_drivers)`);
+          } else {
+            const companyDriverCheck = await client.query('SELECT id FROM drivers WHERE id = $1', [ann.assigned_driver_id]);
+            if (companyDriverCheck.rowCount > 0) {
+              assignmentType = 'company';
+              console.log(`🔍 [finalizeAssignments] Detected assignment_type=company for ${annId} (driver found in drivers)`);
+            }
+          }
+        }
+        
+        // اگر هنوز تشخیص داده نشد، از line_type استفاده کن
+        if (!assignmentType) {
+          const iceCreamMatches = ['IceCream', 'بستنی'];
+          if (iceCreamMatches.includes(ann.line_type)) {
+            assignmentType = 'company';
+          } else {
+            // برای Dairy و Ambient، معمولاً personal است
+            assignmentType = 'personal';
+          }
+          console.log(`🔍 [finalizeAssignments] Detected assignment_type=${assignmentType} for ${annId} (was null, inferred from line_type=${ann.line_type})`);
+        }
       }
       
       // بررسی شماره بارنامه فقط برای خودروهای شخصی

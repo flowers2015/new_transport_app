@@ -461,12 +461,25 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                     });
                 }
 
-                rows.push({
-                    announcement: ann,
-                    destination: dest,
-                    destinationFreightCost: dest.freightCost || 0,
-                    paymentStatus: destPaymentStatus,
-                });
+                // بررسی اینکه آیا این ردیف قبلاً اضافه شده است (برای جلوگیری از duplicate)
+                const rowKey = `${ann.id}-${dest.id}`;
+                const alreadyExists = rows.some(r => `${r.announcement.id}-${r.destination.id}` === rowKey);
+                
+                if (!alreadyExists) {
+                    rows.push({
+                        announcement: ann,
+                        destination: dest,
+                        destinationFreightCost: dest.freightCost || 0,
+                        paymentStatus: destPaymentStatus,
+                    });
+                } else {
+                    console.warn(`⚠️ [FreightFinance] Duplicate row detected and skipped:`, {
+                        annCode: ann.announcementCode,
+                        annId: ann.id,
+                        destId: dest.id,
+                        city: dest.city
+                    });
+                }
             });
         });
 
@@ -741,7 +754,7 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                                 
                                 return (
                                     <tr key={`${ann.id}-${dest.id}-${idx}`} className="border-b">
-                                    <td className="p-2 font-mono">#{ann.announcementCode}</td>
+                                    <td className="p-2 font-mono">#{ann.announcementCode || ann.announcement_code || '-'}</td>
                                     <td className="p-2">{formatJalali(ann.loadingDate)}</td>
                                         <td className="p-2">{lineType}</td>
                                         <td className="p-2">{vehicleType}</td>
