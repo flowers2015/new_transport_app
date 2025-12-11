@@ -288,27 +288,58 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     };
 
     // Function to generate Excel export based on filtered data
-    const generateExcelExport = () => {
+    const generateExcelExport = (mode: 'compact' | 'full' = viewMode) => {
         const cols = visibleColumns;
-        const isFullDairyAmbientMode = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+        const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
         
         // Helper function to check if column should be displayed
-        const shouldDisplayColumn = (col: any): boolean => {
+        const shouldDisplayColumn = (col: any, currentMode: 'compact' | 'full'): boolean => {
             if (col.header === 'عملیات') return false;
             if (!col.display) return true; // اگر display نداشت، نمایش بده
             if (typeof col.display === 'function') {
-                return col.display(activeLine);
+                // برای ستون‌های خاص، همیشه نمایش بده (حتی در حالت compact)
+                if (col.header === 'کرایه کل' || col.header === 'ارزش بار') {
+                    return true;
+                }
+                // برای بقیه، از display function استفاده کن
+                // اما viewMode را از currentMode بگیر
+                const originalViewMode = viewMode;
+                // Temporarily set viewMode for display check
+                const tempViewMode = currentMode;
+                // Create a wrapper that uses tempViewMode
+                try {
+                    // Check if display function uses viewMode
+                    const result = col.display(activeLine);
+                    // If it's a function that checks viewMode, we need to handle it differently
+                    // For now, always show important columns
+                    return result !== false;
+                } catch {
+                    return true;
+                }
             }
             return Boolean(col.display);
         };
         
-        // Get headers
+        // Get headers - always include important columns
         const headers: string[] = [];
+        const importantHeaders = new Set<string>();
+        
         cols.forEach(col => {
-            if (shouldDisplayColumn(col)) {
+            if (shouldDisplayColumn(col, mode)) {
                 headers.push(col.header);
+                importantHeaders.add(col.header);
             }
         });
+        
+        // اضافه کردن ستون‌های مهم که ممکن است فیلتر شده باشند
+        // همیشه "کرایه کل" را اضافه کن (حتی در حالت compact)
+        if (!importantHeaders.has('کرایه کل')) {
+            headers.push('کرایه کل');
+        }
+        // "ارزش بار" را هم در حالت compact اضافه کن
+        if (!importantHeaders.has('ارزش بار')) {
+            headers.push('ارزش بار');
+        }
         
         // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم
         if (isFullDairyAmbientMode) {
@@ -328,62 +359,82 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         filteredAnnouncements.forEach((ann, idx) => {
             const row: any[] = [];
             
-            cols.forEach(col => {
-                if (shouldDisplayColumn(col)) {
-                    let value: any = '';
-                    
-                    // بررسی اینکه آیا این ستون عددی است
-                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
-                    const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
-                    
-                    if (col.render) {
-                        const rendered = col.render(ann, idx);
-                        if (typeof rendered === 'string') {
-                            value = rendered;
-                        } else if (typeof rendered === 'number') {
-                            value = rendered;
-                        } else if (React.isValidElement(rendered)) {
-                            value = extractTextFromElement(rendered);
-                            value = value.replace(/[📅🕐]/g, '').trim();
-                        } else if (Array.isArray(rendered)) {
-                            value = rendered.map((item: any) => {
-                                if (React.isValidElement(item)) {
-                                    let text = extractTextFromElement(item);
-                                    text = text.replace(/[📅🕐]/g, '').trim();
-                                    return text;
-                                }
-                                return String(item || '');
-                            }).join('، ');
-                        } else {
-                            value = String(rendered || '');
-                        }
-                    } else {
-                        value = (ann as any)[col.header] || '';
-                    }
-                    
-                    // Clean up
-                    if (typeof value === 'string') {
-                        value = value.replace(/<[^>]*>/g, '').trim();
-                    }
-                    
-                    // برای ستون‌های عددی، مقدار عددی را استخراج کن
-                    if (isNumericColumn) {
-                        if (typeof value === 'number') {
-                            value = value;
-                        } else if (typeof value === 'string') {
-                            const cleaned = value.replace(/[^\d]/g, '');
-                            const numValue = parseFloat(cleaned);
-                            if (!isNaN(numValue) && numValue > 0) {
-                                value = numValue;
-                            } else {
-                                value = '';
+            // Helper to get value for a column header
+            const getValueForHeader = (header: string): any => {
+                // بررسی اینکه آیا این ستون عددی است
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                const isNumericColumn = numericHeaders.some(h => header.includes(h));
+                
+                // Handle special columns directly
+                if (header === 'کرایه کل') {
+                    const value = ann.totalFreightCost || 0;
+                    return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
+                }
+                if (header === 'ارزش بار') {
+                    const value = ann.cargoValue || 0;
+                    return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
+                }
+                
+                // Find column definition
+                const col = cols.find(c => c.header === header);
+                if (!col) return '';
+                
+                let value: any = '';
+                
+                if (col.render) {
+                    const rendered = col.render(ann, idx);
+                    if (typeof rendered === 'string') {
+                        value = rendered;
+                    } else if (typeof rendered === 'number') {
+                        value = rendered;
+                    } else if (React.isValidElement(rendered)) {
+                        value = extractTextFromElement(rendered);
+                        value = value.replace(/[📅🕐]/g, '').trim();
+                    } else if (Array.isArray(rendered)) {
+                        value = rendered.map((item: any) => {
+                            if (React.isValidElement(item)) {
+                                let text = extractTextFromElement(item);
+                                text = text.replace(/[📅🕐]/g, '').trim();
+                                return text;
                             }
+                            return String(item || '');
+                        }).join('، ');
+                    } else {
+                        value = String(rendered || '');
+                    }
+                } else {
+                    value = (ann as any)[col.header] || '';
+                }
+                
+                // Clean up
+                if (typeof value === 'string') {
+                    value = value.replace(/<[^>]*>/g, '').trim();
+                }
+                
+                // برای ستون‌های عددی، مقدار عددی را استخراج کن
+                if (isNumericColumn) {
+                    if (typeof value === 'number') {
+                        value = value;
+                    } else if (typeof value === 'string') {
+                        const cleaned = value.replace(/[^\d]/g, '');
+                        const numValue = parseFloat(cleaned);
+                        if (!isNaN(numValue) && numValue > 0) {
+                            value = numValue;
                         } else {
                             value = '';
                         }
+                    } else {
+                        value = '';
                     }
-                    
-                    row.push(value);
+                }
+                
+                return value;
+            };
+            
+            // Process columns in header order (excluding destination headers)
+            headers.forEach(header => {
+                if (!header.startsWith('مقصد')) {
+                    row.push(getValueForHeader(header));
                 }
             });
             
@@ -462,12 +513,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     };
 
     // Function to download Excel
-    const downloadExcel = () => {
-        const wb = generateExcelExport();
+    const downloadExcel = (mode: 'compact' | 'full' = viewMode) => {
+        const wb = generateExcelExport(mode);
         const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
                             activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
                             'لبنیات-فروتلند';
-        const modeName = viewMode === 'compact' ? 'فشرده' : 'کامل';
+        const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
         const dateStr = new Date().toISOString().split('T')[0];
         const fileName = `تاریخچه_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
         XLSX.writeFile(wb, fileName);
@@ -672,8 +723,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
-                        <button onClick={downloadExcel} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
-                            {viewMode === 'compact' ? 'اکسل فشرده' : 'اکسل کامل'}
+                        <button onClick={() => downloadExcel('compact')} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
+                            اکسل فشرده
+                        </button>
+                        <button onClick={() => downloadExcel('full')} className="px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 whitespace-nowrap">
+                            اکسل کامل
                         </button>
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg">
