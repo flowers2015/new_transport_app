@@ -91,6 +91,21 @@ async function getAllUsers(req, res) {
     const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : null);
     
     // ساخت query بر اساس ستون‌های موجود
+    // اگر branch_city وجود دارد، باید بررسی کنیم که آیا این ID است یا نام شهر
+    // اگر branch_id وجود دارد، از branches table join می‌کنیم
+    // اگر branch_city وجود دارد و به نظر می‌رسد که ID است (UUID format)، از branches table join می‌کنیم
+    let branchJoin = '';
+    let branchSelect = 'NULL as branch_id, NULL as branch_name';
+    if (hasBranchId) {
+      branchSelect = 'u.branch_id, b.name as branch_name';
+      branchJoin = 'LEFT JOIN branches b ON u.branch_id = b.id';
+    } else if (hasBranchCity) {
+      // اگر branch_city وجود دارد، سعی می‌کنیم از branches table join کنیم
+      // اگر branch_city یک UUID است (36 کاراکتر با خط تیره)، از branches table join می‌کنیم
+      branchSelect = 'u.branch_city as branch_id, COALESCE(b.name, u.branch_city) as branch_name';
+      branchJoin = 'LEFT JOIN branches b ON u.branch_city = b.id';
+    }
+    
     let query = `
       SELECT 
         u.id,
@@ -98,12 +113,12 @@ async function getAllUsers(req, res) {
         ${hasEmail ? 'u.email' : 'NULL as email'},
         ${nameColumn ? `u.${nameColumn}` : 'NULL'} as full_name,
         u.role,
-        ${hasBranchId ? 'u.branch_id, b.name as branch_name' : (hasBranchCity ? 'u.branch_city as branch_id, u.branch_city as branch_name' : 'NULL as branch_id, NULL as branch_name')},
+        ${branchSelect},
         u.created_at,
         u.updated_at,
         COUNT(*) OVER() as total_count
       FROM users u
-      ${hasBranchId ? 'LEFT JOIN branches b ON u.branch_id = b.id' : ''}
+      ${branchJoin}
       WHERE 1=1
     `;
     const params = [];
@@ -147,7 +162,7 @@ async function getAllUsers(req, res) {
         fullName: row.full_name || null,
         role: row.role,
         branchId: row.branch_id || null,
-        branchName: row.branch_name || row.branch_id || null,
+        branchName: row.branch_name || null, // فقط branch_name را برگردان، نه branch_id
         createdAt: row.created_at,
         updatedAt: row.updated_at
       })),
@@ -184,6 +199,17 @@ async function getUserById(req, res) {
     
     const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : null);
     
+    // ساخت query برای branch - مشابه getAllUsers
+    let branchJoin = '';
+    let branchSelect = 'NULL as branch_id, NULL as branch_name';
+    if (hasBranchId) {
+      branchSelect = 'u.branch_id, b.name as branch_name';
+      branchJoin = 'LEFT JOIN branches b ON u.branch_id = b.id';
+    } else if (hasBranchCity) {
+      branchSelect = 'u.branch_city as branch_id, COALESCE(b.name, u.branch_city) as branch_name';
+      branchJoin = 'LEFT JOIN branches b ON u.branch_city = b.id';
+    }
+    
     const result = await pool.query(`
       SELECT 
         u.id,
@@ -191,11 +217,11 @@ async function getUserById(req, res) {
         ${hasEmail ? 'u.email' : 'NULL as email'},
         ${nameColumn ? `u.${nameColumn}` : 'NULL'} as full_name,
         u.role,
-        ${hasBranchId ? 'u.branch_id, b.name as branch_name' : (hasBranchCity ? 'u.branch_city as branch_id, u.branch_city as branch_name' : 'NULL as branch_id, NULL as branch_name')},
+        ${branchSelect},
         u.created_at,
         u.updated_at
       FROM users u
-      ${hasBranchId ? 'LEFT JOIN branches b ON u.branch_id = b.id' : ''}
+      ${branchJoin}
       WHERE u.id = $1
     `, [id]);
 
@@ -211,7 +237,7 @@ async function getUserById(req, res) {
       fullName: user.full_name || null,
       role: user.role,
       branchId: user.branch_id || null,
-      branchName: user.branch_name || user.branch_id || null,
+      branchName: user.branch_name || null, // فقط branch_name را برگردان، نه branch_id
       createdAt: user.created_at,
       updatedAt: user.updated_at
     });

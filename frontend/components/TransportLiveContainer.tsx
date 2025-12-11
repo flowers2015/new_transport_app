@@ -605,12 +605,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const responseData = await res.json();
             console.log('✅ [TransportLive] Assignment successful:', responseData);
             
-            // Real-time update will handle the UI update, no need for alert or refresh
-            // console.log('🔄 [TransportLive] Refreshing all data after assignment...');
-            // await fetchData(); // Removed to prevent double refresh
+            // بعد از تخصیص موفق، داده‌ها را refresh کن تا تغییرات در UI نمایش داده شود
+            // این برای اطمینان از نمایش صحیح در جدول و تابلو اعلام بار است
+            console.log('🔄 [TransportLive] Refreshing data after assignment...');
+            setTimeout(() => {
+                fetchData(false); // refresh کامل برای نمایش تغییرات
+            }, 500); // کمی delay برای اطمینان از commit شدن transaction در backend
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
-            console.error('❌ [TransportLive] Assignment error:', e); 
+            // در صورت خطا، rollback انجام شده است
         }
     };
 

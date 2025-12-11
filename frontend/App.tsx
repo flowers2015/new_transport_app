@@ -317,7 +317,7 @@ const App: React.FC = () => {
                 let errorData;
                 try {
                     errorData = JSON.parse(errorText);
-                } catch {
+                } catch (e) {
                     errorData = { message: errorText || 'خطای نامشخص' };
                 }
                 alert(errorData.message || `خطا در حذف شعبه (کد: ${response.status})`);

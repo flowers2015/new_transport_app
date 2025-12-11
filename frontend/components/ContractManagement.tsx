@@ -45,8 +45,10 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
         if (window.confirm('آیا از حذف این شعبه اطمینان دارید؟')) {
             try {
                 await onDeleteBranch(id);
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Error deleting branch:', error);
+                const errorMessage = error?.message || 'خطا در حذف شعبه';
+                alert(errorMessage);
             }
         }
     };

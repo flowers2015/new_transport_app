@@ -1925,24 +1925,28 @@ async function assignVehicleAndDriver(req, res) {
     // برای تخصیص‌های شرکت، باید رکورد در dispatch_assignments ایجاد کنیم تا در تابلو اعلام بار نمایش داده شود
     // اگر reassignment باشد، ابتدا dispatch_assignments قبلی را cancel می‌کنیم
     if (assignmentType === 'company') {
+      console.log(`🔍 [assignVehicleAndDriver] Creating dispatch_assignments for company assignment, announcementId: ${announcementId}, isReassignment: ${isReassignment}`);
       try {
         // اگر reassignment باشد، dispatch_assignments قبلی را cancel می‌کنیم
         if (isReassignment) {
-          await client.query(
+          const cancelResult = await client.query(
             `UPDATE dispatch_assignments
              SET is_cancelled = TRUE
              WHERE freight_announcement_id = $1 
                AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
             [announcementId]
           );
-          console.log(`✅ [assignVehicleAndDriver] Cancelled previous dispatch_assignments for reassignment ${announcementId}`);
+          console.log(`✅ [assignVehicleAndDriver] Cancelled ${cancelResult.rowCount} previous dispatch_assignments for reassignment ${announcementId}`);
         }
         
-        // گرفتن همه مقاصد
-        const allDestRows = await client.query(
-          'SELECT id, city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
-          [announcementId]
-        );
+        // گرفتن همه مقاصد - با timeout
+        const allDestRows = await client.query({
+          text: 'SELECT id, city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          values: [announcementId],
+          rowMode: 'array' // برای performance بهتر
+        });
+        
+        console.log(`🔍 [assignVehicleAndDriver] Found ${allDestRows.rows.length} destinations for announcement ${announcementId}`);
 
         if (allDestRows.rows.length > 0) {
           // پیدا کردن route برای primary destination (آخرین مقصد یا مقصد با بیشترین کیلومتر)
@@ -2027,12 +2031,18 @@ async function assignVehicleAndDriver(req, res) {
           }
 
           console.log(`✅ [assignVehicleAndDriver] Created ${allDestRows.rows.length} dispatch_assignments records for announcement ${announcementId}`);
+        } else {
+          console.warn(`⚠️ [assignVehicleAndDriver] No destinations found for announcement ${announcementId}, skipping dispatch_assignments creation`);
         }
       } catch (dispatchError) {
         console.error('❌ [assignVehicleAndDriver] Error creating dispatch_assignments:', dispatchError);
-        // خطا را ignore نمی‌کنیم - اگر dispatch_assignments ایجاد نشود، در تابلو نمایش داده نمی‌شود
-        // اما assignment را rollback نمی‌کنیم چون ممکن است کاربر بخواهد از طریق ثبت نوبت این کار را انجام دهد
+        // خطا را log می‌کنیم اما assignment را rollback نمی‌کنیم
+        // اگر dispatch_assignments ایجاد نشود، در تابلو نمایش داده نمی‌شود
+        // اما assignment در freight_announcements ثبت شده است
+        // کاربر می‌تواند بعداً از طریق ثبت نوبت این کار را انجام دهد
       }
+    } else {
+      console.log(`ℹ️ [assignVehicleAndDriver] Assignment type is not 'company' (${assignmentType}), skipping dispatch_assignments creation`);
     }
 
     await client.query('COMMIT');

@@ -31,6 +31,32 @@ const pool = new Pool({
   database: dbName,
   password: dbPassword,
   port: dbPort,
+  // تنظیمات connection pool برای جلوگیری از timeout و connection leak
+  max: 20, // حداکثر تعداد connection‌های همزمان
+  idleTimeoutMillis: 30000, // 30 ثانیه - اگر connection بیش از این مدت idle باشد، بسته می‌شود
+  connectionTimeoutMillis: 10000, // 10 ثانیه - timeout برای گرفتن connection از pool
+  // تنظیمات statement timeout (برای هر query)
+  statement_timeout: 30000, // 30 ثانیه timeout برای هر query
 });
+
+// Event listeners برای monitoring connection pool
+pool.on('error', (err, client) => {
+  console.error('❌ [DB Pool] Unexpected error on idle client', err);
+  // اگر client وجود دارد، آن را release کن
+  if (client) {
+    client.release();
+  }
+});
+
+// Log pool stats periodically (every 5 minutes) - فقط در حالت development
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(() => {
+    console.log('📊 [DB Pool] Stats:', {
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount
+    });
+  }, 5 * 60 * 1000);
+}
 
 module.exports = pool;

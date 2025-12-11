@@ -42,6 +42,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
         if (query.length < 2) {
             setSuggestions([]);
             setShowSuggestions(false);
+            setIsLoading(false);
             return;
         }
 
@@ -91,6 +92,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
             console.error('Error fetching cities:', error);
             setSuggestions([]);
             setShowSuggestions(false);
+        } finally {
             setIsLoading(false);
         }
     };
@@ -104,10 +106,23 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
             clearTimeout(timeoutRef.current);
         }
 
-        // Debounce API call
-        timeoutRef.current = setTimeout(() => {
-            fetchCities(inputValue);
-        }, 300);
+        // اگر input خالی است، suggestions را پاک کن و loading را false کن
+        if (inputValue.length === 0) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            setIsLoading(false);
+            return;
+        }
+
+        // Debounce API call - فقط اگر حداقل 2 کاراکتر باشد
+        if (inputValue.length >= 2) {
+            timeoutRef.current = setTimeout(() => {
+                fetchCities(inputValue);
+            }, 300);
+        } else {
+            // اگر کمتر از 2 کاراکتر است، loading را false کن
+            setIsLoading(false);
+        }
     };
 
     const handleSuggestionClick = (suggestion: CityOption) => {
