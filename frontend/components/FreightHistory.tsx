@@ -516,8 +516,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         
         // استفاده از ExcelJS برای استایل‌ها
         try {
-            try {
-                const workbook = new ExcelJS.Workbook();
+            const workbook = new ExcelJS.Workbook();
                 const worksheet = workbook.addWorksheet('تاریخچه اعلام بار');
                 
                 // Get headers and data
