@@ -1768,6 +1768,7 @@ async function assignVehicleAndDriverInternal(req, res) {
     truckSmartId
   } = req.body;
   const userId = req.user?.userId || req.user?.id;
+  const userRole = req.user?.role || req.user?.userRole;
   
   // لاگ جامع درخواست
   console.log('🚀 [assignVehicleAndDriver] ========== START ASSIGNMENT ==========');
@@ -1781,7 +1782,7 @@ async function assignVehicleAndDriverInternal(req, res) {
     notes: notes ? notes.substring(0, 50) + '...' : null,
     destinationsCount: destinations ? destinations.length : 0,
     userId,
-    userRole: req.user?.role,
+    userRole,
     timestamp: new Date().toISOString()
   });
   // ساخت userName به فرمت "username - name - role"
@@ -1883,10 +1884,12 @@ async function assignVehicleAndDriverInternal(req, res) {
       announcement_code: code 
     } = rows[0];
 
+    const userRole = req.user?.role || req.user?.userRole;
+    
     console.log('🔍 [Assignment] Database values:', {
       dbAssignmentType,
       requestAssignmentType: assignmentType,
-      role,
+      userRole,
       oldStatus
     });
     
@@ -1899,11 +1902,11 @@ async function assignVehicleAndDriverInternal(req, res) {
     const destinationLabel = destinations || 'بدون مقصد';
     
     // بررسی دسترسی - باید با assignmentType در دیتابیس مقایسه شود
-    if (role === 'transport_user' && dbAssignmentType !== 'company') {
+    if (userRole === 'transport_user' && dbAssignmentType !== 'company') {
       await client.query('ROLLBACK');
       return res.status(403).json({ message: 'Assignment not allowed in current queue for Transport Company.' });
     }
-    if (role === 'personal_transport_user' && dbAssignmentType !== 'personal') {
+    if (userRole === 'personal_transport_user' && dbAssignmentType !== 'personal') {
       await client.query('ROLLBACK');
       return res.status(403).json({ message: 'Assignment not allowed in current queue for Personal Transport.' });
     }
