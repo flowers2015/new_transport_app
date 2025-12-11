@@ -385,22 +385,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     
     // Auto-refresh به عنوان fallback (همیشه فعال برای اطمینان از دریافت اعلام بارهای جدید)
     useEffect(() => {
-        console.log('🔄 [Auto-refresh] Effect triggered', { sseConnected, announcementsCount: announcements.length });
-        
-        // اگر SSE متصل است، interval را کاهش می‌دهیم (60 ثانیه) برای fallback
-        // اگر SSE قطع است، interval را کاهش می‌دهیم (15 ثانیه) برای fallback قوی‌تر
-        const interval = sseConnected ? 60000 : 15000; // 60s if SSE connected, 15s if disconnected
+        // کاهش interval برای به‌روزرسانی سریع‌تر
+        // اگر SSE متصل است، 10 ثانیه برای fallback
+        // اگر SSE قطع است، 5 ثانیه برای fallback قوی‌تر
+        const interval = sseConnected ? 10000 : 5000; // 10s if SSE connected, 5s if disconnected
         
         if (refreshIntervalRef.current) {
             clearInterval(refreshIntervalRef.current);
         }
         
-        console.log(`🔄 [Auto-refresh] Setting up refresh interval: ${interval}ms (SSE: ${sseConnected ? 'connected' : 'disconnected'})`);
-        
         refreshIntervalRef.current = setInterval(() => {
             // فقط اگر صفحه visible است
             if (!document.hidden) {
-                console.log(`🔄 [Auto-refresh] Periodic refresh (SSE: ${sseConnected ? 'connected' : 'disconnected'})`);
                 fetchDataRef.current(true, needsPersonalResourcesRef.current);
             }
         }, interval);
@@ -456,7 +452,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
                         // اگر اعلام بار جدید است (approved, created)
-                        if (data && data.id && data.status && (updateType === 'created' || updateType === 'approved')) {
+                        if (data && data.id && data.status && (updateType === 'created' || updateType === 'approved' || updateType === 'queue_changed')) {
                             try {
                                 // Normalize data برای اضافه کردن به state
                                 const statusMap: Record<string, FreightAnnouncementStatus> = {
@@ -1026,6 +1022,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onChangeVehicleType={onChangeVehicleType}
                 onOpenHistory={onOpenHistory}
                 onOpenAssignmentDialog={onOpenAssignmentDialog}
+                onRefresh={() => fetchData(false, needsPersonalResources)}
                 currentUser={currentUser}
                 activeLine={activeLine}
                 setActiveLine={setActiveLine}

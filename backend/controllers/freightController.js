@@ -1981,15 +1981,82 @@ async function setAssignmentQueue(req, res) {
     
     await client.query('COMMIT');
     
-    // ارسال real-time notification
+    // ارسال real-time notification با داده کامل
     try {
       const realtimeService = require('../services/realtimeService');
-      realtimeService.notifyAnnouncementUpdate(
-        announcementId,
-        'queue_changed',
-        { status: newStatus, assignmentType: nextQueue },
-        userId
+      
+      // دریافت داده کامل announcement برای ارسال در notification
+      const fullAnnouncementResult = await pool.query(
+        `SELECT 
+           fa.*,
+           d.name as assigned_driver_name,
+           d.employee_id as assigned_driver_employee_id,
+           v.model as assigned_vehicle_model,
+           v.brand as assigned_vehicle_brand,
+           v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
+         FROM freight_announcements fa
+         LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+         LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+         WHERE fa.id = $1`,
+        [announcementId]
       );
+      
+      const fullAnnouncement = fullAnnouncementResult.rows[0];
+      if (fullAnnouncement) {
+        // دریافت destinations
+        const destResult = await pool.query(
+          'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          [announcementId]
+        );
+        
+        // آماده‌سازی داده کامل
+        const notificationData = {
+          id: announcementId,
+          status: newStatus,
+          assignmentType: nextQueue,
+          announcementCode: code,
+          lineType: fullAnnouncement.line_type,
+          vehicleType: fullAnnouncement.vehicle_type,
+          originCity: fullAnnouncement.origin_city,
+          brand: fullAnnouncement.brand,
+          representativeType: fullAnnouncement.representative_type,
+          representativeName: fullAnnouncement.representative_name,
+          cartonCount: fullAnnouncement.carton_count,
+          priority: fullAnnouncement.priority,
+          products: fullAnnouncement.products ? (typeof fullAnnouncement.products === 'string' ? JSON.parse(fullAnnouncement.products) : fullAnnouncement.products) : [],
+          platformArrivalTime: fullAnnouncement.platform_arrival_time,
+          cargoValue: fullAnnouncement.cargo_value || 0,
+          loadingDate: normalizeJalaliDate(fullAnnouncement.loading_date),
+          deliveryDate: fullAnnouncement.delivery_date ? normalizeJalaliDate(fullAnnouncement.delivery_date) : null,
+          destinations: destResult.rows.map(d => ({
+            id: d.id,
+            city: d.city,
+            representativeName: d.representative_name,
+            tonnage: d.tonnage,
+            freightCost: d.freight_cost,
+            unloadTime: d.unload_time,
+            deliveryDate: d.delivery_date,
+            representativeType: d.representative_type
+          })),
+          createdAt: fullAnnouncement.created_at,
+          updatedAt: fullAnnouncement.updated_at
+        };
+        
+        realtimeService.notifyAnnouncementUpdate(
+          announcementId,
+          'queue_changed',
+          notificationData,
+          userId
+        );
+      } else {
+        // Fallback
+        realtimeService.notifyAnnouncementUpdate(
+          announcementId,
+          'queue_changed',
+          { status: newStatus, assignmentType: nextQueue },
+          userId
+        );
+      }
     } catch (realtimeError) {
       console.error('❌ [setAssignmentQueue] Error sending realtime notification:', realtimeError);
     }
