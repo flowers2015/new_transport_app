@@ -119,7 +119,11 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
     const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
     const [selectedTransactionForView, setSelectedTransactionForView] = useState<FreightTransaction | null>(null);
 
-    const enforcedCity = currentUser.branchCity;
+    // اگر branchCity یک UUID است، آن را null می‌کنیم (نمایش داده نمی‌شود)
+    // در غیر این صورت، نام شهر را استفاده می‌کنیم
+    const enforcedCity = currentUser.branchCity && !currentUser.branchCity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) 
+        ? currentUser.branchCity 
+        : null;
     
     // لاگ برای بررسی enforcedCity
     console.log('🏢 [FreightFinance] User branch info:', {
@@ -622,7 +626,14 @@ const FreightFinanceDashboard: React.FC<FreightFinanceDashboardProps> = (props) 
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 border rounded-lg bg-slate-50">
                     <div>
                         <label className="text-xs text-slate-600 mb-1 block">شهر</label>
-                        <input placeholder="شهر..." value={enforcedCity || filters.city} onChange={e => setFilters(s => ({...s, city: e.target.value}))} className="input-style" disabled={!!enforcedCity} title={enforcedCity ? `فیلتر شده برای شعبه ${enforcedCity}` : ''}/>
+                        <input 
+                            placeholder="شهر..." 
+                            value={enforcedCity || filters.city || ''} 
+                            onChange={e => setFilters(s => ({...s, city: e.target.value}))} 
+                            className="input-style" 
+                            disabled={!!enforcedCity} 
+                            title={enforcedCity ? `فیلتر شده برای شعبه ${enforcedCity}` : ''}
+                        />
                     </div>
                     <div>
                         <label className="text-xs text-slate-600 mb-1 block">نوع</label>

@@ -1939,12 +1939,11 @@ async function assignVehicleAndDriver(req, res) {
           console.log(`✅ [assignVehicleAndDriver] Cancelled ${cancelResult.rowCount} previous dispatch_assignments for reassignment ${announcementId}`);
         }
         
-        // گرفتن همه مقاصد - با timeout
-        const allDestRows = await client.query({
-          text: 'SELECT id, city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
-          values: [announcementId],
-          rowMode: 'array' // برای performance بهتر
-        });
+        // گرفتن همه مقاصد
+        const allDestRows = await client.query(
+          'SELECT id, city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          [announcementId]
+        );
         
         console.log(`🔍 [assignVehicleAndDriver] Found ${allDestRows.rows.length} destinations for announcement ${announcementId}`);
 
@@ -1954,18 +1953,29 @@ async function assignVehicleAndDriver(req, res) {
           let primaryDestination = null;
           
           // ابتدا سعی می‌کنیم route را از مقصد با بیشترین کیلومتر پیدا کنیم
-          for (const dest of allDestRows.rows) {
-            const { rows: routeRows } = await client.query(
+          // استفاده از Promise.all برای parallel queries (اگر تعداد مقاصد زیاد باشد)
+          const routePromises = allDestRows.rows.map(dest => 
+            client.query(
               `SELECT id, city, province, route_category, round_trip_km, distance_category
                FROM dispatch_routes
                WHERE is_active = TRUE AND city = $1
                ORDER BY round_trip_km DESC, route_category DESC
                LIMIT 1`,
               [dest.city]
-            );
+            ).catch(err => {
+              console.error(`❌ [assignVehicleAndDriver] Error fetching route for city ${dest.city}:`, err);
+              return { rows: [] }; // return empty result on error
+            })
+          );
+          
+          const routeResults = await Promise.all(routePromises);
+          
+          // پیدا کردن route با بیشترین round_trip_km
+          for (let i = 0; i < routeResults.length; i++) {
+            const routeRows = routeResults[i].rows;
             if (routeRows.length > 0 && (!route || (routeRows[0].round_trip_km || 0) > (route.round_trip_km || 0))) {
               route = routeRows[0];
-              primaryDestination = dest;
+              primaryDestination = allDestRows.rows[i];
             }
           }
           
@@ -1979,8 +1989,11 @@ async function assignVehicleAndDriver(req, res) {
                ORDER BY route_category DESC
                LIMIT 1`,
               [lastDest.city]
-            );
-            if (routeRows.length > 0) {
+            ).catch(err => {
+              console.error(`❌ [assignVehicleAndDriver] Error fetching route for last destination ${lastDest.city}:`, err);
+              return { rows: [] };
+            });
+            if (routeRows && routeRows.length > 0) {
               route = routeRows[0];
               primaryDestination = lastDest;
             }
@@ -2064,8 +2077,20 @@ async function assignVehicleAndDriver(req, res) {
     return res.status(200).json({ message: 'Assignment successful.' });
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('Assignment failed:', e);
-    return res.status(500).json({ message: 'Internal server error while assigning.' });
+    console.error('❌ [assignVehicleAndDriver] Assignment failed:', e);
+    console.error('❌ [assignVehicleAndDriver] Error stack:', e.stack);
+    console.error('❌ [assignVehicleAndDriver] Error details:', {
+      announcementId,
+      assignmentType,
+      vehicleId,
+      driverId,
+      userId,
+      errorMessage: e.message
+    });
+    return res.status(500).json({ 
+      message: 'Internal server error while assigning.',
+      error: process.env.NODE_ENV === 'development' ? e.message : undefined
+    });
   } finally {
     client.release();
   }

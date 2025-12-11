@@ -89,17 +89,36 @@ async function updateBranch(req, res) {
 async function deleteBranch(req, res) {
   try {
     const { id } = req.params;
+    
+    console.log('🗑️ [deleteBranch] Attempting to delete branch with id:', id);
 
-    const { rows } = await pool.query('DELETE FROM branches WHERE id = $1 RETURNING *', [id]);
-
-    if (rows.length === 0) {
+    // بررسی اینکه آیا شعبه وجود دارد
+    const checkResult = await pool.query('SELECT id, name FROM branches WHERE id = $1', [id]);
+    
+    if (checkResult.rows.length === 0) {
+      console.log('❌ [deleteBranch] Branch not found:', id);
       return res.status(404).json({ message: 'Branch not found.' });
     }
 
+    console.log('✅ [deleteBranch] Branch found:', checkResult.rows[0].name);
+
+    // حذف شعبه
+    const { rows } = await pool.query('DELETE FROM branches WHERE id = $1 RETURNING *', [id]);
+
+    if (rows.length === 0) {
+      console.log('❌ [deleteBranch] Failed to delete branch (no rows returned)');
+      return res.status(500).json({ message: 'Failed to delete branch.' });
+    }
+
+    console.log('✅ [deleteBranch] Branch deleted successfully:', rows[0].name);
     res.json({ message: 'Branch deleted successfully.' });
   } catch (error) {
-    console.error(`Failed to delete branch ${id}:`, error);
-    res.status(500).json({ message: 'Internal server error while deleting branch.' });
+    console.error(`❌ [deleteBranch] Failed to delete branch ${id}:`, error);
+    console.error(`❌ [deleteBranch] Error stack:`, error.stack);
+    res.status(500).json({ 
+      message: 'Internal server error while deleting branch.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 }
 
