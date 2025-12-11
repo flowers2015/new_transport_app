@@ -1734,6 +1734,22 @@ async function assignPersonalDriverAndVehicle(req, res) {
 
 // PUT /:id/assignment
 async function assignVehicleAndDriver(req, res) {
+  // Wrapper برای catch کردن همه خطاها
+  try {
+    return await assignVehicleAndDriverInternal(req, res);
+  } catch (outerError) {
+    console.error('❌ [assignVehicleAndDriver] OUTER CATCH - Unhandled error:', outerError);
+    console.error('❌ [assignVehicleAndDriver] OUTER CATCH - Error stack:', outerError.stack);
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        message: 'Internal server error while assigning.',
+        error: process.env.NODE_ENV === 'development' ? outerError.message : undefined
+      });
+    }
+  }
+}
+
+async function assignVehicleAndDriverInternal(req, res) {
   const { id: announcementId } = req.params;
   const { 
     vehicleId, 
@@ -1840,9 +1856,15 @@ async function assignVehicleAndDriver(req, res) {
     return res.status(400).json({ message: 'Vehicle ID and Driver ID are required for assignment.' });
   }
 
-  const client = await pool.connect();
+  let client = null;
   try {
+    console.log('🔍 [assignVehicleAndDriver] Connecting to database pool...');
+    client = await pool.connect();
+    console.log('✅ [assignVehicleAndDriver] Database connection established');
+    
+    console.log('🔍 [assignVehicleAndDriver] Starting transaction...');
     await client.query('BEGIN');
+    console.log('✅ [assignVehicleAndDriver] Transaction started');
     
     const { rows } = await client.query(
       'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code FROM freight_announcements WHERE id = $1',
@@ -2139,6 +2161,22 @@ async function assignVehicleAndDriver(req, res) {
                 assignedAtJalali
               });
               
+              // اطمینان از وجود ستون‌های مورد نیاز
+              try {
+                await client.query(`
+                  ALTER TABLE dispatch_assignments
+                  ADD COLUMN IF NOT EXISTS queue_position INTEGER,
+                  ADD COLUMN IF NOT EXISTS assigned_at_jalali VARCHAR(16),
+                  ADD COLUMN IF NOT EXISTS queue_entry_id VARCHAR(255),
+                  ADD COLUMN IF NOT EXISTS queue_type VARCHAR(50),
+                  ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT FALSE,
+                  ADD COLUMN IF NOT EXISTS vehicle_category VARCHAR(255),
+                  ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
+                `);
+              } catch (alterError) {
+                console.warn('⚠️ [assignVehicleAndDriver] Could not alter dispatch_assignments table (columns may already exist):', alterError.message);
+              }
+              
               await client.query(
                 `INSERT INTO dispatch_assignments
                   (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category)
@@ -2204,15 +2242,23 @@ async function assignVehicleAndDriver(req, res) {
     
     return res.status(200).json({ message: 'Assignment successful.' });
   } catch (e) {
-    await client.query('ROLLBACK');
     console.error('❌ [assignVehicleAndDriver] ========== ASSIGNMENT FAILED ==========');
     console.error('❌ [assignVehicleAndDriver] Error message:', e.message);
     console.error('❌ [assignVehicleAndDriver] Error code:', e.code);
     console.error('❌ [assignVehicleAndDriver] Error detail:', e.detail);
     console.error('❌ [assignVehicleAndDriver] Error hint:', e.hint);
     console.error('❌ [assignVehicleAndDriver] Error position:', e.position);
+    console.error('❌ [assignVehicleAndDriver] Error name:', e.name);
     console.error('❌ [assignVehicleAndDriver] Error stack:', e.stack);
-    console.error('❌ [assignVehicleAndDriver] Full error object:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+    
+    // تلاش برای stringify کردن error object
+    try {
+      console.error('❌ [assignVehicleAndDriver] Full error object:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+    } catch (stringifyError) {
+      console.error('❌ [assignVehicleAndDriver] Could not stringify error:', stringifyError);
+      console.error('❌ [assignVehicleAndDriver] Error toString:', e.toString());
+    }
+    
     console.error('❌ [assignVehicleAndDriver] Request context:', {
       announcementId,
       assignmentType,
@@ -2220,16 +2266,35 @@ async function assignVehicleAndDriver(req, res) {
       driverId,
       userId,
       userRole: req.user?.role,
-      body: req.body
+      hasClient: !!client,
+      bodyKeys: Object.keys(req.body || {})
     });
     console.error('❌ [assignVehicleAndDriver] ===========================================');
+    
+    // Rollback transaction اگر client موجود باشد
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+        console.log('✅ [assignVehicleAndDriver] Transaction rolled back');
+      } catch (rollbackError) {
+        console.error('❌ [assignVehicleAndDriver] Error during rollback:', rollbackError);
+      }
+    }
+    
     return res.status(500).json({ 
       message: 'Internal server error while assigning.',
       error: process.env.NODE_ENV === 'development' ? e.message : undefined,
       errorCode: process.env.NODE_ENV === 'development' ? e.code : undefined
     });
   } finally {
-    client.release();
+    if (client) {
+      try {
+        client.release();
+        console.log('✅ [assignVehicleAndDriver] Database connection released');
+      } catch (releaseError) {
+        console.error('❌ [assignVehicleAndDriver] Error releasing connection:', releaseError);
+      }
+    }
     console.log('🔚 [assignVehicleAndDriver] ========== END ASSIGNMENT ==========');
   }
 }
