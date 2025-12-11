@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Branch } from '../types';
 import { UserGroupIcon } from './icons/UserGroupIcon'; // Re-using icon
 import LocationAutocomplete from './LocationAutocomplete';
+import CityAutocomplete from './CityAutocomplete';
 
 interface BranchManagementProps {
     branches: Branch[];
@@ -61,7 +62,13 @@ const BranchManagement: React.FC<BranchManagementProps> = ({ branches, onAddBran
                     {editingBranch ? `ویرایش شعبه: ${editingBranch.name}` : 'افزودن شعبه جدید'}
                 </h2>
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                    <input name="name" value={formData.name} onChange={handleChange} placeholder="نام شعبه" className="input-style" required />
+                    <CityAutocomplete 
+                        value={formData.name}
+                        onChange={(value) => setFormData({...formData, name: value})}
+                        placeholder="نام شعبه (شهر)"
+                        className="input-style"
+                        required
+                    />
                     <LocationAutocomplete 
                         value={formData.location}
                         onChange={(value) => setFormData({...formData, location: value})}

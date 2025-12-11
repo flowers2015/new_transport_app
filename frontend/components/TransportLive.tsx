@@ -951,15 +951,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         <div className="max-w-screen-2xl mx-auto space-y-4">
             <div className="bg-white p-4 rounded-xl shadow-md">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />پیگیری اعلام بار-زنده و تخصیص</h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />پیگیری اعلام بار زنده و تخصیص</h2>
                         {onRefresh && (
                             <button
                                 onClick={() => onRefresh()}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 transition-colors"
+                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 transition-colors"
                                 title="به‌روزرسانی دستی اطلاعات"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                                 به‌روزرسانی
@@ -1259,6 +1259,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     
     // --- Common State ---
     const [blNumber, setBlNumber] = useState(announcement.billOfLadingNumber || '');
+    const [notes, setNotes] = useState(announcement.notes || '');
 
     useEffect(() => {
         if (announcement.assignmentType === 'company') {
@@ -1290,6 +1291,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         const destsCopy = JSON.parse(JSON.stringify(announcement.destinations)); // Deep copy
         setDestinations(destsCopy);
         setBlNumber(announcement.billOfLadingNumber || '');
+        setNotes(announcement.notes || '');
         
         // مقداردهی اولیه displayFreightCosts با فرمت (کاما مثل فیلد کرایه کل)
         const initialDisplayCosts: { [key: string]: string } = {};
@@ -1566,6 +1568,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 driverId: foundCompanyDriver.id, vehicleId: foundVehicle.id, billOfLadingNumber: blNumber, assignmentType: 'company',
                 totalFreightCost: companyTotalCost,
                 destinations: destinations.length > 0 ? destinations : undefined,
+                notes: notes,
             });
         } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
             // موبایل و کد هوشمند راننده اگر خالی باشند، باید از کاربر گرفته شوند
@@ -1639,6 +1642,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 totalFreightCost: personalTotalCost,
                 billOfLadingNumber: blNumber,
                 assignmentType: 'personal',
+                notes: notes,
             });
         }
         onClose();
@@ -1744,6 +1748,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             )}
                         </fieldset>
                          <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
+                         <div><label className="text-sm">توضیحات</label><textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-style mt-1 min-h-[80px]" placeholder="توضیحات اختیاری..." /></div>
                     </div>
                 )}
 
@@ -1902,6 +1907,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                              <div className="text-right font-bold pt-2 border-t">کرایه کل: {typeof totalPersonalCost === 'number' ? totalPersonalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : String(totalPersonalCost)} ریال</div>
                         </fieldset>
                         <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
+                        <div><label className="text-sm">توضیحات</label><textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-style mt-1 min-h-[80px]" placeholder="توضیحات اختیاری..." /></div>
                     </div>
                 )}
                 

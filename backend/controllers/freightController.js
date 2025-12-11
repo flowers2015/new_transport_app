@@ -1378,7 +1378,8 @@ async function assignPersonalDriverAndVehicle(req, res) {
     truckSmartId,
     destinations,
     totalFreightCost,
-    billOfLadingNumber
+    billOfLadingNumber,
+    notes
   } = req.body;
   const userId = req.user?.userId || req.user?.id;
   // ساخت userName به فرمت "username - name - role"
@@ -1603,9 +1604,24 @@ async function assignPersonalDriverAndVehicle(req, res) {
     }
     
     // Update freight announcement
+    const updateFields = ['status = $1', 'assigned_driver_id = $2', 'assigned_vehicle_id = $3', 'bill_of_lading_number = $4', 'total_freight_cost = $5', 'updated_at = NOW()'];
+    const updateValues = ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, totalFreightCost || null];
+    let paramIndex = 6;
+    
+    if (notes !== undefined) {
+      const notesColumn = await client.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'notes'`
+      );
+      if (notesColumn.rowCount > 0) {
+        updateFields.push(`notes = $${paramIndex++}`);
+        updateValues.push(notes || null);
+      }
+    }
+    
+    updateValues.push(announcementId);
     await client.query(
-      'UPDATE freight_announcements SET status = $1, assigned_driver_id = $2, assigned_vehicle_id = $3, bill_of_lading_number = $4, total_freight_cost = $5, updated_at = NOW() WHERE id = $6',
-      ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, totalFreightCost || null, announcementId]
+      `UPDATE freight_announcements SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
+      updateValues
     );
     
     // Log history
@@ -1678,6 +1694,7 @@ async function assignVehicleAndDriver(req, res) {
     assignmentType,
     totalFreightCost,
     billOfLadingNumber,
+    notes,
     destinations,
     // Personal driver/vehicle info
     nationalId,
@@ -1840,6 +1857,16 @@ async function assignVehicleAndDriver(req, res) {
     if (billOfLadingNumber !== undefined) {
       updateFields.push(`bill_of_lading_number = $${paramIndex++}`);
       updateValues.push(billOfLadingNumber || null);
+    }
+    
+    if (notes !== undefined) {
+      const notesColumn = await client.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'notes'`
+      );
+      if (notesColumn.rowCount > 0) {
+        updateFields.push(`notes = $${paramIndex++}`);
+        updateValues.push(notes || null);
+      }
     }
     
     updateValues.push(announcementId);

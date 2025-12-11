@@ -1587,11 +1587,11 @@ const AnnouncementPanel: React.FC<{
         // برای Dairy و Ambient: فیلتر کردن مقاصدی که city ندارند و بررسی فیلدهای اجباری
         const validDestinations = lineType !== FreightLineType.IceCream
             ? destinations.filter(d => {
-                // بررسی فیلدهای اجباری (به جز unloadTime)
+                // بررسی فیلدهای اجباری (به جز unloadTime و representativeName)
                 if (!d.city || d.city.trim() === '') return false;
                 // بررسی representativeType: باید 'agent' یا 'distributor' باشد
                 if (!d.representativeType || (d.representativeType !== 'agent' && d.representativeType !== 'distributor')) return false;
-                if (!d.representativeName || d.representativeName.trim() === '') return false;
+                // representativeName اختیاری است - حذف شد
                 if (!d.tonnage || Number(d.tonnage) <= 0) return false;
                 if (!d.deliveryDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(d.deliveryDate)) return false;
                 return true;
@@ -1600,13 +1600,13 @@ const AnnouncementPanel: React.FC<{
         
         // بررسی اینکه حداقل یک مقصد معتبر وجود دارد (برای Dairy و Ambient)
         if (lineType !== FreightLineType.IceCream && validDestinations.length === 0) {
-            alert('حداقل یک مقصد با تمام فیلدهای اجباری (شهر، نوع نماینده، نام نماینده، تناژ، تاریخ تحویل) الزامی است.');
+            alert('حداقل یک مقصد با تمام فیلدهای اجباری (شهر، نوع نماینده، تناژ، تاریخ تحویل) الزامی است.');
             return;
         }
         
         // بررسی اینکه تمام مقاصد معتبر هستند (برای Dairy و Ambient)
         if (lineType !== FreightLineType.IceCream && validDestinations.length !== destinations.length) {
-            alert('تمام مقاصد باید دارای شهر، نوع نماینده، نام نماینده، تناژ و تاریخ تحویل معتبر باشند.');
+            alert('تمام مقاصد باید دارای شهر، نوع نماینده، تناژ و تاریخ تحویل معتبر باشند.');
             return;
         }
         
@@ -2222,7 +2222,7 @@ const AnnouncementPanel: React.FC<{
                                                     <option value="distributor">پخش</option>
                                                 </select>
                                             </div>
-                                            <div><label className="text-xs">نام نماینده*</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style" required/></div>
+                                            <div><label className="text-xs">نام نماینده</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style" /></div>
                                             <div><label className="text-xs">تناژ <span className="text-[10px] text-slate-500">(کیلوگرم)*</span></label><input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style" required min="0" step="0.01"/></div>
                                             <div><label className="text-xs">تاریخ تحویل*</label><input type="text" value={dest.deliveryDate || ''} onChange={e => {
                                                 let value = e.target.value.replace(/[^\d\/]/g, '');

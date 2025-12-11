@@ -368,89 +368,87 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
         }
       });
       
-      // دریافت اطلاعات رانندگان (شرکتی)
+      // بهینه‌سازی: لود موازی driver/vehicle ها برای سرعت بیشتر
+      const fetchPromises: Promise<void>[] = [];
+      
       if (driverIds.size > 0) {
-        try {
-          const driversRes = await fetch(getApiUrl('drivers'), { headers });
-          if (driversRes.ok) {
-            const drivers: any[] = await driversRes.json();
-            const driverMapData: { [key: string]: { name: string; employeeId: string } } = {};
-            drivers.forEach(d => {
-              if (driverIds.has(d.id)) {
-                driverMapData[d.id] = { name: d.name, employeeId: d.employee_id || '' };
-              }
-            });
-            setDriverMap(driverMapData);
-          }
-        } catch (e) {
-          console.error('Failed to fetch drivers:', e);
-        }
+        // لود رانندگان شرکتی
+        fetchPromises.push(
+          fetch(getApiUrl('drivers'), { headers })
+            .then(res => res.ok ? res.json() : Promise.resolve([]))
+            .then(drivers => {
+              const driverMapData: { [key: string]: { name: string; employeeId: string } } = {};
+              drivers.forEach((d: any) => {
+                if (driverIds.has(d.id)) {
+                  driverMapData[d.id] = { name: d.name, employeeId: d.employee_id || '' };
+                }
+              });
+              setDriverMap(driverMapData);
+            })
+            .catch(e => console.error('Failed to fetch drivers:', e))
+        );
+        
+        // لود رانندگان شخصی
+        fetchPromises.push(
+          fetch(getApiUrl('personal-drivers'), { headers })
+            .then(res => res.ok ? res.json() : Promise.resolve([]))
+            .then(personalDrivers => {
+              const personalDriverMapData: { [key: string]: { name: string; contact?: string } } = {};
+              personalDrivers.forEach((d: any) => {
+                if (driverIds.has(d.id)) {
+                  personalDriverMapData[d.id] = { name: d.name || d.driver_name || '-', contact: d.mobile || d.contact || '' };
+                }
+              });
+              setPersonalDriverMap(personalDriverMapData);
+            })
+            .catch(e => console.error('Failed to fetch personal drivers:', e))
+        );
       }
       
-      // دریافت اطلاعات رانندگان شخصی
-      if (driverIds.size > 0) {
-        try {
-          const personalDriversRes = await fetch(getApiUrl('personal-drivers'), { headers });
-          if (personalDriversRes.ok) {
-            const personalDrivers: any[] = await personalDriversRes.json();
-            const personalDriverMapData: { [key: string]: { name: string; contact?: string } } = {};
-            personalDrivers.forEach(d => {
-              if (driverIds.has(d.id)) {
-                personalDriverMapData[d.id] = { name: d.name || d.driver_name || '-', contact: d.mobile || d.contact || '' };
-              }
-            });
-            setPersonalDriverMap(personalDriverMapData);
-          }
-        } catch (e) {
-          console.error('Failed to fetch personal drivers:', e);
-        }
-      }
-      
-      // دریافت اطلاعات خودروها (شرکتی)
       if (vehicleIds.size > 0) {
-        try {
-          const vehiclesRes = await fetch(getApiUrl('vehicles'), { headers });
-          if (vehiclesRes.ok) {
-            const vehicles: any[] = await vehiclesRes.json();
-            const vehicleMapData: { [key: string]: { plate: string; model?: string } } = {};
-            vehicles.forEach(v => {
-              if (vehicleIds.has(v.id)) {
-                const plate = v.plate_part1 && v.plate_letter && v.plate_part2 && v.plate_city_code
-                  ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}-${v.plate_city_code}`
-                  : v.vehicle_code || v.model || 'نامشخص';
-                vehicleMapData[v.id] = { plate, model: v.model };
-              }
-            });
-            setVehicleMap(vehicleMapData);
-          }
-        } catch (e) {
-          console.error('Failed to fetch vehicles:', e);
-        }
+        // لود خودروهای شرکتی
+        fetchPromises.push(
+          fetch(getApiUrl('vehicles'), { headers })
+            .then(res => res.ok ? res.json() : Promise.resolve([]))
+            .then(vehicles => {
+              const vehicleMapData: { [key: string]: { plate: string; model?: string } } = {};
+              vehicles.forEach((v: any) => {
+                if (vehicleIds.has(v.id)) {
+                  const plate = v.plate_part1 && v.plate_letter && v.plate_part2 && v.plate_city_code
+                    ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}-${v.plate_city_code}`
+                    : v.vehicle_code || v.model || 'نامشخص';
+                  vehicleMapData[v.id] = { plate, model: v.model };
+                }
+              });
+              setVehicleMap(vehicleMapData);
+            })
+            .catch(e => console.error('Failed to fetch vehicles:', e))
+        );
+        
+        // لود خودروهای شخصی
+        fetchPromises.push(
+          fetch(getApiUrl('personal-vehicles'), { headers })
+            .then(res => res.ok ? res.json() : Promise.resolve([]))
+            .then(personalVehicles => {
+              const personalVehicleMapData: { [key: string]: { plate: string; model?: string } } = {};
+              personalVehicles.forEach((v: any) => {
+                if (vehicleIds.has(v.id)) {
+                  const plate = v.plate_part1 && v.plate_letter && v.plate_part2 && v.plate_city_code
+                    ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}-${v.plate_city_code}`
+                    : (v.platePart1 && v.plateLetter && v.platePart2 && v.plateCityCode
+                      ? `${v.platePart1}${v.plateLetter}${v.platePart2}-${v.plateCityCode}`
+                      : v.vehicle_type || 'نامشخص');
+                  personalVehicleMapData[v.id] = { plate, model: v.vehicle_type || v.model };
+                }
+              });
+              setPersonalVehicleMap(personalVehicleMapData);
+            })
+            .catch(e => console.error('Failed to fetch personal vehicles:', e))
+        );
       }
       
-      // دریافت اطلاعات خودروهای شخصی
-      if (vehicleIds.size > 0) {
-        try {
-          const personalVehiclesRes = await fetch(getApiUrl('personal-vehicles'), { headers });
-          if (personalVehiclesRes.ok) {
-            const personalVehicles: any[] = await personalVehiclesRes.json();
-            const personalVehicleMapData: { [key: string]: { plate: string; model?: string } } = {};
-            personalVehicles.forEach(v => {
-              if (vehicleIds.has(v.id)) {
-                const plate = v.plate_part1 && v.plate_letter && v.plate_part2 && v.plate_city_code
-                  ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}-${v.plate_city_code}`
-                  : (v.platePart1 && v.plateLetter && v.platePart2 && v.plateCityCode
-                    ? `${v.platePart1}${v.plateLetter}${v.platePart2}-${v.plateCityCode}`
-                    : v.vehicle_type || 'نامشخص');
-                personalVehicleMapData[v.id] = { plate, model: v.vehicle_type || v.model };
-              }
-            });
-            setPersonalVehicleMap(personalVehicleMapData);
-          }
-        } catch (e) {
-          console.error('Failed to fetch personal vehicles:', e);
-        }
-      }
+      // اجرای همه fetch ها به صورت موازی
+      await Promise.all(fetchPromises);
     } catch (err: any) {
       console.error('Failed to fetch history:', err);
       setError(err.message || 'خطای ناشناخته');

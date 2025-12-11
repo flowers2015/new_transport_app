@@ -291,6 +291,10 @@ const App: React.FC = () => {
     const handleDeleteBranch = async (id: string) => {
         try {
             const token = localStorage.getItem('token');
+            if (!token) {
+                alert('لطفاً دوباره وارد شوید');
+                return;
+            }
             const response = await fetch(getApiUrl(`branches/${id}`), {
                 method: 'DELETE',
                 headers: {
@@ -300,12 +304,15 @@ const App: React.FC = () => {
             });
             if (response.ok) {
                 await fetchBranches();
+                alert('شعبه با موفقیت حذف شد');
             } else {
-                alert('خطا در حذف شعبه');
+                const errorData = await response.json().catch(() => ({ message: 'خطای نامشخص' }));
+                console.error('Delete branch error:', errorData);
+                alert(errorData.message || 'خطا در حذف شعبه');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to delete branch:', error);
-            alert('خطا در حذف شعبه');
+            alert(error?.message || 'خطا در حذف شعبه');
         }
     };
 

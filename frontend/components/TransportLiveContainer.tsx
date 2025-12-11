@@ -582,7 +582,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             assignedDriverId: assignment.driverId,
             assignedVehicleId: assignment.vehicleId,
             totalFreightCost: assignment.totalFreightCost,
-            billOfLadingNumber: assignment.billOfLadingNumber
+            billOfLadingNumber: assignment.billOfLadingNumber,
+            notes: assignment.notes
         }));
 
         try {
