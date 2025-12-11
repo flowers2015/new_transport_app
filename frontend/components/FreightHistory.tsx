@@ -355,6 +355,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     const priorityMap: { [key: string]: string } = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
                     return priorityMap[ann.priority || 'normal'] || ann.priority || 'عادی';
                 }
+                if (header === 'کل تناژ (کیلوگرم)') {
+                    const totalTonnage = ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
+                    return totalTonnage;
+                }
                 
                 // Find column definition - دقیقاً همان header را پیدا کن
                 const col = cols.find(c => c.header === header);
@@ -472,10 +476,29 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         });
         ws['!cols'] = colWidths;
         
-        // تنظیم فرمت اعداد برای ستون‌های عددی
+        // تنظیم فرمت اعداد برای ستون‌های عددی و استایل‌ها
         const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        
+        // رنگ‌بندی headerها (ردیف اول)
         headers.forEach((header, colIdx) => {
-            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
+            const headerCell = XLSX.utils.encode_cell({ r: 0, c: colIdx });
+            if (!ws[headerCell]) {
+                ws[headerCell] = { v: header, t: 's' };
+            }
+            // استایل header: background آبی تیره، متن سفید، bold
+            ws[headerCell].s = {
+                fill: { fgColor: { rgb: '4472C4' } }, // آبی تیره
+                font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: {
+                    top: { style: 'thin', color: { rgb: '000000' } },
+                    bottom: { style: 'thin', color: { rgb: '000000' } },
+                    left: { style: 'thin', color: { rgb: '000000' } },
+                    right: { style: 'thin', color: { rgb: '000000' } }
+                }
+            };
+            
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
             if (isNumericColumn) {
                 for (let row = 1; row <= filteredAnnouncements.length; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
@@ -493,6 +516,45 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 }
             }
         });
+        
+        // رنگ‌بندی ردیف‌ها (zebra striping) - ردیف‌های زوج و فرد
+        for (let row = 1; row <= filteredAnnouncements.length; row++) {
+            const isEvenRow = row % 2 === 0;
+            const rowColor = isEvenRow ? 'F2F2F2' : 'FFFFFF'; // خاکستری روشن برای زوج، سفید برای فرد
+            
+            headers.forEach((header, colIdx) => {
+                const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
+                if (!ws[cellAddress]) {
+                    ws[cellAddress] = { v: '', t: 's' };
+                }
+                
+                // اگر استایل وجود ندارد، ایجاد کن
+                if (!ws[cellAddress].s) {
+                    ws[cellAddress].s = {};
+                }
+                
+                // تنظیم background color
+                ws[cellAddress].s.fill = { fgColor: { rgb: rowColor } };
+                
+                // تنظیم border
+                if (!ws[cellAddress].s.border) {
+                    ws[cellAddress].s.border = {
+                        top: { style: 'thin', color: { rgb: 'D0D0D0' } },
+                        bottom: { style: 'thin', color: { rgb: 'D0D0D0' } },
+                        left: { style: 'thin', color: { rgb: 'D0D0D0' } },
+                        right: { style: 'thin', color: { rgb: 'D0D0D0' } }
+                    };
+                }
+                
+                // تنظیم alignment برای اعداد
+                const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
+                if (isNumericColumn) {
+                    ws[cellAddress].s.alignment = { horizontal: 'right', vertical: 'center' };
+                } else {
+                    ws[cellAddress].s.alignment = { horizontal: 'right', vertical: 'center' };
+                }
+            });
+        }
         
         // اضافه کردن worksheet به workbook
         XLSX.utils.book_append_sheet(wb, ws, 'تاریخچه اعلام بار');
