@@ -2909,7 +2909,7 @@ async function finalizeAssignments(req, res) {
     
     for (const annId of announcementIds) {
       const annResult = await client.query(
-        'SELECT id, assigned_vehicle_id, assigned_driver_id, line_type, status, assignment_type, bill_of_lading_number FROM freight_announcements WHERE id = $1',
+        'SELECT id, announcement_code, assigned_vehicle_id, assigned_driver_id, line_type, status, assignment_type, bill_of_lading_number FROM freight_announcements WHERE id = $1',
         [annId]
       );
       
@@ -2921,6 +2921,7 @@ async function finalizeAssignments(req, res) {
       const ann = annResult.rows[0];
       
       console.log(`🔍 [finalizeAssignments] Processing announcement ${annId}:`, {
+        announcement_code: ann.announcement_code || 'N/A',
         assignment_type: ann.assignment_type,
         assigned_vehicle_id: ann.assigned_vehicle_id,
         assigned_driver_id: ann.assigned_driver_id,
@@ -2989,14 +2990,18 @@ async function finalizeAssignments(req, res) {
       if (assignmentType === 'personal') {
         const billOfLadingNumber = ann.bill_of_lading_number;
         if (!billOfLadingNumber || billOfLadingNumber.trim() === '') {
-          console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} missing bill_of_lading_number - SKIPPING finalization`);
+          console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) missing bill_of_lading_number - SKIPPING finalization`);
+          console.log(`   Vehicle ID: ${ann.assigned_vehicle_id}, Driver ID: ${ann.assigned_driver_id}, Line Type: ${ann.line_type}`);
           missingBillOfLadingIds.push(annId);
           continue; // این اعلام بار را finalize نکن
         } else {
-          console.log(`✅ [finalizeAssignments] Personal assignment ${annId} has bill_of_lading_number: ${billOfLadingNumber}`);
+          console.log(`✅ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) has bill_of_lading_number: ${billOfLadingNumber}`);
         }
+      } else if (assignmentType === 'company') {
+        console.log(`✅ [finalizeAssignments] Company assignment ${annId} (${ann.announcement_code || 'N/A'}) - no bill of lading check needed`);
       } else {
-        console.log(`✅ [finalizeAssignments] Company assignment ${annId} - no bill of lading check needed`);
+        console.log(`⚠️ [finalizeAssignments] Unknown assignment_type for ${annId} (${ann.announcement_code || 'N/A'}): ${assignmentType} - treating as company`);
+        assignmentType = 'company'; // اگر assignment_type نامشخص است، به عنوان company در نظر بگیر
       }
       // برای خودروهای شرکتی نیازی به بررسی شماره بارنامه نیست - باید finalize شوند
       
