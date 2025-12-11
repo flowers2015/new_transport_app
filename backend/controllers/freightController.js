@@ -2897,8 +2897,22 @@ async function finalizeAssignments(req, res) {
       
       const ann = annResult.rows[0];
       
-      // بررسی شماره بارنامه برای خودروهای شخصی
-      if (ann.assignment_type === 'personal') {
+      // تشخیص assignment_type اگر null باشد
+      let assignmentType = ann.assignment_type;
+      if (!assignmentType) {
+        // اگر assignment_type null است، از line_type تشخیص بده
+        const iceCreamMatches = ['IceCream', 'بستنی'];
+        if (iceCreamMatches.includes(ann.line_type)) {
+          assignmentType = 'company';
+        } else {
+          // برای Dairy و Ambient، معمولاً personal است
+          assignmentType = 'personal';
+        }
+        console.log(`🔍 [finalizeAssignments] Detected assignment_type=${assignmentType} for ${annId} (was null, inferred from line_type=${ann.line_type})`);
+      }
+      
+      // بررسی شماره بارنامه فقط برای خودروهای شخصی
+      if (assignmentType === 'personal') {
         const billOfLadingNumber = ann.bill_of_lading_number;
         if (!billOfLadingNumber || billOfLadingNumber.trim() === '') {
           console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} missing bill_of_lading_number`);
@@ -2906,7 +2920,7 @@ async function finalizeAssignments(req, res) {
           continue; // این اعلام بار را finalize نکن
         }
       }
-      // برای خودروهای شرکتی نیازی به بررسی نیست
+      // برای خودروهای شرکتی نیازی به بررسی شماره بارنامه نیست - باید finalize شوند
       
       // تبدیل lineType انگلیسی به فارسی برای مقایسه
       const lineTypeMap = {

@@ -90,6 +90,29 @@ const isToday = (someDate: any) => {
         d.getFullYear() === today.getFullYear();
 }
 
+// Helper function to convert Persian digits to English
+const toEnglishDigits = (str: string | number | null | undefined): string => {
+    if (str === null || str === undefined) return '';
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    let result = String(str);
+    for (let i = 0; i < 10; i++) {
+        result = result.replace(new RegExp(persianDigits[i], 'g'), String(i));
+        result = result.replace(new RegExp(arabicDigits[i], 'g'), String(i));
+    }
+    return result;
+};
+
+// Helper function to escape CSV values
+const escapeCSV = (value: string | number | null | undefined): string => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+};
+
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.Draft]: 'bg-gray-100 text-gray-800',
     [FreightAnnouncementStatus.PendingManagerApproval]: 'bg-yellow-100 text-yellow-800',
@@ -967,6 +990,175 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
+    // Function to generate CSV/Excel export
+    const generateExcelExport = (mode: 'compact' | 'full') => {
+        const cols = columnsConfig(mode);
+        const visibleCols = cols.filter(c => c.display(activeLine));
+        const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+        
+        // Get headers
+        const headers: string[] = [];
+        if (canPerformActions) {
+            headers.push('انتخاب');
+        }
+        
+        if (isFullDairyAmbientMode) {
+            // Full Dairy/Ambient view - special handling
+            visibleCols.forEach(col => {
+                if (col.header !== 'عملیات') {
+                    headers.push(col.header);
+                }
+            });
+            // Add destination headers
+            for (let i = 1; i <= 4; i++) {
+                headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+            }
+        } else {
+            visibleCols.forEach(col => {
+                if (col.header !== 'عملیات') {
+                    headers.push(col.header);
+                }
+            });
+        }
+        
+        // Generate CSV content
+        let csv = '\uFEFF'; // BOM for UTF-8
+        csv += headers.map(h => escapeCSV(h)).join(',') + '\n';
+        
+        // Generate rows
+        filteredAnnouncements.forEach((ann, idx) => {
+            const row: string[] = [];
+            
+            if (canPerformActions) {
+                row.push(''); // Checkbox column
+            }
+            
+            if (isFullDairyAmbientMode) {
+                // Full Dairy/Ambient view
+                visibleCols.forEach(col => {
+                    if (col.header !== 'عملیات') {
+                        let value = '';
+                        if (col.render) {
+                            const rendered = col.render(ann, idx);
+                            if (typeof rendered === 'string') {
+                                value = rendered;
+                            } else if (typeof rendered === 'number') {
+                                value = String(rendered);
+                            } else if (React.isValidElement(rendered)) {
+                                // Extract text from React element
+                                const text = extractTextFromElement(rendered);
+                                value = text;
+                            } else {
+                                value = String(rendered || '');
+                            }
+                        } else {
+                            value = String((ann as any)[col.header] || '');
+                        }
+                        row.push(toEnglishDigits(value));
+                    }
+                });
+                
+                // Add destinations
+                for (let i = 0; i < 4; i++) {
+                    const dest = ann.destinations[i];
+                    if (dest) {
+                        const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
+                                       (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
+                                       (dest.representativeName || '').includes('پخش') ? 'پخش' : 
+                                       (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                        row.push(
+                            toEnglishDigits(repType),
+                            toEnglishDigits(dest.city || ''),
+                            toEnglishDigits(dest.tonnage ? String(dest.tonnage) : ''),
+                            toEnglishDigits((dest as any).deliveryDate || ''),
+                            toEnglishDigits(dest.unloadTime || ''),
+                            toEnglishDigits(dest.freightCost ? String(dest.freightCost) : '')
+                        );
+                    } else {
+                        row.push('', '', '', '', '', '');
+                    }
+                }
+            } else {
+                // Compact or other full views
+                visibleCols.forEach(col => {
+                    if (col.header !== 'عملیات') {
+                        let value = '';
+                        if (col.render) {
+                            const rendered = col.render(ann, idx);
+                            if (typeof rendered === 'string') {
+                                value = rendered;
+                            } else if (typeof rendered === 'number') {
+                                value = String(rendered);
+                            } else if (React.isValidElement(rendered)) {
+                                // Extract text from React element
+                                const text = extractTextFromElement(rendered);
+                                value = text;
+                            } else if (Array.isArray(rendered)) {
+                                // Handle array of elements (like destinations)
+                                value = rendered.map((item: any) => {
+                                    if (React.isValidElement(item)) {
+                                        return extractTextFromElement(item);
+                                    }
+                                    return String(item || '');
+                                }).join('، ');
+                            } else {
+                                value = String(rendered || '');
+                            }
+                        } else {
+                            value = String((ann as any)[col.header] || '');
+                        }
+                        row.push(toEnglishDigits(value));
+                    }
+                });
+            }
+            
+            csv += row.map(cell => escapeCSV(cell)).join(',') + '\n';
+        });
+        
+        return csv;
+    };
+
+    // Helper function to extract text from React element
+    const extractTextFromElement = (element: React.ReactElement | React.ReactNode): string => {
+        if (typeof element === 'string') return element;
+        if (typeof element === 'number') return String(element);
+        if (!React.isValidElement(element)) return '';
+        
+        if (element.props && element.props.children) {
+            if (typeof element.props.children === 'string') {
+                return element.props.children;
+            }
+            if (typeof element.props.children === 'number') {
+                return String(element.props.children);
+            }
+            if (Array.isArray(element.props.children)) {
+                return element.props.children.map((child: any) => extractTextFromElement(child)).join('');
+            }
+            return extractTextFromElement(element.props.children);
+        }
+        return '';
+    };
+
+    // Function to download CSV
+    const downloadExcel = (mode: 'compact' | 'full') => {
+        const csv = generateExcelExport(mode);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
+                            activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
+                            'لبنیات-فروتلند';
+        const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
+        const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="max-w-screen-2xl mx-auto space-y-4">
             <div className="bg-white p-4 rounded-xl shadow-md">
@@ -1034,7 +1226,32 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         )}
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg">
                         </div>
-                        <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
+                        <div className="flex items-center p-1 bg-slate-200 rounded-lg">
+                            <button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button>
+                            <button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={() => downloadExcel('compact')} 
+                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                title="خروجی اکسل - حالت فشرده"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                اکسل فشرده
+                            </button>
+                            <button 
+                                onClick={() => downloadExcel('full')} 
+                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                title="خروجی اکسل - حالت کامل"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                اکسل کامل
+                            </button>
+                        </div>
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg">
                             {Object.values(FreightLineType).map(lt => (
