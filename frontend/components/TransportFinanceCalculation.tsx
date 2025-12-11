@@ -87,9 +87,10 @@ interface AllowanceInputDialogData {
     
     // فیلدهای محاسبات دپو
     depotMissionDays?: number; // تعداد روز ماموریت دپو
-    depotShipmentCount?: number; // تعداد بار ارسالی
-    depotCargoHandlingCost?: number; // هزینه جابجایی بار در دپو
+    depotShipmentCount?: number; // تعداد بار ارسالی (محاسبه خودکار از تعداد ردیف‌ها)
+    depotCargoHandlingCost?: number; // هزینه جابجایی بار در دپو (محاسبه خودکار)
     depotKilometerRate?: number; // اجرت کیلومتر دپو
+    depotTotalMileage?: number; // پیمایش کل دپو (محاسبه خودکار از مجموع mileage ردیف‌ها)
     depotRows?: Array<{ // ردیف‌های جدول محاسبات دپو
         id: string;
         destination: string; // مقاصد اعزامی دپو
@@ -175,6 +176,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [excessMissionCostPerDay, setExcessMissionCostPerDay] = useState<number>(0);
     const [multiUnloadCostPerUnit, setMultiUnloadCostPerUnit] = useState<number>(0);
     const [helperAllowancePerKm, setHelperAllowancePerKm] = useState<number>(0);
+    const [returnCargoRegulations, setReturnCargoRegulations] = useState<Array<{ vehicleType: 'تریلی' | 'ده چرخ'; cargoType: 'full_product' | 'full_box_pallet_basket' | 'half'; cost: number; startDate?: string; endDate?: string; isActive?: boolean }>>([]);
 
     useEffect(() => {
         fetchData();
@@ -209,7 +211,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
                 
                 if (vehicleTypeForApi) {
-                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                    // پیمایش کل = پیمایش مصوب + پیمایش مازاد + پیمایش کل دپو
+                    const depotMileage = Number(inputDialogData.depotTotalMileage) || 0;
+                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0) + depotMileage;
                     const billDate = inputDialogData.billOfLadingDate || '';
                     
                     // دریافت بخشنامه اجرت ثابت برای نوع خودرو
@@ -270,12 +274,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             };
 
             // Fetch همه بخشنامه‌ها
-            const [foodRes, excessMissionRes, multiUnloadRes, helperRes, fuelConsumptionRes] = await Promise.all([
+            const [foodRes, excessMissionRes, multiUnloadRes, helperRes, fuelConsumptionRes, returnCargoRes] = await Promise.all([
                 fetch(getApiUrl('allowance-regulations/food'), { headers }),
                 fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
                 fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
                 fetch(getApiUrl('allowance-regulations/helper'), { headers }),
                 fetch(getApiUrl('allowance-regulations/fuel-consumption'), { headers }),
+                fetch(getApiUrl('allowance-regulations/return-cargo'), { headers }),
             ]);
 
             if (foodRes.ok) {
@@ -325,6 +330,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         }
                     });
                     setFuelConsumptionRegulations(fuelMap);
+                }
+            }
+
+            if (returnCargoRes.ok) {
+                const returnCargoData = await returnCargoRes.json();
+                if (returnCargoData && returnCargoData.length > 0) {
+                    setReturnCargoRegulations(returnCargoData.filter((reg: any) => reg.isActive !== false));
                 }
             }
         } catch (err) {
@@ -1464,7 +1476,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
                 
                 if (vehicleTypeForApi) {
-                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                    // پیمایش کل = پیمایش مصوب + پیمایش مازاد + پیمایش کل دپو
+                    const depotMileage = Number(inputDialogData.depotTotalMileage) || 0;
+                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0) + depotMileage;
                     const billOfLadingDate = inputDialogData.billOfLadingDate || '';
                     
                     // دریافت بخشنامه اجرت ثابت
@@ -1666,6 +1680,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     queueType: activeQueueType,
                     billOfLadingDate: inputDialogData.billOfLadingDate,
                     calculationDate: inputDialogData.calculationDate,
+                    depotTotalMileage: Number(inputDialogData.depotTotalMileage) || 0,
+                    depotShipmentCount: Number(inputDialogData.depotShipmentCount) || 0,
+                    depotCargoHandlingCost: Number(inputDialogData.depotCargoHandlingCost) || 0,
+                    depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
+                    depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
+                    depotRows: inputDialogData.depotRows || [],
                     userId, // اضافه کردن userId
                     // فیلدهای راننده کمکی
                     helperDriverId: inputDialogData.helperDriverId || null,
@@ -2252,13 +2272,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             <span className="px-3 py-2 bg-orange-100 border border-orange-300 rounded-md text-left font-bold text-orange-800 min-w-[140px]">
                                                 {(() => {
                                                     // محاسبه اتوماتیک: پیمایش × نرخ بخشنامه
-                                                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0);
+                                                    const depotMileage = Number(inputDialogData.depotTotalMileage) || 0;
+                                                    const totalKm = (Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0) + depotMileage;
                                                     const calculatedAllowance = inputDialogData.fixedAllowance || 0;
                                                     return calculatedAllowance ? calculatedAllowance.toLocaleString('fa-IR') : 'در حال محاسبه...';
                                                 })()}
                                             </span>
                                             <span className="text-xs text-slate-500">
-                                                (پیمایش: {((Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0)).toLocaleString('fa-IR')} کیلومتر)
+                                                (پیمایش: {((Number(inputDialogData.approvedKilometers) || 0) + (Number(inputDialogData.excessKilometers) || 0) + (Number(inputDialogData.depotTotalMileage) || 0)).toLocaleString('fa-IR')} کیلومتر)
                                             </span>
                                         </div>
                                     )}
@@ -2893,20 +2914,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={inputDialogData.depotShipmentCount ? String(inputDialogData.depotShipmentCount) : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value;
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                depotShipmentCount: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        readOnly
+                                        value={inputDialogData.depotShipmentCount ? String(inputDialogData.depotShipmentCount) : '0'}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار از تعداد ردیف‌های ثبت شده</p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2915,20 +2928,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={inputDialogData.depotCargoHandlingCost ? String(inputDialogData.depotCargoHandlingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                depotCargoHandlingCost: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                        readOnly
+                                        value={inputDialogData.depotCargoHandlingCost ? String(inputDialogData.depotCargoHandlingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد ردیف × هزینه بار کامل محصول</p>
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
@@ -2951,6 +2956,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                     <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        پیمایش کل دپو (کیلومتر)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        readOnly
+                                        value={inputDialogData.depotTotalMileage ? String(inputDialogData.depotTotalMileage).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار از مجموع پیمایش ردیف‌ها</p>
                                 </div>
                             </div>
                             
