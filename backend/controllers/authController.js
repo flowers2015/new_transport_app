@@ -31,25 +31,43 @@ async function login(req, res) {
     const hasBranchId = branchColumnCheck.rows.some(r => r.column_name === 'branch_id');
     const hasBranchCity = branchColumnCheck.rows.some(r => r.column_name === 'branch_city');
     
+    // بررسی اینکه آیا جدول branches وجود دارد
+    let branchesTableExists = false;
+    try {
+      const branchesCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'branches'
+        )
+      `);
+      branchesTableExists = branchesCheck.rows[0]?.exists || false;
+    } catch (err) {
+      console.warn('⚠️ [Login] Could not check branches table existence:', err.message);
+      branchesTableExists = false;
+    }
+    
     // ساخت query برای گرفتن branch name
     let branchJoin = '';
     let branchSelect = '';
-    if (hasBranchId) {
+    if (hasBranchId && branchesTableExists) {
       branchSelect = ', b.name as branch_city_name';
       branchJoin = 'LEFT JOIN branches b ON users.branch_id = b.id';
-    } else if (hasBranchCity) {
+    } else if (hasBranchCity && branchesTableExists) {
       branchSelect = ', COALESCE(b.name, users.branch_city) as branch_city_name';
       branchJoin = 'LEFT JOIN branches b ON users.branch_city = b.id';
     } else {
       branchSelect = ', NULL as branch_city_name';
     }
     
-    const { rows } = await pool.query(`
-      SELECT users.*, ${nameColumn} as display_name${branchSelect}
-      FROM users
-      ${branchJoin}
-      WHERE users.username = $1
-    `, [username]);
+    // ساخت query با error handling
+    let query = `SELECT users.*, ${nameColumn} as display_name${branchSelect} FROM users`;
+    if (branchJoin) {
+      query += ` ${branchJoin}`;
+    }
+    query += ` WHERE users.username = $1`;
+    
+    const { rows } = await pool.query(query, [username]);
     const user = rows[0];
 
     if (!user) {
@@ -89,8 +107,14 @@ async function login(req, res) {
     });
 
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('❌ [Login] Error:', error);
+    console.error('❌ [Login] Error stack:', error.stack);
+    // ارسال پیام خطای دقیق‌تر برای debugging
+    const errorMessage = error.message || 'Internal server error';
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+    });
   }
 }
 
