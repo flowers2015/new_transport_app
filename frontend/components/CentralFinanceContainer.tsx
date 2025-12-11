@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, FreightTransaction, User } from '../types';
 import CentralFinanceDashboard from './CentralFinanceDashboard';
 import { gregorianToJalali } from '../utils/jalali';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { getApiUrl } from '../utils/apiConfig';
 
 interface CentralFinanceContainerProps {

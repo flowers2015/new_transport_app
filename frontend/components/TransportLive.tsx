@@ -10,6 +10,7 @@ import { PencilIcon } from './icons/PencilIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import * as XLSX from 'xlsx';
 
 interface TransportLiveProps {
     announcements: FreightAnnouncement[];
@@ -990,7 +991,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
-    // Function to generate CSV/Excel export - دقیقاً مطابق جدول frontend
+    // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
     const generateExcelExport = (mode: 'compact' | 'full') => {
         const cols = columnsConfig(mode);
         const visibleCols = cols.filter(c => c.display(activeLine));
@@ -1016,13 +1017,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }
         }
         
-        // Generate CSV content
-        let csv = '\uFEFF'; // BOM for UTF-8
-        csv += headers.map(h => escapeCSV(h)).join(',') + '\n';
+        // ایجاد workbook و worksheet
+        const wb = XLSX.utils.book_new();
+        const wsData: any[][] = [];
+        
+        // اضافه کردن headers
+        wsData.push(headers);
         
         // Generate rows - دقیقاً همان ترتیب و محتوای frontend
         filteredAnnouncements.forEach((ann, idx) => {
-            const row: string[] = [];
+            const row: any[] = [];
             
             if (canPerformActions) {
                 row.push(''); // Checkbox column
@@ -1031,13 +1035,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             // استفاده از render functions برای استخراج دقیق داده‌ها
             visibleCols.forEach(col => {
                 if (col.header !== 'عملیات') {
-                    let value = '';
+                    let value: any = '';
+                    
+                    // بررسی اینکه آیا این ستون عددی است (مثل تناژ، کرایه، ارزش بار)
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                    const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
+                    
                     if (col.render) {
                         const rendered = col.render(ann, idx);
                         if (typeof rendered === 'string') {
                             value = rendered;
                         } else if (typeof rendered === 'number') {
-                            value = String(rendered);
+                            value = rendered; // عدد را به صورت عدد نگه دار
                         } else if (React.isValidElement(rendered)) {
                             // Extract text from React element - دقیق‌تر
                             value = extractTextFromElement(rendered);
@@ -1057,13 +1066,36 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             value = String(rendered || '');
                         }
                     } else {
-                        value = String((ann as any)[col.header] || '');
+                        value = (ann as any)[col.header] || '';
                     }
                     
-                    // Clean up: فقط HTML tags و emojis را حذف کن، اما فارسی و اعداد را نگه دار
-                    value = value.replace(/<[^>]*>/g, '').trim();
-                    // تبدیل به انگلیسی برای اکسل (اما محتوا را حفظ کن)
-                    row.push(toEnglishDigits(value));
+                    // Clean up: فقط HTML tags و emojis را حذف کن
+                    if (typeof value === 'string') {
+                        value = value.replace(/<[^>]*>/g, '').trim();
+                    }
+                    
+                    // برای ستون‌های عددی، مقدار عددی را استخراج کن
+                    if (isNumericColumn) {
+                        if (typeof value === 'number') {
+                            // اگر قبلاً عدد است، نگه دار
+                            value = value;
+                        } else if (typeof value === 'string') {
+                            // حذف واحدها (تومان، ریال) و جداکننده‌ها و کاراکترهای فارسی
+                            // همچنین حذف جداکننده‌های فارسی (،) و انگلیسی (,)
+                            const cleaned = value.replace(/[^\d]/g, '');
+                            const numValue = parseFloat(cleaned);
+                            if (!isNaN(numValue) && numValue > 0) {
+                                // مقدار عددی را نگه دار (Excel خودش فرمت می‌کند)
+                                value = numValue;
+                            } else {
+                                value = '';
+                            }
+                        } else {
+                            value = '';
+                        }
+                    }
+                    
+                    row.push(value);
                 }
             });
             
@@ -1076,17 +1108,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                        (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
                                        (dest.representativeName || '').includes('پخش') ? 'پخش' : 
                                        (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
-                        const tonnage = dest.tonnage ? String(dest.tonnage) : '';
+                        const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
-                        const freightCost = dest.freightCost ? formatDestinationFreightCost(dest.freightCost) : '';
+                        // برای کرایه، مقدار عددی را نگه دار (Excel خودش فرمت می‌کند)
+                        const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
                         row.push(
-                            toEnglishDigits(repType),
-                            toEnglishDigits(dest.city || ''),
-                            toEnglishDigits(tonnage),
-                            toEnglishDigits(deliveryDate),
-                            toEnglishDigits(unloadTime),
-                            toEnglishDigits(freightCost)
+                            repType,
+                            dest.city || '',
+                            tonnage,
+                            deliveryDate,
+                            unloadTime,
+                            freightCost
                         );
                     } else {
                         row.push('', '', '', '', '', '');
@@ -1094,10 +1127,56 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
             }
             
-            csv += row.map(cell => escapeCSV(cell)).join(',') + '\n';
+            wsData.push(row);
         });
         
-        return csv;
+        // ایجاد worksheet از data
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // تنظیم عرض ستون‌ها
+        const colWidths = headers.map((header, idx) => {
+            // محاسبه عرض بر اساس طول header و محتوای ستون
+            let maxLength = header.length;
+            wsData.forEach((row, rowIdx) => {
+                if (rowIdx > 0 && row[idx] !== undefined) {
+                    const cellValue = String(row[idx] || '');
+                    maxLength = Math.max(maxLength, cellValue.length);
+                }
+            });
+            return { wch: Math.min(Math.max(maxLength + 2, 10), 50) }; // حداقل 10، حداکثر 50
+        });
+        ws['!cols'] = colWidths;
+        
+        // xlsx استایل‌های محدودی دارد، اما می‌توانیم فرمت اعداد را حفظ کنیم
+        // تنظیم فرمت اعداد برای ستون‌های عددی
+        const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        headers.forEach((header, colIdx) => {
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
+            if (isNumericColumn) {
+                // برای تمام ردیف‌های داده، فرمت عددی تنظیم می‌کنیم
+                for (let row = 1; row <= filteredAnnouncements.length; row++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
+                    if (ws[cellAddress] && ws[cellAddress].v) {
+                        // اگر مقدار عددی است، به صورت عدد نگه دار (Excel خودش فرمت می‌کند)
+                        const cellValue = ws[cellAddress].v;
+                        if (typeof cellValue === 'string' && /^[\d,]+$/.test(cellValue.replace(/,/g, ''))) {
+                            const numValue = parseFloat(cellValue.replace(/,/g, ''));
+                            if (!isNaN(numValue)) {
+                                ws[cellAddress].v = numValue;
+                                ws[cellAddress].t = 'n'; // number type
+                                // فرمت عددی با جداکننده هزارگان
+                                ws[cellAddress].z = '#,##0';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // اضافه کردن worksheet به workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'اعلام بار');
+        
+        return wb;
     };
 
     // Helper function to extract text from React element - بهبود یافته برای استخراج دقیق
@@ -1132,24 +1211,17 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return '';
     };
 
-    // Function to download CSV
+    // Function to download Excel
     const downloadExcel = (mode: 'compact' | 'full') => {
-        const csv = generateExcelExport(mode);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
+        const wb = generateExcelExport(mode);
         const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
                             activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
                             'لبنیات-فروتلند';
         const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
-        const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${new Date().toISOString().split('T')[0]}.csv`;
-        link.setAttribute('download', fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        // نوشتن فایل Excel
+        XLSX.writeFile(wb, fileName);
     };
 
     return (

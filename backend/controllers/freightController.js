@@ -245,7 +245,7 @@ async function getFreightAnnouncements(req, res) {
           END
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-        da.assignment_finalized_at,
+        COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) as assignment_finalized_at,
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
         CASE 
           WHEN pd.id IS NOT NULL THEN 'personal'
@@ -2877,6 +2877,18 @@ async function finalizeAssignments(req, res) {
   try {
     await client.query('BEGIN');
     
+    // بررسی و اضافه کردن ستون assignment_finalized_at به freight_announcements اگر وجود ندارد
+    try {
+      await client.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
+      `);
+      console.log('✅ [finalizeAssignments] Column assignment_finalized_at exists or was added to freight_announcements');
+    } catch (alterError) {
+      // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
+      console.warn('⚠️ [finalizeAssignments] Could not ensure assignment_finalized_at column exists:', alterError.message);
+    }
+    
     const finalizedIds = [];
     const leftoverIds = [];
     const creatorMap = {}; // Map announcementId to creatorUserId
@@ -3001,23 +3013,70 @@ async function finalizeAssignments(req, res) {
         
         // آپدیت status اعلام بار (فقط اگر قبلاً Finalized نبود)
         // همچنین assignment_finalized_at را set می‌کنیم تا در frontend فیلتر شود
-        if (oldStatus !== 'Finalized' && oldStatus !== 'finalized') {
-          await client.query(
-            `UPDATE freight_announcements 
-             SET status = $1, assignment_finalized_at = NOW(), updated_at = NOW() 
-             WHERE id = $2`,
-            [newStatus, annId]
-          );
-          console.log(`✅ [finalizeAssignments] Updated freight_announcements for ${annId}: status=${newStatus}, assignment_finalized_at=NOW()`);
-        } else {
-          // اگر status قبلاً Finalized بود، فقط assignment_finalized_at را set می‌کنیم
-          await client.query(
-            `UPDATE freight_announcements 
-             SET assignment_finalized_at = NOW(), updated_at = NOW() 
-             WHERE id = $1 AND assignment_finalized_at IS NULL`,
-            [annId]
-          );
-          console.log(`✅ [finalizeAssignments] Updated assignment_finalized_at for already finalized ${annId}`);
+        // ابتدا بررسی می‌کنیم که آیا ستون assignment_finalized_at وجود دارد یا نه
+        try {
+          if (oldStatus !== 'Finalized' && oldStatus !== 'finalized') {
+            // تلاش برای آپدیت با assignment_finalized_at
+            try {
+              await client.query(
+                `UPDATE freight_announcements 
+                 SET status = $1, assignment_finalized_at = NOW(), updated_at = NOW() 
+                 WHERE id = $2`,
+                [newStatus, annId]
+              );
+              console.log(`✅ [finalizeAssignments] Updated freight_announcements for ${annId}: status=${newStatus}, assignment_finalized_at=NOW()`);
+            } catch (colError) {
+              // اگر ستون وجود ندارد، فقط status را آپدیت کن
+              if (colError.code === '42703') { // column does not exist
+                console.log(`⚠️ [finalizeAssignments] Column assignment_finalized_at does not exist, adding it...`);
+                await client.query(
+                  `ALTER TABLE freight_announcements ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ`
+                );
+                // دوباره تلاش کن
+                await client.query(
+                  `UPDATE freight_announcements 
+                   SET status = $1, assignment_finalized_at = NOW(), updated_at = NOW() 
+                   WHERE id = $2`,
+                  [newStatus, annId]
+                );
+                console.log(`✅ [finalizeAssignments] Updated freight_announcements for ${annId}: status=${newStatus}, assignment_finalized_at=NOW()`);
+              } else {
+                throw colError;
+              }
+            }
+          } else {
+            // اگر status قبلاً Finalized بود، فقط assignment_finalized_at را set می‌کنیم
+            try {
+              await client.query(
+                `UPDATE freight_announcements 
+                 SET assignment_finalized_at = NOW(), updated_at = NOW() 
+                 WHERE id = $1 AND assignment_finalized_at IS NULL`,
+                [annId]
+              );
+              console.log(`✅ [finalizeAssignments] Updated assignment_finalized_at for already finalized ${annId}`);
+            } catch (colError) {
+              // اگر ستون وجود ندارد، آن را اضافه کن
+              if (colError.code === '42703') { // column does not exist
+                console.log(`⚠️ [finalizeAssignments] Column assignment_finalized_at does not exist, adding it...`);
+                await client.query(
+                  `ALTER TABLE freight_announcements ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ`
+                );
+                // دوباره تلاش کن
+                await client.query(
+                  `UPDATE freight_announcements 
+                   SET assignment_finalized_at = NOW(), updated_at = NOW() 
+                   WHERE id = $1 AND assignment_finalized_at IS NULL`,
+                  [annId]
+                );
+                console.log(`✅ [finalizeAssignments] Updated assignment_finalized_at for already finalized ${annId}`);
+              } else {
+                throw colError;
+              }
+            }
+          }
+        } catch (updateError) {
+          console.error(`❌ [finalizeAssignments] Error updating freight_announcements for ${annId}:`, updateError);
+          throw updateError;
         }
         
         // آپدیت dispatch_assignments برای ثبت زمان نهایی‌سازی
