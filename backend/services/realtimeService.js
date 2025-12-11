@@ -57,19 +57,13 @@ class RealtimeService extends EventEmitter {
       const clients = this.sseClients.get(userId);
       const message = `data: ${JSON.stringify(data)}\n\n`;
       
-      console.log(`📤 [RealtimeService] Sending SSE to user ${userId}, clients: ${clients.size}`);
-      
-      clients.forEach((res, index) => {
+      clients.forEach((res) => {
         try {
           res.write(message);
-          console.log(`✅ [RealtimeService] SSE message sent to user ${userId} (client ${index + 1}/${clients.size})`);
         } catch (error) {
-          console.error(`❌ [RealtimeService] Error sending SSE to user ${userId} (client ${index + 1}):`, error);
           this.removeSSEClient(userId, res);
         }
       });
-    } else {
-      console.warn(`⚠️ [RealtimeService] No SSE clients found for user ${userId}`);
     }
   }
 
@@ -77,16 +71,11 @@ class RealtimeService extends EventEmitter {
    * Broadcast پیام SSE به همه کاربران
    */
   broadcastSSE(data, excludeUserId = null) {
-    console.log(`📡 [RealtimeService] Broadcasting SSE to all users (excluding: ${excludeUserId})`);
-    let sentCount = 0;
     this.sseClients.forEach((clients, userId) => {
       if (userId !== excludeUserId) {
-        console.log(`📡 [RealtimeService] Sending SSE to user ${userId} (${clients.size} connections)`);
         this.sendSSE(userId, data);
-        sentCount++;
       }
     });
-    console.log(`✅ [RealtimeService] SSE broadcast completed. Sent to ${sentCount} users`);
   }
 
   /**
@@ -176,16 +165,9 @@ class RealtimeService extends EventEmitter {
       timestamp: new Date().toISOString()
     };
 
-    console.log(`📢 [RealtimeService] Broadcasting announcement update: ${updateType} for ${announcementId}`);
-    console.log(`📢 [RealtimeService] Message:`, JSON.stringify(message, null, 2));
-    console.log(`📢 [RealtimeService] SSE Clients count: ${this.sseClients.size}`);
-    console.log(`📢 [RealtimeService] SSE Clients details:`, Array.from(this.sseClients.keys()));
-
     // Broadcast به همه کاربران (یا فقط کاربران خاص)
     this.broadcastSSE(message, userId);
     this.broadcastWS(message, userId);
-
-    console.log(`✅ [RealtimeService] Broadcasted announcement update: ${updateType} for ${announcementId}`);
   }
 
   /**

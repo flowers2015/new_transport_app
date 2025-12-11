@@ -81,48 +81,37 @@ export const useRealtimeUpdates = ({
 
   const connectSSE = useCallback(() => {
     if (!enabled) {
-      console.log('⚠️ [useRealtimeUpdates] SSE disabled, skipping connection');
       return;
     }
 
     const token = localStorage.getItem('token');
     if (!token) {
-      console.warn('⚠️ [useRealtimeUpdates] No token found, skipping SSE connection');
       return;
     }
 
     try {
       // بستن connection قبلی اگر وجود دارد
       if (eventSourceRef.current) {
-        console.log('🔄 [useRealtimeUpdates] Closing existing SSE connection');
         eventSourceRef.current.close();
       }
 
       // EventSource نمی‌تواند header ارسال کند، پس token را در query parameter می‌فرستیم
       const url = `${getApiUrl('realtime/sse')}?token=${encodeURIComponent(token)}`;
-      console.log('🔌 [useRealtimeUpdates] Connecting to SSE:', url);
       const eventSource = new EventSource(url, {
         withCredentials: true
       });
-      
-      console.log('🔌 [useRealtimeUpdates] EventSource created, readyState:', eventSource.readyState);
 
       eventSource.onopen = () => {
-        console.log('✅ [useRealtimeUpdates] SSE connected successfully');
-        console.log('🔗 [useRealtimeUpdates] SSE URL:', url);
-        console.log('🔗 [useRealtimeUpdates] EventSource readyState:', eventSource.readyState);
         reconnectAttemptsRef.current = 0;
         onConnect?.();
       };
 
       eventSource.onmessage = (event) => {
         try {
-          console.log('📨 [useRealtimeUpdates] Raw SSE message received:', event.data);
           const message: RealtimeMessage = JSON.parse(event.data);
-          console.log('📨 [useRealtimeUpdates] Parsed message:', message);
           onMessage?.(message);
         } catch (error) {
-          console.error('❌ [useRealtimeUpdates] Error parsing message:', error, 'Raw data:', event.data);
+          // Silent error handling
         }
       };
 

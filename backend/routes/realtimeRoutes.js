@@ -17,10 +17,7 @@ const realtimeService = require('../services/realtimeService');
 router.get('/sse', authenticateSSE, (req, res) => {
   const userId = req.user.userId || req.user.id;
 
-  console.log(`🔌 [realtimeRoutes] SSE connection request from user ${userId}`);
-
   if (!userId) {
-    console.error('❌ [realtimeRoutes] No userId found in request');
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
@@ -30,11 +27,8 @@ router.get('/sse', authenticateSSE, (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // برای NGINX
 
-  console.log(`✅ [realtimeRoutes] SSE headers set for user ${userId}`);
-
   // اضافه کردن client به service
   realtimeService.addSSEClient(userId, res);
-  console.log(`✅ [realtimeRoutes] SSE client added to service for user ${userId}`);
 
   // ارسال heartbeat هر 30 ثانیه برای نگه داشتن connection
   const heartbeatInterval = setInterval(() => {

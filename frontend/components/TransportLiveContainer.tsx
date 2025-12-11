@@ -439,9 +439,6 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     // اتصال به Real-Time Updates (SSE)
     useRealtimeUpdates({
         onMessage: (message) => {
-            console.log('📨 [TransportLiveContainer] ===== REAL-TIME MESSAGE RECEIVED =====');
-            console.log('📨 [TransportLiveContainer] Full message:', JSON.stringify(message, null, 2));
-            
             if (message.type === 'announcement_update') {
                 // به‌روزرسانی اعلام بار
                 const { announcementId, updateType, data } = message;
@@ -450,32 +447,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 
                 // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
                 if (updateType === 'finalized' || data.status === 'Finalized' || data.status === 'finalized' || data.assignmentFinalizedAt) {
-                    console.log('🗑️ [TransportLiveContainer] Announcement finalized, removing from list', { announcementId, updateType, data });
-                    setAnnouncements(prev => {
-                        const exists = prev.some(a => a.id === announcementId);
-                        if (!exists) {
-                            console.log('⚠️ [TransportLiveContainer] Announcement already removed from list');
-                            return prev;
-                        }
-                        const filtered = prev.filter(a => a.id !== announcementId);
-                        console.log('🗑️ [TransportLiveContainer] Removed finalized announcement', { 
-                            before: prev.length, 
-                            after: filtered.length,
-                            removedId: announcementId 
-                        });
-                        return filtered;
-                    });
+                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
                     return;
                 }
                 
-                // اعمال optimistic update
+                // اعمال optimistic update - فوری اضافه کردن/حذف بدون تاخیر
                 setAnnouncements(prev => {
                     const index = prev.findIndex(a => a.id === announcementId);
                     if (index === -1) {
-                        // اگر اعلام بار جدید است (approved, created, یا هر update type دیگر)
-                        console.log('🔄 [TransportLiveContainer] New announcement detected', { announcementId, updateType, data });
-                        
-                        // اگر داده کامل در notification موجود است، optimistic update انجام بده
+                        // اگر اعلام بار جدید است (approved, created)
                         if (data && data.id && data.status && (updateType === 'created' || updateType === 'approved')) {
                             try {
                                 // Normalize data برای اضافه کردن به state
@@ -546,76 +526,32 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                 );
                                 
                                 if (shouldShow) {
-                                    console.log('✨ [TransportLiveContainer] Adding announcement optimistically', { 
-                                        announcementId, 
-                                        status: normalizedAnnouncement.status,
-                                        lineType: normalizedAnnouncement.lineType 
-                                    });
-                                    
-                                    // اضافه کردن به ابتدای لیست برای نمایش فوری
+                                    // اضافه کردن فوری به ابتدای لیست - بدون تاخیر
                                     return [normalizedAnnouncement, ...prev];
-                                } else {
-                                    console.log('⚠️ [TransportLiveContainer] Announcement should not be shown in tracking dashboard', { 
-                                        announcementId, 
-                                        status: normalizedAnnouncement.status 
-                                    });
                                 }
                             } catch (normalizeError) {
-                                console.error('❌ [TransportLiveContainer] Error normalizing announcement data:', normalizeError);
+                                // Silent fail - اگر normalize نشد، fetch می‌کنیم
                             }
                         }
                         
-                        // Invalidate cache برای freight-announcements
+                        // Fallback: اگر داده کامل نبود یا normalize نشد، fetch کن
+                        // Invalidate cache و fetch با تاخیر کم
                         import('../utils/apiCache').then(({ apiCache }) => {
                             const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
                             apiCache.invalidate(cacheKey);
-                            console.log('🗑️ [TransportLiveContainer] Cache invalidated for new announcement');
-                        }).catch(err => {
-                            console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
-                        });
+                        }).catch(() => {});
                         
-                        // Retry logic برای اطمینان از دریافت اعلام بار جدید
-                        // افزایش delay و اضافه کردن retry mechanism
-                        const fetchWithRetry = async (attempt: number = 1, maxAttempts: number = 3) => {
-                            try {
-                                // برای approved/created، delay بیشتر (200ms برای اولین تلاش) برای اطمینان از commit تراکنش
-                                // برای سایر update types، delay بیشتر (300ms)
-                                const baseDelay = (updateType === 'approved' || updateType === 'created') ? 200 : 300;
-                                const delay = baseDelay * attempt; // exponential backoff
-                                
-                                await new Promise(resolve => setTimeout(resolve, delay));
-                                console.log(`🔄 [TransportLiveContainer] Fetching attempt ${attempt}/${maxAttempts} after ${delay}ms delay for ${updateType}`);
-                                
-                                await fetchDataRef.current(true, needsPersonalResourcesRef.current);
-                                
-                                // بررسی اینکه آیا اعلام بار دریافت شد
-                                // این بررسی در fetchData انجام می‌شود، اما می‌توانیم retry کنیم اگر نیاز باشد
-                                console.log(`✅ [TransportLiveContainer] Fetch completed for attempt ${attempt}`);
-                            } catch (err) {
-                                console.error(`❌ [TransportLiveContainer] Error fetching new announcement (attempt ${attempt}/${maxAttempts}):`, err);
-                                
-                                // Retry اگر تعداد تلاش‌ها کمتر از maxAttempts است
-                                if (attempt < maxAttempts) {
-                                    console.log(`🔄 [TransportLiveContainer] Retrying fetch (attempt ${attempt + 1}/${maxAttempts})...`);
-                                    fetchWithRetry(attempt + 1, maxAttempts);
-                                } else {
-                                    console.error(`❌ [TransportLiveContainer] Failed to fetch after ${maxAttempts} attempts`);
-                                }
-                            }
-                        };
-                        
-                        // شروع fetch با retry (برای اطمینان از sync با backend)
-                        fetchWithRetry();
+                        // Fetch فوری (50ms delay) برای sync با backend
+                        setTimeout(() => {
+                            fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                        }, 50);
                         
                         return prev;
                     }
                     
                     // به‌روزرسانی اعلام بار موجود
-                    console.log('✅ [TransportLiveContainer] Updating existing announcement in list');
-                    
-                    // اگر assignmentFinalizedAt set شده، فوراً از لیست حذف کن (قبل از update)
+                    // اگر assignmentFinalizedAt set شده، فوراً از لیست حذف کن
                     if (data.assignmentFinalizedAt) {
-                        console.log('🗑️ [TransportLiveContainer] assignmentFinalizedAt set, removing from list immediately');
                         return prev.filter(a => a.id !== announcementId);
                     }
                     
@@ -630,21 +566,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
         },
         onConnect: () => {
-            console.log('✅ [TransportLiveContainer] ===== SSE CONNECTION ESTABLISHED =====');
-            console.log('✅ [TransportLiveContainer] User:', currentUser?.id, currentUser?.role);
             setSseConnected(true);
-            console.log('🔄 [TransportLiveContainer] SSE connected, periodic refresh will use 60s interval');
         },
         onDisconnect: () => {
-            console.log('❌ [TransportLiveContainer] ===== SSE CONNECTION LOST =====');
-            console.log('❌ [TransportLiveContainer] User:', currentUser?.id);
             setSseConnected(false);
-            console.log('🔄 [TransportLiveContainer] SSE disconnected, periodic refresh will use 15s interval');
         },
-        onError: (error) => {
-            console.error('❌ [TransportLiveContainer] ===== REAL-TIME ERROR =====');
-            console.error('❌ [TransportLiveContainer] Error details:', error);
-            console.error('❌ [TransportLiveContainer] Stack:', error?.stack);
+        onError: () => {
+            // Silent error handling
         },
         enabled: !!currentUser?.id
     });
@@ -1083,15 +1011,6 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     return (
         <>
-            {/* نمایش وضعیت اتصال SSE */}
-            <div className={`mb-4 p-2 rounded-md text-sm flex items-center gap-2 ${sseConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></span>
-                <span>
-                    {sseConnected 
-                        ? '✓ اتصال زنده فعال - به‌روزرسانی‌ها به صورت لحظه‌ای دریافت می‌شوند' 
-                        : '⚠ اتصال زنده غیرفعال - از به‌روزرسانی دوره‌ای استفاده می‌شود'}
-                </span>
-            </div>
             <TransportLive
                 announcements={announcements}
                 vehicles={vehicles}
