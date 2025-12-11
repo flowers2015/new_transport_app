@@ -289,57 +289,32 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
 
     // Function to generate Excel export based on filtered data
     const generateExcelExport = (mode: 'compact' | 'full' = viewMode) => {
-        const cols = visibleColumns;
+        // استفاده از visibleColumns برای حفظ ترتیب دقیق جدول frontend
+        // اما باید مطمئن شویم که viewMode درست است
+        // اگر mode با viewMode متفاوت است، باید از columnsConfig استفاده کنیم
+        let cols: any[] = [];
+        
+        if (mode === viewMode) {
+            // اگر mode با viewMode یکسان است، از visibleColumns استفاده می‌کنیم
+            cols = visibleColumns;
+        } else {
+            // اگر mode متفاوت است، از columnsConfig استفاده می‌کنیم
+            cols = columnsConfig(mode);
+        }
+        
         const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
         
-        // Helper function to check if column should be displayed
-        const shouldDisplayColumn = (col: any, currentMode: 'compact' | 'full'): boolean => {
-            if (col.header === 'عملیات') return false;
-            if (!col.display) return true; // اگر display نداشت، نمایش بده
-            if (typeof col.display === 'function') {
-                // برای ستون‌های خاص، همیشه نمایش بده (حتی در حالت compact)
-                if (col.header === 'کرایه کل' || col.header === 'ارزش بار') {
-                    return true;
-                }
-                // برای بقیه، از display function استفاده کن
-                // اما viewMode را از currentMode بگیر
-                const originalViewMode = viewMode;
-                // Temporarily set viewMode for display check
-                const tempViewMode = currentMode;
-                // Create a wrapper that uses tempViewMode
-                try {
-                    // Check if display function uses viewMode
-                    const result = col.display(activeLine);
-                    // If it's a function that checks viewMode, we need to handle it differently
-                    // For now, always show important columns
-                    return result !== false;
-                } catch {
-                    return true;
-                }
-            }
-            return Boolean(col.display);
-        };
-        
-        // Get headers - always include important columns
+        // Get headers - دقیقاً مطابق با ترتیب cols
         const headers: string[] = [];
-        const importantHeaders = new Set<string>();
+        const seenHeaders = new Set<string>();
         
         cols.forEach(col => {
-            if (shouldDisplayColumn(col, mode)) {
+            // جلوگیری از تکرار headerها و حذف ستون عملیات
+            if (!seenHeaders.has(col.header) && col.header !== 'عملیات') {
                 headers.push(col.header);
-                importantHeaders.add(col.header);
+                seenHeaders.add(col.header);
             }
         });
-        
-        // اضافه کردن ستون‌های مهم که ممکن است فیلتر شده باشند
-        // همیشه "کرایه کل" را اضافه کن (حتی در حالت compact)
-        if (!importantHeaders.has('کرایه کل')) {
-            headers.push('کرایه کل');
-        }
-        // "ارزش بار" را هم در حالت compact اضافه کن
-        if (!importantHeaders.has('ارزش بار')) {
-            headers.push('ارزش بار');
-        }
         
         // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم
         if (isFullDairyAmbientMode) {
@@ -359,25 +334,38 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         filteredAnnouncements.forEach((ann, idx) => {
             const row: any[] = [];
             
-            // Helper to get value for a column header
+            // Helper to get value for a column header - دقیقاً مطابق با ترتیب headers
             const getValueForHeader = (header: string): any => {
                 // بررسی اینکه آیا این ستون عددی است
-                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
                 const isNumericColumn = numericHeaders.some(h => header.includes(h));
                 
-                // Handle special columns directly
+                // Handle special columns directly - اولویت با اینهاست
                 if (header === 'کرایه کل') {
                     const value = ann.totalFreightCost || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
                 }
-                if (header === 'ارزش بار') {
+                if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
                     const value = ann.cargoValue || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
                 }
                 
-                // Find column definition
+                // Handle other special cases
+                if (header === 'اولویت') {
+                    const priorityMap: { [key: string]: string } = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
+                    return priorityMap[ann.priority || 'normal'] || ann.priority || 'عادی';
+                }
+                
+                // Find column definition - دقیقاً همان header را پیدا کن
                 const col = cols.find(c => c.header === header);
-                if (!col) return '';
+                if (!col) {
+                    // اگر ستون پیدا نشد، از announcement مستقیماً بگیر
+                    const directValue = (ann as any)[header];
+                    if (directValue !== undefined) {
+                        return directValue;
+                    }
+                    return '';
+                }
                 
                 let value: any = '';
                 
@@ -431,7 +419,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 return value;
             };
             
-            // Process columns in header order (excluding destination headers)
+            // Process columns in header order - دقیقاً همان ترتیب headers
             headers.forEach(header => {
                 if (!header.startsWith('مقصد')) {
                     row.push(getValueForHeader(header));
