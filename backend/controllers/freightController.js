@@ -166,11 +166,58 @@ async function getFreightAnnouncements(req, res) {
     const userId = req.user?.id || req.user?.userId;
     const isPlanningEmployee = userRole === 'planner' || userRole === 'کارمند برنامه‌ریزی';
     const isPlanningManager = userRole === 'planner_manager' || userRole === 'مدیر برنامه‌ریزی';
+    const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
     
     // Add filter for planning employees (only see their own announcements)
     let userFilter = '';
     if (isPlanningEmployee && userId) {
       userFilter = ` AND fa.created_by_user_id = '${userId}'`;
+    }
+    
+    // Add filter for branch finance users (only see announcements with destinations matching their branch city)
+    let branchCityFilter = '';
+    if (isBranchFinance) {
+      // گرفتن branch_city از JWT token یا از دیتابیس
+      let branchCity = req.user?.branchCity || null;
+      
+      // اگر branchCity در JWT نیست، از دیتابیس بگیر
+      if (!branchCity && userId) {
+        try {
+          const userRow = await pool.query('SELECT branch_city, branch_id FROM users WHERE id = $1', [userId]);
+          if (userRow.rows.length > 0) {
+            const user = userRow.rows[0];
+            branchCity = user.branch_city;
+            
+            // اگر branch_city یک UUID است، از branches table نام شهر را بگیر
+            if (branchCity && branchCity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchCity]);
+              if (branchResult.rows.length > 0) {
+                branchCity = branchResult.rows[0].name;
+              }
+            } else if (user.branch_id) {
+              // اگر branch_id وجود دارد، از branches table نام شهر را بگیر
+              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_id]);
+              if (branchResult.rows.length > 0) {
+                branchCity = branchResult.rows[0].name;
+              }
+            }
+          }
+        } catch (branchError) {
+          console.error('❌ [getFreightAnnouncements] Error fetching branch city:', branchError);
+        }
+      }
+      
+      if (branchCity) {
+        // فیلتر بر اساس مقاصد: فقط اعلام بارهایی که یکی از مقاصدشان با branch_city مطابقت دارد
+        branchCityFilter = ` AND EXISTS (
+          SELECT 1 FROM freight_destinations fd 
+          WHERE fd.freight_announcement_id = fa.id 
+          AND fd.city = '${branchCity.replace(/'/g, "''")}'
+        )`;
+        console.log(`🏢 [getFreightAnnouncements] Branch finance filter applied for city: ${branchCity}`);
+      } else {
+        console.warn('⚠️ [getFreightAnnouncements] Branch finance user but no branch city found');
+      }
     }
     
     // بررسی اینکه کدام ستون name در جدول users وجود دارد
@@ -225,7 +272,7 @@ async function getFreightAnnouncements(req, res) {
         ORDER BY created_at DESC
         LIMIT 1
       ) da ON true
-      ${whereClause}${userFilter}
+      ${whereClause}${userFilter}${branchCityFilter}
       ORDER BY fa.id, fa.created_at DESC
     `);
     
@@ -1705,6 +1752,22 @@ async function assignVehicleAndDriver(req, res) {
     truckSmartId
   } = req.body;
   const userId = req.user?.userId || req.user?.id;
+  
+  // لاگ جامع درخواست
+  console.log('🚀 [assignVehicleAndDriver] ========== START ASSIGNMENT ==========');
+  console.log('🚀 [assignVehicleAndDriver] Request details:', {
+    announcementId,
+    vehicleId,
+    driverId,
+    assignmentType,
+    totalFreightCost,
+    billOfLadingNumber,
+    notes: notes ? notes.substring(0, 50) + '...' : null,
+    destinationsCount: destinations ? destinations.length : 0,
+    userId,
+    userRole: req.user?.role,
+    timestamp: new Date().toISOString()
+  });
   // ساخت userName به فرمت "username - name - role"
   // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
   let userFullName = '';
@@ -2050,35 +2113,59 @@ async function assignVehicleAndDriver(req, res) {
                 queueType = stage === 'stage1' ? 'far' : 'near';
               }
               
+              const insertValues = [
+                announcementId,
+                dest.id,
+                vehicleId,
+                driverId,
+                stage,
+                route ? route.id : null,
+                route ? route.round_trip_km : null,
+                userId || null,
+                assignedAtJalali,
+                queueType,
+                vehicleCategory
+              ];
+              
+              console.log(`🔍 [assignVehicleAndDriver] Inserting dispatch_assignments for destination ${dest.id}:`, {
+                destinationId: dest.id,
+                destinationCity: dest.city,
+                vehicleId,
+                driverId,
+                stage,
+                routeId: route ? route.id : null,
+                queueType,
+                vehicleCategory,
+                assignedAtJalali
+              });
+              
               await client.query(
                 `INSERT INTO dispatch_assignments
                   (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11)`,
-                [
-                  announcementId,
-                  dest.id,
-                  vehicleId,
-                  driverId,
-                  stage,
-                  route ? route.id : null,
-                  route ? route.round_trip_km : null,
-                  userId || null,
-                  assignedAtJalali,
-                  queueType,
-                  vehicleCategory
-                ]
+                insertValues
               );
+              
+              console.log(`✅ [assignVehicleAndDriver] Successfully inserted dispatch_assignments for destination ${dest.id}`);
             } catch (insertError) {
               console.error(`❌ [assignVehicleAndDriver] Error inserting dispatch_assignments for destination ${dest.id}:`, insertError);
               console.error(`❌ [assignVehicleAndDriver] Insert error details:`, {
                 announcementId,
                 destinationId: dest.id,
+                destinationCity: dest.city,
                 vehicleId,
                 driverId,
                 stage,
                 routeId: route ? route.id : null,
+                queueType,
+                vehicleCategory,
+                assignedAtJalali,
                 errorMessage: insertError.message,
-                errorCode: insertError.code
+                errorCode: insertError.code,
+                errorDetail: insertError.detail,
+                errorHint: insertError.hint,
+                errorPosition: insertError.position,
+                errorStack: insertError.stack
               });
               throw insertError; // خطا را throw می‌کنیم تا transaction rollback شود
             }
@@ -2118,22 +2205,32 @@ async function assignVehicleAndDriver(req, res) {
     return res.status(200).json({ message: 'Assignment successful.' });
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('❌ [assignVehicleAndDriver] Assignment failed:', e);
+    console.error('❌ [assignVehicleAndDriver] ========== ASSIGNMENT FAILED ==========');
+    console.error('❌ [assignVehicleAndDriver] Error message:', e.message);
+    console.error('❌ [assignVehicleAndDriver] Error code:', e.code);
+    console.error('❌ [assignVehicleAndDriver] Error detail:', e.detail);
+    console.error('❌ [assignVehicleAndDriver] Error hint:', e.hint);
+    console.error('❌ [assignVehicleAndDriver] Error position:', e.position);
     console.error('❌ [assignVehicleAndDriver] Error stack:', e.stack);
-    console.error('❌ [assignVehicleAndDriver] Error details:', {
+    console.error('❌ [assignVehicleAndDriver] Full error object:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+    console.error('❌ [assignVehicleAndDriver] Request context:', {
       announcementId,
       assignmentType,
       vehicleId,
       driverId,
       userId,
-      errorMessage: e.message
+      userRole: req.user?.role,
+      body: req.body
     });
+    console.error('❌ [assignVehicleAndDriver] ===========================================');
     return res.status(500).json({ 
       message: 'Internal server error while assigning.',
-      error: process.env.NODE_ENV === 'development' ? e.message : undefined
+      error: process.env.NODE_ENV === 'development' ? e.message : undefined,
+      errorCode: process.env.NODE_ENV === 'development' ? e.code : undefined
     });
   } finally {
     client.release();
+    console.log('🔚 [assignVehicleAndDriver] ========== END ASSIGNMENT ==========');
   }
 }
 
@@ -2422,6 +2519,50 @@ async function getFreightHistory(req, res) {
     const limitNum = Math.min(parseInt(limit, 10) || 50, 100); // حداکثر 100 رکورد در هر صفحه
     const offset = (pageNum - 1) * limitNum;
     
+    // Get user role for filtering
+    const userRole = req.user?.role || req.user?.userRole;
+    const userId = req.user?.id || req.user?.userId;
+    const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
+    
+    // Get branch city for branch finance users
+    let branchCity = null;
+    if (isBranchFinance) {
+      branchCity = req.user?.branchCity || null;
+      
+      // اگر branchCity در JWT نیست، از دیتابیس بگیر
+      if (!branchCity && userId) {
+        try {
+          const userRow = await pool.query('SELECT branch_city, branch_id FROM users WHERE id = $1', [userId]);
+          if (userRow.rows.length > 0) {
+            const user = userRow.rows[0];
+            branchCity = user.branch_city;
+            
+            // اگر branch_city یک UUID است، از branches table نام شهر را بگیر
+            if (branchCity && branchCity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchCity]);
+              if (branchResult.rows.length > 0) {
+                branchCity = branchResult.rows[0].name;
+              }
+            } else if (user.branch_id) {
+              // اگر branch_id وجود دارد، از branches table نام شهر را بگیر
+              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_id]);
+              if (branchResult.rows.length > 0) {
+                branchCity = branchResult.rows[0].name;
+              }
+            }
+          }
+        } catch (branchError) {
+          console.error('❌ [getFreightHistory] Error fetching branch city:', branchError);
+        }
+      }
+      
+      if (branchCity) {
+        console.log(`🏢 [getFreightHistory] Branch finance filter will be applied for city: ${branchCity}`);
+      } else {
+        console.warn('⚠️ [getFreightHistory] Branch finance user but no branch city found');
+      }
+    }
+    
     let query = `
       SELECT 
         fa.*,
@@ -2447,6 +2588,18 @@ async function getFreightHistory(req, res) {
     `;
     const params = [];
     let paramIndex = 1;
+    
+    // Add branch city filter for branch finance users
+    if (isBranchFinance && branchCity) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM freight_destinations fd 
+        WHERE fd.freight_announcement_id = fa.id 
+        AND fd.city = $${paramIndex}
+      )`;
+      params.push(branchCity);
+      paramIndex += 1;
+      console.log(`🏢 [getFreightHistory] Branch finance filter applied for city: ${branchCity}`);
+    }
     
     // فیلتر بر اساس lineType - فقط برای تب فعلی
     if (lineType && lineType.trim()) {
@@ -2502,17 +2655,17 @@ async function getFreightHistory(req, res) {
     // Count total records for pagination (before LIMIT/OFFSET)
     // برای فیلتر destination، باید از subquery استفاده کنیم
     let countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(DISTINCT fa.id) as total FROM');
+    const countParams = [...params];
+    let countParamIndex = paramIndex;
     if (destination && destination.trim()) {
       // اگر فیلتر destination داریم، باید در count query هم لحاظ شود
       countQuery += ` AND EXISTS (
         SELECT 1 FROM freight_destinations fd 
         WHERE fd.freight_announcement_id = fa.id 
-        AND fd.city ILIKE $${paramIndex}
+        AND fd.city ILIKE $${countParamIndex}
       )`;
-    }
-    const countParams = [...params];
-    if (destination && destination.trim()) {
       countParams.push(`%${destination.trim()}%`);
+      countParamIndex += 1;
     }
     const countResult = await pool.query(countQuery, countParams);
     const totalCount = parseInt(countResult.rows[0].total, 10);
