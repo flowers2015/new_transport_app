@@ -3224,10 +3224,11 @@ async function finalizeAssignments(req, res) {
     
     console.log(`📊 [finalizeAssignments] Summary: finalized=${finalizedIds.length}, leftover=${leftoverIds.length}, missingBillOfLading=${missingBillOfLadingIds.length}`);
     
-    // اگر اعلام بارهایی با شماره بارنامه خالی وجود دارند، خطا برگردان
+    // COMMIT کردن تغییرات (حتی اگر برخی اعلام بارها finalize نشدند)
+    await client.query('COMMIT');
+    
+    // اگر اعلام بارهایی با شماره بارنامه خالی وجود دارند، notification ارسال کن و خطا برگردان
     if (missingBillOfLadingIds.length > 0) {
-      await client.query('ROLLBACK');
-      
       // ارسال notification برای اعلام بارهایی که شماره بارنامه ندارند
       try {
         const realtimeService = require('../services/realtimeService');
@@ -3249,14 +3250,26 @@ async function finalizeAssignments(req, res) {
         console.error('❌ [finalizeAssignments] Error sending notification:', notifError);
       }
       
-      return res.status(400).json({ 
-        message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`,
-        missingBillOfLadingCount: missingBillOfLadingIds.length,
-        missingBillOfLadingIds: missingBillOfLadingIds
-      });
+      // اگر برخی finalize شدند و برخی نه، پیام مناسب برگردان
+      if (finalizedIds.length > 0) {
+        return res.status(200).json({
+          success: true,
+          partial: true,
+          message: `${finalizedIds.length} اعلام بار نهایی شد. ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه در کارتابل باقی ماند.`,
+          finalizedCount: finalizedIds.length,
+          finalizedIds: finalizedIds,
+          missingBillOfLadingCount: missingBillOfLadingIds.length,
+          missingBillOfLadingIds: missingBillOfLadingIds
+        });
+      } else {
+        // اگر هیچ کدام finalize نشدند
+        return res.status(400).json({ 
+          message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`,
+          missingBillOfLadingCount: missingBillOfLadingIds.length,
+          missingBillOfLadingIds: missingBillOfLadingIds
+        });
+      }
     }
-    
-    await client.query('COMMIT');
     
     // ارسال real-time notification برای هر اعلام بار finalized شده (بعد از COMMIT)
     try {

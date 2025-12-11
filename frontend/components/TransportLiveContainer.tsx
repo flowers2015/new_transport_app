@@ -668,19 +668,37 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 })
             });
             
-            if (!response.ok) {
-                // Rollback در صورت خطا
-                console.log('❌ [TransportLiveContainer] Finalize failed, rolling back optimistic update');
-                setAnnouncements(originalAnnouncements);
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'خطا در اتمام تخصیص');
-            }
-            
             const result = await response.json();
             console.log('✅ [TransportLive] Finalize result:', result);
             
+            if (!response.ok) {
+                // Rollback در صورت خطا (فقط اگر هیچ کدام finalize نشدند)
+                if (!result.partial) {
+                    console.log('❌ [TransportLiveContainer] Finalize failed completely, rolling back optimistic update');
+                    setAnnouncements(originalAnnouncements);
+                } else {
+                    // اگر برخی finalize شدند، فقط آنهایی که finalize نشدند را برگردان
+                    console.log('⚠️ [TransportLiveContainer] Partial finalize - some succeeded, some failed');
+                    if (result.missingBillOfLadingIds && result.missingBillOfLadingIds.length > 0) {
+                        // فقط اعلام بارهایی که finalize نشدند را برگردان
+                        setAnnouncements(prev => {
+                            const failedIds = result.missingBillOfLadingIds || [];
+                            const restored = originalAnnouncements.filter(a => failedIds.includes(a.id));
+                            return [...prev, ...restored];
+                        });
+                    }
+                }
+                throw new Error(result.message || 'خطا در اتمام تخصیص');
+            }
+            
             // نمایش پیام موفقیت
-            alert(`اتمام تخصیص انجام شد:\n${result.finalized} مورد نهایی شد\n${result.leftover} مورد به بارهای مانده برگشت`);
+            if (result.partial) {
+                // اگر برخی finalize شدند و برخی نه
+                alert(`${result.message || `${result.finalizedCount || 0} اعلام بار نهایی شد. ${result.missingBillOfLadingCount || 0} اعلام بار بدون شماره بارنامه در کارتابل باقی ماند.`}`);
+            } else {
+                // اگر همه finalize شدند
+                alert(`اتمام تخصیص انجام شد:\n${result.finalizedCount || result.finalized || 0} مورد نهایی شد${result.leftover ? `\n${result.leftover} مورد به بارهای مانده برگشت` : ''}`);
+            }
             
             // Invalidate cache برای freight-announcements تا داده جدید fetch شود
             try {
@@ -693,9 +711,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
             
             // Real-time updates باید finalized ها را از لیست حذف کنند
-            // اما برای leftover ها، ممکن است نیاز به refresh باشد
-            if (result.leftover && result.leftover > 0) {
-                console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover announcements...');
+            // اما برای leftover ها یا missing bill of lading، ممکن است نیاز به refresh باشد
+            if ((result.leftover && result.leftover > 0) || (result.missingBillOfLadingCount && result.missingBillOfLadingCount > 0)) {
+                console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover/missing bill of lading announcements...');
                 // با کمی تاخیر برای اطمینان از به‌روزرسانی backend
                 setTimeout(async () => {
                     await fetchDataRef.current(true, needsPersonalResourcesRef.current);
