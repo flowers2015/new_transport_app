@@ -2266,14 +2266,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                             
                             {/* جدول اطلاعات اصلی */}
-                            <div className="overflow-x-auto border border-slate-300 rounded-md">
-                                <table className="w-full text-sm text-right border-collapse">
+                            <div className="border border-slate-300 rounded-md">
+                                <table className="w-full text-sm text-right border-collapse table-fixed">
+                                    <colgroup>
+                                        <col style={{ width: '25%' }} />
+                                        <col style={{ width: '25%' }} />
+                                        <col style={{ width: '25%' }} />
+                                        <col style={{ width: '25%' }} />
+                                    </colgroup>
                                     <thead>
                                         <tr className="bg-slate-100 border-b border-slate-300">
-                                            <th className="p-2 border-l border-slate-300 min-w-[200px]">فیلد</th>
-                                            <th className="p-2 border-l border-slate-300 min-w-[250px]">مقدار</th>
-                                            <th className="p-2 border-l border-slate-300 min-w-[200px]">فیلد</th>
-                                            <th className="p-2 min-w-[250px]">مقدار</th>
+                                            <th className="p-2 border-l border-slate-300">فیلد</th>
+                                            <th className="p-2 border-l border-slate-300">مقدار</th>
+                                            <th className="p-2 border-l border-slate-300">فیلد</th>
+                                            <th className="p-2">مقدار</th>
                                         </tr>
                                     </thead>
                                     <tbody>

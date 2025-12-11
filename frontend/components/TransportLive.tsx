@@ -1304,7 +1304,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // Handle special columns directly - اولویت با اینهاست
                 if (header === 'کرایه کل') {
                     const value = ann.totalFreightCost || 0;
-                    return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
+                    if (typeof value === 'number') {
+                        return value;
+                    }
+                    // اگر string است، باید به عدد تبدیل شود بدون استفاده از parseFloat که ممکن است به صورت علمی تبدیل کند
+                    const strValue = String(value).replace(/[^\d]/g, '');
+                    if (strValue === '') return 0;
+                    // استفاده از parseInt برای اعداد بزرگ یا Number برای اطمینان
+                    const numValue = Number(strValue);
+                    return isNaN(numValue) ? 0 : numValue;
                 }
                 if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
                     const value = ann.cargoValue || 0;
@@ -1432,7 +1440,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     const header = headers[colNumber - 1];
                     const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
                     if (isNumericColumn && typeof cell.value === 'number') {
+                        // برای اطمینان از نمایش صحیح اعداد بزرگ بدون نماد علمی
+                        // استفاده از فرمت عددی با جداکننده هزارگان
                         cell.numFmt = '#,##0';
+                        // برای اطمینان از اینکه Excel عدد را به صورت علمی نمایش نمی‌دهد
+                        if (Math.abs(cell.value) >= 1e15) {
+                            // برای اعداد خیلی بزرگ، از فرمت رشته استفاده می‌کنیم
+                            cell.value = cell.value.toString();
+                            cell.numFmt = '@'; // Text format
+                        }
                     }
                 });
             });
@@ -1447,6 +1463,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 });
                 worksheet.getColumn(idx + 1).width = Math.min(Math.max(maxLength + 2, 10), 50);
             });
+            
+            // Set page setup for right-to-left
+            worksheet.views = [{
+                rightToLeft: true
+            }];
             
             // Download
             const buffer = await workbook.xlsx.writeBuffer();

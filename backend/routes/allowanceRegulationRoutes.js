@@ -172,6 +172,28 @@ router.delete(
   deleteFixedAllowanceRegulation
 );
 
+// Routes for Return Cargo Regulations (اجرت بار برگشتی)
+router.get(
+  '/return-cargo',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  getReturnCargoRegulations
+);
+
+router.post(
+  '/return-cargo',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  saveReturnCargoRegulation
+);
+
+router.delete(
+  '/return-cargo/:id',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  deleteReturnCargoRegulation
+);
+
 // Route to calculate allowance
 router.get(
   '/calculate',

@@ -698,7 +698,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         const header = headers[colNumber - 1];
                         const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
                         if (isNumericColumn && typeof cell.value === 'number') {
-                            cell.numFmt = '#,##0';
+                            // برای اعداد بزرگ، از فرمت عددی بدون نماد علمی استفاده می‌کنیم
+                            if (cell.value > 1e15) {
+                                // برای اعداد خیلی بزرگ، از فرمت رشته استفاده می‌کنیم
+                                cell.value = cell.value.toString();
+                                cell.numFmt = '@'; // Text format
+                            } else {
+                                cell.numFmt = '#,##0';
+                            }
                         }
                     });
                 });
@@ -713,6 +720,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     });
                     worksheet.getColumn(idx + 1).width = Math.min(Math.max(maxLength + 2, 10), 50);
                 });
+                
+                // Set page setup for right-to-left
+                worksheet.views = [{
+                    rightToLeft: true
+                }];
                 
                 // Download
                 const buffer = await workbook.xlsx.writeBuffer();

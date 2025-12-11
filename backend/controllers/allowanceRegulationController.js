@@ -1078,7 +1078,7 @@ async function getExcessMissionRegulations(req, res) {
     
     const regulations = result.rows.map(row => ({
       id: row.id,
-      excessMissionCost: parseFloat(row.excess_mission_cost || 0),
+      excessMissionCost: parseFloat(row.excess_mission_cost || 0) || 0,
       approvalDate: row.approval_date || null,
       documentPath: row.document_path || null,
       startDate: row.start_date || null,
