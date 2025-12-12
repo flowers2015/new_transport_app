@@ -2753,66 +2753,75 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                                 />
                                             </td>
-                                            <td className="p-2 border-l border-slate-200 font-medium">هزینه بار برگشتی (ریال)</td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">هزینه بار برگشتی</td>
                                             <td className="p-2">
-                                                <select
-                                                    value={(() => {
-                                                        // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
-                                                        const vehicleType = inputDialogData.vehicleType || '';
-                                                        const isTrailer = vehicleType.includes('تریلی');
-                                                        const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
-                                                        
-                                                        const selectedReg = returnCargoRegulations.find(reg => 
-                                                            reg.vehicleType === vehicleTypeForApi &&
-                                                            reg.cost === inputDialogData.returnCargoCost &&
-                                                            reg.isActive !== false
-                                                        );
-                                                        
-                                                        return selectedReg ? `${vehicleTypeForApi}-${selectedReg.cargoType}-${selectedReg.cost}` : '';
-                                                    })()}
-                                                    onChange={(e) => {
-                                                        const selectedValue = e.target.value;
-                                                        if (selectedValue) {
-                                                            const [vehicleType, cargoType, cost] = selectedValue.split('-');
-                                                            const numValue = Number(cost) || 0;
-                                                            setInputDialogData({
-                                                                ...inputDialogData,
-                                                                returnCargoCost: numValue
-                                                            });
-                                                        } else {
-                                                            setInputDialogData({
-                                                                ...inputDialogData,
-                                                                returnCargoCost: 0
-                                                            });
-                                                        }
-                                                    }}
-                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                                >
-                                                    <option value="">انتخاب کنید</option>
-                                                    {(() => {
-                                                        const vehicleType = inputDialogData.vehicleType || '';
-                                                        const isTrailer = vehicleType.includes('تریلی');
-                                                        const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
-                                                        
-                                                        // فیلتر کردن بر اساس نوع خودرو
-                                                        const filteredRegs = returnCargoRegulations.filter(reg => 
-                                                            reg.vehicleType === vehicleTypeForApi && reg.isActive !== false
-                                                        );
-                                                        
-                                                        // گروه‌بندی بر اساس cargoType
-                                                        const cargoTypeLabels: { [key: string]: string } = {
-                                                            'full_product': 'بار کامل محصول',
-                                                            'full_box_pallet_basket': 'بار کامل جعبه/پالت/سبد',
-                                                            'half': 'نیم بار'
-                                                        };
-                                                        
-                                                        return filteredRegs.map((reg, idx) => (
-                                                            <option key={idx} value={`${reg.vehicleType}-${reg.cargoType}-${reg.cost}`}>
-                                                                {cargoTypeLabels[reg.cargoType] || reg.cargoType}: {reg.cost.toLocaleString('fa-IR')} ریال
-                                                            </option>
-                                                        ));
-                                                    })()}
-                                                </select>
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        value={(() => {
+                                                            // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
+                                                            const vehicleType = inputDialogData.vehicleType || '';
+                                                            const isTrailer = vehicleType.includes('تریلی');
+                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            
+                                                            const selectedReg = returnCargoRegulations.find(reg => 
+                                                                reg.vehicleType === vehicleTypeForApi &&
+                                                                reg.cost === inputDialogData.returnCargoCost &&
+                                                                reg.isActive !== false
+                                                            );
+                                                            
+                                                            return selectedReg ? `${vehicleTypeForApi}-${selectedReg.cargoType}-${selectedReg.cost}` : '';
+                                                        })()}
+                                                        onChange={(e) => {
+                                                            const selectedValue = e.target.value;
+                                                            if (selectedValue) {
+                                                                const [vehicleType, cargoType, cost] = selectedValue.split('-');
+                                                                const numValue = Number(cost) || 0;
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    returnCargoCost: numValue
+                                                                });
+                                                            } else {
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    returnCargoCost: 0
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="flex-1 px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                    >
+                                                        <option value="">انتخاب کنید</option>
+                                                        {(() => {
+                                                            const vehicleType = inputDialogData.vehicleType || '';
+                                                            const isTrailer = vehicleType.includes('تریلی');
+                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            
+                                                            // فیلتر کردن بر اساس نوع خودرو
+                                                            const filteredRegs = returnCargoRegulations.filter(reg => 
+                                                                reg.vehicleType === vehicleTypeForApi && reg.isActive !== false
+                                                            );
+                                                            
+                                                            // گروه‌بندی بر اساس cargoType
+                                                            const cargoTypeLabels: { [key: string]: string } = {
+                                                                'full_product': 'بار کامل محصول',
+                                                                'full_box_pallet_basket': 'بار کامل جعبه/پالت/سبد',
+                                                                'half': 'نیم بار'
+                                                            };
+                                                            
+                                                            return filteredRegs.map((reg, idx) => (
+                                                                <option key={idx} value={`${reg.vehicleType}-${reg.cargoType}-${reg.cost}`}>
+                                                                    {cargoTypeLabels[reg.cargoType] || reg.cargoType}
+                                                                </option>
+                                                            ));
+                                                        })()}
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={inputDialogData.returnCargoCost ? String(inputDialogData.returnCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                                        className="w-32 px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left cursor-not-allowed"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
                                             </td>
                                         </tr>
                                         {/* ردیف 11: هزینه بارنامه، پیش پرداخت */}
@@ -3499,8 +3508,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         <li><strong>هزینه جابجایی بار:</strong> تعداد بار ارسالی × هزینه بار کامل محصول طبق بخشنامه</li>
                                         <li><strong>پیمایش کل دپو:</strong> مجموع پیمایش همه ردیف‌های جدول دپو</li>
                                         <li><strong>اجرت دپو (اجرت ثابت):</strong> پیمایش کل دپو × اجرت ثابت بخشنامه</li>
-                                        <li><strong>هزینه غذا دپو:</strong> تعداد روز ماموریت دپو × هزینه غذا طبق بخشنامه</li>
-                                        <li><strong>هزینه ماموریت دپو:</strong> تعداد روز ماموریت دپو × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                        <li><strong>حق ماموریت دپو:</strong> تعداد روز ماموریت دپو × هزینه ماموریت مازاد طبق بخشنامه</li>
                                     </ul>
                                 </div>
                             </div>

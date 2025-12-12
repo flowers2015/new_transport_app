@@ -308,6 +308,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(helperDriverFoodCost, 0),
         parseNumber(helperDriverExcessMissionDays, 0),
         parseNumber(helperDriverExcessMissionCost, 0),
+        parseNumber(helperDriverExcessKilometers, 0),
         validatedFoodCost,
         validatedFuelCost,
         validatedTourCost,
