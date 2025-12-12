@@ -485,6 +485,7 @@ async function getDriverCalculations(req, res) {
       LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
       LEFT JOIN drivers d ON dc.driver_id = d.id
       WHERE 1=1
+        AND (dc.is_paid IS NULL OR dc.is_paid = FALSE)
     `;
     const params = [];
     let paramIndex = 1;
