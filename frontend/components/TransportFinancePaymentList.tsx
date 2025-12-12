@@ -85,6 +85,20 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             const recordsMap = new Map<string, PaymentRecord>();
             const helperRecordsMap = new Map<string, PaymentRecord>(); // برای راننده‌های کمکی
             
+            // تابع محاسبه هزینه راننده اصلی (مطابق منطق صورتحساب)
+            const calculateMainDriverCost = (calc: any): number => {
+                const food = parseFloat(calc.food_cost || calc.foodCost || 0);
+                const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
+                const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
+                const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
+                const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
+                const returnBill = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0);
+                const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
+                const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
+                const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
+                return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance;
+            };
+            
             (Array.isArray(calculationsData) ? calculationsData : []).forEach((calc: any) => {
                 // فقط محاسباتی که total_cost دارند (یعنی ثبت شده‌اند)
                 const totalCost = parseFloat(calc.total_cost || calc.totalCost || 0);
@@ -95,18 +109,18 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 
                 if (!driver) return;
                 
+                // محاسبه هزینه راننده اصلی (مطابق منطق صورتحساب)
+                const mainDriverCost = calculateMainDriverCost(calc);
+                
                 // محاسبه هزینه راننده کمکی (فقط اگر راننده کمکی تعریف شده باشد)
                 const helperId = calc.helper_driver_id || calc.helperDriverId;
                 const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
                 const helperName = calc.helper_driver_name || calc.helperDriverName || '';
-                const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
-                const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
-                const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+                const helperAllowance = parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0);
+                const helperFoodCost = parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0);
+                const helperExcessMissionCost = parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0);
                 // فقط زمانی هزینه راننده کمکی را حساب کن که واقعاً راننده کمکی وجود داشته باشد
                 const helperDriverCost = helperId && helperEmployeeId ? (helperAllowance + helperFoodCost + helperExcessMissionCost) : 0;
-                
-                // محاسبه هزینه راننده اصلی = هزینه کل - هزینه راننده کمکی
-                const mainDriverCost = totalCost - helperDriverCost;
                 
                 // پیش پرداخت (فقط برای راننده اصلی)
                 const advancePayment = parseFloat(calc.advance_payment || calc.advancePayment || 0);
@@ -116,8 +130,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 // راننده اصلی
                 const existing = recordsMap.get(driverId);
                 if (existing) {
-                    existing.totalAmount += totalCost;
-                    existing.mainDriverAmount += mainDriverCost; // جمع هزینه راننده اصلی برای همه تورها
+                    existing.mainDriverAmount += mainDriverCost; // جمع هزینه راننده اصلی برای همه تورها (مطابق منطق صورتحساب)
                     existing.advancePayment += advancePayment;
                     existing.payableAmount = existing.mainDriverAmount - existing.advancePayment;
                     // استفاده از جدیدترین تاریخ محاسبه
@@ -130,8 +143,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         employeeId: driver.employee_id || driver.employeeId || '',
                         driverName: driver.name || '',
                         accountNumber: (driver as any).account_number || (driver as any).accountNumber || '',
-                        totalAmount: totalCost,
-                        mainDriverAmount: mainDriverCost,
+                        totalAmount: mainDriverCost + helperDriverCost, // فقط برای نمایش - استفاده نمی‌شود
+                        mainDriverAmount: mainDriverCost, // هزینه راننده اصلی (مطابق منطق صورتحساب)
                         helperDriverAmount: 0, // دیگر استفاده نمی‌شود
                         advancePayment: advancePayment,
                         payableAmount: mainDriverCost - advancePayment,
@@ -215,13 +228,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         
                         let desc = '';
                         if (isHelper) {
+                            // برای راننده کمکی: راننده کمکی، راننده اصلی، مقاصد، تاریخ
                             desc = `راننده کمکی: ${record.driverName || 'نامشخص'}، راننده اصلی: ${mainDriverName}، تور به مقاصد: ${destinations}`;
                         } else {
-                            if (helperName) {
-                                desc = `راننده اصلی: ${record.driverName || 'نامشخص'}، راننده کمکی: ${helperName}، تور به مقاصد: ${destinations}`;
-                            } else {
-                                desc = `راننده اصلی: ${record.driverName || 'نامشخص'}، تور به مقاصد: ${destinations}`;
-                            }
+                            // برای راننده اصلی: فقط راننده اصلی، مقاصد، تاریخ (بدون ذکر راننده کمکی)
+                            desc = `راننده اصلی: ${record.driverName || 'نامشخص'}، تور به مقاصد: ${destinations}`;
                         }
                         
                         if (calcDate) {
@@ -576,7 +587,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     }
 
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="w-full px-6 py-4 space-y-4">
             <div className="bg-white rounded-xl shadow-lg p-6">
                 <h1 className="text-2xl font-bold text-slate-800 mb-6">
                     لیست پرداخت
@@ -678,6 +689,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 <th className="p-3 text-right border-l border-slate-600">مبلغ قابل پرداخت (ریال)</th>
                                 <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
                                 <th className="p-3 text-right border-l border-slate-600">آخرین پرداخت هزینه</th>
+                                <th className="p-3 text-right border-l border-slate-600">توضیحات</th>
                                 <th className="p-3 text-right">عملیات</th>
                             </tr>
                         </thead>
@@ -712,8 +724,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                             '-'
                                         )}
                                     </td>
-                                    <td className="p-3 border-l border-slate-200 text-xs text-slate-700 max-w-xs">
-                                        <div className="truncate" title={record.descriptions || '-'}>
+                                    <td className="p-3 border-l border-slate-200 text-xs text-slate-700" style={{ maxWidth: '300px' }}>
+                                        <div className="line-clamp-2" title={record.descriptions || '-'}>
                                             {record.descriptions || '-'}
                                         </div>
                                     </td>
