@@ -1123,7 +1123,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     tour.vehicleType || '',
                     `${tour.vehicleCode || '-'} * ${tour.plateNumber || '-'}`,
                     tour.lineType || '',
-                    tour.destinations.join('، ') || '',
+                    (Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')) || '',
                     tour.billOfLadingNumber || '',
                     billDateStr,
                     tour.approvedKilometers || 0,
@@ -1237,7 +1237,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 vehicleCode: tour.vehicleCode || '',
                 vehiclePlate: tour.plateNumber || '',
                 vehicleType: tour.vehicleType || '',
-                destinations: tour.destinations?.join('، ') || '',
+                destinations: Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || ''),
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
@@ -1475,7 +1475,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 vehicleCode: tour.vehicleCode || '',
                 vehiclePlate: tour.plateNumber || '',
                 vehicleType: tour.vehicleType || '',
-                destinations: tour.destinations?.join('، ') || '',
+                destinations: Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || ''),
                 billOfLadingNumber: billOfLading,
                 billOfLadingDate: billOfLadingDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
@@ -1559,7 +1559,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 vehicleCode: tour.vehicleCode || '',
                 vehiclePlate: tour.plateNumber || '',
                 vehicleType: tour.vehicleType || '',
-                destinations: tour.destinations?.join('، ') || '',
+                destinations: Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || ''),
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
@@ -3665,7 +3665,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     <td className="p-3 border-l border-slate-200">{tour.vehicleType}</td>
                                                     <td className="p-3 border-l border-slate-200">{tour.vehicleCode || '-'} * {tour.plateNumber || '-'}</td>
                                                     <td className="p-3 border-l border-slate-200">{tour.lineType}</td>
-                                                    <td className="p-3 border-l border-slate-200">{tour.destinations.join('، ')}</td>
+                                                    <td className="p-3 border-l border-slate-200">{Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')}</td>
                                                     <td className="p-3 border-l border-slate-200">
                                                         {tour.billOfLadingNumber || '-'}
                                                     </td>

@@ -237,7 +237,7 @@ async function saveDriverCalculation(req, res) {
 
     if (existingCheck.rows.length > 0) {
       // آپدیت رکورد موجود
-      await pool.query(`
+      const updateQuery = `
         UPDATE driver_calculations SET
           bill_of_lading_number = $1,
           bill_of_lading_date = $2,
@@ -285,7 +285,9 @@ async function saveDriverCalculation(req, res) {
           updated_by = $44,
           updated_at = NOW()
         WHERE driver_id = $45 AND announcement_id = $46
-      `, [
+      `;
+      
+      const updateParams = [
         billOfLadingNumber || null,
         billOfLadingDate || null,
         parseNumber(billOfLadingCost, 0),
@@ -318,7 +320,7 @@ async function saveDriverCalculation(req, res) {
         calculationDate || null,
         vehicleCode || null,
         vehiclePlate || null,
-        destinations || null,
+        (destinations ? String(destinations) : null),
         parseNumber(multiUnloadCount, 0),
         parseNumber(advancePayment, 0),
         parseNumber(depotTotalMileage, 0),
@@ -328,11 +330,22 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotKilometerRate, 0),
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
-        depotRows ? JSON.stringify(depotRows) : null,
-        userId || null,
+        (depotRows ? JSON.stringify(depotRows) : null),
+        (userId || null),
         driverId,
         announcementId,
-      ]);
+      ];
+      
+      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE:', updateParams.length, 'مورد نیاز: 46');
+      if (updateParams.length !== 46) {
+        console.error('❌ [saveDriverCalculation] تعداد پارامترها نادرست است!', {
+          count: updateParams.length,
+          expected: 46,
+          params: updateParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
+        });
+      }
+      
+      await pool.query(updateQuery, updateParams);
 
       console.log('✅ [saveDriverCalculation] اطلاعات به‌روزرسانی شد:', existingCheck.rows[0].id);
       return res.json({ 
@@ -399,8 +412,8 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
         depotRows ? JSON.stringify(depotRows) : null,
-        userId || null,
-        userId || null,
+        userId || null, // created_by
+        userId || null, // updated_by
       ]);
 
       console.log('✅ [saveDriverCalculation] اطلاعات جدید ثبت شد:', id);
