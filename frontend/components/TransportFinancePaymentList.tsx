@@ -45,6 +45,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     // صفحه‌بندی
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [itemsPerPage, setItemsPerPage] = useState<number>(30);
+    
+    // دیالوگ قوانین
+    const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
 
     useEffect(() => {
         fetchData();
