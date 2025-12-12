@@ -262,7 +262,54 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }, 500); // debounce 500ms
         
         return () => clearTimeout(timeoutId);
-    }, [showInputDialog, inputDialogData?.tourId, inputDialogData?.approvedKilometers, inputDialogData?.excessKilometers, selectedDriverQueueType]);
+    }, [showInputDialog, inputDialogData?.tourId, inputDialogData?.approvedKilometers, inputDialogData?.excessKilometers, inputDialogData?.depotTotalMileage, selectedDriverQueueType]);
+
+    // محاسبه خودکار تعداد بار ارسالی، هزینه جابجایی بار در دپو و پیمایش کل دپو
+    useEffect(() => {
+        if (!inputDialogData || !showInputDialog) return;
+
+        const depotRows = inputDialogData.depotRows || [];
+        
+        // تعداد بار ارسالی = تعداد ردیف‌هایی که destination یا mileage دارند
+        const validRows = depotRows.filter(row => (row.destination && row.destination.trim()) || (row.mileage && row.mileage > 0));
+        const shipmentCount = validRows.length;
+
+        // پیمایش کل دپو = مجموع mileage همه ردیف‌ها
+        const totalMileage = depotRows.reduce((sum, row) => sum + (Number(row.mileage) || 0), 0);
+
+        // محاسبه هزینه جابجایی بار در دپو
+        let cargoHandlingCost = 0;
+        if (shipmentCount > 0 && inputDialogData.vehicleType) {
+            const vehicleType = inputDialogData.vehicleType;
+            const isTrailer = vehicleType.includes('تریلی');
+            const isTenWheeler = vehicleType.includes('ده چرخ');
+            const vehicleTypeForReg = isTrailer ? 'تریلی' : (isTenWheeler ? 'ده چرخ' : null);
+
+            if (vehicleTypeForReg) {
+                // پیدا کردن بخشنامه اجرت بار برگشتی برای "هزینه بار کامل (محصول)"
+                const regulation = returnCargoRegulations.find(reg => 
+                    reg.vehicleType === vehicleTypeForReg && 
+                    reg.cargoType === 'full_product'
+                );
+                
+                if (regulation) {
+                    cargoHandlingCost = shipmentCount * (Number(regulation.cost) || 0);
+                }
+            }
+        }
+
+        // به‌روزرسانی مقادیر
+        if (inputDialogData.depotShipmentCount !== shipmentCount || 
+            inputDialogData.depotCargoHandlingCost !== cargoHandlingCost ||
+            inputDialogData.depotTotalMileage !== totalMileage) {
+            setInputDialogData({
+                ...inputDialogData,
+                depotShipmentCount: shipmentCount,
+                depotCargoHandlingCost: cargoHandlingCost,
+                depotTotalMileage: totalMileage
+            });
+        }
+    }, [inputDialogData?.depotRows, inputDialogData?.vehicleType, returnCargoRegulations, showInputDialog]);
 
     // Fetch بخشنامه‌ها
     const fetchRegulations = async () => {
@@ -1442,7 +1489,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotShipmentCount: (tour as any).depotShipmentCount || 0,
                 depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
                 depotKilometerRate: (tour as any).depotKilometerRate || 0,
-                depotRows: (tour as any).depotRows || undefined,
+                depotTotalMileage: (tour as any).depotTotalMileage || 0,
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : undefined,
             });
         }
         
@@ -3159,8 +3207,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         ...inputDialogData,
                                         notes: e.target.value
                                     })}
-                                    className="input-style w-full"
-                                    rows={15}
+                                    className="input-style w-full resize-y"
+                                    rows={4}
+                                    placeholder="توضیحات اختیاری..."
                                 />
                             </div>
                         </div>

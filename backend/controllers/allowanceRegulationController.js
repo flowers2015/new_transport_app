@@ -1011,8 +1011,13 @@ async function getExcessMissionRegulations(req, res) {
       await createAllowanceRegulationTables();
       console.log('✅ [getExcessMissionRegulations] جداول بررسی شدند');
     } catch (tableError) {
-      console.error('❌ [getExcessMissionRegulations] خطا در ایجاد جداول:', tableError);
-      throw tableError;
+      // اگر خطای duplicate key است، فقط لاگ کن و ادامه بده
+      if (tableError.code === '23505' || tableError.message?.includes('duplicate key')) {
+        console.warn('⚠️ [getExcessMissionRegulations] خطای duplicate key در ایجاد جداول (نادیده گرفته شد):', tableError.message);
+      } else {
+        console.error('❌ [getExcessMissionRegulations] خطا در ایجاد جداول:', tableError);
+        throw tableError;
+      }
     }
 
     // بررسی وجود جدول excess_mission
