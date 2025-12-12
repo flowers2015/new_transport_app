@@ -173,6 +173,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // State برای باز/بستن بخش محاسبات دپو
     const [isDepotSectionOpen, setIsDepotSectionOpen] = useState(false);
     
+    // State برای دیالوگ قوانین محاسبات
+    const [showCalculationRulesDialog, setShowCalculationRulesDialog] = useState(false);
+    
     // بخشنامه‌ها
     const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
     const [fixedAllowance, setFixedAllowance] = useState<number>(0);
@@ -1247,7 +1250,23 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
                 helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
+                // فیلدهای محاسبات دپو
+                depotMissionDays: (tour as any).depotMissionDays || 0,
+                depotShipmentCount: (tour as any).depotShipmentCount || 0,
+                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
+                depotKilometerRate: (tour as any).depotKilometerRate || 0,
+                depotTotalMileage: (tour as any).depotTotalMileage || 0,
+                depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
+                depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : [],
             });
+            
+            // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
+            const hasDepotData = (tour as any).depotRows || (tour as any).depotTotalMileage || (tour as any).depotShipmentCount || (tour as any).depotMissionDays;
+            if (hasDepotData) {
+                setIsDepotSectionOpen(true);
+            }
+            
             setShowInputDialog(true);
         }
     };
@@ -1528,8 +1547,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotTotalMileage: (tour as any).depotTotalMileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
-                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : undefined,
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : [],
             });
+            
+            // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
+            const hasDepotData = (tour as any).depotRows || (tour as any).depotTotalMileage || (tour as any).depotShipmentCount || (tour as any).depotMissionDays;
+            if (hasDepotData) {
+                setIsDepotSectionOpen(true);
+            }
         }
         
         setShowInputDialog(true);
@@ -2304,9 +2329,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         style={{ transform: `scale(${dialogZoom / 100})`, transformOrigin: 'center' }}
                     >
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-slate-800">
-                                {inputDialogData && calculations.find(c => c.driverId === inputDialogData.driverId)?.tours.find(t => t.announcementId === inputDialogData.tourId)?.isDataRecorded ? 'ویرایش اطلاعات محاسباتی' : 'ثبت اطلاعات محاسباتی'}
-                            </h2>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-xl font-bold text-slate-800">
+                                    {inputDialogData && calculations.find(c => c.driverId === inputDialogData.driverId)?.tours.find(t => t.announcementId === inputDialogData.tourId)?.isDataRecorded ? 'ویرایش اطلاعات محاسباتی' : 'ثبت اطلاعات محاسباتی'}
+                                </h2>
+                                <button
+                                    onClick={() => setShowCalculationRulesDialog(true)}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors border border-blue-300"
+                                    title="قوانین محاسبات"
+                                >
+                                    <span>📋</span>
+                                    <span>قوانین محاسبات</span>
+                                </button>
+                            </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setDialogZoom(prev => Math.max(50, prev - 10))}
@@ -2326,52 +2361,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             </div>
                         </div>
 
-                        {/* بخش قوانین محاسبات */}
-                        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-                            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                <span>📋</span>
-                                <span>قوانین محاسبات</span>
-                            </h3>
-                            <div className="space-y-4 text-sm">
-                                {/* راننده اصلی */}
-                                <div className="bg-white p-3 rounded border border-blue-100">
-                                    <h4 className="font-bold text-slate-700 mb-2">🚗 راننده اصلی</h4>
-                                    <ul className="space-y-1 text-slate-600 list-disc list-inside">
-                                        <li><strong>هزینه غذا:</strong> ماموریت مصوب (روز) × هزینه غذا طبق بخشنامه</li>
-                                        <li><strong>هزینه سوخت:</strong> (پیمایش مصوب + پیمایش مازاد) ÷ 100 × درصد مصرف × قیمت سوخت</li>
-                                        <li><strong>اجرت (پورسانتی):</strong> بر اساس بخشنامه اجرت و پیمایش کل</li>
-                                        <li><strong>اجرت (ثابت):</strong> پیمایش کل × اجرت ثابت بخشنامه</li>
-                                        <li><strong>حق ماموریت:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
-                                        <li><strong>هزینه چندجا تخلیه:</strong> (تعداد مقاصد - 1) × هزینه واحد چندجا تخلیه</li>
-                                    </ul>
-                                </div>
-                                
-                                {/* راننده کمکی */}
-                                <div className="bg-white p-3 rounded border border-green-100">
-                                    <h4 className="font-bold text-slate-700 mb-2">👥 راننده کمکی</h4>
-                                    <ul className="space-y-1 text-slate-600 list-disc list-inside">
-                                        <li><strong>اجرت راننده کمکی:</strong> پیمایش کل × اجرت کیلومتر راننده کمکی طبق بخشنامه</li>
-                                        <li><strong>هزینه غذا:</strong> ماموریت مصوب (روز) × هزینه غذا طبق بخشنامه</li>
-                                        <li><strong>ماموریت مازاد:</strong> به صورت پیش‌فرض برابر با راننده اصلی (قابل ویرایش)</li>
-                                        <li><strong>هزینه ماموریت مازاد:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
-                                    </ul>
-                                </div>
-                                
-                                {/* محاسبات دپو */}
-                                <div className="bg-white p-3 rounded border border-purple-100">
-                                    <h4 className="font-bold text-slate-700 mb-2">🏢 محاسبات دپو</h4>
-                                    <ul className="space-y-1 text-slate-600 list-disc list-inside">
-                                        <li><strong>تعداد بار ارسالی:</strong> تعداد ردیف‌های ثبت شده در جدول دپو</li>
-                                        <li><strong>هزینه جابجایی بار:</strong> تعداد بار ارسالی × هزینه بار کامل محصول طبق بخشنامه</li>
-                                        <li><strong>پیمایش کل دپو:</strong> مجموع پیمایش همه ردیف‌های جدول دپو</li>
-                                        <li><strong>اجرت دپو (اجرت ثابت):</strong> پیمایش کل دپو × اجرت ثابت بخشنامه</li>
-                                        <li><strong>هزینه غذا دپو:</strong> تعداد روز ماموریت دپو × هزینه غذا طبق بخشنامه</li>
-                                        <li><strong>هزینه ماموریت دپو:</strong> تعداد روز ماموریت دپو × هزینه ماموریت مازاد طبق بخشنامه</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                        
                         <div className="flex-1 overflow-y-auto" style={{ minHeight: '400px' }}>
                         {/* بخش اول: اطلاعات اصلی */}
                         <div className="space-y-4 mb-6">
@@ -3018,8 +3007,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     onClick={() => setIsDepotSectionOpen(!isDepotSectionOpen)}
                                     className="flex items-center gap-2 text-base font-bold text-slate-800 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
                                 >
+                                    <span className="text-lg">{isDepotSectionOpen ? '▼' : '▶'}</span>
                                     <span>🏢 محاسبات دپو</span>
-                                    <span className="text-sm">{isDepotSectionOpen ? '▼' : '▶'}</span>
                                 </button>
                                 <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
                             </div>
