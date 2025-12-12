@@ -89,8 +89,10 @@ interface AllowanceInputDialogData {
     depotMissionDays?: number; // تعداد روز ماموریت دپو
     depotShipmentCount?: number; // تعداد بار ارسالی (محاسبه خودکار از تعداد ردیف‌ها)
     depotCargoHandlingCost?: number; // هزینه جابجایی بار در دپو (محاسبه خودکار)
-    depotKilometerRate?: number; // اجرت کیلومتر دپو
+    depotKilometerRate?: number; // اجرت کیلومتر دپو (محاسبه خودکار برای اجرت ثابت)
     depotTotalMileage?: number; // پیمایش کل دپو (محاسبه خودکار از مجموع mileage ردیف‌ها)
+    depotFoodCost?: number; // هزینه غذا دپو (محاسبه خودکار: تعداد روز × هزینه غذا)
+    depotMissionCost?: number; // هزینه ماموریت دپو (محاسبه خودکار)
     depotRows?: Array<{ // ردیف‌های جدول محاسبات دپو
         id: string;
         destination: string; // مقاصد اعزامی دپو
@@ -167,6 +169,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [selectedDriverName, setSelectedDriverName] = useState<string>('');
     const [selectedDriverId, setSelectedDriverId] = useState<string>('');
     const [selectedDriverQueueType, setSelectedDriverQueueType] = useState<'porsant' | 'fixed_allowance' | 'helper'>('porsant');
+    
+    // State برای باز/بستن بخش محاسبات دپو
+    const [isDepotSectionOpen, setIsDepotSectionOpen] = useState(false);
     
     // بخشنامه‌ها
     const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
@@ -264,7 +269,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         return () => clearTimeout(timeoutId);
     }, [showInputDialog, inputDialogData?.tourId, inputDialogData?.approvedKilometers, inputDialogData?.excessKilometers, inputDialogData?.depotTotalMileage, selectedDriverQueueType]);
 
-    // محاسبه خودکار تعداد بار ارسالی، هزینه جابجایی بار در دپو و پیمایش کل دپو
+    // محاسبه خودکار فیلدهای محاسبات دپو
     useEffect(() => {
         if (!inputDialogData || !showInputDialog) return;
 
@@ -298,18 +303,49 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }
         }
 
-        // به‌روزرسانی مقادیر
-        if (inputDialogData.depotShipmentCount !== shipmentCount || 
-            inputDialogData.depotCargoHandlingCost !== cargoHandlingCost ||
-            inputDialogData.depotTotalMileage !== totalMileage) {
-            setInputDialogData({
-                ...inputDialogData,
-                depotShipmentCount: shipmentCount,
-                depotCargoHandlingCost: cargoHandlingCost,
-                depotTotalMileage: totalMileage
-            });
+        // محاسبه اجرت دپو (فقط برای اجرت ثابت)
+        let depotKilometerRate = inputDialogData.depotKilometerRate || 0;
+        if (selectedDriverQueueType === 'fixed_allowance' && totalMileage > 0 && fixedAllowance > 0) {
+            // اجرت دپو = پیمایش کل دپو × (اجرت ثابت ÷ پیمایش کل)
+            const totalKm = (inputDialogData.approvedKilometers || 0) + (inputDialogData.excessKilometers || 0) + totalMileage;
+            if (totalKm > 0) {
+                const fixedAllowancePerKm = fixedAllowance / totalKm;
+                depotKilometerRate = Math.round(totalMileage * fixedAllowancePerKm);
+            }
         }
-    }, [inputDialogData?.depotRows, inputDialogData?.vehicleType, returnCargoRegulations, showInputDialog]);
+
+        // محاسبه هزینه غذا دپو
+        const depotMissionDays = inputDialogData.depotMissionDays || 0;
+        const depotFoodCost = Math.round(depotMissionDays * (Number(foodCostPerDay) || 0)) || 0;
+
+        // محاسبه هزینه ماموریت دپو
+        const depotMissionCost = Math.round(depotMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
+
+        // به‌روزرسانی مقادیر
+        setInputDialogData(prev => {
+            if (!prev) return prev;
+            const hasChanges = 
+                prev.depotShipmentCount !== shipmentCount || 
+                prev.depotCargoHandlingCost !== cargoHandlingCost ||
+                prev.depotTotalMileage !== totalMileage ||
+                (selectedDriverQueueType === 'fixed_allowance' && prev.depotKilometerRate !== depotKilometerRate) ||
+                prev.depotFoodCost !== depotFoodCost ||
+                prev.depotMissionCost !== depotMissionCost;
+            
+            if (hasChanges) {
+                return {
+                    ...prev,
+                    depotShipmentCount: shipmentCount,
+                    depotCargoHandlingCost: cargoHandlingCost,
+                    depotTotalMileage: totalMileage,
+                    depotKilometerRate: selectedDriverQueueType === 'fixed_allowance' ? depotKilometerRate : prev.depotKilometerRate,
+                    depotFoodCost: depotFoodCost,
+                    depotMissionCost: depotMissionCost
+                };
+            }
+            return prev;
+        });
+    }, [inputDialogData?.depotRows, inputDialogData?.vehicleType, inputDialogData?.depotMissionDays, inputDialogData?.approvedKilometers, inputDialogData?.excessKilometers, returnCargoRegulations, foodCostPerDay, excessMissionCostPerDay, fixedAllowance, selectedDriverQueueType, showInputDialog]);
 
     // Fetch بخشنامه‌ها
     const fetchRegulations = async () => {
@@ -1208,7 +1244,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverName: (tour as any).helperDriverName || '',
                 helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
-                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
                 helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
             });
@@ -1418,7 +1454,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverName: (tour as any).helperDriverName || '',
                 helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
-                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
                 helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
             });
@@ -1481,7 +1517,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverName: (tour as any).helperDriverName || '',
                 helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
-                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
                 helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
                 helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
                 // فیلدهای محاسبات دپو
@@ -1490,6 +1526,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
                 depotKilometerRate: (tour as any).depotKilometerRate || 0,
                 depotTotalMileage: (tour as any).depotTotalMileage || 0,
+                depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
+                depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
                 depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : undefined,
             });
         }
@@ -1611,6 +1649,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         let fuelCost = 0;
         const fuelReg = fuelConsumptionRegulations[vehicleType];
         if (fuelReg) {
+            // محاسبه کل پیمایش
+            const totalKm = (inputDialogData.approvedKilometers || 0) + (inputDialogData.excessKilometers || 0) + (inputDialogData.depotTotalMileage || 0);
             // هزینه سوخت = (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر
             fuelCost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
         } else {
@@ -1733,6 +1773,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     depotCargoHandlingCost: Number(inputDialogData.depotCargoHandlingCost) || 0,
                     depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
                     depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
+                    depotFoodCost: Number(inputDialogData.depotFoodCost) || 0,
+                    depotMissionCost: Number(inputDialogData.depotMissionCost) || 0,
                     depotRows: inputDialogData.depotRows || [],
                     userId, // اضافه کردن userId
                     // فیلدهای راننده کمکی
@@ -2281,6 +2323,52 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 >
                                     +
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* بخش قوانین محاسبات */}
+                        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                <span>📋</span>
+                                <span>قوانین محاسبات</span>
+                            </h3>
+                            <div className="space-y-4 text-sm">
+                                {/* راننده اصلی */}
+                                <div className="bg-white p-3 rounded border border-blue-100">
+                                    <h4 className="font-bold text-slate-700 mb-2">🚗 راننده اصلی</h4>
+                                    <ul className="space-y-1 text-slate-600 list-disc list-inside">
+                                        <li><strong>هزینه غذا:</strong> ماموریت مصوب (روز) × هزینه غذا طبق بخشنامه</li>
+                                        <li><strong>هزینه سوخت:</strong> (پیمایش مصوب + پیمایش مازاد) ÷ 100 × درصد مصرف × قیمت سوخت</li>
+                                        <li><strong>اجرت (پورسانتی):</strong> بر اساس بخشنامه اجرت و پیمایش کل</li>
+                                        <li><strong>اجرت (ثابت):</strong> پیمایش کل × اجرت ثابت بخشنامه</li>
+                                        <li><strong>حق ماموریت:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                        <li><strong>هزینه چندجا تخلیه:</strong> (تعداد مقاصد - 1) × هزینه واحد چندجا تخلیه</li>
+                                    </ul>
+                                </div>
+                                
+                                {/* راننده کمکی */}
+                                <div className="bg-white p-3 rounded border border-green-100">
+                                    <h4 className="font-bold text-slate-700 mb-2">👥 راننده کمکی</h4>
+                                    <ul className="space-y-1 text-slate-600 list-disc list-inside">
+                                        <li><strong>اجرت راننده کمکی:</strong> پیمایش کل × اجرت کیلومتر راننده کمکی طبق بخشنامه</li>
+                                        <li><strong>هزینه غذا:</strong> ماموریت مصوب (روز) × هزینه غذا طبق بخشنامه</li>
+                                        <li><strong>ماموریت مازاد:</strong> به صورت پیش‌فرض برابر با راننده اصلی (قابل ویرایش)</li>
+                                        <li><strong>هزینه ماموریت مازاد:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                    </ul>
+                                </div>
+                                
+                                {/* محاسبات دپو */}
+                                <div className="bg-white p-3 rounded border border-purple-100">
+                                    <h4 className="font-bold text-slate-700 mb-2">🏢 محاسبات دپو</h4>
+                                    <ul className="space-y-1 text-slate-600 list-disc list-inside">
+                                        <li><strong>تعداد بار ارسالی:</strong> تعداد ردیف‌های ثبت شده در جدول دپو</li>
+                                        <li><strong>هزینه جابجایی بار:</strong> تعداد بار ارسالی × هزینه بار کامل محصول طبق بخشنامه</li>
+                                        <li><strong>پیمایش کل دپو:</strong> مجموع پیمایش همه ردیف‌های جدول دپو</li>
+                                        <li><strong>اجرت دپو (اجرت ثابت):</strong> پیمایش کل دپو × اجرت ثابت بخشنامه</li>
+                                        <li><strong>هزینه غذا دپو:</strong> تعداد روز ماموریت دپو × هزینه غذا طبق بخشنامه</li>
+                                        <li><strong>هزینه ماموریت دپو:</strong> تعداد روز ماموریت دپو × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                         
@@ -2925,14 +3013,104 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             {/* Separator: محاسبات دپو */}
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
-                                <h3 className="text-base font-bold text-slate-800 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
-                                    🏢 محاسبات دپو
-                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDepotSectionOpen(!isDepotSectionOpen)}
+                                    className="flex items-center gap-2 text-base font-bold text-slate-800 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+                                >
+                                    <span>🏢 محاسبات دپو</span>
+                                    <span className="text-sm">{isDepotSectionOpen ? '▼' : '▶'}</span>
+                                </button>
                                 <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
                             </div>
                             
                             {/* فیلدهای محاسبات دپو */}
+                            {isDepotSectionOpen && (
                             <div className="grid grid-cols-4 gap-4 items-start">
+                                {/* 1. تعداد بار ارسالی */}
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        تعداد بار ارسالی
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        readOnly
+                                        value={inputDialogData.depotShipmentCount ? String(inputDialogData.depotShipmentCount) : '0'}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار از تعداد ردیف‌های ثبت شده</p>
+                                </div>
+                                
+                                {/* 2. هزینه جابجایی بار در دپو */}
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        هزینه جابجایی بار در دپو (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        readOnly
+                                        value={inputDialogData.depotCargoHandlingCost ? String(inputDialogData.depotCargoHandlingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد ردیف × هزینه بار کامل محصول</p>
+                                </div>
+                                
+                                {/* 3. پیمایش کل دپو */}
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        پیمایش کل دپو (کیلومتر)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        readOnly
+                                        value={inputDialogData.depotTotalMileage ? String(inputDialogData.depotTotalMileage).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار از مجموع پیمایش ردیف‌ها</p>
+                                </div>
+                                
+                                {/* 4. اجرت دپو */}
+                                <div className="flex flex-col">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
+                                        اجرت دپو (ریال)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        readOnly={selectedDriverQueueType === 'fixed_allowance'}
+                                        value={inputDialogData.depotKilometerRate ? String(inputDialogData.depotKilometerRate).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                        onChange={(e) => {
+                                            if (selectedDriverQueueType !== 'fixed_allowance') {
+                                                const inputValue = e.target.value.replace(/,/g, '');
+                                                const cleaned = inputValue.replace(/[^\d]/g, '');
+                                                const numValue = cleaned ? Number(cleaned) : 0;
+                                                setInputDialogData({
+                                                    ...inputDialogData,
+                                                    depotKilometerRate: numValue
+                                                });
+                                            }
+                                        }}
+                                        className={`block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm text-left ${
+                                            selectedDriverQueueType === 'fixed_allowance' 
+                                                ? 'bg-slate-100 cursor-not-allowed' 
+                                                : 'focus:outline-none focus:ring-sky-500 focus:border-sky-500'
+                                        }`}
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">
+                                        {selectedDriverQueueType === 'fixed_allowance' 
+                                            ? 'محاسبه خودکار: پیمایش دپو × اجرت ثابت بخشنامه' 
+                                            : 'برای اجرت پورسانتی وارد کنید'}
+                                    </p>
+                                </div>
+                                
+                                {/* 5. تعداد روز ماموریت دپو */}
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
                                         تعداد روز ماموریت دپو
@@ -2955,73 +3133,43 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     />
                                     <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
+                                
+                                {/* 6. هزینه غذا دپو */}
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        تعداد بار ارسالی
+                                        هزینه غذا دپو (ریال)
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
                                         readOnly
-                                        value={inputDialogData.depotShipmentCount ? String(inputDialogData.depotShipmentCount) : '0'}
+                                        value={inputDialogData.depotFoodCost ? String(inputDialogData.depotFoodCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار از تعداد ردیف‌های ثبت شده</p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد روز × هزینه غذا</p>
                                 </div>
+                                
+                                {/* 7. هزینه ماموریت دپو */}
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه جابجایی بار در دپو (ریال)
+                                        هزینه ماموریت دپو (ریال)
                                     </label>
                                     <input
                                         type="text"
                                         inputMode="numeric"
                                         readOnly
-                                        value={inputDialogData.depotCargoHandlingCost ? String(inputDialogData.depotCargoHandlingCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                        value={inputDialogData.depotMissionCost ? String(inputDialogData.depotMissionCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد ردیف × هزینه بار کامل محصول</p>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        اجرت کیلومتر دپو (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.depotKilometerRate ? String(inputDialogData.depotKilometerRate).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value.replace(/,/g, '');
-                                            const cleaned = inputValue.replace(/[^\d]/g, '');
-                                            const numValue = cleaned ? Number(cleaned) : 0;
-                                            setInputDialogData({
-                                                ...inputDialogData,
-                                                depotKilometerRate: numValue
-                                            });
-                                        }}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        پیمایش کل دپو (کیلومتر)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        readOnly
-                                        value={inputDialogData.depotTotalMileage ? String(inputDialogData.depotTotalMileage).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار از مجموع پیمایش ردیف‌ها</p>
+                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد روز × هزینه ماموریت مازاد</p>
                                 </div>
                             </div>
+                            )}
                             
                             {/* جدول محاسبات دپو */}
+                            {isDepotSectionOpen && (
                             <div className="mt-4">
                                 <div className="flex justify-between items-center mb-2">
                                     <h4 className="text-sm font-semibold text-slate-700">جدول محاسبات دپو</h4>
@@ -3184,6 +3332,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     </table>
                                 </div>
                             </div>
+                            )}
                         </div>
                         
                         {/* بخش چهارم: توضیحات */}

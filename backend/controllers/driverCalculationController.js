@@ -49,6 +49,8 @@ async function saveDriverCalculation(req, res) {
       depotCargoHandlingCost,
       depotMissionDays,
       depotKilometerRate,
+      depotFoodCost,
+      depotMissionCost,
       depotRows,
     } = req.body;
 
@@ -202,6 +204,8 @@ async function saveDriverCalculation(req, res) {
           ADD COLUMN IF NOT EXISTS depot_cargo_handling_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS depot_mission_days INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS depot_kilometer_rate INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS depot_food_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS depot_mission_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS depot_rows JSONB
         `);
         // تبدیل ستون‌های DECIMAL به INTEGER برای هزینه‌ها
@@ -272,10 +276,12 @@ async function saveDriverCalculation(req, res) {
           depot_cargo_handling_cost = $37,
           depot_mission_days = $38,
           depot_kilometer_rate = $39,
-          depot_rows = $40,
-          updated_by = $41,
+          depot_food_cost = $40,
+          depot_mission_cost = $41,
+          depot_rows = $42,
+          updated_by = $43,
           updated_at = NOW()
-        WHERE driver_id = $42 AND announcement_id = $43
+        WHERE driver_id = $44 AND announcement_id = $45
       `, [
         billOfLadingNumber || null,
         billOfLadingDate || null,
@@ -311,6 +317,14 @@ async function saveDriverCalculation(req, res) {
         destinations || null,
         parseNumber(multiUnloadCount, 0),
         parseNumber(advancePayment, 0),
+        parseNumber(depotTotalMileage, 0),
+        parseNumber(depotShipmentCount, 0),
+        parseNumber(depotCargoHandlingCost, 0),
+        parseNumber(depotMissionDays, 0),
+        parseNumber(depotKilometerRate, 0),
+        parseNumber(depotFoodCost, 0),
+        parseNumber(depotMissionCost, 0),
+        depotRows ? JSON.stringify(depotRows) : null,
         userId || null,
         driverId,
         announcementId,
@@ -331,9 +345,9 @@ async function saveDriverCalculation(req, res) {
           helper_driver_id, helper_driver_employee_id, helper_driver_name, helper_driver_allowance, helper_driver_food_cost, helper_driver_excess_mission_days, helper_driver_excess_mission_cost,
           food_cost, fuel_cost, tour_cost, total_cost,
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, 
-          depot_total_mileage, depot_shipment_count, depot_cargo_handling_cost, depot_mission_days, depot_kilometer_rate, depot_rows,
+          depot_total_mileage, depot_shipment_count, depot_cargo_handling_cost, depot_mission_days, depot_kilometer_rate, depot_food_cost, depot_mission_cost, depot_rows,
           created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47)
       `, [
         id,
         driverId,
@@ -377,6 +391,8 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotCargoHandlingCost, 0),
         parseNumber(depotMissionDays, 0),
         parseNumber(depotKilometerRate, 0),
+        parseNumber(depotFoodCost, 0),
+        parseNumber(depotMissionCost, 0),
         depotRows ? JSON.stringify(depotRows) : null,
         userId || null,
         userId || null,
