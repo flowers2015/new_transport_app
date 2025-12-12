@@ -624,6 +624,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || saved.helperDriverExcessMissionCost || 0,
                                         helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || saved.helperDriverExcessKilometers || 0,
                                         isPaid: saved.is_paid || saved.isPaid || false,
+                                        // فیلدهای محاسبات دپو
+                                        depotMissionDays: saved.depot_mission_days || saved.depotMissionDays || 0,
+                                        depotShipmentCount: saved.depot_shipment_count || saved.depotShipmentCount || 0,
+                                        depotCargoHandlingCost: saved.depot_cargo_handling_cost || saved.depotCargoHandlingCost || 0,
+                                        depotKilometerRate: saved.depot_kilometer_rate || saved.depotKilometerRate || 0,
+                                        depotTotalMileage: saved.depot_total_mileage || saved.depotTotalMileage || 0,
+                                        depotFoodCost: saved.depot_food_cost || saved.depotFoodCost || 0,
+                                        depotMissionCost: saved.depot_mission_cost || saved.depotMissionCost || 0,
+                                        depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows) : []) : saved.depot_rows) : (saved.depotRows || []),
                                     } as any;
                                 }
                                 return tour;
@@ -1258,11 +1267,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotTotalMileage: (tour as any).depotTotalMileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
-                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : [],
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows) : []) : (tour as any).depotRows) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows) : []) : (tour as any).depot_rows) : []),
             });
             
             // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
-            const hasDepotData = (tour as any).depotRows || (tour as any).depotTotalMileage || (tour as any).depotShipmentCount || (tour as any).depotMissionDays;
+            const hasDepotData = (tour as any).depotRows || (tour as any).depot_rows || (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || (tour as any).depotMissionDays || (tour as any).depot_mission_days;
             if (hasDepotData) {
                 setIsDepotSectionOpen(true);
             }
@@ -1547,11 +1556,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotTotalMileage: (tour as any).depotTotalMileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
-                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? JSON.parse((tour as any).depotRows) : (tour as any).depotRows) : [],
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows) : []) : (tour as any).depotRows) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows) : []) : (tour as any).depot_rows) : []),
             });
             
             // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
-            const hasDepotData = (tour as any).depotRows || (tour as any).depotTotalMileage || (tour as any).depotShipmentCount || (tour as any).depotMissionDays;
+            const hasDepotData = (tour as any).depotRows || (tour as any).depot_rows || (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || (tour as any).depotMissionDays || (tour as any).depot_mission_days;
             if (hasDepotData) {
                 setIsDepotSectionOpen(true);
             }
@@ -3369,6 +3378,75 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             >
                                 ثبت و محاسبه
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* دیالوگ قوانین محاسبات */}
+            {showCalculationRulesDialog && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 z-[70] flex items-center justify-center">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <span>📋</span>
+                                <span>قوانین محاسبات</span>
+                            </h2>
+                            <button
+                                onClick={() => setShowCalculationRulesDialog(false)}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm hover:bg-slate-300"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="space-y-4 text-sm">
+                                {/* راننده اصلی */}
+                                <div className="bg-white p-4 rounded-lg border-2 border-blue-200 shadow-sm">
+                                    <h4 className="font-bold text-slate-700 mb-3 text-base flex items-center gap-2">
+                                        <span>🚗</span>
+                                        <span>راننده اصلی</span>
+                                    </h4>
+                                    <ul className="space-y-2 text-slate-600 list-disc list-inside">
+                                        <li><strong>هزینه غذا:</strong> ماموریت مصوب (روز) × هزینه غذا طبق بخشنامه</li>
+                                        <li><strong>هزینه سوخت:</strong> (پیمایش مصوب + پیمایش مازاد) ÷ 100 × درصد مصرف × قیمت سوخت</li>
+                                        <li><strong>اجرت (پورسانتی):</strong> بر اساس بخشنامه اجرت و پیمایش کل</li>
+                                        <li><strong>اجرت (ثابت):</strong> پیمایش کل × اجرت ثابت بخشنامه</li>
+                                        <li><strong>حق ماموریت:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                        <li><strong>هزینه چندجا تخلیه:</strong> (تعداد مقاصد - 1) × هزینه واحد چندجا تخلیه</li>
+                                    </ul>
+                                </div>
+                                
+                                {/* راننده کمکی */}
+                                <div className="bg-white p-4 rounded-lg border-2 border-green-200 shadow-sm">
+                                    <h4 className="font-bold text-slate-700 mb-3 text-base flex items-center gap-2">
+                                        <span>👥</span>
+                                        <span>راننده کمکی</span>
+                                    </h4>
+                                    <ul className="space-y-2 text-slate-600 list-disc list-inside">
+                                        <li><strong>اجرت راننده کمکی:</strong> پیمایش کل × اجرت کیلومتر راننده کمکی طبق بخشنامه</li>
+                                        <li><strong>هزینه غذا:</strong> ماموریت مصوب (روز) × هزینه غذا طبق بخشنامه</li>
+                                        <li><strong>ماموریت مازاد:</strong> به صورت پیش‌فرض برابر با راننده اصلی (قابل ویرایش)</li>
+                                        <li><strong>هزینه ماموریت مازاد:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                    </ul>
+                                </div>
+                                
+                                {/* محاسبات دپو */}
+                                <div className="bg-white p-4 rounded-lg border-2 border-purple-200 shadow-sm">
+                                    <h4 className="font-bold text-slate-700 mb-3 text-base flex items-center gap-2">
+                                        <span>🏢</span>
+                                        <span>محاسبات دپو</span>
+                                    </h4>
+                                    <ul className="space-y-2 text-slate-600 list-disc list-inside">
+                                        <li><strong>تعداد بار ارسالی:</strong> تعداد ردیف‌های ثبت شده در جدول دپو</li>
+                                        <li><strong>هزینه جابجایی بار:</strong> تعداد بار ارسالی × هزینه بار کامل محصول طبق بخشنامه</li>
+                                        <li><strong>پیمایش کل دپو:</strong> مجموع پیمایش همه ردیف‌های جدول دپو</li>
+                                        <li><strong>اجرت دپو (اجرت ثابت):</strong> پیمایش کل دپو × اجرت ثابت بخشنامه</li>
+                                        <li><strong>هزینه غذا دپو:</strong> تعداد روز ماموریت دپو × هزینه غذا طبق بخشنامه</li>
+                                        <li><strong>هزینه ماموریت دپو:</strong> تعداد روز ماموریت دپو × هزینه ماموریت مازاد طبق بخشنامه</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
