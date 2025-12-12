@@ -1420,13 +1420,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     </div>
                 </div>
             )}
-        </div>
-        
-        {/* دیالوگ قوانین کارتابل */}
-        {rulesDialogOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-                    <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-10">
+            
+            {/* دیالوگ قوانین کارتابل */}
+            {rulesDialogOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-10">
                         <h2 className="text-xl font-bold text-slate-800">
                             قوانین کارتابل لیست پرداخت
                         </h2>
@@ -1499,11 +1498,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 </p>
                             </div>
                         </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        )}
-    </div>
+            )}
+        </div>
     );
 };
 
