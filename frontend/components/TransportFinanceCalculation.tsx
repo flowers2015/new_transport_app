@@ -639,6 +639,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             ...row,
                                             billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
                                         }))) : (saved.depotRows || []),
+                                        advancePayment: saved.advance_payment || saved.advancePayment || 0,
                                     } as any;
                                 }
                                 return tour;
@@ -2824,7 +2825,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             // گروه‌بندی بر اساس cargoType
                                                             const cargoTypeLabels: { [key: string]: string } = {
                                                                 'full_product': 'بار کامل محصول',
-                                                                'full_box_pallet_basket': 'بار کامل جعبه/پالت/سبد',
+                                                                'full_box_pallet_basket': 'بار کامل باکس/پالت/سید',
                                                                 'half': 'نیم بار'
                                                             };
                                                             
