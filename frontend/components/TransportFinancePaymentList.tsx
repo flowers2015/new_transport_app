@@ -1376,27 +1376,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
                             {/* خلاصه */}
                             {invoiceCalculations.length > 0 && (() => {
-                                // محاسبه هزینه‌های راننده اصلی (بدون اجرت ثابت)
-                                const calculateMainDriverCostWithoutAllowance = (calc: any) => {
-                                    const food = calc.food_cost || calc.foodCost || 0;
-                                    const fuel = calc.fuel_cost || calc.fuelCost || 0;
-                                    const toll = calc.toll_cost || calc.tollCost || 0;
-                                    const bill = calc.bill_of_lading_cost || calc.billOfLadingCost || 0;
-                                    const returnCargo = calc.return_cargo_cost || calc.returnCargoCost || 0;
-                                    const returnBill = calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0;
-                                    const multiUnload = calc.multi_unload_cost || calc.multiUnloadCost || 0;
-                                    const excessMission = calc.excess_mission_cost || calc.excessMissionCost || 0;
-                                    return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission;
-                                };
-                                
-                                // هزینه‌های راننده اصلی (بدون اجرت ثابت)
-                                const totalMainCosts = invoiceCalculations.reduce((sum, calc) => {
-                                    return sum + calculateMainDriverCostWithoutAllowance(calc);
-                                }, 0);
-                                
-                                // جمع اجرت ثابت
-                                const totalFixedAllowance = invoiceCalculations.reduce((sum, calc) => {
-                                    return sum + (calc.fixed_allowance || calc.fixedAllowance || 0);
+                                // محاسبه هزینه کل راننده اصلی (همه تورها - با و بدون راننده کمکی) - مطابق منطق جدول
+                                const totalMainAll = invoiceCalculations.reduce((sum, calc) => {
+                                    return sum + calculateMainDriverCost(calc);
                                 }, 0);
                                 
                                 // گروه‌بندی هزینه‌های راننده کمکی بر اساس کد پرسنلی
@@ -1424,7 +1406,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 });
                                 
                                 const totalHelperCosts = Array.from(helperCostsByEmployee.values()).reduce((sum, h) => sum + h.total, 0);
-                                const grandTotal = totalMainCosts + totalFixedAllowance + totalHelperCosts;
+                                const grandTotal = totalMainAll + totalHelperCosts;
                                 
                                 return (
                                     <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-300">
@@ -1433,10 +1415,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                 <p className="font-semibold text-slate-700 mb-2" style={{ fontSize: '14px' }}>خلاصه:</p>
                                                 <p className="text-sm mb-1" style={{ fontSize: '13px' }}>تعداد تور: {invoiceCalculations.length}</p>
                                                 <div className="mt-2 space-y-1">
-                                                    <p className="text-sm" style={{ fontSize: '13px' }}>هزینه‌های راننده اصلی: <span className="font-semibold">{totalMainCosts.toLocaleString('fa-IR')}</span> ریال</p>
-                                                    {totalFixedAllowance > 0 && (
-                                                        <p className="text-sm" style={{ fontSize: '13px' }}>اجرت ثابت: <span className="font-semibold text-amber-700">{totalFixedAllowance.toLocaleString('fa-IR')}</span> ریال</p>
-                                                    )}
+                                                    <p className="text-sm" style={{ fontSize: '13px' }}>هزینه‌های راننده اصلی: <span className="font-semibold">{totalMainAll.toLocaleString('fa-IR')}</span> ریال</p>
                                                     {Array.from(helperCostsByEmployee.values()).map((helper, idx) => (
                                                         <p key={idx} className="text-sm" style={{ fontSize: '13px' }}>
                                                             هزینه راننده کمکی ({helper.employeeId}-{helper.name}): <span className="font-semibold">{helper.total.toLocaleString('fa-IR')}</span> ریال

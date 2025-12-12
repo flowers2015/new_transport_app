@@ -169,6 +169,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [selectedDriverName, setSelectedDriverName] = useState<string>('');
     const [selectedDriverId, setSelectedDriverId] = useState<string>('');
     const [selectedDriverQueueType, setSelectedDriverQueueType] = useState<'porsant' | 'fixed_allowance' | 'helper'>('porsant');
+    const [expandedTours, setExpandedTours] = useState<Set<string>>(new Set());
     
     // State برای باز/بستن بخش محاسبات دپو
     const [isDepotSectionOpen, setIsDepotSectionOpen] = useState(false);
@@ -3634,204 +3635,293 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             <th className="p-3 text-right border-l border-slate-600">شماره بارنامه</th>
                                             <th className="p-3 text-right border-l border-slate-600">تاریخ صدور بارنامه</th>
                                             <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
-                                            <th className="p-3 text-right border-l border-slate-600">پیمایش (کیلومتر)</th>
-                                            <th className="p-3 text-right border-l border-slate-600">هزینه تور (ریال)</th>
-                                            <th className="p-3 text-right border-l border-slate-600">تاریخ اعلام بار</th>
-                                            <th className="p-3 text-right border-l border-slate-600">وضعیت</th>
+                                            <th className="p-3 text-right border-l border-slate-600">پیمایش کل (کیلومتر)</th>
+                                            <th className="p-3 text-right border-l border-slate-600">مجموع ماموریت (روز)</th>
+                                            <th className="p-3 text-right border-l border-slate-600">هزینه‌ها (ریال)</th>
                                             <th className="p-3 text-right">عملیات</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {selectedTourDetails.map((tour, tourIdx) => (
-                                            <React.Fragment key={tour.announcementId}>
-                                                <tr className={`border-b border-slate-200 ${
-                                                    (tour as any).isPaid 
-                                                        ? 'bg-purple-50' 
-                                                        : tour.isDataRecorded 
-                                                            ? 'bg-green-50' 
-                                                            : 'bg-orange-50'
-                                                }`}>
-                                                    <td className="p-3 border-l border-slate-200 text-center">
-                                                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm ${
-                                                            (tour as any).isPaid
-                                                                ? 'bg-purple-600 text-white'
-                                                                : tour.isDataRecorded 
-                                                                    ? 'bg-green-600 text-white' 
-                                                                    : 'bg-orange-500 text-white'
-                                                        }`}>
-                                                            {tourIdx + 1}
-                                                        </span>
-                                                    </td>
-                                                    <td className="p-3 border-l border-slate-200">{tour.vehicleType}</td>
-                                                    <td className="p-3 border-l border-slate-200">{tour.vehicleCode || '-'} * {tour.plateNumber || '-'}</td>
-                                                    <td className="p-3 border-l border-slate-200">{tour.lineType}</td>
-                                                    <td className="p-3 border-l border-slate-200">{Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')}</td>
-                                                    <td className="p-3 border-l border-slate-200">
-                                                        {tour.billOfLadingNumber || '-'}
-                                                    </td>
-                                                    <td className="p-3 border-l border-slate-200 text-xs">
-                                                        {tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '-'}
-                                                    </td>
-                                                    <td className="p-3 border-l border-slate-200 text-xs">
-                                                        {tour.calculationDate || '-'}
-                                                    </td>
-                                            <td className="p-3 border-l border-slate-200 text-left">
-                                                {(() => {
-                                                    const totalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                                                    const value = totalKm || tour.roundTripKm || 0;
-                                                    return value ? value.toLocaleString('fa-IR') : '-';
-                                                })()}
-                                            </td>
-                                                    <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
-                                                        {tour.tourCost?.toLocaleString('fa-IR') || 0}
-                                                    </td>
-                                                    <td className="p-3 border-l border-slate-200 text-xs">
-                                                        {tour.announcementDate ? formatJalali(tour.announcementDate) : '-'}
-                                                    </td>
-                                                    <td className="p-3 border-l border-slate-200">
-                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                                                            (tour as any).isPaid
-                                                                ? 'bg-purple-600 text-white'
-                                                                : tour.isDataRecorded 
-                                                                    ? 'bg-green-600 text-white' 
-                                                                    : 'bg-orange-500 text-white'
-                                                        }`}>
-                                                            {(tour as any).isPaid ? 'پرداخت شد' : (tour.isDataRecorded ? 'ثبت شده' : 'ثبت نشده')}
-                                                        </span>
-                                                    </td>
-                                                    <td className="p-3">
-                                                        {(tour as any).isPaid ? (
-                                                            <div className="flex gap-2">
-                                                                <span className="text-xs text-purple-600 font-semibold">✓ پرداخت شد</span>
-                                                            </div>
-                                                        ) : !tour.isDataRecorded ? (
-                                                            <button
-                                                                onClick={() => {
-                                                                    // دیالوگ را باز نگه داریم و فقط دیالوگ ثبت اطلاعات را باز کنیم
-                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                    if (calc) {
-                                                                        handleRecordData(calc.driverId, tour.announcementId);
-                                                                    }
-                                                                }}
-                                                                className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
-                                                            >
-                                                                ثبت اطلاعات
-                                                            </button>
-                                                        ) : (
-                                                            <div className="flex gap-2">
-                                                                <span className="text-xs text-green-600 font-semibold">✓ ثبت شده</span>
+                                        {selectedTourDetails.map((tour, tourIdx) => {
+                                            const isExpanded = expandedTours.has(tour.announcementId);
+                                            
+                                            // محاسبه پیمایش کل (مصوب + مازاد + دپو)
+                                            const approvedKm = Number(tour.approvedKilometers) || 0;
+                                            const excessKm = Number(tour.excessKilometers) || 0;
+                                            const depotKm = Number((tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0);
+                                            const totalMileage = approvedKm + excessKm + depotKm;
+                                            
+                                            // محاسبه مجموع ماموریت (مصوب + مازاد + دپو)
+                                            const approvedMission = Number(tour.approvedMissionDays) || 0;
+                                            const excessMission = Number(tour.excessMissionDays) || 0;
+                                            const depotMission = Number((tour as any).depotMissionDays || (tour as any).depot_mission_days || 0);
+                                            const totalMission = approvedMission + excessMission + depotMission;
+                                            
+                                            // محاسبه مجموع هزینه‌ها
+                                            const foodCost = Number(tour.foodCost) || 0;
+                                            const fuelCost = Number(tour.fuelCost) || 0;
+                                            const tollCost = Number(tour.tollCost) || 0;
+                                            const billCost = Number(tour.loadingCost) || 0;
+                                            const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
+                                            const returnBill = Number((tour as any).returnBillOfLadingCost || (tour as any).return_bill_of_lading_cost || 0);
+                                            const multiUnload = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
+                                            const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
+                                            const fixedAllowance = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
+                                            const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
+                                            const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
+                                            const totalCost = foodCost + fuelCost + tollCost + billCost + returnCargo + returnBill + multiUnload + excessMissionCost + fixedAllowance + depotMissionCost + depotAllowance;
+                                            
+                                            return (
+                                                <React.Fragment key={tour.announcementId}>
+                                                    <tr className={`border-b border-slate-200 ${
+                                                        (tour as any).isPaid 
+                                                            ? 'bg-purple-50' 
+                                                            : tour.isDataRecorded 
+                                                                ? 'bg-green-50' 
+                                                                : 'bg-orange-50'
+                                                    }`}>
+                                                        <td className="p-3 border-l border-slate-200 text-center">
+                                                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm ${
+                                                                (tour as any).isPaid
+                                                                    ? 'bg-purple-600 text-white'
+                                                                    : tour.isDataRecorded 
+                                                                        ? 'bg-green-600 text-white' 
+                                                                        : 'bg-orange-500 text-white'
+                                                            }`}>
+                                                                {tourIdx + 1}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200">{tour.vehicleType}</td>
+                                                        <td className="p-3 border-l border-slate-200">{tour.vehicleCode || '-'} * {tour.plateNumber || '-'}</td>
+                                                        <td className="p-3 border-l border-slate-200">{tour.lineType}</td>
+                                                        <td className="p-3 border-l border-slate-200">{Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')}</td>
+                                                        <td className="p-3 border-l border-slate-200">
+                                                            {tour.billOfLadingNumber || '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-xs">
+                                                            {tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-xs">
+                                                            {tour.calculationDate || '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-left font-medium">
+                                                            {totalMileage > 0 ? totalMileage.toLocaleString('fa-IR') : '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-center font-medium">
+                                                            {totalMission > 0 ? totalMission.toLocaleString('fa-IR') : '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
+                                                            {totalCost > 0 ? totalCost.toLocaleString('fa-IR') : '-'}
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <div className="flex gap-2 items-center justify-end">
                                                                 <button
                                                                     onClick={() => {
-                                                                        const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                        if (calc) {
-                                                                            handleEditData(calc.driverId, tour.announcementId);
-                                                                        }
+                                                                        setExpandedTours(prev => {
+                                                                            const newSet = new Set(prev);
+                                                                            if (newSet.has(tour.announcementId)) {
+                                                                                newSet.delete(tour.announcementId);
+                                                                            } else {
+                                                                                newSet.add(tour.announcementId);
+                                                                            }
+                                                                            return newSet;
+                                                                        });
                                                                     }}
-                                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                                    className="px-2 py-1 bg-sky-600 text-white rounded text-xs hover:bg-sky-700 transition-colors"
+                                                                    title={isExpanded ? "بستن جزئیات" : "مشاهده جزئیات"}
                                                                 >
-                                                                    ویرایش
+                                                                    {isExpanded ? '▼' : '▶'} جزئیات
                                                                 </button>
+                                                                {(tour as any).isPaid ? (
+                                                                    <span className="text-xs text-purple-600 font-semibold">✓ پرداخت شد</span>
+                                                                ) : !tour.isDataRecorded ? (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                            if (calc) {
+                                                                                handleRecordData(calc.driverId, tour.announcementId);
+                                                                            }
+                                                                        }}
+                                                                        className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                                                    >
+                                                                        ثبت اطلاعات
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                            if (calc) {
+                                                                                handleEditData(calc.driverId, tour.announcementId);
+                                                                            }
+                                                                        }}
+                                                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                                    >
+                                                                        ویرایش
+                                                                    </button>
+                                                                )}
                                                             </div>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                                {/* ردیف اطلاعات محاسباتی */}
-                                                {/* ردیف اطلاعات محاسباتی - با پس‌زمینه و مرز پررنگ‌تر برای تفکیک بهتر */}
-                                                <tr className="border-t-2 border-b-4 border-slate-300 bg-slate-50">
-                                                    <td className="p-2 border-l border-slate-200"></td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">پیمایش مصوب (کیلومتر)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-blue-700' : 'text-slate-400'}`}>
-                                                            {tour.approvedKilometers?.toLocaleString('fa-IR') || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">پیمایش مازاد (کیلومتر)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}`}>
-                                                            {tour.excessKilometers?.toLocaleString('fa-IR') || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">ماموریت مصوب (روز)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-blue-700' : 'text-slate-400'}`}>
-                                                            {tour.approvedMissionDays || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">ماموریت مازاد (روز)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}`}>
-                                                            {tour.excessMissionDays || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه عوارض (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {tour.tollCost?.toLocaleString('fa-IR') || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه غذا (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {tour.foodCost?.toLocaleString('fa-IR') || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه سوخت (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {tour.fuelCost?.toLocaleString('fa-IR') || '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه بار برگشتی (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {(tour as any).returnCargoCost
-                                                                ? (tour as any).returnCargoCost.toLocaleString('fa-IR')
-                                                                : '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه بارنامه برگشتی (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {(tour as any).returnBillOfLadingCost
-                                                                ? (tour as any).returnBillOfLadingCost.toLocaleString('fa-IR')
-                                                                : '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه چندجا تخلیه (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {(tour as any).multiUnloadCost
-                                                                ? (tour as any).multiUnloadCost.toLocaleString('fa-IR')
-                                                                : '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">هزینه ماموریت مازاد (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                            {(tour as any).excessMissionCost
-                                                                ? (tour as any).excessMissionCost.toLocaleString('fa-IR')
-                                                                : '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <div className="text-xs text-slate-600 mb-1">اجرت ثابت (ریال)</div>
-                                                        <div className={`font-semibold ${tour.isDataRecorded ? 'text-amber-700' : 'text-slate-400'}`}>
-                                                            {(tour as any).fixedAllowance
-                                                                ? (tour as any).fixedAllowance.toLocaleString('fa-IR')
-                                                                : '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        {tour.notes && (
-                                                            <div>
-                                                                <div className="text-xs text-slate-600 mb-1">توضیحات</div>
-                                                                <div className="text-xs text-slate-800">{tour.notes}</div>
+                                                        </td>
+                                                    </tr>
+                                                    {/* ردیف اطلاعات محاسباتی - با پس‌زمینه و مرز پررنگ‌تر برای تفکیک بهتر */}
+                                                    {isExpanded && (
+                                                    <tr className="border-t-2 border-b-4 border-slate-300 bg-slate-50">
+                                                        <td colSpan={12} className="p-4">
+                                                            <div className="font-bold text-lg text-slate-800 mb-3 pb-2 border-b border-slate-300">
+                                                                جزئیات محاسباتی تور شماره {tourIdx + 1}
                                                             </div>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            </React.Fragment>
-                                        ))}
+                                                            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                                                {/* پیمایش */}
+                                                                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                                                    <div className="text-xs text-blue-700 mb-1 font-semibold">پیمایش مصوب (کیلومتر)</div>
+                                                                    <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-blue-800' : 'text-slate-400'}`}>
+                                                                        {approvedKm.toLocaleString('fa-IR') || '-'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                                                                    <div className="text-xs text-orange-700 mb-1 font-semibold">پیمایش مازاد (کیلومتر)</div>
+                                                                    <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-orange-800' : 'text-slate-400'}`}>
+                                                                        {excessKm.toLocaleString('fa-IR') || '-'}
+                                                                    </div>
+                                                                </div>
+                                                                {depotKm > 0 && (
+                                                                    <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                                                        <div className="text-xs text-purple-700 mb-1 font-semibold">پیمایش دپو (کیلومتر)</div>
+                                                                        <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-purple-800' : 'text-slate-400'}`}>
+                                                                            {depotKm.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* ماموریت */}
+                                                                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                                                                    <div className="text-xs text-green-700 mb-1 font-semibold">ماموریت مصوب (روز)</div>
+                                                                    <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-green-800' : 'text-slate-400'}`}>
+                                                                        {approvedMission || '-'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                                                                    <div className="text-xs text-yellow-700 mb-1 font-semibold">ماموریت مازاد (روز)</div>
+                                                                    <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-yellow-800' : 'text-slate-400'}`}>
+                                                                        {excessMission || '-'}
+                                                                    </div>
+                                                                </div>
+                                                                {depotMission > 0 && (
+                                                                    <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                                                                        <div className="text-xs text-indigo-700 mb-1 font-semibold">ماموریت دپو (روز)</div>
+                                                                        <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-indigo-800' : 'text-slate-400'}`}>
+                                                                            {depotMission}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* هزینه‌ها */}
+                                                                {foodCost > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه غذا (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {foodCost.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {fuelCost > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه سوخت (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {fuelCost.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {tollCost > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه عوارض (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {tollCost.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {billCost > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه بارگیری (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {billCost.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {returnCargo > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه بار برگشتی (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {returnCargo.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {returnBill > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه بارنامه برگشتی (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {returnBill.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {multiUnload > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">هزینه چندجا تخلیه (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {multiUnload.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {excessMissionCost > 0 && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">حق ماموریت مازاد (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                            {excessMissionCost.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {fixedAllowance > 0 && (
+                                                                    <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                                                                        <div className="text-xs text-amber-700 mb-1 font-semibold">اجرت ثابت (ریال)</div>
+                                                                        <div className={`font-bold text-lg ${tour.isDataRecorded ? 'text-amber-800' : 'text-slate-400'}`}>
+                                                                            {fixedAllowance.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {depotAllowance > 0 && (
+                                                                    <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                                                        <div className="text-xs text-purple-700 mb-1 font-semibold">اجرت دپو (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-purple-800' : 'text-slate-400'}`}>
+                                                                            {depotAllowance.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {depotMissionCost > 0 && (
+                                                                    <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                                                        <div className="text-xs text-purple-700 mb-1 font-semibold">حق ماموریت دپو (ریال)</div>
+                                                                        <div className={`font-bold text-base ${tour.isDataRecorded ? 'text-purple-800' : 'text-slate-400'}`}>
+                                                                            {depotMissionCost.toLocaleString('fa-IR')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {tour.notes && (
+                                                                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300 col-span-full">
+                                                                        <div className="text-xs text-slate-600 mb-1 font-semibold">توضیحات</div>
+                                                                        <div className="text-sm text-slate-800">{tour.notes}</div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="mt-4 pt-3 border-t border-slate-300">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-sm font-semibold text-slate-700">جمع کل هزینه‌ها:</span>
+                                                                    <span className="text-xl font-bold text-green-700">{totalCost.toLocaleString('fa-IR')} ریال</span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        })}
                                     </tbody>
                             </table>
                         </div>
