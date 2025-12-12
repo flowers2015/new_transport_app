@@ -34,6 +34,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     const [error, setError] = useState<string | null>(null);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
+    const [helperRecordsMap, setHelperRecordsMap] = useState<Map<string, PaymentRecord>>(new Map());
     
     // فیلتر تاریخ (تاریخ محاسبه)
     const [startDate, setStartDate] = useState<string>('');
@@ -99,7 +100,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
                 const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
                 const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
-                return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance;
+                // هزینه‌های دپو
+                const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0);
+                const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
+                return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance + depotAllowance + depotMissionCost;
             };
             
             (Array.isArray(calculationsData) ? calculationsData : []).forEach((calc: any) => {
@@ -251,6 +255,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 return descriptions.join(' / ');
             };
             
+            // ذخیره helperRecordsMap برای استفاده در generateInvoiceImage
+            setHelperRecordsMap(helperRecordsMap);
+            
             // ترکیب راننده اصلی و راننده کمکی
             const allRecords = [...Array.from(recordsMap.values()), ...Array.from(helperRecordsMap.values())];
             
@@ -290,14 +297,19 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             let unpaidCalculations;
                             
                             if (isHelper) {
-                                // فیلتر کردن محاسباتی که helper_driver_id = record.driverId دارند
+                                // فیلتر کردن محاسباتی که helper_driver_id = record.driverId دارند و پرداخت نشده‌اند
                                 unpaidCalculations = allCalculations.filter((calc: any) => {
                                     const calcHelperId = calc.helper_driver_id || calc.helperDriverId;
                                     const calcHelperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
-                                    return (calcHelperId === record.driverId || calcHelperEmployeeId === record.employeeId);
+                                    const isPaid = calc.is_paid || calc.isPaid;
+                                    return (calcHelperId === record.driverId || calcHelperEmployeeId === record.employeeId) && !isPaid;
                                 });
                             } else {
-                                unpaidCalculations = allCalculations;
+                                // برای راننده اصلی: فقط محاسبات پرداخت نشده
+                                unpaidCalculations = allCalculations.filter((calc: any) => {
+                                    const isPaid = calc.is_paid || calc.isPaid;
+                                    return !isPaid;
+                                });
                             }
                             
                             // اگر هیچ محاسبه پرداخت نشده‌ای وجود ندارد، این راننده را از لیست حذف کن
@@ -461,18 +473,47 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 'Content-Type': 'application/json',
             };
 
-            const calculationsRes = await fetch(
-                getApiUrl(`driver-calculations?driverId=${record.driverId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
-                { headers }
-            );
+            // بررسی اینکه آیا این راننده کمکی است یا نه
+            const isHelper = helperRecordsMap.has(record.driverId) || Array.from(helperRecordsMap.values()).some(r => r.employeeId === record.employeeId);
+            
+            let calculationsRes;
+            if (isHelper) {
+                // برای راننده کمکی، باید تمام محاسبات را بگیریم و فیلتر کنیم
+                calculationsRes = await fetch(
+                    getApiUrl(`driver-calculations${startDate ? `?startDate=${startDate}` : '?'}${endDate ? `&endDate=${endDate}` : ''}`),
+                    { headers }
+                );
+            } else {
+                // برای راننده اصلی
+                calculationsRes = await fetch(
+                    getApiUrl(`driver-calculations?driverId=${record.driverId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
+                    { headers }
+                );
+            }
 
             if (calculationsRes.ok) {
                 const calculationsData = await calculationsRes.json();
                 const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
-                // فقط محاسبات پرداخت نشده را نمایش بده
-                const unpaidCalculations = calculationsArray.filter((calc: any) => 
-                    !(calc.is_paid || calc.isPaid)
-                );
+                
+                // فیلتر کردن محاسبات مربوط به این راننده و پرداخت نشده
+                let unpaidCalculations;
+                if (isHelper) {
+                    // برای راننده کمکی: فیلتر بر اساس helper_driver_id یا helper_driver_employee_id
+                    unpaidCalculations = calculationsArray.filter((calc: any) => {
+                        const calcHelperId = calc.helper_driver_id || calc.helperDriverId;
+                        const calcHelperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+                        const isPaid = calc.is_paid || calc.isPaid;
+                        return (calcHelperId === record.driverId || calcHelperEmployeeId === record.employeeId) && !isPaid;
+                    });
+                } else {
+                    // برای راننده اصلی: فیلتر بر اساس driver_id و is_paid = false
+                    unpaidCalculations = calculationsArray.filter((calc: any) => {
+                        const calcDriverId = calc.driver_id || calc.driverId;
+                        const isPaid = calc.is_paid || calc.isPaid;
+                        return calcDriverId === record.driverId && !isPaid;
+                    });
+                }
+                
                 setInvoiceCalculations(unpaidCalculations);
                 
                 // دریافت اطلاعات اعلام بار برای هر محاسبه (برای نمایش مقاصد)
@@ -770,10 +811,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         {record.mainDriverAmount.toLocaleString('fa-IR')}
                                     </td>
                                     <td className="p-3 border-l border-slate-200 text-left font-semibold text-orange-700">
-                                        {record.advancePayment.toLocaleString('fa-IR')}
+                                        {record.advancePayment < 0 ? '−' : ''}{Math.abs(record.advancePayment).toLocaleString('fa-IR')}
                                     </td>
-                                    <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
-                                        {record.payableAmount.toLocaleString('fa-IR')}
+                                    <td className={`p-3 border-l border-slate-200 text-left font-semibold ${record.payableAmount < 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                        {record.payableAmount < 0 ? '−' : ''}{Math.abs(record.payableAmount).toLocaleString('fa-IR')}
                                     </td>
                                     <td className="p-3 border-l border-slate-200 text-xs">
                                         {record.calculationDate || '-'}
@@ -961,7 +1002,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     const multiUnload = calc.multi_unload_cost || calc.multiUnloadCost || 0;
                                     const excessMission = calc.excess_mission_cost || calc.excessMissionCost || 0;
                                     const fixedAllowance = calc.fixed_allowance || calc.fixedAllowance || 0;
-                                    return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance;
+                                    // هزینه‌های دپو
+                                    const depotAllowance = calc.depot_kilometer_rate || calc.depotKilometerRate || 0;
+                                    const depotMissionCost = calc.depot_mission_cost || calc.depotMissionCost || 0;
+                                    return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance + depotAllowance + depotMissionCost;
                                 };
 
                                 // محاسبه هزینه‌های راننده کمکی
@@ -1300,7 +1344,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                             <div className="flex justify-between items-center border-t border-slate-400 pt-2 mt-2">
                                                                 <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>کسور (پیش پرداخت - فقط از راننده اصلی):</span>
                                                                 <span className="text-lg font-bold text-orange-700" style={{ fontSize: '17px' }}>
-                                                                    {totalAdvancePayment > 0 ? '−' : ''}{Math.abs(totalAdvancePayment).toLocaleString('fa-IR')} ریال
+                                                                    {totalAdvancePayment < 0 ? '−' : ''}{Math.abs(totalAdvancePayment).toLocaleString('fa-IR')} ریال
                                                                 </span>
                                                             </div>
                                                         )}
@@ -1445,17 +1489,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 mb-3">📋 ورود به کارتابل لیست پرداخت</h3>
                                 <ul className="list-disc list-inside space-y-2 mr-4">
-                                    <li>بارها زمانی وارد لیست پرداخت می‌شوند که محاسبات راننده برای آنها ثبت شده باشد (یعنی <strong>total_cost</strong> بزرگتر از صفر باشد)</li>
+                                    <li>بارها زمانی وارد لیست پرداخت می‌شوند که محاسبات راننده برای آنها ثبت شده باشد (یعنی مبلغ کل هزینه بیشتر از صفر باشد)</li>
                                     <li>راننده اصلی و راننده کمکی به صورت جداگانه در لیست پرداخت نمایش داده می‌شوند</li>
-                                    <li>هر راننده (اصلی یا کمکی) به ازای همه تورهای پرداخت نشده خود، یک رکورد در لیست پرداخت دارد</li>
-                                    <li>فقط محاسباتی که وضعیت <strong>is_paid = FALSE</strong> دارند، در لیست پرداخت نمایش داده می‌شوند</li>
+                                    <li>هر راننده (اصلی یا کمکی) یک رکورد در لیست پرداخت دارد که شامل مجموع هزینه‌های همه تورهای پرداخت نشده او می‌شود</li>
+                                    <li>فقط محاسباتی که <strong>پرداخت نشده</strong> هستند، در لیست پرداخت نمایش داده می‌شوند</li>
                                 </ul>
                             </div>
                             
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 mb-3">✅ خروج از کارتابل لیست پرداخت</h3>
                                 <ul className="list-disc list-inside space-y-2 mr-4">
-                                    <li>پس از ثبت پرداخت برای یک راننده، وضعیت تمام محاسبات مربوط به آن راننده به <strong>is_paid = TRUE</strong> تغییر می‌کند</li>
+                                    <li>پس از ثبت پرداخت برای یک راننده، وضعیت تمام محاسبات مربوط به آن راننده به <strong>پرداخت شده</strong> تغییر می‌کند</li>
                                     <li>راننده‌هایی که همه محاسباتشان پرداخت شده است، از لیست پرداخت حذف می‌شوند و به کارتابل <strong>صورتحساب‌های پرداخت شده</strong> منتقل می‌شوند</li>
                                     <li>پرداخت راننده اصلی و راننده کمکی کاملاً مستقل است:
                                         <ul className="list-circle list-inside mr-6 mt-2 space-y-1">
@@ -1470,7 +1514,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 mb-3">💰 محاسبه هزینه راننده</h3>
                                 <ul className="list-disc list-inside space-y-2 mr-4">
-                                    <li>هزینه راننده اصلی شامل: هزینه غذا، سوخت، عوارض، بارنامه، بار برگشتی، بارنامه برگشتی، چندجا تخلیه، ماموریت مازاد، و اجرت ثابت</li>
+                                    <li><strong>هزینه راننده اصلی</strong> شامل: هزینه غذا، سوخت، عوارض، بارنامه، بار برگشتی، بارنامه برگشتی، چندجا تخلیه، ماموریت مازاد، اجرت ثابت، اجرت دپو، و حق ماموریت دپو</li>
                                     <li>هزینه راننده کمکی شامل: اجرت راننده کمکی، هزینه غذا راننده کمکی، و هزینه ماموریت مازاد راننده کمکی</li>
                                     <li>پیش پرداخت (کسور) فقط از هزینه راننده اصلی کم می‌شود، نه از هزینه راننده کمکی</li>
                                     <li>مبلغ قابل پرداخت = (هزینه راننده اصلی - پیش پرداخت) + هزینه راننده کمکی</li>
