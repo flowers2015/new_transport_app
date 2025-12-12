@@ -192,6 +192,7 @@ async function saveDriverCalculation(req, res) {
           ADD COLUMN IF NOT EXISTS helper_driver_food_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_days INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS helper_driver_excess_mission_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS helper_driver_excess_kilometers INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'recorded',
           ADD COLUMN IF NOT EXISTS period_id VARCHAR(255),

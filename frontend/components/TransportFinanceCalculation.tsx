@@ -91,13 +91,13 @@ interface AllowanceInputDialogData {
     depotCargoHandlingCost?: number; // هزینه جابجایی بار در دپو (محاسبه خودکار)
     depotKilometerRate?: number; // اجرت کیلومتر دپو (محاسبه خودکار برای اجرت ثابت)
     depotTotalMileage?: number; // پیمایش کل دپو (محاسبه خودکار از مجموع mileage ردیف‌ها)
-    depotFoodCost?: number; // هزینه غذا دپو (محاسبه خودکار: تعداد روز × هزینه غذا)
-    depotMissionCost?: number; // هزینه ماموریت دپو (محاسبه خودکار)
+    depotFoodCost?: number; // هزینه غذا دپو (محاسبه خودکار: تعداد روز × هزینه غذا) - فقط برای محاسبه، نمایش داده نمی‌شود
+    depotMissionCost?: number; // حق ماموریت دپو (محاسبه خودکار)
     depotRows?: Array<{ // ردیف‌های جدول محاسبات دپو
         id: string;
         destination: string; // مقاصد اعزامی دپو
         mileage: number; // پیمایش حمل دپو
-        notes: string; // توضیحات
+        billOfLadingNumber: string; // شماره بارنامه
     }>;
 }
 
@@ -321,7 +321,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const depotMissionDays = inputDialogData.depotMissionDays || 0;
         const depotFoodCost = Math.round(depotMissionDays * (Number(foodCostPerDay) || 0)) || 0;
 
-        // محاسبه هزینه ماموریت دپو
+        // محاسبه حق ماموریت دپو
         const depotMissionCost = Math.round(depotMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
 
         // به‌روزرسانی مقادیر
@@ -632,7 +632,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         depotTotalMileage: saved.depot_total_mileage || saved.depotTotalMileage || 0,
                                         depotFoodCost: saved.depot_food_cost || saved.depotFoodCost || 0,
                                         depotMissionCost: saved.depot_mission_cost || saved.depotMissionCost || 0,
-                                        depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows) : []) : saved.depot_rows) : (saved.depotRows || []),
+                                        depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows).map((row: any) => ({
+                                            ...row,
+                                            billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                                        })) : []) : saved.depot_rows.map((row: any) => ({
+                                            ...row,
+                                            billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                                        }))) : (saved.depotRows || []),
                                     } as any;
                                 }
                                 return tour;
@@ -1267,7 +1273,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotTotalMileage: (tour as any).depotTotalMileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
-                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows) : []) : (tour as any).depotRows) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows) : []) : (tour as any).depot_rows) : []),
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows).map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                })) : []) : (tour as any).depotRows.map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                }))) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows).map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                })) : []) : (tour as any).depot_rows.map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                }))) : []),
             });
             
             // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
@@ -1556,7 +1574,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotTotalMileage: (tour as any).depotTotalMileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
-                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows) : []) : (tour as any).depotRows) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows) : []) : (tour as any).depot_rows) : []),
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows).map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                })) : []) : (tour as any).depotRows.map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                }))) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows).map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                })) : []) : (tour as any).depot_rows.map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                }))) : []),
             });
             
             // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
@@ -2725,21 +2755,64 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             </td>
                                             <td className="p-2 border-l border-slate-200 font-medium">هزینه بار برگشتی (ریال)</td>
                                             <td className="p-2">
-                                                <input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    value={inputDialogData.returnCargoCost ? String(inputDialogData.returnCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                <select
+                                                    value={(() => {
+                                                        // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
+                                                        const vehicleType = inputDialogData.vehicleType || '';
+                                                        const isTrailer = vehicleType.includes('تریلی');
+                                                        const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                        
+                                                        const selectedReg = returnCargoRegulations.find(reg => 
+                                                            reg.vehicleType === vehicleTypeForApi &&
+                                                            reg.cost === inputDialogData.returnCargoCost &&
+                                                            reg.isActive !== false
+                                                        );
+                                                        
+                                                        return selectedReg ? `${vehicleTypeForApi}-${selectedReg.cargoType}-${selectedReg.cost}` : '';
+                                                    })()}
                                                     onChange={(e) => {
-                                                        const inputValue = e.target.value.replace(/,/g, '');
-                                                        const cleaned = inputValue.replace(/[^\d]/g, '');
-                                                        const numValue = cleaned ? Number(cleaned) : 0;
-                                                        setInputDialogData({
-                                                            ...inputDialogData,
-                                                            returnCargoCost: numValue
-                                                        });
+                                                        const selectedValue = e.target.value;
+                                                        if (selectedValue) {
+                                                            const [vehicleType, cargoType, cost] = selectedValue.split('-');
+                                                            const numValue = Number(cost) || 0;
+                                                            setInputDialogData({
+                                                                ...inputDialogData,
+                                                                returnCargoCost: numValue
+                                                            });
+                                                        } else {
+                                                            setInputDialogData({
+                                                                ...inputDialogData,
+                                                                returnCargoCost: 0
+                                                            });
+                                                        }
                                                     }}
                                                     className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
-                                                />
+                                                >
+                                                    <option value="">انتخاب کنید</option>
+                                                    {(() => {
+                                                        const vehicleType = inputDialogData.vehicleType || '';
+                                                        const isTrailer = vehicleType.includes('تریلی');
+                                                        const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                        
+                                                        // فیلتر کردن بر اساس نوع خودرو
+                                                        const filteredRegs = returnCargoRegulations.filter(reg => 
+                                                            reg.vehicleType === vehicleTypeForApi && reg.isActive !== false
+                                                        );
+                                                        
+                                                        // گروه‌بندی بر اساس cargoType
+                                                        const cargoTypeLabels: { [key: string]: string } = {
+                                                            'full_product': 'بار کامل محصول',
+                                                            'full_box_pallet_basket': 'بار کامل جعبه/پالت/سبد',
+                                                            'half': 'نیم بار'
+                                                        };
+                                                        
+                                                        return filteredRegs.map((reg, idx) => (
+                                                            <option key={idx} value={`${reg.vehicleType}-${reg.cargoType}-${reg.cost}`}>
+                                                                {cargoTypeLabels[reg.cargoType] || reg.cargoType}: {reg.cost.toLocaleString('fa-IR')} ریال
+                                                            </option>
+                                                        ));
+                                                    })()}
+                                                </select>
                                             </td>
                                         </tr>
                                         {/* ردیف 11: هزینه بارنامه، پیش پرداخت */}
@@ -3132,26 +3205,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     <p className="text-xs text-slate-500 mt-1 min-h-[16px]"></p>
                                 </div>
                                 
-                                {/* 6. هزینه غذا دپو */}
+                                {/* 7. حق ماموریت دپو */}
                                 <div className="flex flex-col">
                                     <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه غذا دپو (ریال)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        readOnly
-                                        value={inputDialogData.depotFoodCost ? String(inputDialogData.depotFoodCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
-                                        className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm bg-slate-100 text-left cursor-not-allowed"
-                                        placeholder="0"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 min-h-[16px]">محاسبه خودکار: تعداد روز × هزینه غذا</p>
-                                </div>
-                                
-                                {/* 7. هزینه ماموریت دپو */}
-                                <div className="flex flex-col">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 min-h-[20px]">
-                                        هزینه ماموریت دپو (ریال)
+                                        حق ماموریت دپو (ریال)
                                     </label>
                                     <input
                                         type="text"
@@ -3182,7 +3239,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     id: `depot-default-${i}`,
                                                     destination: '',
                                                     mileage: 0,
-                                                    notes: ''
+                                                    billOfLadingNumber: ''
                                                 }));
                                             }
                                             
@@ -3191,7 +3248,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 id: `depot-${Date.now()}-${Math.random()}`,
                                                 destination: '',
                                                 mileage: 0,
-                                                notes: ''
+                                                billOfLadingNumber: ''
                                             };
                                             setInputDialogData({
                                                 ...inputDialogData,
@@ -3210,7 +3267,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 <th className="p-2 border-l border-slate-300 text-center min-w-[60px]">شماره ردیف</th>
                                                 <th className="p-2 border-l border-slate-300 min-w-[200px]">مقاصد اعزامی دپو</th>
                                                 <th className="p-2 border-l border-slate-300 min-w-[150px]">پیمایش حمل دپو (کیلومتر)</th>
-                                                <th className="p-2 min-w-[200px]">توضیحات</th>
+                                                <th className="p-2 min-w-[200px]">شماره بارنامه</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -3218,7 +3275,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 id: `depot-default-${i}`,
                                                 destination: '',
                                                 mileage: 0,
-                                                notes: ''
+                                                billOfLadingNumber: ''
                                             }))).map((row, index) => (
                                                 <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
                                                     <td className="p-2 border-l border-slate-200 text-center">
@@ -3238,7 +3295,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         id: `depot-default-${i}`,
                                                                         destination: '',
                                                                         mileage: 0,
-                                                                        notes: ''
+                                                                        billOfLadingNumber: ''
                                                                     }));
                                                                     defaultRows[index].destination = e.target.value;
                                                                     setInputDialogData({
@@ -3274,7 +3331,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         id: `depot-default-${i}`,
                                                                         destination: '',
                                                                         mileage: 0,
-                                                                        notes: ''
+                                                                        billOfLadingNumber: ''
                                                                     }));
                                                                     defaultRows[index].mileage = numValue;
                                                                     setInputDialogData({
@@ -3295,20 +3352,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     <td className="p-2">
                                                         <input
                                                             type="text"
-                                                            value={row.notes}
-                                                            onChange={(e) => {
-                                                                const updatedRows = (inputDialogData.depotRows || []).map(r => 
-                                                                    r.id === row.id ? { ...r, notes: e.target.value } : r
-                                                                );
-                                                                // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
-                                                                if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
-                                                                    const defaultRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                        id: `depot-default-${i}`,
-                                                                        destination: '',
-                                                                        mileage: 0,
-                                                                        notes: ''
-                                                                    }));
-                                                                    defaultRows[index].notes = e.target.value;
+                                                    value={row.billOfLadingNumber || ''}
+                                                    onChange={(e) => {
+                                                        const updatedRows = (inputDialogData.depotRows || []).map(r => 
+                                                            r.id === row.id ? { ...r, billOfLadingNumber: e.target.value } : r
+                                                        );
+                                                        // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
+                                                        if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
+                                                            const defaultRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                id: `depot-default-${i}`,
+                                                                destination: '',
+                                                                mileage: 0,
+                                                                billOfLadingNumber: ''
+                                                            }));
+                                                            defaultRows[index].billOfLadingNumber = e.target.value;
                                                                     setInputDialogData({
                                                                         ...inputDialogData,
                                                                         depotRows: defaultRows
