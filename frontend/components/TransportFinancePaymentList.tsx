@@ -26,6 +26,7 @@ interface PaymentRecord {
     calculationDate: string;
     lastPaymentDate?: string;
     lastPaymentAmount?: number;
+    descriptions?: string; // توضیحات خودکار
 }
 
 const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = ({ currentUser }) => {
@@ -171,10 +172,75 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 }
             });
             
+            // ساخت توضیحات برای هر رکورد
+            const buildDescriptions = async (record: PaymentRecord, isHelper: boolean = false): Promise<string> => {
+                const relevantCalcs = (Array.isArray(calculationsData) ? calculationsData : []).filter((calc: any) => {
+                    const totalCost = parseFloat(calc.total_cost || calc.totalCost || 0);
+                    if (totalCost <= 0) return false;
+                    
+                    if (isHelper) {
+                        const helperId = calc.helper_driver_id || calc.helperDriverId;
+                        return helperId === record.driverId;
+                    } else {
+                        const mainDriverId = calc.driver_id || calc.driverId;
+                        return mainDriverId === record.driverId;
+                    }
+                });
+                
+                if (relevantCalcs.length === 0) return '';
+                
+                const descriptions: string[] = [];
+                const processedAnnouncements = new Set<string>();
+                
+                for (const calc of relevantCalcs.slice(0, 10)) { // محدود به 10 مورد اول
+                    try {
+                        const announcementId = calc.announcement_id || calc.announcementId;
+                        if (!announcementId || processedAnnouncements.has(announcementId)) continue;
+                        processedAnnouncements.add(announcementId);
+                        
+                        const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
+                        if (!annRes.ok) continue;
+                        
+                        const annData = await annRes.json();
+                        const destinations = Array.isArray(annData.destinations) 
+                            ? annData.destinations.map((d: any) => d.city || '').filter(Boolean).join('، ')
+                            : '-';
+                        
+                        const mainDriverId = calc.driver_id || calc.driverId;
+                        const mainDriver = driversData.find((d: Driver) => d.id === mainDriverId);
+                        const mainDriverName = mainDriver?.name || record.driverName || '';
+                        
+                        const helperName = calc.helper_driver_name || calc.helperDriverName || '';
+                        const calcDate = calc.calculation_date || calc.calculationDate || '';
+                        
+                        let desc = '';
+                        if (isHelper) {
+                            desc = `راننده کمکی: ${record.driverName || 'نامشخص'}، راننده اصلی: ${mainDriverName}، تور به مقاصد: ${destinations}`;
+                        } else {
+                            if (helperName) {
+                                desc = `راننده اصلی: ${record.driverName || 'نامشخص'}، راننده کمکی: ${helperName}، تور به مقاصد: ${destinations}`;
+                            } else {
+                                desc = `راننده اصلی: ${record.driverName || 'نامشخص'}، تور به مقاصد: ${destinations}`;
+                            }
+                        }
+                        
+                        if (calcDate) {
+                            desc += ` در تاریخ: ${calcDate}`;
+                        }
+                        
+                        descriptions.push(desc);
+                    } catch (err) {
+                        console.warn(`⚠️ [buildDescriptions] خطا در ساخت توضیحات:`, err);
+                    }
+                }
+                
+                return descriptions.join(' / ');
+            };
+            
             // ترکیب راننده اصلی و راننده کمکی
             const allRecords = [...Array.from(recordsMap.values()), ...Array.from(helperRecordsMap.values())];
             
-            // دریافت آخرین پرداخت برای هر راننده
+            // دریافت آخرین پرداخت و ساخت توضیحات برای هر راننده
             const recordsWithPayments = await Promise.all(
                 allRecords.map(async (record) => {
                     try {
@@ -192,6 +258,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     } catch (err) {
                         console.warn(`⚠️ [fetchData] Failed to fetch last payment for driver ${record.driverId}:`, err);
                     }
+                    
+                    // ساخت توضیحات
+                    const isHelper = helperRecordsMap.has(record.driverId) || 
+                        (Array.from(helperRecordsMap.values()).some(r => r.employeeId === record.employeeId));
+                    record.descriptions = await buildDescriptions(record, isHelper);
+                    
                     return record;
                 })
             );
@@ -639,6 +711,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         ) : (
                                             '-'
                                         )}
+                                    </td>
+                                    <td className="p-3 border-l border-slate-200 text-xs text-slate-700 max-w-xs">
+                                        <div className="truncate" title={record.descriptions || '-'}>
+                                            {record.descriptions || '-'}
+                                        </div>
                                     </td>
                                     <td className="p-3">
                                         <div className="flex gap-2">
@@ -1114,11 +1191,31 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                 return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
                                             }, 0);
                                             
-                                            const payableAmount = grandTotal - totalAdvancePayment;
+                                            // پیش پرداخت فقط از هزینه راننده اصلی کم می‌شود
+                                            const mainDriverPayable = totalMainAll - totalAdvancePayment;
+                                            const payableAmount = mainDriverPayable + totalHelper;
                                             
                                             return (
                                                 <div className="mt-4 p-4 bg-slate-200 rounded-lg border-2 border-slate-600">
                                                     <div className="space-y-2">
+                                                        {/* خلاصه تفکیکی */}
+                                                        <div className="mb-3 pb-3 border-b border-slate-400">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>جمع هزینه راننده اصلی:</span>
+                                                                <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>
+                                                                    {totalMainAll.toLocaleString('fa-IR')} ریال
+                                                                </span>
+                                                            </div>
+                                                            {totalHelper > 0 && (
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>جمع هزینه راننده کمکی:</span>
+                                                                    <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>
+                                                                        {totalHelper.toLocaleString('fa-IR')} ریال
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        
                                                         <div className="flex justify-between items-center">
                                                             <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>جمع کل هزینه سفر:</span>
                                                             <span className="text-xl font-bold text-green-700" style={{ fontSize: '18px' }}>
@@ -1127,7 +1224,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                         </div>
                                                         {totalAdvancePayment > 0 && (
                                                             <div className="flex justify-between items-center border-t border-slate-400 pt-2 mt-2">
-                                                                <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>کسور (پیش پرداخت):</span>
+                                                                <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>کسور (پیش پرداخت - فقط از راننده اصلی):</span>
                                                                 <span className="text-lg font-bold text-orange-700" style={{ fontSize: '17px' }}>
                                                                     {totalAdvancePayment.toLocaleString('fa-IR')} ریال
                                                                 </span>

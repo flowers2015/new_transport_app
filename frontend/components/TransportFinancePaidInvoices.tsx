@@ -325,6 +325,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const totalAdvancePayment = calculations.reduce((sum, calc) => {
             return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
         }, 0);
+        // پیش پرداخت فقط از هزینه راننده اصلی کم می‌شود
+        const mainDriverPayable = totalMainAll - totalAdvancePayment;
+        const payableAmount = mainDriverPayable + totalHelper;
+        const mainDriverPayable = totalMainAll - totalAdvancePayment;
+        const payableAmount = mainDriverPayable + totalHelper;
 
         // ساخت HTML با فونت‌های بزرگتر
         let html = `
@@ -456,7 +461,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 8px; margin-top: 8px;">
                                 <span style="font-size: 16px; font-weight: bold; color: #1e293b;">مبلغ قابل پرداخت:</span>
-                                <span style="font-size: 18px; font-weight: bold; color: #0284c7;">${(grandTotal - totalAdvancePayment).toLocaleString('fa-IR')} ریال</span>
+                                <span style="font-size: 18px; font-weight: bold; color: #0284c7;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
                             </div>
                         ` : ''}
                     </div>
