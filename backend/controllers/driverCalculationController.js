@@ -337,12 +337,29 @@ async function saveDriverCalculation(req, res) {
       ];
       
       console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE:', updateParams.length, 'مورد نیاز: 46');
+      console.log('🔍 [saveDriverCalculation] جزئیات پارامترها:', updateParams.map((p, i) => ({ 
+        index: i + 1, 
+        value: p, 
+        type: typeof p,
+        isUndefined: p === undefined 
+      })));
+      
       if (updateParams.length !== 46) {
         console.error('❌ [saveDriverCalculation] تعداد پارامترها نادرست است!', {
           count: updateParams.length,
           expected: 46,
           params: updateParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
         });
+        return res.status(500).json({ 
+          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای 46`,
+          error: 'PARAMETER_COUNT_MISMATCH'
+        });
+      }
+      
+      // بررسی undefined بودن پارامترها
+      const undefinedParams = updateParams.map((p, i) => ({ index: i + 1, isUndefined: p === undefined })).filter(p => p.isUndefined);
+      if (undefinedParams.length > 0) {
+        console.error('❌ [saveDriverCalculation] پارامترهای undefined:', undefinedParams);
       }
       
       await pool.query(updateQuery, updateParams);
@@ -401,7 +418,7 @@ async function saveDriverCalculation(req, res) {
         calculationDate || null,
         vehicleCode || null,
         vehiclePlate || null,
-        destinations || null,
+        (destinations ? String(destinations) : null),
         parseNumber(multiUnloadCount, 0),
         parseNumber(advancePayment, 0),
         parseNumber(depotTotalMileage, 0),
