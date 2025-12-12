@@ -1253,24 +1253,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
-                fixedAllowance: (tour as any).fixedAllowance || 0,
-                advancePayment: (tour as any).advancePayment || 0,
+                fixedAllowance: (tour as any).fixedAllowance || (tour as any).fixed_allowance || 0,
+                advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
-                helperDriverId: (tour as any).helperDriverId || '',
-                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
-                helperDriverName: (tour as any).helperDriverName || '',
-                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
-                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
-                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
-                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
-                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
+                helperDriverId: (tour as any).helperDriverId || (tour as any).helper_driver_id || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || (tour as any).helper_driver_employee_id || '',
+                helperDriverName: (tour as any).helperDriverName || (tour as any).helper_driver_name || '',
+                helperDriverAllowance: (tour as any).helperDriverAllowance || (tour as any).helper_driver_allowance || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || (tour as any).helper_driver_food_cost || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).helper_driver_excess_mission_days || (tour as any).excessMissionDays || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || (tour as any).helper_driver_excess_mission_cost || 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || (tour as any).helper_driver_excess_kilometers || 0,
                 // فیلدهای محاسبات دپو
-                depotMissionDays: (tour as any).depotMissionDays || 0,
-                depotShipmentCount: (tour as any).depotShipmentCount || 0,
-                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
-                depotKilometerRate: (tour as any).depotKilometerRate || 0,
-                depotTotalMileage: (tour as any).depotTotalMileage || 0,
+                depotMissionDays: (tour as any).depotMissionDays || (tour as any).depot_mission_days || 0,
+                depotShipmentCount: (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || 0,
+                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0,
+                depotKilometerRate: (tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0,
+                depotTotalMileage: (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
                 depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows).map((row: any) => ({
@@ -1492,17 +1492,38 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
                 fixedAllowance: initialFixedAllowance,
-                advancePayment: (tour as any).advancePayment || 0,
+                advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
-                helperDriverId: (tour as any).helperDriverId || '',
-                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
-                helperDriverName: (tour as any).helperDriverName || '',
-                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
-                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
-                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
-                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
-                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
+                helperDriverId: (tour as any).helperDriverId || (tour as any).helper_driver_id || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || (tour as any).helper_driver_employee_id || '',
+                helperDriverName: (tour as any).helperDriverName || (tour as any).helper_driver_name || '',
+                helperDriverAllowance: (tour as any).helperDriverAllowance || (tour as any).helper_driver_allowance || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || (tour as any).helper_driver_food_cost || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).helper_driver_excess_mission_days || (tour as any).excessMissionDays || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || (tour as any).helper_driver_excess_mission_cost || 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || (tour as any).helper_driver_excess_kilometers || 0,
+                // فیلدهای محاسبات دپو
+                depotMissionDays: (tour as any).depotMissionDays || (tour as any).depot_mission_days || 0,
+                depotShipmentCount: (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || 0,
+                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0,
+                depotKilometerRate: (tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0,
+                depotTotalMileage: (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0,
+                depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
+                depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
+                depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows).map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                })) : []) : (tour as any).depotRows.map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                }))) : ((tour as any).depot_rows ? (typeof (tour as any).depot_rows === 'string' ? ((tour as any).depot_rows.trim() ? JSON.parse((tour as any).depot_rows).map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                })) : []) : (tour as any).depot_rows.map((row: any) => ({
+                    ...row,
+                    billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
+                }))) : []),
             });
         } catch (err) {
             console.error('خطا در دریافت اطلاعات مصوب:', err);
@@ -1554,24 +1575,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
-                fixedAllowance: (tour as any).fixedAllowance || 0,
-                advancePayment: (tour as any).advancePayment || 0,
+                fixedAllowance: (tour as any).fixedAllowance || (tour as any).fixed_allowance || 0,
+                advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
-                helperDriverId: (tour as any).helperDriverId || '',
-                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
-                helperDriverName: (tour as any).helperDriverName || '',
-                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
-                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
-                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).excessMissionDays || 0,
-                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
-                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || 0,
+                helperDriverId: (tour as any).helperDriverId || (tour as any).helper_driver_id || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || (tour as any).helper_driver_employee_id || '',
+                helperDriverName: (tour as any).helperDriverName || (tour as any).helper_driver_name || '',
+                helperDriverAllowance: (tour as any).helperDriverAllowance || (tour as any).helper_driver_allowance || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || (tour as any).helper_driver_food_cost || 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).helper_driver_excess_mission_days || (tour as any).excessMissionDays || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || (tour as any).helper_driver_excess_mission_cost || 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers || (tour as any).helper_driver_excess_kilometers || 0,
                 // فیلدهای محاسبات دپو
-                depotMissionDays: (tour as any).depotMissionDays || 0,
-                depotShipmentCount: (tour as any).depotShipmentCount || 0,
-                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
-                depotKilometerRate: (tour as any).depotKilometerRate || 0,
-                depotTotalMileage: (tour as any).depotTotalMileage || 0,
+                depotMissionDays: (tour as any).depotMissionDays || (tour as any).depot_mission_days || 0,
+                depotShipmentCount: (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || 0,
+                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0,
+                depotKilometerRate: (tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0,
+                depotTotalMileage: (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
                 depotRows: (tour as any).depotRows ? (typeof (tour as any).depotRows === 'string' ? ((tour as any).depotRows.trim() ? JSON.parse((tour as any).depotRows).map((row: any) => ({
@@ -2753,9 +2774,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                                 />
                                             </td>
-                                            <td className="p-2 border-l border-slate-200 font-medium">هزینه بار برگشتی</td>
+                                            <td className="p-2 border-l border-slate-200 font-medium text-xs">هزینه بار برگشتی</td>
                                             <td className="p-2">
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-1 items-center">
                                                     <select
                                                         value={(() => {
                                                             // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
@@ -2787,9 +2808,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                 });
                                                             }
                                                         }}
-                                                        className="flex-1 px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
+                                                        className="flex-1 min-w-0 px-1.5 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left text-xs"
                                                     >
-                                                        <option value="">انتخاب کنید</option>
+                                                        <option value="">انتخاب</option>
                                                         {(() => {
                                                             const vehicleType = inputDialogData.vehicleType || '';
                                                             const isTrailer = vehicleType.includes('تریلی');
@@ -2818,7 +2839,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         type="text"
                                                         readOnly
                                                         value={inputDialogData.returnCargoCost ? String(inputDialogData.returnCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
-                                                        className="w-32 px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left cursor-not-allowed"
+                                                        className="w-20 px-1.5 py-1 border border-slate-300 rounded bg-slate-100 text-left cursor-not-allowed text-xs"
                                                         placeholder="0"
                                                     />
                                                 </div>
