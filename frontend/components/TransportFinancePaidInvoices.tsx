@@ -328,8 +328,6 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         // پیش پرداخت فقط از هزینه راننده اصلی کم می‌شود
         const mainDriverPayable = totalMainAll - totalAdvancePayment;
         const payableAmount = mainDriverPayable + totalHelper;
-        const mainDriverPayable = totalMainAll - totalAdvancePayment;
-        const payableAmount = mainDriverPayable + totalHelper;
 
         // ساخت HTML با فونت‌های بزرگتر
         let html = `
