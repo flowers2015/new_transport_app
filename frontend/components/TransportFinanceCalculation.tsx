@@ -3792,12 +3792,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         جزئیات پیمایش:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
-                                                                        <div className="flex gap-4">
+                                                                        <div className="flex items-center gap-3">
                                                                             <span className={tour.isDataRecorded ? 'text-blue-700' : 'text-slate-400'}>
-                                                                                مصوب: {approvedKm.toLocaleString('fa-IR')}
+                                                                                <span className="text-slate-600">مصوب:</span> {approvedKm.toLocaleString('fa-IR')}
                                                                             </span>
                                                                             <span className={tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}>
-                                                                                مازاد: {excessKm.toLocaleString('fa-IR')}
+                                                                                <span className="text-slate-600">مازاد:</span> {excessKm.toLocaleString('fa-IR')}
                                                                             </span>
                                                                         </div>
                                                                     </td>
@@ -3811,15 +3811,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         جزئیات ماموریت:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
-                                                                        <div className="flex gap-4">
+                                                                        <div className="flex items-center gap-3">
                                                                             <span className={tour.isDataRecorded ? 'text-green-700' : 'text-slate-400'}>
-                                                                                مصوب: {approvedMission}
+                                                                                <span className="text-slate-600">مصوب:</span> {approvedMission}
                                                                             </span>
                                                                             <span className={tour.isDataRecorded ? 'text-yellow-700' : 'text-slate-400'}>
-                                                                                مازاد: {excessMission}
+                                                                                <span className="text-slate-600">مازاد:</span> {excessMission}
                                                                             </span>
                                                                             <span className={tour.isDataRecorded ? 'text-indigo-700' : 'text-slate-400'}>
-                                                                                دپو: {depotMission}
+                                                                                <span className="text-slate-600">دپو:</span> {depotMission}
                                                                             </span>
                                                                         </div>
                                                                     </td>
@@ -3831,12 +3831,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         جزئیات ماموریت:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
-                                                                        <div className="flex gap-4">
+                                                                        <div className="flex items-center gap-3">
                                                                             <span className={tour.isDataRecorded ? 'text-green-700' : 'text-slate-400'}>
-                                                                                مصوب: {approvedMission}
+                                                                                <span className="text-slate-600">مصوب:</span> {approvedMission}
                                                                             </span>
                                                                             <span className={tour.isDataRecorded ? 'text-yellow-700' : 'text-slate-400'}>
-                                                                                مازاد: {excessMission}
+                                                                                <span className="text-slate-600">مازاد:</span> {excessMission}
                                                                             </span>
                                                                         </div>
                                                                     </td>
@@ -3850,70 +3850,76 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         جزئیات هزینه‌ها:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
-                                                                        <div className="space-y-1">
+                                                                        <div className="space-y-0.5">
                                                                             {foodCost > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">هزینه غذا:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه غذا:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{foodCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {fuelCost > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">هزینه سوخت:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه سوخت:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{fuelCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {tollCost > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">هزینه عوارض:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه عوارض:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{tollCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {billOfLadingCost > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">هزینه بارنامه:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه بارنامه:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{billOfLadingCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {returnCargo > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">هزینه بار برگشتی:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه بار برگشتی:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{returnCargo.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {returnBill > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">هزینه بارنامه برگشتی:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه بارنامه برگشتی:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{returnBill.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {excessMissionCost > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">حق ماموریت مازاد:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">حق ماموریت مازاد:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{excessMissionCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {fixedAllowance > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600 font-bold">اجرت ثابت:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 font-bold whitespace-nowrap">اجرت ثابت:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-amber-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {depotAllowance > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">اجرت دپو:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">اجرت دپو:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotAllowance.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {depotMissionCost > 0 && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-600">حق ماموریت دپو:</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">حق ماموریت دپو:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotMissionCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
-                                                                            <div className="flex justify-between pt-1 mt-1 border-t border-slate-300">
-                                                                                <span className="text-slate-700 font-bold">جمع کل:</span>
-                                                                                <span className="text-green-700 font-bold">{totalCost.toLocaleString('fa-IR')} ریال</span>
+                                                                            <div className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-300">
+                                                                                <span className="text-slate-700 font-bold whitespace-nowrap">جمع کل:</span>
+                                                                                <span className="text-green-700 font-bold">
+                                                                                    {(() => {
+                                                                                        // محاسبه جمع کل از هزینه‌های نمایش داده شده
+                                                                                        const calculatedTotal = foodCost + fuelCost + tollCost + billOfLadingCost + returnCargo + returnBill + excessMissionCost + fixedAllowance + depotMissionCost + depotAllowance;
+                                                                                        return calculatedTotal.toLocaleString('fa-IR');
+                                                                                    })()} ریال
+                                                                                </span>
                                                                             </div>
                                                                         </div>
                                                                     </td>

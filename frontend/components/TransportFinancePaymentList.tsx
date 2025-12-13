@@ -30,6 +30,23 @@ interface PaymentRecord {
 }
 
 const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = ({ currentUser }) => {
+    // تابع محاسبه هزینه‌های راننده اصلی (برای استفاده در همه جا)
+    const calculateMainDriverCost = (calc: any): number => {
+        const food = parseFloat(calc.food_cost || calc.foodCost || 0);
+        const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
+        const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
+        const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
+        const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
+        const returnBill = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0);
+        const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
+        const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
+        const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
+        // هزینه‌های دپو
+        const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0);
+        const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
+        return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance + depotAllowance + depotMissionCost;
+    };
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -88,23 +105,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             // تبدیل محاسبات به رکوردهای پرداخت (فقط محاسبات ثبت شده)
             const recordsMap = new Map<string, PaymentRecord>();
             const helperRecordsMap = new Map<string, PaymentRecord>(); // برای راننده‌های کمکی
-            
-            // تابع محاسبه هزینه راننده اصلی (مطابق منطق صورتحساب)
-            const calculateMainDriverCost = (calc: any): number => {
-                const food = parseFloat(calc.food_cost || calc.foodCost || 0);
-                const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
-                const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
-                const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
-                const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
-                const returnBill = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0);
-                const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
-                const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
-                const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
-                // هزینه‌های دپو
-                const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0);
-                const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
-                return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance + depotAllowance + depotMissionCost;
-            };
             
             (Array.isArray(calculationsData) ? calculationsData : []).forEach((calc: any) => {
                 // فقط محاسباتی که total_cost دارند (یعنی ثبت شده‌اند)
@@ -991,8 +991,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     }
                                 });
 
-                                // محاسبه هزینه‌های راننده اصلی
-                                const calculateMainDriverCost = (calc: any) => {
+                                // تابع محاسبه هزینه‌های راننده اصلی (تعریف مجدد برای استفاده محلی - اما با همان منطق)
+                                const calculateMainDriverCostLocal = (calc: any) => {
                                     const food = calc.food_cost || calc.foodCost || 0;
                                     const fuel = calc.fuel_cost || calc.fuelCost || 0;
                                     const toll = calc.toll_cost || calc.tollCost || 0;
