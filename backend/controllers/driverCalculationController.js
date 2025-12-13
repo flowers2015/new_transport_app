@@ -55,7 +55,7 @@ async function saveDriverCalculation(req, res) {
       depotRows,
     } = req.body;
 
-    // تبدیل و اعتبارسنجی مقادیر عددی
+    // تبدیل و اعتبارسنجی مقادیر عددی - همیشه integer برمی‌گرداند
     const parseNumber = (value, defaultValue = 0) => {
       if (value === null || value === undefined || value === '') return defaultValue;
       // اگر string است، ابتدا آن را به number تبدیل کن
@@ -64,10 +64,10 @@ async function saveDriverCalculation(req, res) {
         const cleaned = value.replace(/[^\d.-]/g, '');
         if (cleaned === '' || cleaned === '-' || cleaned === '.') return defaultValue;
         const num = parseFloat(cleaned);
-        return isNaN(num) ? defaultValue : num;
+        return isNaN(num) ? defaultValue : Math.round(num);
       }
       const num = Number(value);
-      return isNaN(num) ? defaultValue : num;
+      return isNaN(num) ? defaultValue : Math.round(num);
     };
 
     console.log('🔍 [saveDriverCalculation] مقادیر خام دریافت شده:', {
