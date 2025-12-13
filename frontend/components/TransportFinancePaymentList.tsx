@@ -814,7 +814,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         {record.advancePayment < 0 ? '−' : ''}{Math.abs(record.advancePayment).toLocaleString('fa-IR')}
                                     </td>
                                     <td className={`p-3 border-l border-slate-200 text-left font-semibold ${record.payableAmount < 0 ? 'text-red-700' : 'text-green-700'}`}>
-                                        {record.payableAmount < 0 ? '−' : ''}{Math.abs(record.payableAmount).toLocaleString('fa-IR')}
+                                        <span dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>
+                                            {record.payableAmount < 0 ? '−' : ''}{Math.abs(record.payableAmount).toLocaleString('fa-IR')}
+                                        </span>
                                     </td>
                                     <td className="p-3 border-l border-slate-200 text-xs">
                                         {record.calculationDate || '-'}
@@ -1351,7 +1353,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                         <div className="flex justify-between items-center border-t-2 border-slate-600 pt-2 mt-2">
                                                             <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>مبلغ قابل پرداخت:</span>
                                                             <span className={`text-xl font-bold ${payableAmount < 0 ? 'text-red-700' : 'text-blue-700'}`} style={{ fontSize: '18px' }}>
-                                                                {payableAmount < 0 ? '−' : ''}{Math.abs(payableAmount).toLocaleString('fa-IR')} ریال
+                                                                <span dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>
+                                                                    {payableAmount < 0 ? '−' : ''}{Math.abs(payableAmount).toLocaleString('fa-IR')} ریال
+                                                                </span>
                                                             </span>
                                                         </div>
                                                     </div>

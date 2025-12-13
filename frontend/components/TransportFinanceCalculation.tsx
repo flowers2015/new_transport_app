@@ -3768,19 +3768,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             {/* ردیف جزئیات پیمایش */}
                                                             {depotKm > 0 && (
                                                                 <tr className="bg-blue-50 border-b border-slate-200">
-                                                                    <td colSpan={8} className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
+                                                                    <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
+                                                                    <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
                                                                         جزئیات پیمایش:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
-                                                                        <div className="flex gap-4">
+                                                                        <div className="flex items-center gap-3">
                                                                             <span className={tour.isDataRecorded ? 'text-blue-700' : 'text-slate-400'}>
-                                                                                مصوب: {approvedKm.toLocaleString('fa-IR')}
+                                                                                <span className="text-slate-600">مصوب:</span> {approvedKm.toLocaleString('fa-IR')}
                                                                             </span>
                                                                             <span className={tour.isDataRecorded ? 'text-orange-700' : 'text-slate-400'}>
-                                                                                مازاد: {excessKm.toLocaleString('fa-IR')}
+                                                                                <span className="text-slate-600">مازاد:</span> {excessKm.toLocaleString('fa-IR')}
                                                                             </span>
                                                                             <span className={tour.isDataRecorded ? 'text-purple-700' : 'text-slate-400'}>
-                                                                                دپو: {depotKm.toLocaleString('fa-IR')}
+                                                                                <span className="text-slate-600">دپو:</span> {depotKm.toLocaleString('fa-IR')}
                                                                             </span>
                                                                         </div>
                                                                     </td>
@@ -3788,7 +3789,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             {depotKm === 0 && approvedKm + excessKm > 0 && (
                                                                 <tr className="bg-blue-50 border-b border-slate-200">
-                                                                    <td colSpan={8} className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
+                                                                    <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
+                                                                    <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
                                                                         جزئیات پیمایش:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
@@ -3807,7 +3809,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             {/* ردیف جزئیات ماموریت */}
                                                             {depotMission > 0 && (
                                                                 <tr className="bg-green-50 border-b border-slate-200">
-                                                                    <td colSpan={8} className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
+                                                                    <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
+                                                                    <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
                                                                         جزئیات ماموریت:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
@@ -3827,7 +3830,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             {depotMission === 0 && approvedMission + excessMission > 0 && (
                                                                 <tr className="bg-green-50 border-b border-slate-200">
-                                                                    <td colSpan={8} className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
+                                                                    <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
+                                                                    <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
                                                                         جزئیات ماموریت:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
@@ -3846,7 +3850,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             {/* ردیف جزئیات هزینه‌ها */}
                                                             {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || returnBill > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0) && (
                                                                 <tr className="bg-slate-50 border-b-2 border-slate-300">
-                                                                    <td colSpan={8} className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
+                                                                    <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
+                                                                    <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
                                                                         جزئیات هزینه‌ها:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs border-l border-slate-200">
@@ -3914,11 +3919,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                             <div className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-300">
                                                                                 <span className="text-slate-700 font-bold whitespace-nowrap">جمع کل:</span>
                                                                                 <span className="text-green-700 font-bold">
-                                                                                    {(() => {
-                                                                                        // محاسبه جمع کل از هزینه‌های نمایش داده شده
-                                                                                        const calculatedTotal = foodCost + fuelCost + tollCost + billOfLadingCost + returnCargo + returnBill + excessMissionCost + fixedAllowance + depotMissionCost + depotAllowance;
-                                                                                        return calculatedTotal.toLocaleString('fa-IR');
-                                                                                    })()} ریال
+                                                                                    {totalCost.toLocaleString('fa-IR')} ریال
                                                                                 </span>
                                                                             </div>
                                                                         </div>
@@ -3929,7 +3930,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             {/* ردیف توضیحات */}
                                                             {tour.notes && (
                                                                 <tr className="bg-slate-100 border-b-2 border-slate-300">
-                                                                    <td colSpan={8} className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
+                                                                    <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
+                                                                    <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
                                                                         توضیحات:
                                                                     </td>
                                                                     <td colSpan={4} className="p-2 text-xs text-slate-800 border-l border-slate-200">
