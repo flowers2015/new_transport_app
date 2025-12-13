@@ -251,7 +251,7 @@ async function saveDriverCalculation(req, res) {
           return_cargo_cost = $9,
           return_bill_of_lading_cost = $10,
           multi_unload_cost = $11,
-          excess_mission_cost = $12::INTEGER,
+          excess_mission_cost = CAST($12 AS INTEGER),
           helper_driver_cost = $13,
           fixed_allowance = $14,
           helper_driver_id = $15,
@@ -380,7 +380,7 @@ async function saveDriverCalculation(req, res) {
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, 
           depot_total_mileage, depot_shipment_count, depot_cargo_handling_cost, depot_mission_days, depot_kilometer_rate, depot_food_cost, depot_mission_cost, depot_rows,
           created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, $12, $13, $14, $15::INTEGER, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, $12, $13, $14, CAST($15 AS INTEGER), $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47)
       `, [
         id,
         driverId,
