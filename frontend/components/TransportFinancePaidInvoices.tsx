@@ -212,38 +212,67 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
                 // ایجاد یک div موقت برای render کردن HTML صورتحساب
                 const tempDiv = document.createElement('div');
-                tempDiv.style.position = 'absolute';
-                tempDiv.style.left = '-9999px';
+                tempDiv.id = `temp-invoice-${i}`;
+                tempDiv.style.position = 'fixed';
+                tempDiv.style.top = '0';
+                tempDiv.style.left = '0';
                 tempDiv.style.width = '297mm';
+                tempDiv.style.minHeight = '210mm';
                 tempDiv.style.backgroundColor = '#ffffff';
-                tempDiv.dir = 'rtl';
+                tempDiv.style.padding = '20px';
+                tempDiv.style.boxSizing = 'border-box';
+                tempDiv.style.overflow = 'visible';
+                tempDiv.style.zIndex = '9999';
+                tempDiv.setAttribute('dir', 'rtl');
                 document.body.appendChild(tempDiv);
 
-                // Render کردن HTML صورتحساب (مشابه TransportFinancePaymentList)
+                // Render کردن HTML صورتحساب
                 const htmlContent = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+                console.log(`📄 [PDF ${i+1}] HTML content length:`, htmlContent.length);
+                console.log(`📄 [PDF ${i+1}] HTML preview:`, htmlContent.substring(0, 500));
+                
                 tempDiv.innerHTML = htmlContent;
 
-                // صبر کردن تا محتوا render شود
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // صبر کردن بیشتر تا محتوا و فونت‌ها render شوند
+                await new Promise(resolve => setTimeout(resolve, 500));
 
-                // تبدیل به canvas با کیفیت متعادل (برای کاهش حجم)
-                const canvas = await html2canvas(tempDiv, {
-                    scale: 1.5, // کاهش scale برای کاهش حجم (از 2.5 به 1.5)
-                    useCORS: true,
-                    logging: true, // فعال کردن logging برای دیباگ
-                    backgroundColor: '#ffffff',
-                    allowTaint: true,
-                    removeContainer: false,
-                    onclone: (clonedDoc) => {
-                        // اطمینان از اینکه فونت‌ها و استایل‌ها در cloned document موجود هستند
-                        const clonedDiv = clonedDoc.querySelector('div[dir="rtl"]');
-                        if (clonedDiv) {
-                            console.log('✅ [PDF] clonedDiv found:', clonedDiv.innerHTML.substring(0, 200));
-                        } else {
-                            console.warn('⚠️ [PDF] clonedDiv not found');
+                // بررسی اینکه آیا محتوا در DOM موجود است
+                const innerContent = tempDiv.innerHTML;
+                if (!innerContent || innerContent.length < 100) {
+                    console.error(`❌ [PDF ${i+1}] HTML content is empty or too short!`);
+                    document.body.removeChild(tempDiv);
+                    continue;
+                }
+
+                // تبدیل به canvas
+                let canvas;
+                try {
+                    canvas = await html2canvas(tempDiv, {
+                        scale: 1.5,
+                        useCORS: true,
+                        logging: true,
+                        backgroundColor: '#ffffff',
+                        allowTaint: true,
+                        removeContainer: false,
+                        width: tempDiv.scrollWidth,
+                        height: tempDiv.scrollHeight,
+                        windowWidth: tempDiv.scrollWidth,
+                        windowHeight: tempDiv.scrollHeight,
+                        onclone: (clonedDoc) => {
+                            const clonedDiv = clonedDoc.getElementById(`temp-invoice-${i}`);
+                            if (clonedDiv) {
+                                console.log(`✅ [PDF ${i+1}] Cloned div found, content length:`, clonedDiv.innerHTML.length);
+                            } else {
+                                console.warn(`⚠️ [PDF ${i+1}] Cloned div not found!`);
+                            }
                         }
-                    }
-                });
+                    });
+                    console.log(`✅ [PDF ${i+1}] Canvas created:`, canvas.width, 'x', canvas.height);
+                } catch (canvasError) {
+                    console.error(`❌ [PDF ${i+1}] Error creating canvas:`, canvasError);
+                    document.body.removeChild(tempDiv);
+                    continue;
+                }
 
                 // حذف div موقت
                 document.body.removeChild(tempDiv);
@@ -342,10 +371,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const mainDriverPayable = totalMainAll - totalAdvancePayment;
         const payableAmount = mainDriverPayable + totalHelper;
 
-        // ساخت HTML با فونت‌های بزرگتر
+        // ساخت HTML با فونت‌های بزرگتر - استفاده از inline styles به جای classes
         let html = `
-            <div class="p-6 bg-white" dir="rtl" style="width: 297mm; min-height: 210mm; font-family: 'Vazirmatn', Arial, sans-serif;">
-                <div class="mb-4 border-b-2 border-slate-800 pb-3">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap');
+            </style>
+            <div dir="rtl" style="width: 100%; min-height: 100%; font-family: 'Vazirmatn', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box;">
+                <div style="margin-bottom: 16px; border-bottom: 2px solid #1e293b; padding-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
                             <h1 style="font-size: 24px; font-weight: bold; color: #1e293b; margin-bottom: 8px;">صورتحساب هزینه</h1>

@@ -305,10 +305,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     return (calcHelperId === record.driverId || calcHelperEmployeeId === record.employeeId) && !isPaid;
                                 });
                             } else {
-                                // برای راننده اصلی: فقط محاسبات پرداخت نشده
+                                // برای راننده اصلی: فقط محاسبات پرداخت نشده که مربوط به این راننده است
                                 unpaidCalculations = allCalculations.filter((calc: any) => {
+                                    const calcDriverId = calc.driver_id || calc.driverId;
                                     const isPaid = calc.is_paid || calc.isPaid;
-                                    return !isPaid;
+                                    return calcDriverId === record.driverId && !isPaid;
                                 });
                             }
                             
@@ -656,8 +657,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             }
 
             alert(`پرداخت برای ${record.driverName} با موفقیت ثبت شد`);
+            // صبر کردن کمی تا backend پرداخت را ثبت کند
+            await new Promise(resolve => setTimeout(resolve, 500));
             // بارگذاری مجدد داده‌ها
-            fetchData();
+            await fetchData();
         } catch (err: any) {
             console.error('❌ [markAsPaid] Error:', err);
             alert(`خطا در ثبت پرداخت: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
