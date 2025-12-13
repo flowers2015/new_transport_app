@@ -3970,7 +3970,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             
                                                             {/* ردیف جزئیات هزینه‌ها */}
-                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || tourCost > 0) && (
+                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || depotCargoHandlingCost > 0 || tourCost > 0) && (
                                                                 <tr className="bg-slate-50 border-b-2 border-slate-300">
                                                                     <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
                                                                     <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
@@ -4020,10 +4020,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{excessMissionCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
-                                                                            {fixedAllowance > 0 && (
+                                                                            {depotCargoHandlingCost > 0 && (
                                                                                 <div className="flex items-center gap-2">
-                                                                                    <span className="text-slate-600 font-bold whitespace-nowrap">اجرت ثابت:</span>
-                                                                                    <span className={tour.isDataRecorded ? 'text-amber-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه جابجایی بار در دپو:</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotCargoHandlingCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {depotAllowance > 0 && (
@@ -4036,6 +4036,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 whitespace-nowrap">حق ماموریت دپو:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotMissionCost.toLocaleString('fa-IR')} ریال</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {fixedAllowance > 0 && (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 font-bold whitespace-nowrap">اجرت ثابت:</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-amber-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {tourCost > 0 && (
