@@ -211,18 +211,18 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 }));
 
                 // ایجاد یک div موقت برای render کردن HTML صورتحساب
+                // استفاده از offset برای قرار دادن div خارج از صفحه (نه visibility: hidden)
                 const tempDiv = document.createElement('div');
                 tempDiv.id = `temp-invoice-${i}`;
                 tempDiv.style.position = 'absolute';
-                tempDiv.style.top = '0';
+                tempDiv.style.top = '-10000px';
                 tempDiv.style.left = '0';
                 tempDiv.style.width = '1200px';
                 tempDiv.style.backgroundColor = '#ffffff';
                 tempDiv.style.padding = '0';
                 tempDiv.style.boxSizing = 'border-box';
                 tempDiv.style.overflow = 'visible';
-                tempDiv.style.visibility = 'hidden';
-                tempDiv.style.opacity = '0';
+                tempDiv.style.zIndex = '-1000';
                 document.body.appendChild(tempDiv);
 
                 // Render کردن HTML صورتحساب
