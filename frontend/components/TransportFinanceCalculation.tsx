@@ -3668,8 +3668,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const fixedAllowance = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
                                             const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
                                             const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
-                                            // استفاده از totalCost از tour اگر موجود باشد، در غیر این صورت محاسبه
-                                            const totalCost = Number(tour.totalCost) || (foodCost + fuelCost + tollCost + billOfLadingCost + returnCargo + returnBill + excessMissionCost + fixedAllowance + depotMissionCost + depotAllowance);
+                                            const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
+                                            // استفاده از totalCost از tour که از دیتابیس می‌آید (این شامل همه هزینه‌ها از جمله tourCost است)
+                                            const totalCost = Number(tour.totalCost) || (foodCost + fuelCost + tollCost + billOfLadingCost + returnCargo + returnBill + excessMissionCost + fixedAllowance + depotMissionCost + depotAllowance + tourCost);
                                             
                                             return (
                                                 <React.Fragment key={tour.announcementId}>
@@ -3848,7 +3849,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             
                                                             {/* ردیف جزئیات هزینه‌ها */}
-                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || returnBill > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0) && (
+                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || returnBill > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || tourCost > 0) && (
                                                                 <tr className="bg-slate-50 border-b-2 border-slate-300">
                                                                     <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
                                                                     <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
@@ -3914,6 +3915,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 whitespace-nowrap">حق ماموریت دپو:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotMissionCost.toLocaleString('fa-IR')} ریال</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {tourCost > 0 && (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 font-bold whitespace-nowrap">اجرت تور:</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>{tourCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             <div className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-300">
