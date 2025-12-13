@@ -299,7 +299,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
-        Math.round(parseNumber(excessMissionCost || 0, 0)), // اطمینان از اینکه integer باشد
+        (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(), // اطمینان از اینکه integer باشد و NaN نباشد
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
         helperDriverId || null,
@@ -396,7 +396,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
-        Math.round(parseNumber(excessMissionCost || 0, 0)), // اطمینان از اینکه integer باشد
+        (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(), // اطمینان از اینکه integer باشد و NaN نباشد
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
         helperDriverId || null,
