@@ -220,16 +220,29 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 document.body.appendChild(tempDiv);
 
                 // Render کردن HTML صورتحساب (مشابه TransportFinancePaymentList)
-                tempDiv.innerHTML = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+                const htmlContent = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+                tempDiv.innerHTML = htmlContent;
+
+                // صبر کردن تا محتوا render شود
+                await new Promise(resolve => setTimeout(resolve, 100));
 
                 // تبدیل به canvas با کیفیت متعادل (برای کاهش حجم)
                 const canvas = await html2canvas(tempDiv, {
                     scale: 1.5, // کاهش scale برای کاهش حجم (از 2.5 به 1.5)
                     useCORS: true,
-                    logging: false,
+                    logging: true, // فعال کردن logging برای دیباگ
                     backgroundColor: '#ffffff',
                     allowTaint: true,
                     removeContainer: false,
+                    onclone: (clonedDoc) => {
+                        // اطمینان از اینکه فونت‌ها و استایل‌ها در cloned document موجود هستند
+                        const clonedDiv = clonedDoc.querySelector('div[dir="rtl"]');
+                        if (clonedDiv) {
+                            console.log('✅ [PDF] clonedDiv found:', clonedDiv.innerHTML.substring(0, 200));
+                        } else {
+                            console.warn('⚠️ [PDF] clonedDiv not found');
+                        }
+                    }
                 });
 
                 // حذف div موقت

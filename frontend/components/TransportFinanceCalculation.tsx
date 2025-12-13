@@ -607,7 +607,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         multiUnloadCost: saved.multi_unload_cost || saved.multiUnloadCost || 0,
                                         excessMissionCost: saved.excess_mission_cost || saved.excessMissionCost || 0,
                                         helperDriverCost: saved.helper_driver_cost || saved.helperDriverCost || 0,
-                                        fixedAllowance: saved.fixed_allowance || saved.fixedAllowance || 0,
+                                        // اگر queue_type پورسانتی است، fixedAllowance باید 0 باشد
+                                        fixedAllowance: ((saved.queue_type || saved.queueType || calc.queueType) === 'porsant' ? 0 : (saved.fixed_allowance || saved.fixedAllowance || 0)),
                                         foodCost: saved.food_cost || saved.foodCost || 0,
                                         fuelCost: saved.fuel_cost || saved.fuelCost || 0,
                                         tourCost: saved.tour_cost || saved.tourCost || 0,
@@ -629,7 +630,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         depotMissionDays: saved.depot_mission_days || saved.depotMissionDays || 0,
                                         depotShipmentCount: saved.depot_shipment_count || saved.depotShipmentCount || 0,
                                         depotCargoHandlingCost: saved.depot_cargo_handling_cost || saved.depotCargoHandlingCost || 0,
-                                        depotKilometerRate: saved.depot_kilometer_rate || saved.depotKilometerRate || 0,
+                                        // اگر queue_type پورسانتی است، depotKilometerRate باید 0 باشد
+                                        depotKilometerRate: ((saved.queue_type || saved.queueType || calc.queueType) === 'porsant' ? 0 : (saved.depot_kilometer_rate || saved.depotKilometerRate || 0)),
                                         depotTotalMileage: saved.depot_total_mileage || saved.depotTotalMileage || 0,
                                         depotFoodCost: saved.depot_food_cost || saved.depotFoodCost || 0,
                                         depotMissionCost: saved.depot_mission_cost || saved.depotMissionCost || 0,
@@ -1298,7 +1300,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
-                fixedAllowance: (tour as any).fixedAllowance || (tour as any).fixed_allowance || 0,
+                // اگر راننده پورسانتی است، fixedAllowance باید 0 باشد
+                fixedAllowance: (calc.queueType === 'porsant' ? 0 : ((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0)),
                 advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
@@ -1314,7 +1317,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotMissionDays: (tour as any).depotMissionDays || (tour as any).depot_mission_days || 0,
                 depotShipmentCount: (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || 0,
                 depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0,
-                depotKilometerRate: (tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0,
+                // اگر راننده پورسانتی است، depotKilometerRate باید 0 باشد
+                depotKilometerRate: (calc.queueType === 'porsant' ? 0 : ((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0)),
                 depotTotalMileage: (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
@@ -1552,7 +1556,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotMissionDays: (tour as any).depotMissionDays || (tour as any).depot_mission_days || 0,
                 depotShipmentCount: (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || 0,
                 depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0,
-                depotKilometerRate: (tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0,
+                // اگر راننده پورسانتی است، depotKilometerRate باید 0 باشد
+                depotKilometerRate: (calc.queueType === 'porsant' ? 0 : ((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0)),
                 depotTotalMileage: (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
@@ -1620,7 +1625,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
-                fixedAllowance: (tour as any).fixedAllowance || (tour as any).fixed_allowance || 0,
+                // اگر راننده پورسانتی است، fixedAllowance باید 0 باشد
+                fixedAllowance: (calc.queueType === 'porsant' ? 0 : ((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0)),
                 advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
@@ -1636,7 +1642,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotMissionDays: (tour as any).depotMissionDays || (tour as any).depot_mission_days || 0,
                 depotShipmentCount: (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || 0,
                 depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0,
-                depotKilometerRate: (tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0,
+                // اگر راننده پورسانتی است، depotKilometerRate باید 0 باشد
+                depotKilometerRate: (calc.queueType === 'porsant' ? 0 : ((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0)),
                 depotTotalMileage: (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0,
                 depotFoodCost: (tour as any).depotFoodCost || (tour as any).depot_food_cost || 0,
                 depotMissionCost: (tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0,
@@ -2828,7 +2835,25 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 />
                                             </td>
                                         </tr>
-                                        {/* ردیف 9: ماموریت مازاد، حق ماموریت (ماموریت مازاد) */}
+                                        {/* ردیف 9: اجرت ثابت (فقط برای اجرت ثابت) */}
+                                        {selectedDriverQueueType === 'fixed_allowance' && (
+                                            <tr className="border-b border-slate-200 hover:bg-slate-50">
+                                                <td className="p-2 border-l border-slate-200 font-medium">
+                                                    اجرت ثابت (ریال)
+                                                    <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار: پیمایش کل × بخشنامه اجرت ثابت</p>
+                                                </td>
+                                                <td className="p-2 border-l border-slate-200" colSpan={3}>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        readOnly
+                                                        value={inputDialogData.fixedAllowance ? inputDialogData.fixedAllowance.toLocaleString('fa-IR') : '0'}
+                                                        className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-left cursor-not-allowed"
+                                                    />
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {/* ردیف 10: ماموریت مازاد، حق ماموریت (ماموریت مازاد) */}
                                         <tr className="border-b border-slate-200 hover:bg-slate-50">
                                             <td className="p-2 border-l border-slate-200 font-medium">ماموریت مازاد (روز) *</td>
                                             <td className="p-2 border-l border-slate-200">
@@ -3753,11 +3778,29 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
                                             const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
                                             const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
-                                            const fixedAllowance = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
+                                            // بررسی نوع صف راننده برای این تور - اگر queue_type در تور وجود داشت، استفاده می‌کنیم، در غیر این صورت از selectedDriverQueueType استفاده می‌کنیم
+                                            const tourQueueType = (tour as any).queueType || (tour as any).queue_type || selectedDriverQueueType;
+                                            
+                                            // اگر راننده پورسانتی است، fixedAllowance و depotAllowance باید 0 باشند
+                                            // اگر راننده اجرت ثابت است، tourCost باید 0 باشد
+                                            const isFixedAllowance = tourQueueType === 'fixed_allowance';
+                                            const isPorsant = tourQueueType === 'porsant';
+                                            
+                                            // برای راننده پورسانتی: fixedAllowance و depotAllowance را 0 می‌کنیم
+                                            // برای راننده اجرت ثابت: tourCost را 0 می‌کنیم
+                                            const fixedAllowanceRaw = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
+                                            const depotAllowanceRaw = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
+                                            const tourCostRaw = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
+                                            
+                                            // برای راننده پورسانتی: fixedAllowance و depotAllowance را 0 می‌کنیم
+                                            // برای راننده اجرت ثابت: tourCost را 0 نمی‌کنیم (چون اجرت تور برای اجرت ثابت معنی دارد)
+                                            const fixedAllowance = isPorsant ? 0 : fixedAllowanceRaw;
+                                            const depotAllowance = isPorsant ? 0 : depotAllowanceRaw;
+                                            // tourCost برای اجرت ثابت نمایش داده می‌شود (نه پورسانتی)
+                                            const tourCost = isPorsant ? 0 : tourCostRaw;
+                                            
                                             const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
-                                            const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
                                             const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
-                                            const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
                                             
                                             // محاسبه سایر هزینه‌های راننده اصلی (بدون اجرت/پورسانت):
                                             // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
@@ -4027,7 +4070,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotCargoHandlingCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
-                                                                            {depotAllowance > 0 && (
+                                                                            {/* اجرت دپو فقط برای راننده اجرت ثابت */}
+                                                                            {isFixedAllowance && depotAllowance > 0 && (
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 whitespace-nowrap">اجرت دپو:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotAllowance.toLocaleString('fa-IR')} ریال</span>
@@ -4039,13 +4083,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotMissionCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
-                                                                            {fixedAllowance > 0 && (
+                                                                            {/* اجرت ثابت فقط برای راننده اجرت ثابت */}
+                                                                            {isFixedAllowance && fixedAllowance > 0 && (
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 font-bold whitespace-nowrap">اجرت ثابت:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-amber-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
-                                                                            {tourCost > 0 && (
+                                                                            {/* اجرت تور فقط برای راننده اجرت ثابت (نه پورسانتی، چون پورسانتی در انتهای دوره محاسبه می‌شود) */}
+                                                                            {isFixedAllowance && tourCost > 0 && (
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 font-bold whitespace-nowrap">اجرت تور:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>{tourCost.toLocaleString('fa-IR')} ریال</span>

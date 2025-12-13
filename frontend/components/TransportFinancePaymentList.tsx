@@ -643,7 +643,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 body: JSON.stringify({
                     driverId: record.driverId,
                     paymentDate,
-                    paymentAmount: record.totalAmount,
+                    paymentAmount: record.payableAmount,
                     calculationDateFrom: startDate || null,
                     calculationDateTo: endDate || null,
                     paymentListDate: paymentDate,
