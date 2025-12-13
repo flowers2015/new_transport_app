@@ -1017,17 +1017,42 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const excelData = getExcelFilteredData();
         
         const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'صف', 'تعداد تور', 'تور محاسبه نشده', 'تور محاسبه شده', 'پیمایش کل (کیلومتر)', 'هزینه کل تور (ریال)', 'تاریخ صدور بارنامه']
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'نوع صف', 'تعداد تور', 'تور تریلی', 'تور ده‌چرخ', 'کل پیمایش (کیلومتر)', 'اجرت (ریال)', 'سایر هزینه‌ها (ریال)', 'جمع قابل پرداخت (ریال)']
         ];
 
         excelData.forEach((calc, index) => {
-            const recordedTours = calc.tours.filter(t => t.isDataRecorded).length;
-            const unrecordedTours = calc.tours.length - recordedTours;
+            const recordedTours = calc.tours.filter(t => t.isDataRecorded);
+            const recordedToursCount = recordedTours.length;
+            const unrecordedTours = calc.tours.length - recordedToursCount;
+            
+            // محاسبه کل پیمایش شامل دپو: مصوب + مازاد + دپو
             const totalKm = calc.tours.reduce((sum, tour) => {
-                const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                return sum + tourTotalKm;
+                const approvedKm = Number(tour.approvedKilometers) || 0;
+                const excessKm = Number(tour.excessKilometers) || 0;
+                const depotKm = Number((tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0);
+                return sum + approvedKm + excessKm + depotKm;
             }, 0);
+            
+            // محاسبه اجرت (tourCost)
+            const totalTourCost = calc.tours.reduce((sum, tour) => {
+                const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
+                return sum + tourCost;
+            }, 0);
+            
+            // محاسبه سایر هزینه‌ها (totalCost - tourCost)
             const totalCost = calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+            const otherCosts = totalCost - totalTourCost;
+            
+            // محاسبه تعداد تور تریلی و ده چرخ
+            const trailerCount = calc.tours.filter(t => {
+                const vehicleType = t.vehicleType || '';
+                return (vehicleType.includes('تریلی') && !vehicleType.includes('مینی')) || vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
+            }).length;
+            
+            const tenWheelerCount = calc.tours.filter(t => {
+                const vehicleType = t.vehicleType || '';
+                return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
+            }).length;
             
             // پیدا کردن اولین تاریخ صدور بارنامه
             const firstBillDate = calc.tours
@@ -1047,11 +1072,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 calc.driverName || '',
                 queueTypeStr,
                 calc.tourCount || 0,
-                unrecordedTours,
-                recordedTours,
+                trailerCount,
+                tenWheelerCount,
                 totalKm,
-                totalCost,
-                billDateStr
+                totalTourCost,
+                otherCosts,
+                totalCost
             ]);
         });
 
@@ -1087,13 +1113,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             { wch: 8 },  // ردیف
             { wch: 12 }, // کد پرسنلی
             { wch: 20 }, // نام
-            { wch: 15 }, // صف
+            { wch: 12 }, // نوع صف
             { wch: 12 }, // تعداد تور
-            { wch: 14 }, // تور محاسبه‌نشده
-            { wch: 14 }, // تور محاسبه‌شده
-            { wch: 18 }, // پیمایش کل
-            { wch: 18 }, // هزینه کل
-            { wch: 18 }  // تاریخ
+            { wch: 12 }, // تور تریلی
+            { wch: 12 }, // تور ده‌چرخ
+            { wch: 18 }, // کل پیمایش
+            { wch: 18 }, // اجرت
+            { wch: 20 }, // سایر هزینه‌ها
+            { wch: 20 }  // جمع قابل پرداخت
         ];
         
         const wb = XLSX.utils.book_new();
@@ -2333,12 +2360,21 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-left font-medium">
                                                 {calc.tours.reduce((sum, tour) => {
-                                                    const totalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                                                    return sum + totalKm;
+                                                    const approvedKm = Number(tour.approvedKilometers) || 0;
+                                                    const excessKm = Number(tour.excessKilometers) || 0;
+                                                    const depotKm = Number((tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0);
+                                                    return sum + approvedKm + excessKm + depotKm;
                                                 }, 0).toLocaleString('fa-IR')}
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
-                                                {calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0).toLocaleString('fa-IR')}
+                                                {(() => {
+                                                    const totalCost = calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+                                                    const totalTourCost = calc.tours.reduce((sum, tour) => {
+                                                        const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
+                                                        return sum + tourCost;
+                                                    }, 0);
+                                                    return totalCost.toLocaleString('fa-IR');
+                                                })()}
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-xs">
                                                 {billDateStr}
@@ -3657,20 +3693,54 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const depotMission = Number((tour as any).depotMissionDays || (tour as any).depot_mission_days || 0);
                                             const totalMission = approvedMission + excessMission + depotMission;
                                             
-                                            // محاسبه مجموع هزینه‌ها - فقط هزینه‌های واقعی که در فیلدهای محاسباتی وجود دارند
+                                            // محاسبه مجموع هزینه‌ها - باید دقیقاً مطابق با محاسبه backend باشد
                                             const foodCost = Number(tour.foodCost) || 0;
                                             const fuelCost = Number(tour.fuelCost) || 0;
                                             const tollCost = Number(tour.tollCost) || 0;
                                             const billOfLadingCost = Number((tour as any).billOfLadingCost || (tour as any).bill_of_lading_cost || 0);
+                                            const loadingCost = Number((tour as any).loadingCost || (tour as any).loading_cost || 0);
                                             const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
                                             const returnBill = Number((tour as any).returnBillOfLadingCost || (tour as any).return_bill_of_lading_cost || 0);
+                                            const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
                                             const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
                                             const fixedAllowance = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
                                             const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
                                             const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
                                             const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
-                                            // استفاده از totalCost از tour که از دیتابیس می‌آید (این شامل همه هزینه‌ها از جمله tourCost است)
-                                            const totalCost = Number(tour.totalCost) || (foodCost + fuelCost + tollCost + billOfLadingCost + returnCargo + returnBill + excessMissionCost + fixedAllowance + depotMissionCost + depotAllowance + tourCost);
+                                            
+                                            // محاسبه totalLoadingCost مطابق با backend (خط 1820)
+                                            const totalLoadingCost = loadingCost + returnCargo + returnBill + multiUnloadCost + excessMissionCost + fixedAllowance;
+                                            
+                                            // محاسبه totalCost مطابق با backend (خط 1823): foodCost + fuelCost + tollCost + billOfLadingCost + totalLoadingCost + tourCost
+                                            // اما باید depot costs را هم اضافه کنیم
+                                            const calculatedTotalCost = foodCost + fuelCost + tollCost + billOfLadingCost + totalLoadingCost + tourCost + depotMissionCost + depotAllowance;
+                                            
+                                            // استفاده از totalCost از دیتابیس (اولویت) یا محاسبه شده
+                                            const totalCost = Number(tour.totalCost) || calculatedTotalCost;
+                                            
+                                            // لاگ برای دیباگ
+                                            if (tourIdx === 0 && tour.announcementId) {
+                                                console.log('💰 [Tour Cost Breakdown]', {
+                                                    announcementId: tour.announcementId,
+                                                    foodCost,
+                                                    fuelCost,
+                                                    tollCost,
+                                                    billOfLadingCost,
+                                                    loadingCost,
+                                                    returnCargo,
+                                                    returnBill,
+                                                    multiUnloadCost,
+                                                    excessMissionCost,
+                                                    fixedAllowance,
+                                                    depotMissionCost,
+                                                    depotAllowance,
+                                                    tourCost,
+                                                    totalLoadingCost,
+                                                    calculatedTotalCost,
+                                                    totalCostFromDB: tour.totalCost,
+                                                    totalCost
+                                                });
+                                            }
                                             
                                             return (
                                                 <React.Fragment key={tour.announcementId}>
@@ -3849,7 +3919,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             
                                                             {/* ردیف جزئیات هزینه‌ها */}
-                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || returnBill > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || tourCost > 0) && (
+                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || loadingCost > 0 || returnCargo > 0 || returnBill > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || tourCost > 0) && (
                                                                 <tr className="bg-slate-50 border-b-2 border-slate-300">
                                                                     <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
                                                                     <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
@@ -3881,6 +3951,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{billOfLadingCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
+                                                                            {loadingCost > 0 && (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه بارگیری:</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{loadingCost.toLocaleString('fa-IR')} ریال</span>
+                                                                                </div>
+                                                                            )}
                                                                             {returnCargo > 0 && (
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 whitespace-nowrap">هزینه بار برگشتی:</span>
@@ -3891,6 +3967,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 whitespace-nowrap">هزینه بارنامه برگشتی:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{returnBill.toLocaleString('fa-IR')} ریال</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {multiUnloadCost > 0 && (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه چندجا تخلیه:</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{multiUnloadCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {excessMissionCost > 0 && (
