@@ -210,102 +210,100 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                 }));
 
-                // ایجاد یک iframe موقت برای render کردن HTML صورتحساب (بهتر از div)
-                const tempIframe = document.createElement('iframe');
-                tempIframe.id = `temp-invoice-iframe-${i}`;
-                tempIframe.style.position = 'fixed';
-                tempIframe.style.top = '0';
-                tempIframe.style.left = '0';
-                tempIframe.style.width = '1200px'; // عرض مناسب برای A4 landscape
-                tempIframe.style.height = '800px'; // ارتفاع مناسب
-                tempIframe.style.border = 'none';
-                tempIframe.style.backgroundColor = '#ffffff';
-                tempIframe.style.zIndex = '9999';
-                document.body.appendChild(tempIframe);
+                // ایجاد یک div موقت برای render کردن HTML صورتحساب
+                // استفاده از div به جای iframe برای جلوگیری از مشکلات CORS و blob URLs
+                const tempDiv = document.createElement('div');
+                tempDiv.id = `temp-invoice-${i}`;
+                tempDiv.style.position = 'fixed';
+                tempDiv.style.top = '-9999px'; // خارج از دید برای جلوگیری از فلش
+                tempDiv.style.left = '0';
+                tempDiv.style.width = '1200px'; // عرض مناسب برای A4 landscape
+                tempDiv.style.minHeight = '800px';
+                tempDiv.style.backgroundColor = '#ffffff';
+                tempDiv.style.padding = '24px';
+                tempDiv.style.boxSizing = 'border-box';
+                tempDiv.style.overflow = 'visible';
+                tempDiv.style.zIndex = '-1';
+                tempDiv.setAttribute('dir', 'rtl');
+                document.body.appendChild(tempDiv);
 
                 // Render کردن HTML صورتحساب
                 const htmlContent = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
-                console.log(`📄 [PDF ${i+1}] HTML content length:`, htmlContent.length);
-                console.log(`📄 [PDF ${i+1}] HTML preview:`, htmlContent.substring(0, 500));
+                console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML content length:`, htmlContent.length);
+                console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML preview:`, htmlContent.substring(0, 500));
                 
-                // نوشتن HTML به iframe
-                const iframeDoc = tempIframe.contentDocument || tempIframe.contentWindow?.document;
-                if (!iframeDoc) {
-                    console.error(`❌ [PDF ${i+1}] Cannot access iframe document`);
-                    document.body.removeChild(tempIframe);
-                    continue;
+                // استخراج محتوای body از HTML کامل
+                let bodyContent = htmlContent;
+                const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+                if (bodyMatch) {
+                    bodyContent = bodyMatch[1];
+                } else {
+                    // اگر body پیدا نشد، style tag را پیدا کن و محتوای بعد از آن را بگیر
+                    const styleMatch = htmlContent.match(/<\/style>([\s\S]*)/i);
+                    if (styleMatch) {
+                        bodyContent = styleMatch[1];
+                    }
                 }
+                
+                // اضافه کردن استایل‌های inline به tempDiv برای اطمینان از render شدن
+                tempDiv.innerHTML = bodyContent;
 
-                iframeDoc.open();
-                iframeDoc.write(htmlContent);
-                iframeDoc.close();
-
-                // صبر کردن تا محتوا render شود
+                // صبر کردن تا محتوا و فونت‌ها render شوند
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
-                // پیدا کردن div اصلی در iframe
-                const iframeBody = iframeDoc.body || iframeDoc.querySelector('body');
-                if (!iframeBody) {
-                    console.error(`❌ [PDF ${i+1}] Cannot find body in iframe`);
-                    document.body.removeChild(tempIframe);
+                // بررسی اینکه آیا محتوا در DOM موجود است
+                const innerContent = tempDiv.innerHTML;
+                if (!innerContent || innerContent.length < 100) {
+                    console.error(`❌ [PDF ${i+1}/${totalRecords}] HTML content is empty or too short!`);
+                    document.body.removeChild(tempDiv);
                     continue;
                 }
+
+                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Content ready, length:`, innerContent.length);
 
                 // پیدا کردن div اصلی صورتحساب
-                const invoiceDiv = iframeBody.querySelector('div[dir="rtl"]') || iframeBody.firstElementChild;
-                if (!invoiceDiv) {
-                    console.error(`❌ [PDF ${i+1}] Cannot find invoice div in iframe`);
-                    document.body.removeChild(tempIframe);
-                    continue;
-                }
+                const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
 
-                // بررسی اینکه آیا محتوا در DOM موجود است
-                const innerContent = invoiceDiv.innerHTML;
-                if (!innerContent || innerContent.length < 100) {
-                    console.error(`❌ [PDF ${i+1}] HTML content is empty or too short!`);
-                    document.body.removeChild(tempIframe);
-                    continue;
-                }
-
-                console.log(`✅ [PDF ${i+1}] Invoice div found, content length:`, innerContent.length);
-
-                // تبدیل به canvas - استفاده از invoiceDiv از iframe
+                // تبدیل به canvas - استفاده از invoiceDiv
                 let canvas;
                 try {
+                    console.log(`🔄 [PDF ${i+1}/${filteredRecords.length}] Starting html2canvas...`);
                     canvas = await html2canvas(invoiceDiv as HTMLElement, {
                         scale: 1.5,
                         useCORS: true,
                         logging: true,
                         backgroundColor: '#ffffff',
-                        allowTaint: true,
+                        allowTaint: false, // تغییر به false برای جلوگیری از مشکلات CORS
                         removeContainer: false,
                         windowWidth: invoiceDiv.scrollWidth || 1200,
                         windowHeight: invoiceDiv.scrollHeight || 800,
                         onclone: (clonedDoc) => {
-                            const clonedDiv = clonedDoc.querySelector('div[dir="rtl"]');
+                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`) || 
+                                            clonedDoc.querySelector(`#temp-invoice-${i}`);
                             if (clonedDiv) {
-                                console.log(`✅ [PDF ${i+1}] Cloned div found in onclone, content length:`, clonedDiv.innerHTML.length);
+                                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Cloned div found in onclone, content length:`, clonedDiv.innerHTML.length);
                             } else {
-                                console.warn(`⚠️ [PDF ${i+1}] Cloned div not found in onclone!`);
+                                console.warn(`⚠️ [PDF ${i+1}/${filteredRecords.length}] Cloned div not found in onclone!`);
                             }
                         }
                     });
                     
                     if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                        console.error(`❌ [PDF ${i+1}] Canvas is empty!`);
-                        document.body.removeChild(tempIframe);
+                        console.error(`❌ [PDF ${i+1}/${totalRecords}] Canvas is empty! width: ${canvas?.width}, height: ${canvas?.height}`);
+                        document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    console.log(`✅ [PDF ${i+1}] Canvas created:`, canvas.width, 'x', canvas.height);
-                } catch (canvasError) {
-                    console.error(`❌ [PDF ${i+1}] Error creating canvas:`, canvasError);
-                    document.body.removeChild(tempIframe);
+                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas created successfully: ${canvas.width}x${canvas.height}`);
+                } catch (canvasError: any) {
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error creating canvas:`, canvasError);
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error stack:`, canvasError?.stack);
+                    document.body.removeChild(tempDiv);
                     continue;
                 }
 
-                // حذف iframe موقت
-                document.body.removeChild(tempIframe);
+                // حذف div موقت
+                document.body.removeChild(tempDiv);
 
                 // تبدیل به JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
                 const imgData = canvas.toDataURL('image/jpeg', 0.85);
@@ -549,9 +547,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         ` : ''}
                     </div>
                 </div>
-            </div>
-</body>
-</html>`;
+            </div>`;
 
         return html;
     };
