@@ -299,7 +299,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
-        parseNumber(excessMissionCost || 0, 0), // اطمینان از اینکه undefined نباشد
+        Math.round(parseNumber(excessMissionCost || 0, 0)), // اطمینان از اینکه integer باشد
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
         helperDriverId || null,
@@ -396,7 +396,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
-        parseNumber(excessMissionCost || 0, 0), // اطمینان از اینکه undefined نباشد
+        Math.round(parseNumber(excessMissionCost || 0, 0)), // اطمینان از اینکه integer باشد
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
         helperDriverId || null,
