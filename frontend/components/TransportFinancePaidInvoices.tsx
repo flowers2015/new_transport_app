@@ -210,72 +210,102 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                 }));
 
-                // ایجاد یک div موقت برای render کردن HTML صورتحساب
-                const tempDiv = document.createElement('div');
-                tempDiv.id = `temp-invoice-${i}`;
-                tempDiv.style.position = 'fixed';
-                tempDiv.style.top = '0';
-                tempDiv.style.left = '0';
-                tempDiv.style.width = '297mm';
-                tempDiv.style.minHeight = '210mm';
-                tempDiv.style.backgroundColor = '#ffffff';
-                tempDiv.style.padding = '20px';
-                tempDiv.style.boxSizing = 'border-box';
-                tempDiv.style.overflow = 'visible';
-                tempDiv.style.zIndex = '9999';
-                tempDiv.setAttribute('dir', 'rtl');
-                document.body.appendChild(tempDiv);
+                // ایجاد یک iframe موقت برای render کردن HTML صورتحساب (بهتر از div)
+                const tempIframe = document.createElement('iframe');
+                tempIframe.id = `temp-invoice-iframe-${i}`;
+                tempIframe.style.position = 'fixed';
+                tempIframe.style.top = '0';
+                tempIframe.style.left = '0';
+                tempIframe.style.width = '1200px'; // عرض مناسب برای A4 landscape
+                tempIframe.style.height = '800px'; // ارتفاع مناسب
+                tempIframe.style.border = 'none';
+                tempIframe.style.backgroundColor = '#ffffff';
+                tempIframe.style.zIndex = '9999';
+                document.body.appendChild(tempIframe);
 
                 // Render کردن HTML صورتحساب
                 const htmlContent = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
                 console.log(`📄 [PDF ${i+1}] HTML content length:`, htmlContent.length);
                 console.log(`📄 [PDF ${i+1}] HTML preview:`, htmlContent.substring(0, 500));
                 
-                tempDiv.innerHTML = htmlContent;
-
-                // صبر کردن بیشتر تا محتوا و فونت‌ها render شوند
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // بررسی اینکه آیا محتوا در DOM موجود است
-                const innerContent = tempDiv.innerHTML;
-                if (!innerContent || innerContent.length < 100) {
-                    console.error(`❌ [PDF ${i+1}] HTML content is empty or too short!`);
-                    document.body.removeChild(tempDiv);
+                // نوشتن HTML به iframe
+                const iframeDoc = tempIframe.contentDocument || tempIframe.contentWindow?.document;
+                if (!iframeDoc) {
+                    console.error(`❌ [PDF ${i+1}] Cannot access iframe document`);
+                    document.body.removeChild(tempIframe);
                     continue;
                 }
 
-                // تبدیل به canvas
+                iframeDoc.open();
+                iframeDoc.write(htmlContent);
+                iframeDoc.close();
+
+                // صبر کردن تا محتوا render شود
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // پیدا کردن div اصلی در iframe
+                const iframeBody = iframeDoc.body || iframeDoc.querySelector('body');
+                if (!iframeBody) {
+                    console.error(`❌ [PDF ${i+1}] Cannot find body in iframe`);
+                    document.body.removeChild(tempIframe);
+                    continue;
+                }
+
+                // پیدا کردن div اصلی صورتحساب
+                const invoiceDiv = iframeBody.querySelector('div[dir="rtl"]') || iframeBody.firstElementChild;
+                if (!invoiceDiv) {
+                    console.error(`❌ [PDF ${i+1}] Cannot find invoice div in iframe`);
+                    document.body.removeChild(tempIframe);
+                    continue;
+                }
+
+                // بررسی اینکه آیا محتوا در DOM موجود است
+                const innerContent = invoiceDiv.innerHTML;
+                if (!innerContent || innerContent.length < 100) {
+                    console.error(`❌ [PDF ${i+1}] HTML content is empty or too short!`);
+                    document.body.removeChild(tempIframe);
+                    continue;
+                }
+
+                console.log(`✅ [PDF ${i+1}] Invoice div found, content length:`, innerContent.length);
+
+                // تبدیل به canvas - استفاده از invoiceDiv از iframe
                 let canvas;
                 try {
-                    canvas = await html2canvas(tempDiv, {
+                    canvas = await html2canvas(invoiceDiv as HTMLElement, {
                         scale: 1.5,
                         useCORS: true,
                         logging: true,
                         backgroundColor: '#ffffff',
                         allowTaint: true,
                         removeContainer: false,
-                        width: tempDiv.scrollWidth,
-                        height: tempDiv.scrollHeight,
-                        windowWidth: tempDiv.scrollWidth,
-                        windowHeight: tempDiv.scrollHeight,
+                        windowWidth: invoiceDiv.scrollWidth || 1200,
+                        windowHeight: invoiceDiv.scrollHeight || 800,
                         onclone: (clonedDoc) => {
-                            const clonedDiv = clonedDoc.getElementById(`temp-invoice-${i}`);
+                            const clonedDiv = clonedDoc.querySelector('div[dir="rtl"]');
                             if (clonedDiv) {
-                                console.log(`✅ [PDF ${i+1}] Cloned div found, content length:`, clonedDiv.innerHTML.length);
+                                console.log(`✅ [PDF ${i+1}] Cloned div found in onclone, content length:`, clonedDiv.innerHTML.length);
                             } else {
-                                console.warn(`⚠️ [PDF ${i+1}] Cloned div not found!`);
+                                console.warn(`⚠️ [PDF ${i+1}] Cloned div not found in onclone!`);
                             }
                         }
                     });
+                    
+                    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                        console.error(`❌ [PDF ${i+1}] Canvas is empty!`);
+                        document.body.removeChild(tempIframe);
+                        continue;
+                    }
+                    
                     console.log(`✅ [PDF ${i+1}] Canvas created:`, canvas.width, 'x', canvas.height);
                 } catch (canvasError) {
                     console.error(`❌ [PDF ${i+1}] Error creating canvas:`, canvasError);
-                    document.body.removeChild(tempDiv);
+                    document.body.removeChild(tempIframe);
                     continue;
                 }
 
-                // حذف div موقت
-                document.body.removeChild(tempDiv);
+                // حذف iframe موقت
+                document.body.removeChild(tempIframe);
 
                 // تبدیل به JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
                 const imgData = canvas.toDataURL('image/jpeg', 0.85);
@@ -371,12 +401,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const mainDriverPayable = totalMainAll - totalAdvancePayment;
         const payableAmount = mainDriverPayable + totalHelper;
 
-        // ساخت HTML با فونت‌های بزرگتر - استفاده از inline styles به جای classes
-        let html = `
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap');
-            </style>
-            <div dir="rtl" style="width: 100%; min-height: 100%; font-family: 'Vazirmatn', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box;">
+        // ساخت HTML کامل با DOCTYPE و head برای iframe
+        let html = `<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif; direction: rtl; text-align: right; }
+    </style>
+</head>
+<body>
+<div dir="rtl" style="width: 100%; min-height: 100vh; font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box; direction: rtl; text-align: right;">
                 <div style="margin-bottom: 16px; border-bottom: 2px solid #1e293b; padding-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
@@ -510,7 +550,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     </div>
                 </div>
             </div>
-        `;
+</body>
+</html>`;
 
         return html;
     };
