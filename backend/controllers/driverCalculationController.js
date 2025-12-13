@@ -247,13 +247,13 @@ async function saveDriverCalculation(req, res) {
           approved_mission_days = $6,
           excess_mission_days = $7,
           toll_cost = $8,
-          loading_cost = $9,
-          return_cargo_cost = $10,
-          return_bill_of_lading_cost = $11,
-          multi_unload_cost = $12,
-          excess_mission_cost = $13,
-          helper_driver_cost = $14,
-          fixed_allowance = $15,
+          loading_cost = 0, -- این فیلد دیگر استفاده نمی‌شود و همیشه 0 است
+          return_cargo_cost = $9,
+          return_bill_of_lading_cost = $10,
+          multi_unload_cost = $11,
+          excess_mission_cost = $12,
+          helper_driver_cost = $13,
+          fixed_allowance = $14,
           helper_driver_id = $16,
           helper_driver_employee_id = $17,
           helper_driver_name = $18,
@@ -296,7 +296,6 @@ async function saveDriverCalculation(req, res) {
         approvedMissionDays || null,
         excessMissionDays || 0,
         validatedTollCost,
-        validatedLoadingCost,
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
@@ -336,7 +335,7 @@ async function saveDriverCalculation(req, res) {
         announcementId,
       ];
       
-      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE:', updateParams.length, 'مورد نیاز: 46');
+      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE:', updateParams.length, 'مورد نیاز: 45');
       console.log('🔍 [saveDriverCalculation] جزئیات پارامترها:', updateParams.map((p, i) => ({ 
         index: i + 1, 
         value: p, 
@@ -344,14 +343,14 @@ async function saveDriverCalculation(req, res) {
         isUndefined: p === undefined 
       })));
       
-      if (updateParams.length !== 46) {
+      if (updateParams.length !== 45) {
         console.error('❌ [saveDriverCalculation] تعداد پارامترها نادرست است!', {
           count: updateParams.length,
-          expected: 46,
+          expected: 45,
           params: updateParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
         });
         return res.status(500).json({ 
-          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای 46`,
+          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای 45`,
           error: 'PARAMETER_COUNT_MISMATCH'
         });
       }
@@ -381,7 +380,7 @@ async function saveDriverCalculation(req, res) {
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, 
           depot_total_mileage, depot_shipment_count, depot_cargo_handling_cost, depot_mission_days, depot_kilometer_rate, depot_food_cost, depot_mission_cost, depot_rows,
           created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47)
       `, [
         id,
         driverId,
@@ -394,7 +393,6 @@ async function saveDriverCalculation(req, res) {
         approvedMissionDays || null,
         excessMissionDays || 0,
         validatedTollCost,
-        validatedLoadingCost,
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),

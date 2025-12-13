@@ -3767,8 +3767,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             // اگر fixedAllowance > 0 باشد، یعنی راننده اجرت ثابت است و اجرت قبلاً در otherMainDriverCosts اضافه شده
                                             const calculatedTotalCost = (fixedAllowance > 0 ? otherMainDriverCosts : (otherMainDriverCosts + tourCost));
                                             
-                                            // استفاده از totalCost از دیتابیس (اولویت) یا محاسبه شده
-                                            const totalCost = Number(tour.totalCost) || calculatedTotalCost;
+                                            // استفاده از calculatedTotalCost (محاسبه شده) به جای totalCost از دیتابیس
+                                            // چون totalCost از دیتابیس ممکن است شامل loadingCost باشد که دیگر استفاده نمی‌شود
+                                            const totalCost = calculatedTotalCost;
                                             
                                             // لاگ برای دیباگ
                                             if (tourIdx === 0 && tour.announcementId) {
