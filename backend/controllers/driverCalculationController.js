@@ -239,8 +239,8 @@ async function saveDriverCalculation(req, res) {
       // آپدیت رکورد موجود
       const updateQuery = `
         UPDATE driver_calculations SET
-          bill_of_lading_number = $1,
-          bill_of_lading_date = $2,
+          bill_of_lading_number = CAST($1 AS VARCHAR),
+          bill_of_lading_date = CAST($2 AS VARCHAR),
           bill_of_lading_cost = $3,
           approved_kilometers = $4,
           excess_kilometers = $5,
@@ -254,9 +254,9 @@ async function saveDriverCalculation(req, res) {
           excess_mission_cost = CAST($12 AS INTEGER),
           helper_driver_cost = $13,
           fixed_allowance = $14,
-          helper_driver_id = $15,
-          helper_driver_employee_id = $16,
-          helper_driver_name = $17,
+          helper_driver_id = CAST($15 AS VARCHAR),
+          helper_driver_employee_id = CAST($16 AS VARCHAR),
+          helper_driver_name = CAST($17 AS VARCHAR),
           helper_driver_allowance = $18,
           helper_driver_food_cost = $19,
           helper_driver_excess_mission_days = $20,
@@ -266,12 +266,12 @@ async function saveDriverCalculation(req, res) {
           fuel_cost = $24,
           tour_cost = $25,
           total_cost = $26,
-          notes = $27,
-          queue_type = $28,
-          calculation_date = $29,
-          vehicle_code = $30,
-          vehicle_plate = $31,
-          destinations = $32,
+          notes = CAST($27 AS TEXT),
+          queue_type = CAST($28 AS VARCHAR),
+          calculation_date = CAST($29 AS VARCHAR),
+          vehicle_code = CAST($30 AS VARCHAR),
+          vehicle_plate = CAST($31 AS VARCHAR),
+          destinations = CAST($32 AS TEXT),
           multi_unload_count = $33,
           advance_payment = $34,
           depot_total_mileage = $35,
@@ -281,8 +281,8 @@ async function saveDriverCalculation(req, res) {
           depot_kilometer_rate = $39,
           depot_food_cost = $40,
           depot_mission_cost = $41,
-          depot_rows = $42,
-          updated_by = $43,
+          depot_rows = CAST($42 AS JSONB),
+          updated_by = CAST($43 AS VARCHAR),
           updated_at = NOW()
         WHERE driver_id = $44 AND announcement_id = $45
       `;

@@ -331,9 +331,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 }
             }
 
-            // ذخیره PDF
+            // ذخیره PDF با استفاده از blob برای جلوگیری از هشدار HTTP
             const dateRange = startDate && endDate ? `${startDate}_${endDate}` : new Date().toISOString().split('T')[0];
-            pdf.save(`صورتحساب_های_پرداخت_شده_${dateRange}.pdf`);
+            const filename = `صورتحساب_های_پرداخت_شده_${dateRange}.pdf`;
+            
+            // استفاده از output('blob') برای ایجاد blob و سپس دانلود
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // پاک کردن blob URL بعد از استفاده
+            setTimeout(() => URL.revokeObjectURL(url), 100);
             
             alert(`✅ PDF با موفقیت تولید شد. تعداد ${filteredRecords.length} صورتحساب در فایل قرار گرفت.`);
         } catch (err: any) {

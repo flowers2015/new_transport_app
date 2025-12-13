@@ -587,7 +587,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 heightLeft -= pageHeight;
             }
 
-            pdf.save(`صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.pdf`);
+            // ذخیره PDF با استفاده از blob برای جلوگیری از هشدار HTTP
+            const filename = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.pdf`;
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
         } catch (err: any) {
             console.error('❌ [exportInvoiceToPDF] Error:', err);
             alert(`خطا در تولید PDF: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
