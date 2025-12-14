@@ -781,10 +781,25 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 tempDiv.style.zIndex = '-1000';
                 document.body.appendChild(tempDiv);
 
-                // Render کردن HTML صورتحساب - استفاده از همان منطق invoiceRef
-                // باید HTML را به صورت دستی بسازیم
+                // Render کردن HTML صورتحساب
                 const htmlContent = generateInvoiceHTML(record, unpaidCalculations, announcementsMap, calcDateFrom, calcDateTo);
-                tempDiv.innerHTML = htmlContent;
+                
+                // استخراج body content از HTML کامل
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+                const bodyContent = doc.body.innerHTML;
+                
+                // اضافه کردن استایل‌های inline برای اطمینان از نمایش
+                tempDiv.innerHTML = `
+                    <style>
+                        body, div { margin: 0; padding: 0; font-family: 'Vazirmatn', Arial, sans-serif; }
+                        .invoice-container { padding: 24px; background: white; width: 100%; }
+                        table { width: 100%; border-collapse: collapse; font-size: 10px; }
+                        th { background-color: #1e293b; color: white; padding: 8px 4px; border: 1px solid #475569; }
+                        td { padding: 8px 4px; border: 1px solid #cbd5e1; }
+                    </style>
+                    ${bodyContent}
+                `;
 
                 // صبر کردن تا محتوا render شود
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -800,7 +815,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Content ready, length:`, innerContent.length);
 
                 // پیدا کردن div اصلی صورتحساب
-                const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
+                const invoiceDiv = tempDiv.querySelector('.invoice-container') || tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
                 
                 if (!invoiceDiv || invoiceDiv === tempDiv) {
                     console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Cannot find invoice div!`);
@@ -825,10 +840,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         allowTaint: true,
                         removeContainer: false,
                         onclone: (clonedDoc) => {
-                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`);
+                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} .invoice-container`) || 
+                                            clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`) ||
+                                            clonedDoc.querySelector(`#temp-invoice-${i}`);
                             if (clonedDiv) {
                                 (clonedDiv as HTMLElement).style.visibility = 'visible';
                                 (clonedDiv as HTMLElement).style.opacity = '1';
+                                (clonedDiv as HTMLElement).style.display = 'block';
                             }
                         }
                     });
@@ -893,7 +911,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
-    // تابع برای تولید HTML صورتحساب
+    // تابع برای تولید HTML صورتحساب - با استایل‌های کامل و inline
     const generateInvoiceHTML = (
         record: PaymentRecord,
         calculations: any[],
@@ -901,42 +919,66 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         calcDateFrom: string,
         calcDateTo: string
     ): string => {
-        // این تابع باید HTML مشابه invoiceRef.current را تولید کند
-        // برای سادگی، از همان ساختار استفاده می‌کنیم
-        // در واقعیت باید تمام محتوا را به صورت HTML string بسازیم
-        // اما برای اکنون، می‌توانیم از یک ساختار ساده استفاده کنیم
+        const totalMainCost = calculations.reduce((sum, calc) => sum + calculateMainDriverCost(calc), 0);
+        const totalAdvance = record.advancePayment || 0;
+        const totalPayable = record.payableAmount || totalMainCost - totalAdvance;
         
         let html = `
-            <div dir="rtl" class="p-6 bg-white mx-auto" style="width: 100%; max-width: 100%; min-height: 210mm;">
-                <div class="mb-4 border-b-2 border-slate-800 pb-3">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div>
-                            <h1 style="font-size: 20px; font-weight: bold; margin-bottom: 8px;">صورتحساب هزینه</h1>
-                            <p style="font-size: 14px; margin-bottom: 4px;">کد پرسنلی: ${record.employeeId}</p>
-                            <p style="font-size: 14px; margin-bottom: 4px;">نام: ${record.driverName}</p>
-                            <p style="font-size: 14px;">شماره حساب: ${record.accountNumber || '-'}</p>
-                        </div>
-                        <div style="text-align: left;">
-                            <p style="font-size: 14px; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
-                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 14px;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
+            <!DOCTYPE html>
+            <html dir="rtl" lang="fa">
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { margin: 0; padding: 0; font-family: 'Vazirmatn', Arial, sans-serif; background: white; }
+                    .invoice-container { padding: 24px; background: white; width: 100%; }
+                    .header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #1e293b; }
+                    .header-content { display: flex; justify-content: space-between; align-items: start; }
+                    .header-right { text-align: right; }
+                    .header-left { text-align: left; }
+                    h1 { font-size: 20px; font-weight: bold; margin: 0 0 8px 0; color: #1e293b; }
+                    p { font-size: 14px; margin: 4px 0; color: #475569; }
+                    .summary { margin: 20px 0; padding: 16px; background: #f1f5f9; border-radius: 8px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 20px; }
+                    th { background-color: #1e293b; color: white; padding: 8px 4px; border: 1px solid #475569; text-align: center; font-weight: bold; }
+                    td { padding: 8px 4px; border: 1px solid #cbd5e1; text-align: center; }
+                    .text-right { text-align: right; }
+                    .text-left { text-align: left; }
+                    .text-center { text-align: center; }
+                    .font-bold { font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="invoice-container" dir="rtl">
+                    <div class="header">
+                        <div class="header-content">
+                            <div class="header-right">
+                                <h1>صورتحساب هزینه</h1>
+                                <p>کد پرسنلی: ${record.employeeId || '-'}</p>
+                                <p>نام: ${record.driverName || '-'}</p>
+                                <p>شماره حساب: ${record.accountNumber || '-'}</p>
+                            </div>
+                            <div class="header-left">
+                                <p>تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
+                                ${calcDateFrom && calcDateTo ? `<p>بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div style="margin-top: 20px;">
-                    <p style="font-size: 14px; font-weight: bold;">تعداد تور: ${calculations.length}</p>
-                    <p style="font-size: 14px; margin-top: 10px;">جمع کل هزینه: ${record.mainDriverAmount?.toLocaleString('fa-IR') || 0} ریال</p>
-                    <p style="font-size: 14px; margin-top: 10px;">کسور (پیش پرداخت): ${record.advancePayment?.toLocaleString('fa-IR') || 0} ریال</p>
-                    <p style="font-size: 16px; font-weight: bold; margin-top: 10px;">مبلغ قابل پرداخت: ${record.payableAmount?.toLocaleString('fa-IR') || 0} ریال</p>
-                </div>
-                <div style="margin-top: 20px;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                    
+                    <div class="summary">
+                        <p class="font-bold">تعداد تور: ${calculations.length}</p>
+                        <p>جمع کل هزینه: ${totalMainCost.toLocaleString('fa-IR')} ریال</p>
+                        <p>کسور (پیش پرداخت): ${totalAdvance.toLocaleString('fa-IR')} ریال</p>
+                        <p class="font-bold" style="font-size: 16px; margin-top: 10px;">مبلغ قابل پرداخت: ${totalPayable.toLocaleString('fa-IR')} ریال</p>
+                    </div>
+                    
+                    <table>
                         <thead>
-                            <tr style="background-color: #1e293b; color: white;">
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: center;">ردیف</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">شماره بارنامه</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">مقاصد</th>
-                                <th style="padding: 4px; border: 1px solid #475569;">تاریخ صدور</th>
-                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">جمع کل</th>
+                            <tr>
+                                <th>ردیف</th>
+                                <th>شماره بارنامه</th>
+                                <th>مقاصد</th>
+                                <th>تاریخ صدور</th>
+                                <th class="text-left">جمع کل (ریال)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -947,23 +989,31 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             const announcement = announcementsMap.get(announcementId);
             const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
             const mainCost = calculateMainDriverCost(calc);
+            const billDate = calc.bill_of_lading_date || calc.billOfLadingDate || '-';
             
             html += `
-                <tr style="border-bottom: 1px solid #cbd5e1;">
-                    <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">${(idx + 1).toLocaleString('fa-IR')}</td>
-                    <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                    <td style="padding: 4px; border: 1px solid #cbd5e1;">${destinations}</td>
-                    <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
-                    <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${mainCost.toLocaleString('fa-IR')}</td>
-                </tr>
+                            <tr>
+                                <td>${(idx + 1).toLocaleString('fa-IR')}</td>
+                                <td>${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                                <td>${destinations}</td>
+                                <td>${billDate}</td>
+                                <td class="text-left">${mainCost.toLocaleString('fa-IR')}</td>
+                            </tr>
             `;
         });
         
         html += `
                         </tbody>
+                        <tfoot>
+                            <tr style="background-color: #f1f5f9; font-weight: bold;">
+                                <td colspan="4" class="text-right">جمع کل:</td>
+                                <td class="text-left">${totalMainCost.toLocaleString('fa-IR')} ریال</td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
-            </div>
+            </body>
+            </html>
         `;
         
         return html;
