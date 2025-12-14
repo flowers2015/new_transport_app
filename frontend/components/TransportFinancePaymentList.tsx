@@ -549,9 +549,27 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
     // تبدیل صورتحساب به PDF (با کیفیت بالا و خوانایی بهتر)
     const exportInvoiceToPDF = async () => {
-        if (!invoiceRef.current || !selectedInvoiceRecord) return;
+        if (!invoiceRef.current || !selectedInvoiceRecord) {
+            alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
+            return;
+        }
+
+        // بررسی اینکه آیا محتوا وجود دارد
+        if (invoiceCalculations.length === 0) {
+            alert('خطا: هیچ محاسبه‌ای برای نمایش در صورتحساب یافت نشد.');
+            return;
+        }
 
         try {
+            // صبر کردن کمی تا محتوا کاملاً render شود
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // بررسی اینکه آیا invoiceRef.current هنوز وجود دارد
+            if (!invoiceRef.current) {
+                alert('خطا: محتوای صورتحساب یافت نشد.');
+                return;
+            }
+
             // استفاده از scale متعادل برای کاهش حجم (در عین حفظ کیفیت)
             const canvas = await html2canvas(invoiceRef.current, {
                 scale: 1.5, // کاهش scale برای کاهش حجم (از 2.5 به 1.5)
@@ -560,6 +578,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 backgroundColor: '#ffffff',
                 allowTaint: true,
                 removeContainer: false,
+                onclone: (clonedDoc) => {
+                    // بررسی اینکه آیا محتوا در cloned document وجود دارد
+                    if (invoiceRef.current) {
+                        const clonedRef = clonedDoc.querySelector(`[data-invoice-ref]`);
+                        if (!clonedRef || clonedRef.children.length === 0) {
+                            console.warn('⚠️ [exportInvoiceToPDF] محتوای صورتحساب در cloned document یافت نشد');
+                        } else {
+                            console.log('✅ [exportInvoiceToPDF] محتوای صورتحساب در cloned document یافت شد:', clonedRef.children.length, 'عنصر');
+                        }
+                    }
+                }
             });
 
             // استفاده از JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
@@ -947,6 +976,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         <div className="flex-1 overflow-auto p-4">
                             <div 
                                 ref={invoiceRef} 
+                                data-invoice-ref="true"
                                 className="p-6 bg-white mx-auto" 
                                 dir="rtl" 
                                 style={{ 

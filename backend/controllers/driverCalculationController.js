@@ -70,6 +70,11 @@ async function saveDriverCalculation(req, res) {
       return isNaN(num) ? defaultValue : Math.round(num);
     };
 
+    // تبدیل undefined به null برای پارامترهای VARCHAR
+    const toNullIfUndefined = (value) => {
+      return value === undefined ? null : (value || null);
+    };
+
     console.log('🔍 [saveDriverCalculation] مقادیر خام دریافت شده:', {
       foodCost: foodCost,
       fuelCost: fuelCost,
@@ -288,12 +293,12 @@ async function saveDriverCalculation(req, res) {
       `;
       
       const updateParams = [
-        billOfLadingNumber || null,
-        billOfLadingDate || null,
+        toNullIfUndefined(billOfLadingNumber),
+        toNullIfUndefined(billOfLadingDate),
         parseNumber(billOfLadingCost, 0),
-        approvedKilometers || null,
+        approvedKilometers !== undefined ? approvedKilometers : null,
         excessKilometers || 0,
-        approvedMissionDays || null,
+        approvedMissionDays !== undefined ? approvedMissionDays : null,
         excessMissionDays || 0,
         validatedTollCost,
         parseNumber(returnCargoCost, 0),
@@ -302,9 +307,9 @@ async function saveDriverCalculation(req, res) {
         (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(), // اطمینان از اینکه integer باشد و NaN نباشد
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
-        helperDriverId || null,
-        helperDriverEmployeeId || null,
-        helperDriverName || null,
+        toNullIfUndefined(helperDriverId),
+        toNullIfUndefined(helperDriverEmployeeId),
+        toNullIfUndefined(helperDriverName),
         parseNumber(helperDriverAllowance, 0),
         parseNumber(helperDriverFoodCost, 0),
         parseNumber(helperDriverExcessMissionDays, 0),
@@ -314,11 +319,11 @@ async function saveDriverCalculation(req, res) {
         validatedFuelCost,
         validatedTourCost,
         validatedTotalCost,
-        notes || null,
-        queueType || null,
-        calculationDate || null,
-        vehicleCode || null,
-        vehiclePlate || null,
+        toNullIfUndefined(notes),
+        toNullIfUndefined(queueType),
+        toNullIfUndefined(calculationDate),
+        toNullIfUndefined(vehicleCode),
+        toNullIfUndefined(vehiclePlate),
         (destinations ? String(destinations) : null),
         parseNumber(multiUnloadCount, 0),
         parseNumber(advancePayment, 0),
@@ -330,7 +335,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
         (depotRows ? JSON.stringify(depotRows) : null),
-        (userId || null),
+        toNullIfUndefined(userId),
         driverId,
         announcementId,
       ];
@@ -385,12 +390,12 @@ async function saveDriverCalculation(req, res) {
         id,
         driverId,
         announcementId,
-        billOfLadingNumber || null,
-        billOfLadingDate || null,
+        toNullIfUndefined(billOfLadingNumber),
+        toNullIfUndefined(billOfLadingDate),
         parseNumber(billOfLadingCost, 0),
-        approvedKilometers || null,
+        approvedKilometers !== undefined ? approvedKilometers : null,
         excessKilometers || 0,
-        approvedMissionDays || null,
+        approvedMissionDays !== undefined ? approvedMissionDays : null,
         excessMissionDays || 0,
         validatedTollCost,
         parseNumber(returnCargoCost, 0),
@@ -399,9 +404,9 @@ async function saveDriverCalculation(req, res) {
         (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(), // اطمینان از اینکه integer باشد و NaN نباشد
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
-        helperDriverId || null,
-        helperDriverEmployeeId || null,
-        helperDriverName || null,
+        toNullIfUndefined(helperDriverId),
+        toNullIfUndefined(helperDriverEmployeeId),
+        toNullIfUndefined(helperDriverName),
         parseNumber(helperDriverAllowance, 0),
         parseNumber(helperDriverFoodCost, 0),
         parseNumber(helperDriverExcessMissionDays, 0),
@@ -411,11 +416,11 @@ async function saveDriverCalculation(req, res) {
         validatedFuelCost,
         validatedTourCost,
         validatedTotalCost,
-        notes || null,
-        queueType || null,
-        calculationDate || null,
-        vehicleCode || null,
-        vehiclePlate || null,
+        toNullIfUndefined(notes),
+        toNullIfUndefined(queueType),
+        toNullIfUndefined(calculationDate),
+        toNullIfUndefined(vehicleCode),
+        toNullIfUndefined(vehiclePlate),
         (destinations ? String(destinations) : null),
         parseNumber(multiUnloadCount, 0),
         parseNumber(advancePayment, 0),
@@ -427,8 +432,8 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
         depotRows ? JSON.stringify(depotRows) : null,
-        userId || null, // created_by
-        userId || null, // updated_by
+        toNullIfUndefined(userId), // created_by
+        toNullIfUndefined(userId), // updated_by
       ]);
 
       console.log('✅ [saveDriverCalculation] اطلاعات جدید ثبت شد:', id);
