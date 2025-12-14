@@ -244,26 +244,32 @@ async function saveDriverCalculation(req, res) {
 
     if (existingCheck.rows.length > 0) {
       // آپدیت رکورد موجود
+      // تبدیل null values به empty string برای VARCHAR parameters
+      const safeString = (val) => {
+        if (val === null || val === undefined) return '';
+        return String(val);
+      };
+      
       const updateQuery = `
         UPDATE driver_calculations SET
-          bill_of_lading_number = COALESCE($1::VARCHAR, NULL),
-          bill_of_lading_date = COALESCE($2::VARCHAR, NULL),
+          bill_of_lading_number = NULLIF($1, ''),
+          bill_of_lading_date = NULLIF($2, ''),
           bill_of_lading_cost = $3,
           approved_kilometers = $4,
           excess_kilometers = $5,
           approved_mission_days = $6,
           excess_mission_days = $7,
           toll_cost = $8,
-          loading_cost = 0, -- این فیلد دیگر استفاده نمی‌شود و همیشه 0 است
+          loading_cost = 0,
           return_cargo_cost = $9,
           return_bill_of_lading_cost = $10,
           multi_unload_cost = $11,
-          excess_mission_cost = COALESCE($12::INTEGER, 0),
+          excess_mission_cost = $12,
           helper_driver_cost = $13,
           fixed_allowance = $14,
-          helper_driver_id = COALESCE($15::VARCHAR, NULL),
-          helper_driver_employee_id = COALESCE($16::VARCHAR, NULL),
-          helper_driver_name = COALESCE($17::VARCHAR, NULL),
+          helper_driver_id = NULLIF($15, ''),
+          helper_driver_employee_id = NULLIF($16, ''),
+          helper_driver_name = NULLIF($17, ''),
           helper_driver_allowance = $18,
           helper_driver_food_cost = $19,
           helper_driver_excess_mission_days = $20,
@@ -273,12 +279,12 @@ async function saveDriverCalculation(req, res) {
           fuel_cost = $24,
           tour_cost = $25,
           total_cost = $26,
-          notes = COALESCE($27::TEXT, NULL),
-          queue_type = COALESCE($28::VARCHAR, NULL),
-          calculation_date = COALESCE($29::VARCHAR, NULL),
-          vehicle_code = COALESCE($30::VARCHAR, NULL),
-          vehicle_plate = COALESCE($31::VARCHAR, NULL),
-          destinations = COALESCE($32::TEXT, NULL),
+          notes = NULLIF($27, ''),
+          queue_type = NULLIF($28, ''),
+          calculation_date = NULLIF($29, ''),
+          vehicle_code = NULLIF($30, ''),
+          vehicle_plate = NULLIF($31, ''),
+          destinations = NULLIF($32, ''),
           multi_unload_count = $33,
           advance_payment = $34,
           depot_total_mileage = $35,
@@ -288,15 +294,21 @@ async function saveDriverCalculation(req, res) {
           depot_kilometer_rate = $39,
           depot_food_cost = $40,
           depot_mission_cost = $41,
-          depot_rows = COALESCE($42::JSONB, NULL),
-          updated_by = COALESCE($43::VARCHAR, NULL),
+          depot_rows = CASE WHEN $42::text = '' THEN NULL ELSE $42::jsonb END,
+          updated_by = NULLIF($43, ''),
           updated_at = NOW()
         WHERE driver_id = $44 AND announcement_id = $45
       `;
       
+      // تبدیل null به empty string برای VARCHAR parameters
+      const safeString = (val) => {
+        if (val === null || val === undefined) return '';
+        return String(val);
+      };
+      
       const updateParams = [
-        toNullIfUndefined(billOfLadingNumber),
-        toNullIfUndefined(billOfLadingDate),
+        safeString(billOfLadingNumber),
+        safeString(billOfLadingDate),
         parseNumber(billOfLadingCost, 0),
         approvedKilometers !== undefined ? approvedKilometers : null,
         excessKilometers || 0,
@@ -306,12 +318,12 @@ async function saveDriverCalculation(req, res) {
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
-        (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(), // اطمینان از اینکه integer باشد و NaN نباشد
+        (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(),
         parseNumber(helperDriverCost, 0),
         parseNumber(fixedAllowance, 0),
-        toNullIfUndefined(helperDriverId),
-        toNullIfUndefined(helperDriverEmployeeId),
-        toNullIfUndefined(helperDriverName),
+        safeString(helperDriverId), // $15 - تبدیل null به empty string
+        safeString(helperDriverEmployeeId),
+        safeString(helperDriverName),
         parseNumber(helperDriverAllowance, 0),
         parseNumber(helperDriverFoodCost, 0),
         parseNumber(helperDriverExcessMissionDays, 0),
@@ -321,12 +333,12 @@ async function saveDriverCalculation(req, res) {
         validatedFuelCost,
         validatedTourCost,
         validatedTotalCost,
-        toNullIfUndefined(notes),
-        toNullIfUndefined(queueType),
-        toNullIfUndefined(calculationDate),
-        toNullIfUndefined(vehicleCode),
-        toNullIfUndefined(vehiclePlate),
-        (destinations ? String(destinations) : null),
+        safeString(notes),
+        safeString(queueType),
+        safeString(calculationDate),
+        safeString(vehicleCode),
+        safeString(vehiclePlate),
+        safeString(destinations),
         parseNumber(multiUnloadCount, 0),
         parseNumber(advancePayment, 0),
         parseNumber(depotTotalMileage, 0),
@@ -336,8 +348,8 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotKilometerRate, 0),
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
-        (depotRows ? JSON.stringify(depotRows) : null),
-        toNullIfUndefined(userId),
+        (depotRows ? JSON.stringify(depotRows) : ''),
+        safeString(userId),
         driverId,
         announcementId,
       ];
@@ -366,26 +378,11 @@ async function saveDriverCalculation(req, res) {
         });
       }
       
-      // بررسی undefined بودن پارامترها و تبدیل به null
-      // برای پارامترهای VARCHAR (indices: 0, 1, 14, 15, 16, 26, 27, 28, 29, 30, 31, 42, 43)
-      // باید string یا null باشند (نه undefined)
-      const varcharIndices = [0, 1, 14, 15, 16, 26, 27, 28, 29, 30, 31, 42, 43]; // indices for VARCHAR parameters
+      // همه پارامترها قبلاً sanitize شده‌اند، فقط بررسی نهایی
       const sanitizedParams = updateParams.map((p, i) => {
         if (p === undefined) {
-          console.warn(`⚠️ [saveDriverCalculation] پارامتر ${i + 1} ($${i + 1}) undefined است، تبدیل به null می‌شود`);
-          return null;
-        }
-        // برای پارامترهای VARCHAR، مطمئن شویم که string یا null است
-        if (varcharIndices.includes(i)) {
-          if (p === null || p === undefined) {
-            return null;
-          }
-          // تبدیل به string اگر نیست
-          return String(p);
-        }
-        // برای سایر پارامترها
-        if (p === null) {
-          return null;
+          console.warn(`⚠️ [saveDriverCalculation] پارامتر ${i + 1} ($${i + 1}) undefined است`);
+          return i < 2 || (i >= 14 && i <= 16) || (i >= 26 && i <= 31) || i === 42 || i === 43 ? '' : null;
         }
         return p;
       });

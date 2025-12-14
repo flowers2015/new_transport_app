@@ -579,9 +579,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 console.warn('⚠️ [exportInvoiceToPDF] اندازه invoiceRef صفر است، ممکن است محتوا render نشده باشد');
             }
             
-            // صبر کردن کمی تا محتوا کاملاً render شود
-            console.log('📄 [exportInvoiceToPDF] صبر 500ms برای render شدن محتوا...');
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // صبر کردن بیشتر تا محتوا کاملاً render شود
+            console.log('📄 [exportInvoiceToPDF] صبر 1000ms برای render شدن محتوا...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
             // بررسی مجدد
             if (!invoiceRef.current) {
@@ -590,34 +590,48 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 return;
             }
             
+            // بررسی مجدد محتوا
+            const hasContent = invoiceRef.current.innerHTML.length > 100 && 
+                              invoiceRef.current.offsetHeight > 0 && 
+                              invoiceRef.current.offsetWidth > 0;
+            
+            console.log('📄 [exportInvoiceToPDF] بررسی نهایی محتوا:', {
+                innerHTMLLength: invoiceRef.current.innerHTML.length,
+                offsetHeight: invoiceRef.current.offsetHeight,
+                offsetWidth: invoiceRef.current.offsetWidth,
+                hasContent
+            });
+            
+            if (!hasContent) {
+                console.error('❌ [exportInvoiceToPDF] محتوا render نشده است!');
+                alert('خطا: محتوای صورتحساب render نشده است. لطفاً صفحه را refresh کنید و دوباره تلاش کنید.');
+                return;
+            }
+            
             console.log('📄 [exportInvoiceToPDF] شروع html2canvas...');
-            console.log('📄 [exportInvoiceToPDF] invoiceRef.current.innerHTML.length پس از delay:', invoiceRef.current.innerHTML.length);
 
-            // استفاده از scale متعادل برای کاهش حجم (در عین حفظ کیفیت)
+            // استفاده از scale بالاتر برای اطمینان از کیفیت
             const canvas = await html2canvas(invoiceRef.current, {
-                scale: 1.5, // کاهش scale برای کاهش حجم (از 2.5 به 1.5)
+                scale: 2, // افزایش scale برای کیفیت بهتر
                 useCORS: true,
-                logging: true, // فعال کردن logging برای دیباگ
+                logging: false,
                 backgroundColor: '#ffffff',
                 allowTaint: true,
                 removeContainer: false,
+                windowWidth: invoiceRef.current.scrollWidth,
+                windowHeight: invoiceRef.current.scrollHeight,
                 onclone: (clonedDoc) => {
                     console.log('📄 [exportInvoiceToPDF] onclone callback فراخوانی شد');
-                    // بررسی اینکه آیا محتوا در cloned document وجود دارد
-                    if (invoiceRef.current) {
-                        const clonedRef = clonedDoc.querySelector(`[data-invoice-ref]`);
-                        console.log('📄 [exportInvoiceToPDF] clonedRef:', clonedRef ? 'موجود' : 'null');
-                        if (clonedRef) {
-                            console.log('📄 [exportInvoiceToPDF] clonedRef.children.length:', clonedRef.children.length);
-                            console.log('📄 [exportInvoiceToPDF] clonedRef.innerHTML.length:', clonedRef.innerHTML.length);
-                            console.log('📄 [exportInvoiceToPDF] clonedRef.offsetHeight:', clonedRef.offsetHeight);
-                            console.log('📄 [exportInvoiceToPDF] clonedRef.offsetWidth:', clonedRef.offsetWidth);
-                        }
-                        if (!clonedRef || clonedRef.children.length === 0) {
-                            console.error('❌ [exportInvoiceToPDF] محتوای صورتحساب در cloned document یافت نشد');
-                        } else {
-                            console.log('✅ [exportInvoiceToPDF] محتوای صورتحساب در cloned document یافت شد:', clonedRef.children.length, 'عنصر');
-                        }
+                    const clonedRef = clonedDoc.querySelector(`[data-invoice-ref]`);
+                    if (clonedRef) {
+                        console.log('✅ [exportInvoiceToPDF] clonedRef یافت شد:', {
+                            children: clonedRef.children.length,
+                            innerHTML: clonedRef.innerHTML.length,
+                            height: clonedRef.offsetHeight,
+                            width: clonedRef.offsetWidth
+                        });
+                    } else {
+                        console.error('❌ [exportInvoiceToPDF] clonedRef یافت نشد!');
                     }
                 }
             });
