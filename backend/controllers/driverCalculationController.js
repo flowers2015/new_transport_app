@@ -341,9 +341,13 @@ async function saveDriverCalculation(req, res) {
         announcementId,
       ];
       
-      // شمارش دقیق پارامترهای query
-      const queryParamCount = (updateQuery.match(/\$\d+/g) || []).length;
-      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE Query:', queryParamCount);
+      // شمارش دقیق پارامترهای query - فقط پارامترهای منحصر به فرد
+      const paramMatches = updateQuery.match(/\$\d+/g) || [];
+      const uniqueParams = [...new Set(paramMatches.map(m => parseInt(m.replace('$', ''))))].sort((a, b) => a - b);
+      const queryParamCount = uniqueParams.length;
+      const maxParam = uniqueParams.length > 0 ? Math.max(...uniqueParams) : 0;
+      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای منحصر به فرد در UPDATE Query:', queryParamCount);
+      console.log('🔍 [saveDriverCalculation] بیشترین پارامتر:', maxParam);
       console.log('🔍 [saveDriverCalculation] تعداد پارامترهای ارسالی:', updateParams.length);
       console.log('🔍 [saveDriverCalculation] جزئیات پارامترها:', updateParams.map((p, i) => ({ 
         index: i + 1, 

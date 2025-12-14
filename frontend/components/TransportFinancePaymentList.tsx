@@ -694,7 +694,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
-    // تولید PDF برای همه رانندگان فیلتر شده
+    // تولید PDF برای همه رانندگان فیلتر شده - روش ساده و مطمئن
     const exportAllInvoicesToPDF = async () => {
         if (filteredRecords.length === 0) {
             alert('هیچ صورتحسابی برای تولید PDF وجود ندارد.');
@@ -712,19 +712,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 'Content-Type': 'application/json',
             };
 
-            // ایجاد PDF
-            const pdf = new jsPDF('p', 'mm', 'a4'); // portrait orientation
-            const pageWidth = 210; // A4 width in mm
-            const pageHeight = 297; // A4 height in mm
+            // ایجاد PDF - landscape برای جدول‌های بزرگ
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const pageWidth = 297; // A4 landscape width
+            const pageHeight = 210; // A4 landscape height
 
             // برای هر رکورد
             for (let i = 0; i < filteredRecords.length; i++) {
                 const record = filteredRecords[i];
-                
-                // نمایش پیشرفت
                 console.log(`📄 در حال تولید صورتحساب ${i + 1} از ${filteredRecords.length}: ${record.driverName}`);
 
-                // دریافت محاسبات مربوط به این راننده (پرداخت نشده)
+                // دریافت محاسبات
                 const calcDateFrom = record.calculationDateFrom || '';
                 const calcDateTo = record.calculationDateTo || '';
                 let calculationsUrl = `driver-calculations?driverId=${record.driverId}`;
@@ -739,11 +737,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
                 const calculationsData = await calculationsRes.json();
                 const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
-                
-                // فقط محاسبات پرداخت نشده را نمایش بده
-                const unpaidCalculations = calculationsArray.filter((calc: any) => 
-                    !calc.is_paid && !calc.isPaid
-                );
+                const unpaidCalculations = calculationsArray.filter((calc: any) => !calc.is_paid && !calc.isPaid);
 
                 if (unpaidCalculations.length === 0) {
                     console.warn(`⚠️ هیچ محاسبه پرداخت نشده‌ای برای ${record.driverName} یافت نشد`);
@@ -767,7 +761,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     }
                 }));
 
-                // ایجاد یک div موقت برای render کردن HTML صورتحساب
+                // ایجاد div موقت
                 const tempDiv = document.createElement('div');
                 tempDiv.id = `temp-invoice-${i}`;
                 tempDiv.style.position = 'absolute';
@@ -781,72 +775,44 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 tempDiv.style.zIndex = '-1000';
                 document.body.appendChild(tempDiv);
 
-                // Render کردن HTML صورتحساب
+                // تولید HTML - فقط div (بدون DOCTYPE)
                 const htmlContent = generateInvoiceHTML(record, unpaidCalculations, announcementsMap, calcDateFrom, calcDateTo);
-                
-                // استخراج body content از HTML کامل
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlContent, 'text/html');
-                const bodyContent = doc.body.innerHTML;
-                
-                // اضافه کردن استایل‌های inline برای اطمینان از نمایش
-                tempDiv.innerHTML = `
-                    <style>
-                        body, div { margin: 0; padding: 0; font-family: 'Vazirmatn', Arial, sans-serif; }
-                        .invoice-container { padding: 24px; background: white; width: 100%; }
-                        table { width: 100%; border-collapse: collapse; font-size: 10px; }
-                        th { background-color: #1e293b; color: white; padding: 8px 4px; border: 1px solid #475569; }
-                        td { padding: 8px 4px; border: 1px solid #cbd5e1; }
-                    </style>
-                    ${bodyContent}
-                `;
+                tempDiv.innerHTML = htmlContent;
 
-                // صبر کردن تا محتوا render شود
+                // صبر برای render
                 await new Promise(resolve => setTimeout(resolve, 2000));
 
-                // بررسی اینکه آیا محتوا در DOM موجود است
-                const innerContent = tempDiv.innerHTML;
-                if (!innerContent || innerContent.length < 100) {
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] HTML content is empty or too short!`);
+                // بررسی محتوا
+                if (!tempDiv.innerHTML || tempDiv.innerHTML.length < 100) {
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] HTML content is empty!`);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
 
-                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Content ready, length:`, innerContent.length);
-
-                // پیدا کردن div اصلی صورتحساب
-                const invoiceDiv = tempDiv.querySelector('.invoice-container') || tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
+                // پیدا کردن div اصلی
+                const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
                 
                 if (!invoiceDiv || invoiceDiv === tempDiv) {
                     console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Cannot find invoice div!`);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
-                
-                // بررسی محتوای invoiceDiv
-                const divContent = invoiceDiv.innerHTML;
-                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Invoice div found, content length:`, divContent.length);
 
                 // تبدیل به canvas
                 let canvas;
                 try {
-                    console.log(`🔄 [PDF ${i+1}/${filteredRecords.length}] Starting html2canvas...`);
-                    
                     canvas = await html2canvas(invoiceDiv as HTMLElement, {
                         scale: 1.5,
                         useCORS: true,
-                        logging: false,
+                        logging: true,
                         backgroundColor: '#ffffff',
                         allowTaint: true,
                         removeContainer: false,
                         onclone: (clonedDoc) => {
-                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} .invoice-container`) || 
-                                            clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`) ||
-                                            clonedDoc.querySelector(`#temp-invoice-${i}`);
+                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`);
                             if (clonedDiv) {
                                 (clonedDiv as HTMLElement).style.visibility = 'visible';
                                 (clonedDiv as HTMLElement).style.opacity = '1';
-                                (clonedDiv as HTMLElement).style.display = 'block';
                             }
                         }
                     });
@@ -857,14 +823,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         continue;
                     }
                     
-                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas created: ${canvas.width}x${canvas.height}`);
+                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas: ${canvas.width}x${canvas.height}`);
                 } catch (canvasError: any) {
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error creating canvas:`, canvasError);
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error:`, canvasError);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
 
-                // حذف div موقت
                 document.body.removeChild(tempDiv);
 
                 // تبدیل به JPEG
@@ -872,19 +837,18 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 const imgHeight = (canvas.height * pageWidth) / canvas.width;
                 let heightLeft = imgHeight;
 
-                // اضافه کردن به PDF
+                // اضافه به PDF
                 if (i > 0) {
-                    pdf.addPage(); // اضافه کردن صفحه جدید برای هر صورتحساب
+                    pdf.addPage('l');
                 }
 
                 let position = 0;
                 pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, imgHeight);
                 heightLeft -= pageHeight;
 
-                // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
                 while (heightLeft >= 0) {
                     position = heightLeft - imgHeight;
-                    pdf.addPage();
+                    pdf.addPage('l');
                     pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, imgHeight);
                     heightLeft -= pageHeight;
                 }
@@ -911,7 +875,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
-    // تابع برای تولید HTML صورتحساب - با استایل‌های کامل و inline
+    // تابع برای تولید HTML صورتحساب - فقط div با استایل inline (مشابه TransportFinancePaidInvoices)
     const generateInvoiceHTML = (
         record: PaymentRecord,
         calculations: any[],
@@ -923,65 +887,39 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         const totalAdvance = record.advancePayment || 0;
         const totalPayable = record.payableAmount || totalMainCost - totalAdvance;
         
-        let html = `
-            <!DOCTYPE html>
-            <html dir="rtl" lang="fa">
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body { margin: 0; padding: 0; font-family: 'Vazirmatn', Arial, sans-serif; background: white; }
-                    .invoice-container { padding: 24px; background: white; width: 100%; }
-                    .header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #1e293b; }
-                    .header-content { display: flex; justify-content: space-between; align-items: start; }
-                    .header-right { text-align: right; }
-                    .header-left { text-align: left; }
-                    h1 { font-size: 20px; font-weight: bold; margin: 0 0 8px 0; color: #1e293b; }
-                    p { font-size: 14px; margin: 4px 0; color: #475569; }
-                    .summary { margin: 20px 0; padding: 16px; background: #f1f5f9; border-radius: 8px; }
-                    table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 20px; }
-                    th { background-color: #1e293b; color: white; padding: 8px 4px; border: 1px solid #475569; text-align: center; font-weight: bold; }
-                    td { padding: 8px 4px; border: 1px solid #cbd5e1; text-align: center; }
-                    .text-right { text-align: right; }
-                    .text-left { text-align: left; }
-                    .text-center { text-align: center; }
-                    .font-bold { font-weight: bold; }
-                </style>
-            </head>
-            <body>
-                <div class="invoice-container" dir="rtl">
-                    <div class="header">
-                        <div class="header-content">
-                            <div class="header-right">
-                                <h1>صورتحساب هزینه</h1>
-                                <p>کد پرسنلی: ${record.employeeId || '-'}</p>
-                                <p>نام: ${record.driverName || '-'}</p>
-                                <p>شماره حساب: ${record.accountNumber || '-'}</p>
-                            </div>
-                            <div class="header-left">
-                                <p>تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
-                                ${calcDateFrom && calcDateTo ? `<p>بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
-                            </div>
+        // فقط div با استایل inline (بدون DOCTYPE و head)
+        let html = `<div dir="rtl" style="width: 100%; min-height: 100%; font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box; direction: rtl; text-align: right;">
+                <div style="margin-bottom: 16px; border-bottom: 2px solid #1e293b; padding-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <h1 style="font-size: 24px; font-weight: bold; color: #1e293b; margin-bottom: 8px;">صورتحساب هزینه</h1>
+                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">کد پرسنلی: ${record.employeeId || '-'}</p>
+                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">نام: ${record.driverName || '-'}</p>
+                            <p style="font-size: 14px; color: #475569;">شماره حساب: ${record.accountNumber || '-'}</p>
+                        </div>
+                        <div style="text-align: left;">
+                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
+                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 14px; color: #475569;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
                         </div>
                     </div>
-                    
-                    <div class="summary">
-                        <p class="font-bold">تعداد تور: ${calculations.length}</p>
-                        <p>جمع کل هزینه: ${totalMainCost.toLocaleString('fa-IR')} ریال</p>
-                        <p>کسور (پیش پرداخت): ${totalAdvance.toLocaleString('fa-IR')} ریال</p>
-                        <p class="font-bold" style="font-size: 16px; margin-top: 10px;">مبلغ قابل پرداخت: ${totalPayable.toLocaleString('fa-IR')} ریال</p>
-                    </div>
-                    
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ردیف</th>
-                                <th>شماره بارنامه</th>
-                                <th>مقاصد</th>
-                                <th>تاریخ صدور</th>
-                                <th class="text-left">جمع کل (ریال)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                </div>
+                <div style="margin-top: 20px; padding: 16px; background-color: #f1f5f9; border-radius: 8px;">
+                    <p style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">تعداد تور: ${calculations.length}</p>
+                    <p style="font-size: 14px; margin-bottom: 4px;">جمع کل هزینه: ${totalMainCost.toLocaleString('fa-IR')} ریال</p>
+                    <p style="font-size: 14px; margin-bottom: 4px;">کسور (پیش پرداخت): ${totalAdvance.toLocaleString('fa-IR')} ریال</p>
+                    <p style="font-size: 16px; font-weight: bold; margin-top: 8px;">مبلغ قابل پرداخت: ${totalPayable.toLocaleString('fa-IR')} ریال</p>
+                </div>
+                <table style="width: 100%; font-size: 12px; border-collapse: collapse; border: 1px solid #1e293b; margin-top: 20px;">
+                    <thead>
+                        <tr style="background-color: #1e293b; color: white;">
+                            <th style="padding: 6px; border: 1px solid #475569; text-align: center; font-size: 12px; font-weight: bold;">ردیف</th>
+                            <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">شماره بارنامه</th>
+                            <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">مقاصد</th>
+                            <th style="padding: 6px; border: 1px solid #475569; font-size: 12px; font-weight: bold;">تاریخ صدور</th>
+                            <th style="padding: 6px; border: 1px solid #475569; text-align: left; font-size: 12px; font-weight: bold;">جمع کل (ریال)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
         `;
         
         calculations.forEach((calc, idx) => {
@@ -992,29 +930,26 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             const billDate = calc.bill_of_lading_date || calc.billOfLadingDate || '-';
             
             html += `
-                            <tr>
-                                <td>${(idx + 1).toLocaleString('fa-IR')}</td>
-                                <td>${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                                <td>${destinations}</td>
-                                <td>${billDate}</td>
-                                <td class="text-left">${mainCost.toLocaleString('fa-IR')}</td>
-                            </tr>
+                        <tr style="border-bottom: 1px solid #cbd5e1;">
+                            <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${(idx + 1).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                            <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${destinations}</td>
+                            <td style="padding: 6px; border: 1px solid #cbd5e1; font-size: 12px;">${billDate}</td>
+                            <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${mainCost.toLocaleString('fa-IR')}</td>
+                        </tr>
             `;
         });
         
         html += `
-                        </tbody>
-                        <tfoot>
-                            <tr style="background-color: #f1f5f9; font-weight: bold;">
-                                <td colspan="4" class="text-right">جمع کل:</td>
-                                <td class="text-left">${totalMainCost.toLocaleString('fa-IR')} ریال</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </body>
-            </html>
-        `;
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #f1f5f9; font-weight: bold;">
+                            <td colspan="4" style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; font-size: 12px;">جمع کل:</td>
+                            <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px;">${totalMainCost.toLocaleString('fa-IR')} ریال</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>`;
         
         return html;
     };
