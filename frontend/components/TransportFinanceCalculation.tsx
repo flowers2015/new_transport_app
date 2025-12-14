@@ -554,8 +554,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 return;
             }
             
-            // صبر کن تا calculateDriverData تنظیم شود
-            if (calculateDriverData.length === 0) {
+            // اگر calculateDriverData خالی است اما calculations پر است، از calculations استفاده کن
+            // این برای زمانی است که component دوباره mount شده و calculateDriverData هنوز محاسبه نشده
+            if (calculateDriverData.length === 0 && calculations.length === 0) {
                 console.log('⏳ [loadSavedCalculations] در انتظار calculateDriverData...');
                 return;
             }
@@ -563,8 +564,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('🔄 [loadSavedCalculations] شروع بارگذاری داده‌های ذخیره شده...', {
                 announcementsCount: announcements.length,
                 calculateDriverDataCount: calculateDriverData.length,
-                refreshTrigger,
-                currentCalculationsCount: calculations.length
+                currentCalculationsCount: calculations.length,
+                refreshTrigger
             });
             
             try {
@@ -594,6 +595,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         source: calculateDriverData.length > 0 ? 'calculateDriverData' : 'calculations',
                         count: baseData.length
                     });
+                    
+                    // اگر baseData خالی است، یعنی هنوز داده‌ای نداریم - صبر کن
+                    if (baseData.length === 0) {
+                        console.log('⏳ [loadSavedCalculations] baseData خالی است، صبر می‌کنیم...');
+                        return;
+                    }
                     
                     // Merge کردن داده‌های ذخیره شده با baseData
                     const updated = baseData.map(calc => {
@@ -693,13 +700,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     console.log('✅ [loadSavedCalculations] داده‌ها با موفقیت load شدند');
                 } else {
                     console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText);
-                    // حتی اگر خطا داد، calculateDriverData را set کن
-                    setCalculations(calculateDriverData);
+                    // اگر خطا داد و calculateDriverData داریم، از آن استفاده کن
+                    if (calculateDriverData.length > 0) {
+                        setCalculations(calculateDriverData);
+                    }
                 }
             } catch (err) {
                 console.error('❌ [loadSavedCalculations] خطا در بارگذاری داده‌های ذخیره شده:', err);
-                // حتی اگر خطا داد، calculateDriverData را set کن
-                setCalculations(calculateDriverData);
+                // اگر خطا داد و calculateDriverData داریم، از آن استفاده کن
+                if (calculateDriverData.length > 0) {
+                    setCalculations(calculateDriverData);
+                }
             }
         };
         
