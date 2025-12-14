@@ -190,6 +190,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     useEffect(() => {
         fetchData();
         fetchRegulations();
+        // Reset refreshTrigger هنگام mount شدن component
+        setRefreshTrigger(0);
     }, []);
 
     // محاسبه اتوماتیک اجرت وقتی دیالوگ باز شد و صف "اجرت ثابت" هست یا پیمایش تغییر کرد (با debounce)
@@ -540,21 +542,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         return Array.from(driverMap.values());
     }, [announcements, drivers, vehicles]);
 
-    useEffect(() => {
-        setCalculations(calculateDriverData);
-    }, [calculateDriverData]);
-
     // State برای force refresh داده‌ها
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [dataLoaded, setDataLoaded] = useState(false);
     
     // بارگذاری داده‌های ذخیره شده از دیتابیس - بعد از fetchData
     useEffect(() => {
         const loadSavedCalculations = async () => {
             // صبر کن تا announcements بارگذاری شوند
-            if (!announcements.length) return;
+            if (!announcements.length) {
+                console.log('⏳ [loadSavedCalculations] در انتظار announcements...');
+                return;
+            }
             
             // صبر کن تا calculateDriverData تنظیم شود
-            if (calculateDriverData.length === 0) return;
+            if (calculateDriverData.length === 0) {
+                console.log('⏳ [loadSavedCalculations] در انتظار calculateDriverData...');
+                return;
+            }
+            
+            console.log('🔄 [loadSavedCalculations] شروع بارگذاری داده‌های ذخیره شده...', {
+                announcementsCount: announcements.length,
+                calculateDriverDataCount: calculateDriverData.length,
+                refreshTrigger
+            });
             
             try {
                 const token = localStorage.getItem('token');
@@ -672,11 +683,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     // تنظیم calculations با داده‌های merge شده
                     setCalculations(filteredUpdated);
+                    console.log('✅ [loadSavedCalculations] داده‌ها با موفقیت load شدند');
                 } else {
                     console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText);
+                    // حتی اگر خطا داد، calculateDriverData را set کن
+                    setCalculations(calculateDriverData);
                 }
             } catch (err) {
                 console.error('❌ [loadSavedCalculations] خطا در بارگذاری داده‌های ذخیره شده:', err);
+                // حتی اگر خطا داد، calculateDriverData را set کن
+                setCalculations(calculateDriverData);
             }
         };
         
