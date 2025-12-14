@@ -1019,7 +1019,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const excelData = getExcelFilteredData();
         
         const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'نوع صف', 'تعداد تور', 'تور تریلی', 'تور ده‌چرخ', 'کل پیمایش (کیلومتر)', 'اجرت (ریال)', 'سایر هزینه‌ها (ریال)', 'جمع قابل پرداخت (ریال)']
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'نوع صف', 'تعداد تور', 'تور تریلی', 'تور ده‌چرخ', 'کل پیمایش (کیلومتر)', 'اجرت (ریال)', 'جمع قابل پرداخت (ریال)']
         ];
 
         excelData.forEach((calc, index) => {
@@ -1096,7 +1096,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 tenWheelerCount,
                 totalKm,
                 totalTourCost,
-                otherCosts,
                 totalCost
             ]);
         });
@@ -1118,8 +1117,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 // فرمت اعداد برای ستون‌های عددی (ردیف 0 = هدر)
                 if (R > 0) {
                     const colIndex = C;
-                    // ستون‌های عددی: ردیف (0), تعداد تور (4), تور محاسبه‌نشده (5), تور محاسبه‌شده (6), پیمایش (7), هزینه (8)
-                    if ([0, 4, 5, 6, 7, 8].includes(colIndex)) {
+                    // ستون‌های عددی: ردیف (0), تعداد تور (4), تور تریلی (5), تور ده‌چرخ (6), کل پیمایش (7), اجرت (8), جمع قابل پرداخت (9)
+                    if ([0, 4, 5, 6, 7, 8, 9].includes(colIndex)) {
                         if (typeof wsData[R][colIndex] === 'number') {
                             ws[cellAddress].z = '#,##0';
                         }
@@ -1139,7 +1138,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             { wch: 12 }, // تور ده‌چرخ
             { wch: 18 }, // کل پیمایش
             { wch: 18 }, // اجرت
-            { wch: 20 }, // سایر هزینه‌ها
             { wch: 20 }  // جمع قابل پرداخت
         ];
         
