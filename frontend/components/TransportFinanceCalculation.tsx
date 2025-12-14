@@ -544,7 +544,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
     // State برای force refresh داده‌ها
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [dataLoaded, setDataLoaded] = useState(false);
     
     // بارگذاری داده‌های ذخیره شده از دیتابیس - بعد از fetchData
     useEffect(() => {
@@ -564,7 +563,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('🔄 [loadSavedCalculations] شروع بارگذاری داده‌های ذخیره شده...', {
                 announcementsCount: announcements.length,
                 calculateDriverDataCount: calculateDriverData.length,
-                refreshTrigger
+                refreshTrigger,
+                currentCalculationsCount: calculations.length
             });
             
             try {
@@ -578,7 +578,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 const savedRes = await fetch(getApiUrl('driver-calculations'), { headers });
                 if (savedRes.ok) {
                     const savedData = await savedRes.json();
-                    console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده:', savedData.length, 'رکورد');
+                    console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده از سرور:', savedData.length, 'رکورد');
                     
                     // فیلتر کردن تورهایی که دوره‌شان بسته شده (commission_calculated یا paid)
                     const closedTourIds = new Set(
@@ -588,8 +588,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     );
                     console.log('🔒 [loadSavedCalculations] تورهای بسته شده:', closedTourIds.size, 'تور');
                     
-                    // Merge کردن داده‌های ذخیره شده با calculateDriverData
-                    const updated = calculateDriverData.map(calc => {
+                    // استفاده از calculateDriverData به عنوان base - اگر خالی بود، از calculations فعلی استفاده کن
+                    const baseData = calculateDriverData.length > 0 ? calculateDriverData : calculations;
+                    console.log('📊 [loadSavedCalculations] استفاده از base data:', {
+                        source: calculateDriverData.length > 0 ? 'calculateDriverData' : 'calculations',
+                        count: baseData.length
+                    });
+                    
+                    // Merge کردن داده‌های ذخیره شده با baseData
+                    const updated = baseData.map(calc => {
                             // فیلتر کردن تورهایی که بسته نشده‌اند
                             const openTours = calc.tours.filter(tour => !closedTourIds.has(tour.announcementId));
                             
@@ -697,7 +704,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         };
         
         loadSavedCalculations();
-    }, [announcements.length, calculateDriverData, refreshTrigger]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [announcements.length, calculateDriverData.length, refreshTrigger]);
 
     // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
     useEffect(() => {
@@ -2079,15 +2087,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 
                 // Trigger refresh برای اطمینان از به‌روزرسانی
                 setRefreshTrigger(prev => prev + 1);
+            } else {
+                console.warn('⚠️ [handleSaveInputData] خطا در دریافت داده‌های به‌روز شده:', savedRes.status);
+                // Trigger refresh برای اجرای دوباره loadSavedCalculations
+                setRefreshTrigger(prev => prev + 1);
             }
         } catch (fetchErr) {
             console.warn('⚠️ [handleSaveInputData] خطا در دریافت داده‌های به‌روز شده:', fetchErr);
-            // اگر fetch خطا داد، از روش قبلی استفاده کن (به‌روزرسانی local state)
-            // اما باز هم trigger را به‌روز کن
+            // Trigger refresh برای اجرای دوباره loadSavedCalculations
             setRefreshTrigger(prev => prev + 1);
         }
         
-        // به‌روزرسانی اطلاعات این تور خاص (fallback - اگر fetch خطا داد)
+        // به‌روزرسانی اطلاعات این تور خاص (fallback - فقط برای نمایش فوری)
+        // اما loadSavedCalculations باید دوباره اجرا شود
         setCalculations(prev => {
             const updated = prev.map(c => {
                 if (c.driverId === inputDialogData.driverId) {
