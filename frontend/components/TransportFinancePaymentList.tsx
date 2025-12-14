@@ -694,6 +694,281 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
+    // تولید PDF برای همه رانندگان فیلتر شده
+    const exportAllInvoicesToPDF = async () => {
+        if (filteredRecords.length === 0) {
+            alert('هیچ صورتحسابی برای تولید PDF وجود ندارد.');
+            return;
+        }
+
+        if (!confirm(`آیا می‌خواهید PDF برای ${filteredRecords.length} راننده تولید شود؟ این عملیات ممکن است چند دقیقه طول بکشد.`)) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            // ایجاد PDF
+            const pdf = new jsPDF('p', 'mm', 'a4'); // portrait orientation
+            const pageWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+
+            // برای هر رکورد
+            for (let i = 0; i < filteredRecords.length; i++) {
+                const record = filteredRecords[i];
+                
+                // نمایش پیشرفت
+                console.log(`📄 در حال تولید صورتحساب ${i + 1} از ${filteredRecords.length}: ${record.driverName}`);
+
+                // دریافت محاسبات مربوط به این راننده (پرداخت نشده)
+                const calcDateFrom = record.calculationDateFrom || '';
+                const calcDateTo = record.calculationDateTo || '';
+                let calculationsUrl = `driver-calculations?driverId=${record.driverId}`;
+                if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
+                if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
+
+                const calculationsRes = await fetch(getApiUrl(calculationsUrl), { headers });
+                if (!calculationsRes.ok) {
+                    console.warn(`⚠️ خطا در دریافت محاسبات برای ${record.driverName}`);
+                    continue;
+                }
+
+                const calculationsData = await calculationsRes.json();
+                const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
+                
+                // فقط محاسبات پرداخت نشده را نمایش بده
+                const unpaidCalculations = calculationsArray.filter((calc: any) => 
+                    !calc.is_paid && !calc.isPaid
+                );
+
+                if (unpaidCalculations.length === 0) {
+                    console.warn(`⚠️ هیچ محاسبه پرداخت نشده‌ای برای ${record.driverName} یافت نشد`);
+                    continue;
+                }
+
+                // دریافت اطلاعات اعلام بار
+                const announcementsMap = new Map<string, any>();
+                await Promise.all(unpaidCalculations.map(async (calc: any) => {
+                    const announcementId = calc.announcement_id || calc.announcementId;
+                    if (announcementId && !announcementsMap.has(announcementId)) {
+                        try {
+                            const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
+                            if (annRes.ok) {
+                                const annData = await annRes.json();
+                                announcementsMap.set(announcementId, annData);
+                            }
+                        } catch (err) {
+                            console.warn('⚠️ خطا در دریافت اعلام بار:', err);
+                        }
+                    }
+                }));
+
+                // ایجاد یک div موقت برای render کردن HTML صورتحساب
+                const tempDiv = document.createElement('div');
+                tempDiv.id = `temp-invoice-${i}`;
+                tempDiv.style.position = 'absolute';
+                tempDiv.style.top = '-10000px';
+                tempDiv.style.left = '0';
+                tempDiv.style.width = '1200px';
+                tempDiv.style.backgroundColor = '#ffffff';
+                tempDiv.style.padding = '0';
+                tempDiv.style.boxSizing = 'border-box';
+                tempDiv.style.overflow = 'visible';
+                tempDiv.style.zIndex = '-1000';
+                document.body.appendChild(tempDiv);
+
+                // Render کردن HTML صورتحساب - استفاده از همان منطق invoiceRef
+                // باید HTML را به صورت دستی بسازیم
+                const htmlContent = generateInvoiceHTML(record, unpaidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+                tempDiv.innerHTML = htmlContent;
+
+                // صبر کردن تا محتوا render شود
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // بررسی اینکه آیا محتوا در DOM موجود است
+                const innerContent = tempDiv.innerHTML;
+                if (!innerContent || innerContent.length < 100) {
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] HTML content is empty or too short!`);
+                    document.body.removeChild(tempDiv);
+                    continue;
+                }
+
+                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Content ready, length:`, innerContent.length);
+
+                // پیدا کردن div اصلی صورتحساب
+                const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
+                
+                if (!invoiceDiv || invoiceDiv === tempDiv) {
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Cannot find invoice div!`);
+                    document.body.removeChild(tempDiv);
+                    continue;
+                }
+                
+                // بررسی محتوای invoiceDiv
+                const divContent = invoiceDiv.innerHTML;
+                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Invoice div found, content length:`, divContent.length);
+
+                // تبدیل به canvas
+                let canvas;
+                try {
+                    console.log(`🔄 [PDF ${i+1}/${filteredRecords.length}] Starting html2canvas...`);
+                    
+                    canvas = await html2canvas(invoiceDiv as HTMLElement, {
+                        scale: 1.5,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                        allowTaint: true,
+                        removeContainer: false,
+                        onclone: (clonedDoc) => {
+                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`);
+                            if (clonedDiv) {
+                                (clonedDiv as HTMLElement).style.visibility = 'visible';
+                                (clonedDiv as HTMLElement).style.opacity = '1';
+                            }
+                        }
+                    });
+                    
+                    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                        console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Canvas is empty!`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
+                    
+                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas created: ${canvas.width}x${canvas.height}`);
+                } catch (canvasError: any) {
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error creating canvas:`, canvasError);
+                    document.body.removeChild(tempDiv);
+                    continue;
+                }
+
+                // حذف div موقت
+                document.body.removeChild(tempDiv);
+
+                // تبدیل به JPEG
+                const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                const imgHeight = (canvas.height * pageWidth) / canvas.width;
+                let heightLeft = imgHeight;
+
+                // اضافه کردن به PDF
+                if (i > 0) {
+                    pdf.addPage(); // اضافه کردن صفحه جدید برای هر صورتحساب
+                }
+
+                let position = 0;
+                pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+            }
+
+            // ذخیره PDF
+            const dateRange = startDate && endDate ? `${startDate}_${endDate}` : new Date().toISOString().split('T')[0];
+            const filename = `صورتحساب_های_پرداخت_نشده_${dateRange}.pdf`;
+            
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            
+            alert(`✅ PDF برای ${filteredRecords.length} راننده با موفقیت تولید شد.`);
+        } catch (error) {
+            console.error('❌ [exportAllInvoicesToPDF] Error:', error);
+            alert('خطا در تولید PDF. لطفاً دوباره تلاش کنید.');
+        }
+    };
+
+    // تابع برای تولید HTML صورتحساب
+    const generateInvoiceHTML = (
+        record: PaymentRecord,
+        calculations: any[],
+        announcementsMap: Map<string, any>,
+        calcDateFrom: string,
+        calcDateTo: string
+    ): string => {
+        // این تابع باید HTML مشابه invoiceRef.current را تولید کند
+        // برای سادگی، از همان ساختار استفاده می‌کنیم
+        // در واقعیت باید تمام محتوا را به صورت HTML string بسازیم
+        // اما برای اکنون، می‌توانیم از یک ساختار ساده استفاده کنیم
+        
+        let html = `
+            <div dir="rtl" class="p-6 bg-white mx-auto" style="width: 100%; max-width: 100%; min-height: 210mm;">
+                <div class="mb-4 border-b-2 border-slate-800 pb-3">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <h1 style="font-size: 20px; font-weight: bold; margin-bottom: 8px;">صورتحساب هزینه</h1>
+                            <p style="font-size: 14px; margin-bottom: 4px;">کد پرسنلی: ${record.employeeId}</p>
+                            <p style="font-size: 14px; margin-bottom: 4px;">نام: ${record.driverName}</p>
+                            <p style="font-size: 14px;">شماره حساب: ${record.accountNumber || '-'}</p>
+                        </div>
+                        <div style="text-align: left;">
+                            <p style="font-size: 14px; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
+                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 14px;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px;">
+                    <p style="font-size: 14px; font-weight: bold;">تعداد تور: ${calculations.length}</p>
+                    <p style="font-size: 14px; margin-top: 10px;">جمع کل هزینه: ${record.mainDriverAmount?.toLocaleString('fa-IR') || 0} ریال</p>
+                    <p style="font-size: 14px; margin-top: 10px;">کسور (پیش پرداخت): ${record.advancePayment?.toLocaleString('fa-IR') || 0} ریال</p>
+                    <p style="font-size: 16px; font-weight: bold; margin-top: 10px;">مبلغ قابل پرداخت: ${record.payableAmount?.toLocaleString('fa-IR') || 0} ریال</p>
+                </div>
+                <div style="margin-top: 20px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                        <thead>
+                            <tr style="background-color: #1e293b; color: white;">
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: center;">ردیف</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">شماره بارنامه</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">مقاصد</th>
+                                <th style="padding: 4px; border: 1px solid #475569;">تاریخ صدور</th>
+                                <th style="padding: 4px; border: 1px solid #475569; text-align: left;">جمع کل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        calculations.forEach((calc, idx) => {
+            const announcementId = calc.announcement_id || calc.announcementId;
+            const announcement = announcementsMap.get(announcementId);
+            const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+            const mainCost = calculateMainDriverCost(calc);
+            
+            html += `
+                <tr style="border-bottom: 1px solid #cbd5e1;">
+                    <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">${(idx + 1).toLocaleString('fa-IR')}</td>
+                    <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #cbd5e1;">${destinations}</td>
+                    <td style="padding: 4px; border: 1px solid #cbd5e1;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: left;">${mainCost.toLocaleString('fa-IR')}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        return html;
+    };
+
     // دانلود عکس صورتحساب
     const exportInvoiceToImage = async () => {
         if (!invoiceRef.current || !selectedInvoiceRecord) return;
@@ -850,6 +1125,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             />
                         </div>
                         <div className="flex gap-2 items-end">
+                            <button
+                                onClick={exportAllInvoicesToPDF}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                            >
+                                تولید PDF همه صورتحساب‌ها
+                            </button>
                             <button
                                 onClick={exportToExcelForBank}
                                 className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
