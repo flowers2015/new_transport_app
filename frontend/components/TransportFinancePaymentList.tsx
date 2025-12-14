@@ -560,6 +560,15 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
 
         try {
+            // صبر کردن تا محتوا کاملاً render شود
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // بررسی اینکه آیا محتوا render شده است
+            if (!invoiceRef.current || invoiceRef.current.offsetHeight === 0) {
+                alert('خطا: محتوای صورتحساب render نشده است. لطفاً دوباره تلاش کنید.');
+                return;
+            }
+            
             // ایجاد canvas از محتوای صورتحساب - روش ساده و مطمئن
             const canvas = await html2canvas(invoiceRef.current, {
                 scale: 2,
@@ -567,6 +576,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 backgroundColor: '#ffffff',
                 logging: false,
             });
+            
+            // بررسی اینکه canvas خالی نباشد
+            if (canvas.width === 0 || canvas.height === 0) {
+                alert('خطا: تصویر صورتحساب خالی است. لطفاً صفحه را refresh کنید.');
+                return;
+            }
 
             // محاسبه ابعاد PDF
             const imgWidth = 210; // A4 width in mm
