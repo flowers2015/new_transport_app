@@ -72,7 +72,9 @@ async function saveDriverCalculation(req, res) {
 
     // تبدیل undefined به null برای پارامترهای VARCHAR
     const toNullIfUndefined = (value) => {
-      return value === undefined ? null : (value || null);
+      if (value === undefined || value === null) return null;
+      if (typeof value === 'string' && value.trim() === '') return null;
+      return value;
     };
 
     console.log('🔍 [saveDriverCalculation] مقادیر خام دریافت شده:', {
@@ -360,13 +362,37 @@ async function saveDriverCalculation(req, res) {
         });
       }
       
-      // بررسی undefined بودن پارامترها
-      const undefinedParams = updateParams.map((p, i) => ({ index: i + 1, isUndefined: p === undefined })).filter(p => p.isUndefined);
+      // بررسی undefined بودن پارامترها و تبدیل به null
+      const sanitizedParams = updateParams.map((p, i) => {
+        if (p === undefined) {
+          console.warn(`⚠️ [saveDriverCalculation] پارامتر ${i + 1} undefined است، تبدیل به null می‌شود`);
+          return null;
+        }
+        return p;
+      });
+      
+      // لاگ جزئیات parameter $15 (helper_driver_id)
+      console.log('🔍 [saveDriverCalculation] جزئیات parameter $15 (helper_driver_id):', {
+        index: 15,
+        rawValue: helperDriverId,
+        processedValue: sanitizedParams[14], // index 14 = parameter $15
+        type: typeof sanitizedParams[14],
+        isNull: sanitizedParams[14] === null,
+        isUndefined: sanitizedParams[14] === undefined
+      });
+      
+      // بررسی همه پارامترهای undefined
+      const undefinedParams = sanitizedParams.map((p, i) => ({ index: i + 1, isUndefined: p === undefined })).filter(p => p.isUndefined);
       if (undefinedParams.length > 0) {
-        console.error('❌ [saveDriverCalculation] پارامترهای undefined:', undefinedParams);
+        console.error('❌ [saveDriverCalculation] پارامترهای undefined پس از sanitize:', undefinedParams);
+        return res.status(500).json({ 
+          message: `خطا: ${undefinedParams.length} پارامتر undefined است`,
+          error: 'UNDEFINED_PARAMETERS',
+          details: undefinedParams
+        });
       }
       
-      await pool.query(updateQuery, updateParams);
+      await pool.query(updateQuery, sanitizedParams);
 
       console.log('✅ [saveDriverCalculation] اطلاعات به‌روزرسانی شد:', existingCheck.rows[0].id);
       return res.json({ 
