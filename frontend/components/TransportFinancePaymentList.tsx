@@ -560,30 +560,102 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
 
         try {
-            // صبر کردن تا محتوا کاملاً render شود
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // بررسی اینکه آیا محتوا render شده است
-            if (!invoiceRef.current || invoiceRef.current.offsetHeight === 0) {
+            // ایجاد div موقت برای render کردن HTML صورتحساب
+            const tempDiv = document.createElement('div');
+            tempDiv.id = 'temp-invoice-pdf';
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.top = '-10000px';
+            tempDiv.style.left = '0';
+            tempDiv.style.width = '1200px';
+            tempDiv.style.backgroundColor = '#ffffff';
+            tempDiv.style.padding = '0';
+            tempDiv.style.boxSizing = 'border-box';
+            tempDiv.style.overflow = 'visible';
+            tempDiv.style.zIndex = '-1000';
+            document.body.appendChild(tempDiv);
+
+            // Clone کردن محتوای invoiceRef به div موقت
+            tempDiv.innerHTML = invoiceRef.current.innerHTML;
+
+            // صبر کردن تا محتوا render شود
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // بررسی اینکه آیا محتوا در DOM موجود است
+            const innerContent = tempDiv.innerHTML;
+            if (!innerContent || innerContent.length < 100) {
+                console.error('❌ HTML content is empty or too short!');
+                document.body.removeChild(tempDiv);
                 alert('خطا: محتوای صورتحساب render نشده است. لطفاً دوباره تلاش کنید.');
                 return;
             }
+
+            console.log('✅ Content ready, length:', innerContent.length);
+
+            // پیدا کردن div اصلی صورتحساب
+            const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
             
-            // ایجاد canvas از محتوای صورتحساب - روش ساده و مطمئن
-            const canvas = await html2canvas(invoiceRef.current, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                logging: false,
-            });
+            if (!invoiceDiv || invoiceDiv === tempDiv) {
+                console.error('❌ Cannot find invoice div!');
+                document.body.removeChild(tempDiv);
+                alert('خطا: ساختار صورتحساب یافت نشد. لطفاً دوباره تلاش کنید.');
+                return;
+            }
             
-            // بررسی اینکه canvas خالی نباشد
-            if (canvas.width === 0 || canvas.height === 0) {
-                alert('خطا: تصویر صورتحساب خالی است. لطفاً صفحه را refresh کنید.');
+            // بررسی محتوای invoiceDiv
+            const divContent = invoiceDiv.innerHTML;
+            console.log('✅ Invoice div found, content length:', divContent.length);
+
+            // تبدیل به canvas - استفاده از invoiceDiv
+            let canvas;
+            try {
+                console.log('🔄 Starting html2canvas...');
+                console.log('📏 Element dimensions:', {
+                    width: invoiceDiv.scrollWidth,
+                    height: invoiceDiv.scrollHeight,
+                    offsetWidth: invoiceDiv.offsetWidth,
+                    offsetHeight: invoiceDiv.offsetHeight
+                });
+                
+                canvas = await html2canvas(invoiceDiv as HTMLElement, {
+                    scale: 1.5,
+                    useCORS: true,
+                    logging: true,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    removeContainer: false,
+                    onclone: (clonedDoc) => {
+                        const clonedDiv = clonedDoc.querySelector('#temp-invoice-pdf div[dir="rtl"]');
+                        if (clonedDiv) {
+                            (clonedDiv as HTMLElement).style.visibility = 'visible';
+                            (clonedDiv as HTMLElement).style.opacity = '1';
+                            console.log('✅ Cloned div found in onclone, content length:', clonedDiv.innerHTML.length);
+                        } else {
+                            console.warn('⚠️ Cloned div not found in onclone!');
+                        }
+                    }
+                });
+                
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    console.error('❌ Canvas is empty! width:', canvas?.width, 'height:', canvas?.height);
+                    document.body.removeChild(tempDiv);
+                    alert('خطا: تصویر صورتحساب خالی است. لطفاً صفحه را refresh کنید.');
+                    return;
+                }
+                
+                console.log('✅ Canvas created successfully:', canvas.width, 'x', canvas.height);
+            } catch (canvasError: any) {
+                console.error('❌ Error creating canvas:', canvasError);
+                console.error('❌ Error stack:', canvasError?.stack);
+                document.body.removeChild(tempDiv);
+                alert('خطا در ایجاد تصویر صورتحساب. لطفاً دوباره تلاش کنید.');
                 return;
             }
 
-            // محاسبه ابعاد PDF
+            // حذف div موقت
+            document.body.removeChild(tempDiv);
+
+            // تبدیل به JPEG با کیفیت 0.85 برای کاهش حجم
+            const imgData = canvas.toDataURL('image/jpeg', 0.85);
             const imgWidth = 210; // A4 width in mm
             const pageHeight = 297; // A4 height in mm
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -594,14 +666,14 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             let position = 0;
 
             // اضافه کردن تصویر به PDF
-            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
             heightLeft -= pageHeight;
 
-            // اضافه کردن صفحات جدید در صورت نیاز
-            while (heightLeft > 0) {
+            // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
+            while (heightLeft >= 0) {
                 position = heightLeft - imgHeight;
                 pdf.addPage();
-                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
             }
 
