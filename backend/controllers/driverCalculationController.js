@@ -342,22 +342,26 @@ async function saveDriverCalculation(req, res) {
         announcementId,
       ];
       
-      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE:', updateParams.length, 'مورد نیاز: 46');
+      // شمارش دقیق پارامترهای query
+      const queryParamCount = (updateQuery.match(/\$\d+/g) || []).length;
+      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای UPDATE Query:', queryParamCount);
+      console.log('🔍 [saveDriverCalculation] تعداد پارامترهای ارسالی:', updateParams.length);
       console.log('🔍 [saveDriverCalculation] جزئیات پارامترها:', updateParams.map((p, i) => ({ 
         index: i + 1, 
         value: p, 
         type: typeof p,
-        isUndefined: p === undefined 
+        isUndefined: p === undefined,
+        isNull: p === null
       })));
       
-      if (updateParams.length !== 45) {
+      if (updateParams.length !== queryParamCount) {
         console.error('❌ [saveDriverCalculation] تعداد پارامترها نادرست است!', {
           count: updateParams.length,
-          expected: 45,
+          expected: queryParamCount,
           params: updateParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
         });
         return res.status(500).json({ 
-          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای 45`,
+          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای ${queryParamCount}`,
           error: 'PARAMETER_COUNT_MISMATCH'
         });
       }
@@ -365,7 +369,11 @@ async function saveDriverCalculation(req, res) {
       // بررسی undefined بودن پارامترها و تبدیل به null
       const sanitizedParams = updateParams.map((p, i) => {
         if (p === undefined) {
-          console.warn(`⚠️ [saveDriverCalculation] پارامتر ${i + 1} undefined است، تبدیل به null می‌شود`);
+          console.warn(`⚠️ [saveDriverCalculation] پارامتر ${i + 1} ($${i + 1}) undefined است، تبدیل به null می‌شود`);
+          return null;
+        }
+        // برای پارامترهای VARCHAR که null هستند، مطمئن شویم که null است نه undefined
+        if (p === null) {
           return null;
         }
         return p;
@@ -375,14 +383,15 @@ async function saveDriverCalculation(req, res) {
       console.log('🔍 [saveDriverCalculation] جزئیات parameter $15 (helper_driver_id):', {
         index: 15,
         rawValue: helperDriverId,
+        rawType: typeof helperDriverId,
         processedValue: sanitizedParams[14], // index 14 = parameter $15
-        type: typeof sanitizedParams[14],
+        processedType: typeof sanitizedParams[14],
         isNull: sanitizedParams[14] === null,
         isUndefined: sanitizedParams[14] === undefined
       });
       
       // بررسی همه پارامترهای undefined
-      const undefinedParams = sanitizedParams.map((p, i) => ({ index: i + 1, isUndefined: p === undefined })).filter(p => p.isUndefined);
+      const undefinedParams = sanitizedParams.map((p, i) => ({ index: i + 1, param: `$${i + 1}`, isUndefined: p === undefined })).filter(p => p.isUndefined);
       if (undefinedParams.length > 0) {
         console.error('❌ [saveDriverCalculation] پارامترهای undefined پس از sanitize:', undefinedParams);
         return res.status(500).json({ 
@@ -392,7 +401,18 @@ async function saveDriverCalculation(req, res) {
         });
       }
       
-      await pool.query(updateQuery, sanitizedParams);
+      // لاگ نهایی قبل از اجرای query
+      console.log('✅ [saveDriverCalculation] آماده اجرای UPDATE query با', sanitizedParams.length, 'پارامتر');
+      console.log('🔍 [saveDriverCalculation] نمونه پارامترها (اولین 5 و آخرین 5):', {
+        first5: sanitizedParams.slice(0, 5).map((p, i) => ({ index: i + 1, type: typeof p, isNull: p === null })),
+        last5: sanitizedParams.slice(-5).map((p, i) => ({ index: sanitizedParams.length - 5 + i + 1, type: typeof p, isNull: p === null }))
+      });
+      
+      // استفاده از query text به جای prepared statement برای جلوگیری از cache
+      await pool.query({
+        text: updateQuery,
+        values: sanitizedParams
+      });
 
       console.log('✅ [saveDriverCalculation] اطلاعات به‌روزرسانی شد:', existingCheck.rows[0].id);
       return res.json({ 
