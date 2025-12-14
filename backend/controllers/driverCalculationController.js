@@ -246,8 +246,8 @@ async function saveDriverCalculation(req, res) {
       // آپدیت رکورد موجود
       const updateQuery = `
         UPDATE driver_calculations SET
-          bill_of_lading_number = CAST($1 AS VARCHAR),
-          bill_of_lading_date = CAST($2 AS VARCHAR),
+          bill_of_lading_number = COALESCE($1::VARCHAR, NULL),
+          bill_of_lading_date = COALESCE($2::VARCHAR, NULL),
           bill_of_lading_cost = $3,
           approved_kilometers = $4,
           excess_kilometers = $5,
@@ -258,12 +258,12 @@ async function saveDriverCalculation(req, res) {
           return_cargo_cost = $9,
           return_bill_of_lading_cost = $10,
           multi_unload_cost = $11,
-          excess_mission_cost = CAST($12 AS INTEGER),
+          excess_mission_cost = COALESCE($12::INTEGER, 0),
           helper_driver_cost = $13,
           fixed_allowance = $14,
-          helper_driver_id = CAST($15 AS VARCHAR),
-          helper_driver_employee_id = CAST($16 AS VARCHAR),
-          helper_driver_name = CAST($17 AS VARCHAR),
+          helper_driver_id = COALESCE($15::VARCHAR, NULL),
+          helper_driver_employee_id = COALESCE($16::VARCHAR, NULL),
+          helper_driver_name = COALESCE($17::VARCHAR, NULL),
           helper_driver_allowance = $18,
           helper_driver_food_cost = $19,
           helper_driver_excess_mission_days = $20,
@@ -273,12 +273,12 @@ async function saveDriverCalculation(req, res) {
           fuel_cost = $24,
           tour_cost = $25,
           total_cost = $26,
-          notes = CAST($27 AS TEXT),
-          queue_type = CAST($28 AS VARCHAR),
-          calculation_date = CAST($29 AS VARCHAR),
-          vehicle_code = CAST($30 AS VARCHAR),
-          vehicle_plate = CAST($31 AS VARCHAR),
-          destinations = CAST($32 AS TEXT),
+          notes = COALESCE($27::TEXT, NULL),
+          queue_type = COALESCE($28::VARCHAR, NULL),
+          calculation_date = COALESCE($29::VARCHAR, NULL),
+          vehicle_code = COALESCE($30::VARCHAR, NULL),
+          vehicle_plate = COALESCE($31::VARCHAR, NULL),
+          destinations = COALESCE($32::TEXT, NULL),
           multi_unload_count = $33,
           advance_payment = $34,
           depot_total_mileage = $35,
@@ -288,8 +288,8 @@ async function saveDriverCalculation(req, res) {
           depot_kilometer_rate = $39,
           depot_food_cost = $40,
           depot_mission_cost = $41,
-          depot_rows = CAST($42 AS JSONB),
-          updated_by = CAST($43 AS VARCHAR),
+          depot_rows = COALESCE($42::JSONB, NULL),
+          updated_by = COALESCE($43::VARCHAR, NULL),
           updated_at = NOW()
         WHERE driver_id = $44 AND announcement_id = $45
       `;
@@ -367,12 +367,23 @@ async function saveDriverCalculation(req, res) {
       }
       
       // بررسی undefined بودن پارامترها و تبدیل به null
+      // برای پارامترهای VARCHAR (indices: 0, 1, 14, 15, 16, 26, 27, 28, 29, 30, 31, 42, 43)
+      // باید string یا null باشند (نه undefined)
+      const varcharIndices = [0, 1, 14, 15, 16, 26, 27, 28, 29, 30, 31, 42, 43]; // indices for VARCHAR parameters
       const sanitizedParams = updateParams.map((p, i) => {
         if (p === undefined) {
           console.warn(`⚠️ [saveDriverCalculation] پارامتر ${i + 1} ($${i + 1}) undefined است، تبدیل به null می‌شود`);
           return null;
         }
-        // برای پارامترهای VARCHAR که null هستند، مطمئن شویم که null است نه undefined
+        // برای پارامترهای VARCHAR، مطمئن شویم که string یا null است
+        if (varcharIndices.includes(i)) {
+          if (p === null || p === undefined) {
+            return null;
+          }
+          // تبدیل به string اگر نیست
+          return String(p);
+        }
+        // برای سایر پارامترها
         if (p === null) {
           return null;
         }
