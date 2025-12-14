@@ -547,174 +547,60 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
-    // تبدیل صورتحساب به PDF (با کیفیت بالا و خوانایی بهتر)
+    // تبدیل صورتحساب به PDF - روش ساده و مطمئن
     const exportInvoiceToPDF = async () => {
-        console.log('📄 [exportInvoiceToPDF] شروع ایجاد PDF...');
-        console.log('📄 [exportInvoiceToPDF] invoiceRef.current:', invoiceRef.current ? 'موجود' : 'null');
-        console.log('📄 [exportInvoiceToPDF] selectedInvoiceRecord:', selectedInvoiceRecord);
-        console.log('📄 [exportInvoiceToPDF] invoiceCalculations.length:', invoiceCalculations.length);
-        
         if (!invoiceRef.current || !selectedInvoiceRecord) {
-            console.error('❌ [exportInvoiceToPDF] invoiceRef یا selectedInvoiceRecord null است');
             alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
             return;
         }
 
-        // بررسی اینکه آیا محتوا وجود دارد
         if (invoiceCalculations.length === 0) {
-            console.error('❌ [exportInvoiceToPDF] invoiceCalculations خالی است');
             alert('خطا: هیچ محاسبه‌ای برای نمایش در صورتحساب یافت نشد.');
             return;
         }
 
         try {
-            console.log('📄 [exportInvoiceToPDF] بررسی محتوای invoiceRef...');
-            console.log('📄 [exportInvoiceToPDF] invoiceRef.current.innerHTML.length:', invoiceRef.current.innerHTML.length);
-            console.log('📄 [exportInvoiceToPDF] invoiceRef.current.children.length:', invoiceRef.current.children.length);
-            console.log('📄 [exportInvoiceToPDF] invoiceRef.current.offsetHeight:', invoiceRef.current.offsetHeight);
-            console.log('📄 [exportInvoiceToPDF] invoiceRef.current.offsetWidth:', invoiceRef.current.offsetWidth);
-            
-            // بررسی اینکه آیا محتوا واقعاً render شده است
-            if (invoiceRef.current.offsetHeight === 0 || invoiceRef.current.offsetWidth === 0) {
-                console.warn('⚠️ [exportInvoiceToPDF] اندازه invoiceRef صفر است، ممکن است محتوا render نشده باشد');
-            }
-            
-            // صبر کردن بیشتر تا محتوا کاملاً render شود
-            console.log('📄 [exportInvoiceToPDF] صبر 1000ms برای render شدن محتوا...');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // بررسی مجدد
-            if (!invoiceRef.current) {
-                console.error('❌ [exportInvoiceToPDF] invoiceRef.current پس از delay null شد');
-                alert('خطا: محتوای صورتحساب یافت نشد.');
-                return;
-            }
-            
-            // بررسی مجدد محتوا
-            const hasContent = invoiceRef.current.innerHTML.length > 100 && 
-                              invoiceRef.current.offsetHeight > 0 && 
-                              invoiceRef.current.offsetWidth > 0;
-            
-            console.log('📄 [exportInvoiceToPDF] بررسی نهایی محتوا:', {
-                innerHTMLLength: invoiceRef.current.innerHTML.length,
-                offsetHeight: invoiceRef.current.offsetHeight,
-                offsetWidth: invoiceRef.current.offsetWidth,
-                hasContent
-            });
-            
-            if (!hasContent) {
-                console.error('❌ [exportInvoiceToPDF] محتوا render نشده است!');
-                alert('خطا: محتوای صورتحساب render نشده است. لطفاً صفحه را refresh کنید و دوباره تلاش کنید.');
-                return;
-            }
-            
-            console.log('📄 [exportInvoiceToPDF] شروع html2canvas...');
-
-            // استفاده از scale بالاتر برای اطمینان از کیفیت
+            // ایجاد canvas از محتوای صورتحساب - روش ساده و مطمئن
             const canvas = await html2canvas(invoiceRef.current, {
-                scale: 2, // افزایش scale برای کیفیت بهتر
+                scale: 2,
                 useCORS: true,
-                logging: false,
                 backgroundColor: '#ffffff',
-                allowTaint: true,
-                removeContainer: false,
-                windowWidth: invoiceRef.current.scrollWidth,
-                windowHeight: invoiceRef.current.scrollHeight,
-                onclone: (clonedDoc) => {
-                    console.log('📄 [exportInvoiceToPDF] onclone callback فراخوانی شد');
-                    const clonedRef = clonedDoc.querySelector(`[data-invoice-ref]`);
-                    if (clonedRef) {
-                        console.log('✅ [exportInvoiceToPDF] clonedRef یافت شد:', {
-                            children: clonedRef.children.length,
-                            innerHTML: clonedRef.innerHTML.length,
-                            height: clonedRef.offsetHeight,
-                            width: clonedRef.offsetWidth
-                        });
-                    } else {
-                        console.error('❌ [exportInvoiceToPDF] clonedRef یافت نشد!');
-                    }
-                }
+                logging: false,
             });
-            
-            console.log('📄 [exportInvoiceToPDF] canvas ایجاد شد:', {
-                width: canvas.width,
-                height: canvas.height,
-                isEmpty: canvas.width === 0 || canvas.height === 0
-            });
-            
-            if (canvas.width === 0 || canvas.height === 0) {
-                console.error('❌ [exportInvoiceToPDF] canvas خالی است!');
-                alert('خطا: تصویر صورتحساب خالی است. لطفاً صفحه را refresh کنید و دوباره تلاش کنید.');
-                return;
-            }
 
-            // استفاده از JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
-            console.log('📄 [exportInvoiceToPDF] تبدیل canvas به image data...');
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
-            console.log('📄 [exportInvoiceToPDF] imgData length:', imgData.length);
-            
-            if (!imgData || imgData.length < 100) {
-                console.error('❌ [exportInvoiceToPDF] imgData خالی یا خیلی کوچک است!');
-                alert('خطا: تصویر صورتحساب خالی است.');
-                return;
-            }
-            
-            // استفاده از landscape orientation برای A4
-            console.log('📄 [exportInvoiceToPDF] ایجاد PDF document...');
-            const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' برای landscape
-            
-            // A4 landscape dimensions: 297mm width x 210mm height
-            const pageWidth = 297; // A4 landscape width in mm
-            const pageHeight = 210; // A4 landscape height in mm
-            const imgWidth = pageWidth;
+            // محاسبه ابعاد PDF
+            const imgWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
             let heightLeft = imgHeight;
 
-            console.log('📄 [exportInvoiceToPDF] ابعاد PDF:', {
-                pageWidth,
-                pageHeight,
-                imgWidth,
-                imgHeight,
-                heightLeft
-            });
-
+            // ایجاد PDF
+            const pdf = new jsPDF('p', 'mm', 'a4');
             let position = 0;
 
-            console.log('📄 [exportInvoiceToPDF] اضافه کردن تصویر به PDF...');
-            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            // اضافه کردن تصویر به PDF
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
             heightLeft -= pageHeight;
 
-            while (heightLeft >= 0) {
-                console.log('📄 [exportInvoiceToPDF] اضافه کردن صفحه جدید...');
+            // اضافه کردن صفحات جدید در صورت نیاز
+            while (heightLeft > 0) {
                 position = heightLeft - imgHeight;
-                pdf.addPage('l'); // اضافه کردن صفحه جدید با landscape orientation
-                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                pdf.addPage();
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
                 heightLeft -= pageHeight;
             }
 
-            // ذخیره PDF با استفاده از blob برای جلوگیری از هشدار HTTP
+            // ذخیره PDF با استفاده از blob
             const filename = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.pdf`;
-            console.log('📄 [exportInvoiceToPDF] نام فایل:', filename);
-            console.log('📄 [exportInvoiceToPDF] تبدیل PDF به blob...');
             const blob = pdf.output('blob');
-            console.log('📄 [exportInvoiceToPDF] blob size:', blob.size, 'bytes');
-            
-            if (blob.size === 0) {
-                console.error('❌ [exportInvoiceToPDF] blob خالی است!');
-                alert('خطا: فایل PDF خالی است.');
-                return;
-            }
-            
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.download = filename;
             document.body.appendChild(link);
-            console.log('📄 [exportInvoiceToPDF] دانلود PDF...');
             link.click();
             document.body.removeChild(link);
             setTimeout(() => URL.revokeObjectURL(url), 100);
-            console.log('✅ [exportInvoiceToPDF] PDF با موفقیت ایجاد و دانلود شد');
         } catch (err: any) {
             console.error('❌ [exportInvoiceToPDF] Error:', err);
             alert(`خطا در تولید PDF: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
