@@ -300,12 +300,6 @@ async function saveDriverCalculation(req, res) {
         WHERE driver_id = $44 AND announcement_id = $45
       `;
       
-      // تبدیل null به empty string برای VARCHAR parameters
-      const safeString = (val) => {
-        if (val === null || val === undefined) return '';
-        return String(val);
-      };
-      
       const updateParams = [
         safeString(billOfLadingNumber),
         safeString(billOfLadingDate),
