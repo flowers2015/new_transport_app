@@ -2490,105 +2490,46 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     });
                 });
                 
-                // Trigger refresh برای اطمینان از به‌روزرسانی
-                setRefreshTrigger(prev => prev + 1);
+                // پاک کردن cache برای اطمینان از دریافت داده‌های جدید
+                try {
+                    localStorage.removeItem('transport_calculations_cache');
+                    console.log('🗑️ [handleSaveInputData] cache پاک شد');
+                } catch (e) {
+                    console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
+                }
+                
+                // Trigger refresh با تاخیر برای اطمینان از به‌روزرسانی کامل
+                setTimeout(() => {
+                    setRefreshTrigger(prev => prev + 1);
+                }, 500);
             } else {
                 console.warn('⚠️ [handleSaveInputData] خطا در دریافت داده‌های به‌روز شده:', savedRes.status);
-                // Trigger refresh برای اجرای دوباره loadSavedCalculations
-                setRefreshTrigger(prev => prev + 1);
+                // پاک کردن cache
+                try {
+                    localStorage.removeItem('transport_calculations_cache');
+                } catch (e) {
+                    console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
+                }
+                // Trigger refresh با تاخیر برای اجرای دوباره loadSavedCalculations
+                setTimeout(() => {
+                    setRefreshTrigger(prev => prev + 1);
+                }, 500);
             }
         } catch (fetchErr) {
             console.warn('⚠️ [handleSaveInputData] خطا در دریافت داده‌های به‌روز شده:', fetchErr);
-            // Trigger refresh برای اجرای دوباره loadSavedCalculations
-            setRefreshTrigger(prev => prev + 1);
+            // پاک کردن cache
+            try {
+                localStorage.removeItem('transport_calculations_cache');
+            } catch (e) {
+                console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
+            }
+            // Trigger refresh با تاخیر برای اجرای دوباره loadSavedCalculations
+            setTimeout(() => {
+                setRefreshTrigger(prev => prev + 1);
+            }, 500);
         }
         
-        // به‌روزرسانی اطلاعات این تور خاص (fallback - فقط برای نمایش فوری)
-        // اما loadSavedCalculations باید دوباره اجرا شود
-        setCalculations(prev => {
-            const updated = prev.map(c => {
-                if (c.driverId === inputDialogData.driverId) {
-                    const updatedTours = c.tours.map(t => 
-                        t.announcementId === inputDialogData.tourId
-                            ? {
-                                ...t,
-                                billOfLadingNumber: inputDialogData.billOfLadingNumber,
-                                approvedKilometers: inputDialogData.approvedKilometers,
-                                excessKilometers: inputDialogData.excessKilometers,
-                                approvedMissionDays: inputDialogData.approvedMissionDays,
-                                excessMissionDays: inputDialogData.excessMissionDays,
-                                tollCost: inputDialogData.tollCost,
-                                loadingCost: 0, // هزینه بارگیری کل - این فیلد دیگر استفاده نمی‌شود
-                                billOfLadingDate: inputDialogData.billOfLadingDate ? parseJalaliDateString(inputDialogData.billOfLadingDate) : tour.billOfLadingDate,
-                                calculationDate: inputDialogData.calculationDate,
-                                notes: inputDialogData.notes,
-                                foodCost,
-                                fuelCost,
-                                tourCost,
-                                totalCost,
-                                isDataRecorded: true,
-                                billOfLadingCost: billOfLadingCostNum,
-                                returnCargoCost: returnCargoCostNum,
-                                returnBillOfLadingCost: returnBillOfLadingCostNum,
-                                multiUnloadCost: multiUnloadCostNum,
-                                excessMissionCost: excessMissionCostNum,
-                                fixedAllowance: calc.queueType === 'fixed_allowance' || calc.queueType === 'helper' ? tourCost : 0,
-                                // فیلدهای راننده کمکی
-                                helperDriverId: inputDialogData.helperDriverId || '',
-                                helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || '',
-                                helperDriverName: inputDialogData.helperDriverName || '',
-                                helperDriverAllowance: calculatedHelperDriverAllowance,
-                                helperDriverFoodCost: calculatedHelperDriverFoodCost,
-                                helperDriverExcessMissionDays: helperExcessMissionDays,
-                                helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
-                                helperDriverExcessKilometers: helperExcessKilometers,
-                                // فیلدهای محاسبات دپو
-                                depotMissionDays: inputDialogData.depotMissionDays || 0,
-                                depotShipmentCount: inputDialogData.depotShipmentCount || 0,
-                                depotCargoHandlingCost: inputDialogData.depotCargoHandlingCost || 0,
-                                depotKilometerRate: inputDialogData.depotKilometerRate || 0,
-                                depotTotalMileage: inputDialogData.depotTotalMileage || 0,
-                                depotFoodCost: inputDialogData.depotFoodCost || 0,
-                                depotMissionCost: inputDialogData.depotMissionCost || 0,
-                                depotRows: inputDialogData.depotRows || [],
-                                // سایر فیلدها
-                                advancePayment: inputDialogData.advancePayment || 0,
-                                vehicleCode: inputDialogData.vehicleCode || '',
-                                vehiclePlate: inputDialogData.vehiclePlate || '',
-                                destinations: inputDialogData.destinations || '',
-                                multiUnloadCount: inputDialogData.multiUnloadCount || 0,
-                            } as any
-                            : t
-                    );
-                    
-                    // محاسبه مجموع هزینه کل و پیمایش کل برای این راننده
-                    const driverTotalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
-                    const driverTotalKm = updatedTours.reduce((sum, tour) => {
-                        const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                        return sum + tourTotalKm;
-                    }, 0);
-                    
-                    return {
-                        ...c,
-                        tours: updatedTours,
-                        tourCost: driverTotalCost,
-                        totalKilometers: driverTotalKm,
-                    };
-                }
-                return c;
-            });
-            
-            // به‌روزرسانی دیالوگ جزئیات اگر باز است
-            if (showTourDetailsDialog && selectedDriverName) {
-                const updatedCalc = updated.find(c => c.driverName === selectedDriverName);
-                if (updatedCalc) {
-                    setSelectedTourDetails(updatedCalc.tours);
-                }
-            }
-            
-            return updated;
-        });
-        
+        // بستن دیالوگ بعد از به‌روزرسانی موفق
         setShowInputDialog(false);
         setInputDialogData(null);
     };
