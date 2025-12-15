@@ -235,20 +235,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 }));
 
                 // ایجاد div موقت برای render کردن HTML صورتحساب
+                // باید در viewport باشد تا html2canvas بتواند آن را render کند
                 const tempDiv = document.createElement('div');
                 tempDiv.id = `temp-invoice-${i}`;
-                tempDiv.style.position = 'absolute';
+                tempDiv.style.position = 'fixed';
                 tempDiv.style.top = '0';
-                tempDiv.style.left = '-9999px'; // خارج از viewport اما در DOM
+                tempDiv.style.left = '0';
                 tempDiv.style.width = '1200px';
                 tempDiv.style.height = 'auto';
                 tempDiv.style.backgroundColor = '#ffffff';
                 tempDiv.style.padding = '20px';
                 tempDiv.style.boxSizing = 'border-box';
                 tempDiv.style.overflow = 'visible';
-                tempDiv.style.zIndex = '-1';
-                tempDiv.style.visibility = 'visible'; // مهم: باید visible باشد
-                tempDiv.style.opacity = '1'; // مهم: باید opacity 1 باشد
+                tempDiv.style.zIndex = '999999';
+                tempDiv.style.visibility = 'visible';
+                tempDiv.style.opacity = '0'; // مخفی اما در viewport
+                tempDiv.style.pointerEvents = 'none'; // جلوگیری از تداخل با کاربر
                 document.body.appendChild(tempDiv);
 
                 // تولید HTML صورتحساب
@@ -299,12 +301,20 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     canvas = await html2canvas(invoiceDiv as HTMLElement, {
                         scale: 1.5,
                         useCORS: true,
-                        logging: false,
+                        logging: true, // برای debug
                         backgroundColor: '#ffffff',
                         allowTaint: true,
                         removeContainer: false,
                         windowWidth: 1200,
                         windowHeight: invoiceDiv.scrollHeight || 2000,
+                        onclone: (clonedDoc) => {
+                            // در cloned document، opacity را 1 کن تا render شود
+                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i}`);
+                            if (clonedDiv) {
+                                (clonedDiv as HTMLElement).style.opacity = '1';
+                                (clonedDiv as HTMLElement).style.visibility = 'visible';
+                            }
+                        }
                     });
                     
                     console.log(`📄 [PDF_AFTER] Canvas created: ${canvas?.width}x${canvas?.height}`);

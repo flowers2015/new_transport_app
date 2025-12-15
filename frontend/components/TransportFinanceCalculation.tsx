@@ -548,25 +548,31 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // بارگذاری داده‌های ذخیره شده از دیتابیس - بعد از fetchData
     useEffect(() => {
         const loadSavedCalculations = async () => {
+            // اگر هنوز در حال loading هستیم، صبر کن
+            if (loading) {
+                console.log('⏳ [loadSavedCalculations] در انتظار fetchData...');
+                return;
+            }
+            
+            // همیشه ابتدا از cache استفاده کن (اگر موجود باشد)
+            try {
+                const cacheStr = localStorage.getItem('transport_calculations_cache');
+                if (cacheStr) {
+                    const cache = JSON.parse(cacheStr);
+                    // اگر cache کمتر از 5 دقیقه قدیمی است، استفاده کن
+                    if (Date.now() - cache.timestamp < 5 * 60 * 1000 && cache.data && cache.data.length > 0) {
+                        console.log('📦 [loadSavedCalculations] استفاده از cache (فوری)');
+                        setCalculations(cache.data);
+                        // اما در background از سرور fetch کن
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️ [loadSavedCalculations] خطا در خواندن cache:', e);
+            }
+            
             // صبر کن تا announcements بارگذاری شوند
             if (!announcements.length) {
                 console.log('⏳ [loadSavedCalculations] در انتظار announcements...');
-                
-                // اگر announcements نداریم اما cache داریم، از cache استفاده کن
-                try {
-                    const cacheStr = localStorage.getItem('transport_calculations_cache');
-                    if (cacheStr) {
-                        const cache = JSON.parse(cacheStr);
-                        // اگر cache کمتر از 5 دقیقه قدیمی است، استفاده کن
-                        if (Date.now() - cache.timestamp < 5 * 60 * 1000 && cache.data && cache.data.length > 0) {
-                            console.log('📦 [loadSavedCalculations] استفاده از cache (در انتظار announcements)');
-                            setCalculations(cache.data);
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('⚠️ [loadSavedCalculations] خطا در خواندن cache:', e);
-                }
                 return;
             }
             
@@ -879,7 +885,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         loadSavedCalculations();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [announcements.length, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger]);
+    }, [loading, announcements.length, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger]);
 
     // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
     useEffect(() => {
