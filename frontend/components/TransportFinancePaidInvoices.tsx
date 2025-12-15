@@ -210,96 +210,73 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                 }));
 
-                // ایجاد یک div موقت برای render کردن HTML صورتحساب
-                // استفاده از offset برای قرار دادن div خارج از صفحه (نه visibility: hidden)
+                // ایجاد div موقت برای render کردن HTML صورتحساب
                 const tempDiv = document.createElement('div');
                 tempDiv.id = `temp-invoice-${i}`;
-                tempDiv.style.position = 'absolute';
-                tempDiv.style.top = '-10000px';
+                tempDiv.style.position = 'fixed';
+                tempDiv.style.top = '0';
                 tempDiv.style.left = '0';
                 tempDiv.style.width = '1200px';
+                tempDiv.style.height = 'auto';
                 tempDiv.style.backgroundColor = '#ffffff';
-                tempDiv.style.padding = '0';
+                tempDiv.style.padding = '20px';
                 tempDiv.style.boxSizing = 'border-box';
                 tempDiv.style.overflow = 'visible';
-                tempDiv.style.zIndex = '-1000';
+                tempDiv.style.zIndex = '9999';
+                tempDiv.style.transform = 'translateX(-200%)'; // خارج از صفحه اما قابل دسترسی برای html2canvas
                 document.body.appendChild(tempDiv);
 
-                // Render کردن HTML صورتحساب
+                // تولید HTML صورتحساب
                 const htmlContent = renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
                 console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML content length:`, htmlContent.length);
-                console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML preview:`, htmlContent.substring(0, 500));
                 
-                // HTML را مستقیماً به div اضافه می‌کنیم (بدون استخراج body)
+                // HTML را به div اضافه می‌کنیم
                 tempDiv.innerHTML = htmlContent;
 
-                // صبر کردن تا محتوا render شود
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // صبر برای render شدن محتوا
+                await new Promise(resolve => setTimeout(resolve, 1500));
 
-                // بررسی اینکه آیا محتوا در DOM موجود است
-                const innerContent = tempDiv.innerHTML;
-                if (!innerContent || innerContent.length < 100) {
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] HTML content is empty or too short!`);
+                // بررسی محتوا
+                if (!tempDiv.innerHTML || tempDiv.innerHTML.length < 100) {
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] HTML content is empty!`);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
 
-                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Content ready, length:`, innerContent.length);
-
                 // پیدا کردن div اصلی صورتحساب
-                const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild || tempDiv;
+                const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild;
                 
                 if (!invoiceDiv || invoiceDiv === tempDiv) {
                     console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Cannot find invoice div!`);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
-                
-                // بررسی محتوای invoiceDiv
-                const divContent = invoiceDiv.innerHTML;
-                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Invoice div found, content length:`, divContent.length);
 
-                // تبدیل به canvas - استفاده از invoiceDiv
+                // تبدیل به canvas
                 let canvas;
                 try {
                     console.log(`🔄 [PDF ${i+1}/${filteredRecords.length}] Starting html2canvas...`);
-                    console.log(`📏 [PDF ${i+1}/${filteredRecords.length}] Element dimensions:`, {
-                        width: invoiceDiv.scrollWidth,
-                        height: invoiceDiv.scrollHeight,
-                        offsetWidth: invoiceDiv.offsetWidth,
-                        offsetHeight: invoiceDiv.offsetHeight
-                    });
                     
                     canvas = await html2canvas(invoiceDiv as HTMLElement, {
                         scale: 1.5,
                         useCORS: true,
-                        logging: true,
+                        logging: false,
                         backgroundColor: '#ffffff',
                         allowTaint: true,
                         removeContainer: false,
-                        onclone: (clonedDoc) => {
-                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`);
-                            if (clonedDiv) {
-                                // اطمینان از اینکه cloned div قابل مشاهده است
-                                (clonedDiv as HTMLElement).style.visibility = 'visible';
-                                (clonedDiv as HTMLElement).style.opacity = '1';
-                                console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Cloned div found in onclone, content length:`, clonedDiv.innerHTML.length);
-                            } else {
-                                console.warn(`⚠️ [PDF ${i+1}/${filteredRecords.length}] Cloned div not found in onclone!`);
-                            }
-                        }
+                        windowWidth: 1200,
+                        windowHeight: invoiceDiv.scrollHeight || 2000,
                     });
                     
                     if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                        console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Canvas is empty! width: ${canvas?.width}, height: ${canvas?.height}`);
+                        console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Canvas is empty!`);
                         document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas created successfully: ${canvas.width}x${canvas.height}`);
+                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas: ${canvas.width}x${canvas.height}`);
                 } catch (canvasError: any) {
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error creating canvas:`, canvasError);
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error stack:`, canvasError?.stack);
+                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error:`, canvasError);
                     document.body.removeChild(tempDiv);
                     continue;
                 }

@@ -554,13 +554,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 return;
             }
             
-            // اگر calculateDriverData خالی است اما calculations پر است، از calculations استفاده کن
-            // این برای زمانی است که component دوباره mount شده و calculateDriverData هنوز محاسبه نشده
-            if (calculateDriverData.length === 0 && calculations.length === 0) {
-                console.log('⏳ [loadSavedCalculations] در انتظار calculateDriverData...');
-                return;
-            }
-            
             console.log('🔄 [loadSavedCalculations] شروع بارگذاری داده‌های ذخیره شده...', {
                 announcementsCount: announcements.length,
                 calculateDriverDataCount: calculateDriverData.length,
@@ -590,15 +583,79 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     console.log('🔒 [loadSavedCalculations] تورهای بسته شده:', closedTourIds.size, 'تور');
                     
                     // استفاده از calculateDriverData به عنوان base - اگر خالی بود، از calculations فعلی استفاده کن
-                    const baseData = calculateDriverData.length > 0 ? calculateDriverData : calculations;
+                    let baseData = calculateDriverData.length > 0 ? calculateDriverData : calculations;
+                    
+                    // اگر baseData خالی است اما announcements, drivers, vehicles موجودند، 
+                    // از savedData برای ساخت baseData استفاده کن
+                    if (baseData.length === 0 && announcements.length > 0 && drivers.length > 0 && vehicles.length > 0 && savedData.length > 0) {
+                        console.log('🔄 [loadSavedCalculations] baseData خالی است، ساخت baseData از savedData و announcements...');
+                        
+                        // ساخت baseData از savedData و announcements
+                        const driverMap = new Map<string, DriverCalculationRow>();
+                        
+                        savedData.forEach((saved: any) => {
+                            // پیدا کردن announcement مربوطه
+                            const ann = announcements.find(a => a.id === saved.announcement_id);
+                            if (!ann || closedTourIds.has(saved.announcement_id)) return;
+                            
+                            const driver = drivers.find(d => d.id === saved.driver_id);
+                            const vehicle = vehicles.find(v => v.id === ann.assigned_vehicle_id);
+                            
+                            if (!driver || !vehicle) return;
+                            
+                            const driverId = driver.id;
+                            const existing = driverMap.get(driverId);
+                            
+                            const roundTripKm = ann.route?.round_trip_km || 0;
+                            
+                            const tourDetail: DriverTourDetailWithCalculation = {
+                                announcementId: ann.id,
+                                announcementCode: ann.announcement_code || '',
+                                vehicleType: ann.vehicle_type || '',
+                                vehicleId: vehicle.id,
+                                vehicleCode: vehicle.vehicleCode,
+                                plateNumber: vehicle.plateNumber ? 
+                                    `${vehicle.plateNumber.part1}${vehicle.plateNumber.letter}${vehicle.plateNumber.part2}-${vehicle.plateNumber.cityCode}` : 
+                                    '',
+                                lineType: ann.line_type || '',
+                                destinations: (ann.destinations || []).map((d: any) => d.city || '').filter(Boolean),
+                                roundTripKm,
+                                billOfLadingNumber: ann.bill_of_lading_number || '',
+                                billOfLadingDate: ann.bill_of_lading_date ? (typeof ann.bill_of_lading_date === 'string' ? new Date(ann.bill_of_lading_date) : ann.bill_of_lading_date) : undefined,
+                                announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
+                            };
+                            
+                            if (existing) {
+                                existing.tourCount += 1;
+                                existing.totalKilometers += roundTripKm;
+                                existing.tours.push(tourDetail);
+                            } else {
+                                driverMap.set(driverId, {
+                                    id: generateUUID(),
+                                    driverId: driver.id,
+                                    employeeId: driver.employeeId,
+                                    driverName: driver.name,
+                                    queueType: (saved.queue_type || saved.queueType || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
+                                    tourCount: 1,
+                                    totalKilometers: roundTripKm,
+                                    tourCost: 0,
+                                    tours: [tourDetail],
+                                });
+                            }
+                        });
+                        
+                        baseData = Array.from(driverMap.values());
+                        console.log('✅ [loadSavedCalculations] baseData از savedData ساخته شد:', baseData.length, 'راننده');
+                    }
+                    
                     console.log('📊 [loadSavedCalculations] استفاده از base data:', {
-                        source: calculateDriverData.length > 0 ? 'calculateDriverData' : 'calculations',
+                        source: calculateDriverData.length > 0 ? 'calculateDriverData' : (calculations.length > 0 ? 'calculations' : 'savedData'),
                         count: baseData.length
                     });
                     
-                    // اگر baseData خالی است، یعنی هنوز داده‌ای نداریم - صبر کن
+                    // اگر baseData هنوز خالی است، یعنی داده‌ای نداریم - صبر کن
                     if (baseData.length === 0) {
-                        console.log('⏳ [loadSavedCalculations] baseData خالی است، صبر می‌کنیم...');
+                        console.log('⏳ [loadSavedCalculations] baseData هنوز خالی است، صبر می‌کنیم...');
                         return;
                     }
                     
