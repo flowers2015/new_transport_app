@@ -1457,7 +1457,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         console.log('🔍 [handleEditData] شروع ویرایش:', { driverId, tourId, calculationsCount: calculations.length });
         
         // اگر calculations خالی است، سعی کن از cache یا سرور load کن
-        if (calculations.length === 0) {
+        let currentCalculations = calculations;
+        if (currentCalculations.length === 0) {
             console.log('⚠️ [handleEditData] calculations خالی است، تلاش برای load...');
             // تلاش برای load از cache
             try {
@@ -1466,19 +1467,134 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     const cache = JSON.parse(cacheStr);
                     if (cache.data && cache.data.length > 0) {
                         console.log('📦 [handleEditData] استفاده از cache');
+                        currentCalculations = cache.data;
                         setCalculations(cache.data);
                         // صبر کن تا state update شود
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        await new Promise(resolve => setTimeout(resolve, 200));
                     }
                 }
             } catch (e) {
                 console.error('❌ [handleEditData] خطا در خواندن cache:', e);
             }
+            
+            // اگر هنوز خالی است، از سرور fetch کن
+            if (currentCalculations.length === 0) {
+                console.log('📡 [handleEditData] fetch از سرور...');
+                try {
+                    const token = localStorage.getItem('token');
+                    const headers = {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    };
+                    
+                    const savedRes = await fetch(getApiUrl('driver-calculations'), { headers });
+                    if (savedRes.ok) {
+                        const savedData = await savedRes.json();
+                        console.log('📦 [handleEditData] داده‌های ذخیره شده از سرور:', savedData.length, 'رکورد');
+                        
+                        // ساخت calculations از savedData
+                        if (savedData.length > 0 && drivers.length > 0 && vehicles.length > 0) {
+                            const driverMap = new Map<string, DriverCalculationRow>();
+                            
+                            savedData.forEach((saved: any) => {
+                                const driver = drivers.find(d => d.id === saved.driver_id);
+                                if (!driver) return;
+                                
+                                const ann = announcements.find(a => a.id === saved.announcement_id);
+                                const roundTripKm = ann?.route?.round_trip_km || (saved.approved_kilometers || 0) + (saved.excess_kilometers || 0);
+                                
+                                const vehicle = ann ? vehicles.find(v => v.id === ann.assigned_vehicle_id) : null;
+                                
+                                const tourDetail: DriverTourDetailWithCalculation = {
+                                    announcementId: saved.announcement_id,
+                                    announcementCode: ann?.announcement_code || saved.announcement_code || saved.announcement_id.substring(0, 8) || '',
+                                    vehicleType: ann?.vehicle_type || saved.vehicle_type || '',
+                                    vehicleId: ann?.assigned_vehicle_id || vehicle?.id || '',
+                                    vehicleCode: saved.vehicle_code || vehicle?.vehicleCode || '',
+                                    plateNumber: saved.vehicle_plate || (vehicle?.plateNumber ? `${vehicle.plateNumber.part1}${vehicle.plateNumber.letter}${vehicle.plateNumber.part2}-${vehicle.plateNumber.cityCode}` : ''),
+                                    lineType: ann?.line_type || saved.line_type || '',
+                                    destinations: ann?.destinations ? (ann.destinations.map((d: any) => d.city || '').filter(Boolean)) : (saved.destinations ? (typeof saved.destinations === 'string' ? saved.destinations.split(',').filter(Boolean) : [saved.destinations].filter(Boolean)) : []),
+                                    roundTripKm,
+                                    billOfLadingNumber: saved.bill_of_lading_number || '',
+                                    billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                                    announcementDate: ann?.created_at ? new Date(ann.created_at) : undefined,
+                                    calculationDate: saved.calculation_date || '',
+                                    approvedKilometers: saved.approved_kilometers || 0,
+                                    excessKilometers: saved.excess_kilometers || 0,
+                                    approvedMissionDays: saved.approved_mission_days || 1,
+                                    excessMissionDays: saved.excess_mission_days || 0,
+                                    tollCost: saved.toll_cost || 0,
+                                    loadingCost: saved.loading_cost || 0,
+                                    billOfLadingCost: saved.bill_of_lading_cost || 0,
+                                    returnCargoCost: saved.return_cargo_cost || 0,
+                                    returnBillOfLadingCost: saved.return_bill_of_lading_cost || 0,
+                                    multiUnloadCost: saved.multi_unload_cost || 0,
+                                    excessMissionCost: saved.excess_mission_cost || 0,
+                                    helperDriverCost: saved.helper_driver_cost || 0,
+                                    fixedAllowance: (saved.queue_type === 'porsant' ? 0 : (saved.fixed_allowance || 0)),
+                                    foodCost: saved.food_cost || 0,
+                                    fuelCost: saved.fuel_cost || 0,
+                                    tourCost: saved.tour_cost || 0,
+                                    totalCost: saved.total_cost || 0,
+                                    notes: saved.notes || '',
+                                    isDataRecorded: true,
+                                    commissionStatus: saved.commission_status || 'recorded',
+                                    helperDriverId: saved.helper_driver_id || '',
+                                    helperDriverEmployeeId: saved.helper_driver_employee_id || '',
+                                    helperDriverName: saved.helper_driver_name || '',
+                                    helperDriverAllowance: saved.helper_driver_allowance || 0,
+                                    helperDriverFoodCost: saved.helper_driver_food_cost || 0,
+                                    helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || 0,
+                                    helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || 0,
+                                    helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || 0,
+                                    isPaid: saved.is_paid || false,
+                                    depotMissionDays: saved.depot_mission_days || 0,
+                                    depotShipmentCount: saved.depot_shipment_count || 0,
+                                    depotCargoHandlingCost: saved.depot_cargo_handling_cost || 0,
+                                    depotKilometerRate: (saved.queue_type === 'porsant' ? 0 : (saved.depot_kilometer_rate || 0)),
+                                    depotTotalMileage: saved.depot_total_mileage || 0,
+                                    depotFoodCost: saved.depot_food_cost || 0,
+                                    depotMissionCost: saved.depot_mission_cost || 0,
+                                    depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows) : []) : saved.depot_rows) : [],
+                                    advancePayment: saved.advance_payment || 0,
+                                } as any;
+                                
+                                const driverId = driver.id;
+                                const existing = driverMap.get(driverId);
+                                
+                                if (existing) {
+                                    existing.tourCount += 1;
+                                    existing.totalKilometers += roundTripKm;
+                                    existing.tours.push(tourDetail);
+                                } else {
+                                    driverMap.set(driverId, {
+                                        id: generateUUID(),
+                                        driverId: driver.id,
+                                        employeeId: driver.employeeId,
+                                        driverName: driver.name,
+                                        queueType: (saved.queue_type || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
+                                        tourCount: 1,
+                                        totalKilometers: roundTripKm,
+                                        tourCost: saved.total_cost || 0,
+                                        tours: [tourDetail],
+                                    });
+                                }
+                            });
+                            
+                            currentCalculations = Array.from(driverMap.values());
+                            setCalculations(currentCalculations);
+                            console.log('✅ [handleEditData] calculations از سرور load شد:', currentCalculations.length, 'راننده');
+                        }
+                    }
+                } catch (err) {
+                    console.error('❌ [handleEditData] خطا در fetch از سرور:', err);
+                }
+            }
         }
         
-        const calc = calculations.find(c => c.driverId === driverId);
+        const calc = currentCalculations.find(c => c.driverId === driverId);
         if (!calc) {
-            console.error('❌ [handleEditData] راننده پیدا نشد:', driverId);
+            console.error('❌ [handleEditData] راننده پیدا نشد:', driverId, 'calculations:', currentCalculations.length);
             alert('خطا: راننده پیدا نشد. لطفاً صفحه را refresh کنید.');
             return;
         }
