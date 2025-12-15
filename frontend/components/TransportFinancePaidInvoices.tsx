@@ -226,7 +226,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 document.body.appendChild(tempDiv);
 
                 // Render کردن HTML صورتحساب
-                const htmlContent = await renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+                const htmlContent = renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
                 console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML content length:`, htmlContent.length);
                 console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML preview:`, htmlContent.substring(0, 500));
                 
@@ -355,13 +355,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     };
 
     // تابع helper برای render کردن HTML صورتحساب
-    const renderInvoiceHTML = async (
+    const renderInvoiceHTML = (
         record: PaidInvoiceRecord,
         calculations: any[],
         announcementsMap: Map<string, any>,
         calcDateFrom: string,
         calcDateTo: string
-    ): Promise<string> => {
+    ): string => {
         // این تابع HTML صورتحساب را برمی‌گرداند (مشابه آنچه در TransportFinancePaymentList است)
         // برای سادگی، از همان ساختار استفاده می‌کنیم
         
