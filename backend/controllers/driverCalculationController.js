@@ -455,6 +455,7 @@ async function saveDriverCalculation(req, res) {
         approvedMissionDays !== undefined ? approvedMissionDays : null,
         excessMissionDays || 0,
         validatedTollCost,
+        0, // loading_cost (مقدار ثابت - در VALUES هم 0 است)
         parseNumber(returnCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
@@ -492,6 +493,28 @@ async function saveDriverCalculation(req, res) {
         safeString(userId), // created_by
         safeString(userId), // updated_by
       ];
+      
+      // بررسی تطابق تعداد پارامترها
+      const insertParamMatches = insertQuery.match(/\$\d+/g) || [];
+      const insertUniqueParams = [...new Set(insertParamMatches.map(m => parseInt(m.replace('$', ''))))].sort((a, b) => a - b);
+      const insertMaxParam = insertUniqueParams.length > 0 ? Math.max(...insertUniqueParams) : 0;
+      
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای منحصر به فرد:', insertUniqueParams.length);
+      console.log('🔍 [saveDriverCalculation] INSERT - بیشترین پارامتر:', insertMaxParam);
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای ارسالی:', insertParams.length);
+      
+      if (insertParams.length !== insertMaxParam) {
+        console.error('❌ [saveDriverCalculation] INSERT - تعداد پارامترها نادرست است!', {
+          count: insertParams.length,
+          expected: insertMaxParam,
+          uniqueParamsCount: insertUniqueParams.length,
+          params: insertParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
+        });
+        return res.status(500).json({ 
+          message: `خطا در تعداد پارامترها (INSERT): ${insertParams.length} به جای ${insertMaxParam}`,
+          error: 'PARAMETER_COUNT_MISMATCH'
+        });
+      }
       
       const insertResult = await pool.query({
         text: insertQuery,
