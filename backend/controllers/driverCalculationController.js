@@ -567,6 +567,19 @@ async function getDriverCalculations(req, res) {
         await pool.query(`ALTER TABLE driver_calculations ADD COLUMN is_paid BOOLEAN DEFAULT FALSE`);
         console.log('✅ [getDriverCalculations] ستون is_paid اضافه شد');
       }
+      
+      // بررسی وجود ستون commission_status
+      const commissionStatusCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'driver_calculations' 
+        AND column_name = 'commission_status'
+      `);
+      
+      if (commissionStatusCheck.rows.length === 0) {
+        await pool.query(`ALTER TABLE driver_calculations ADD COLUMN commission_status VARCHAR(30) DEFAULT 'recorded'`);
+        console.log('✅ [getDriverCalculations] ستون commission_status اضافه شد');
+      }
     } catch (alterError) {
       console.error('⚠️ [getDriverCalculations] خطا در بررسی/اضافه کردن ستون‌ها:', alterError);
     }
@@ -612,7 +625,48 @@ async function getDriverCalculations(req, res) {
 
     query += ` ORDER BY dc.created_at DESC`;
 
+    console.log('🔍 [getDriverCalculations] Query:', query);
+    console.log('🔍 [getDriverCalculations] Params:', params);
+    
     const { rows } = await pool.query(query, params);
+    
+    console.log('✅ [getDriverCalculations] تعداد رکوردهای برگشتی:', rows.length);
+    if (rows.length > 0) {
+      console.log('📊 [getDriverCalculations] نمونه اولین رکورد:', {
+        id: rows[0].id,
+        driver_id: rows[0].driver_id,
+        announcement_id: rows[0].announcement_id,
+        is_paid: rows[0].is_paid,
+        commission_status: rows[0].commission_status,
+        total_cost: rows[0].total_cost,
+        bill_of_lading_number: rows[0].bill_of_lading_number
+      });
+    } else {
+      // اگر هیچ رکوردی برگشت داده نشد، بررسی کن که آیا در دیتابیس رکوردی وجود دارد
+      try {
+        const countQuery = `SELECT COUNT(*) as count FROM driver_calculations`;
+        const countResult = await pool.query(countQuery);
+        console.log('⚠️ [getDriverCalculations] تعداد کل رکوردها در دیتابیس:', countResult.rows[0].count);
+        
+        // بررسی رکوردهای فیلتر شده
+        const filteredCountQuery = `
+          SELECT COUNT(*) as count 
+          FROM driver_calculations dc
+          WHERE (dc.is_paid IS NULL OR dc.is_paid = FALSE)
+            AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
+        `;
+        const filteredCountResult = await pool.query(filteredCountQuery);
+        console.log('⚠️ [getDriverCalculations] تعداد رکوردهای فیلتر شده:', filteredCountResult.rows[0].count);
+        
+        // بررسی نمونه رکوردها برای debug
+        const sampleQuery = `SELECT id, driver_id, announcement_id, is_paid, commission_status, total_cost FROM driver_calculations LIMIT 5`;
+        const sampleResult = await pool.query(sampleQuery);
+        console.log('📋 [getDriverCalculations] نمونه رکوردها از دیتابیس:', sampleResult.rows);
+      } catch (debugError) {
+        console.error('⚠️ [getDriverCalculations] خطا در debug query:', debugError);
+      }
+    }
+    
     res.json(rows);
   } catch (error) {
     console.error('❌ [getDriverCalculations] Error:', error);
