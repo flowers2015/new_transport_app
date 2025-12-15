@@ -440,7 +440,7 @@ async function saveDriverCalculation(req, res) {
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, 
           depot_total_mileage, depot_shipment_count, depot_cargo_handling_cost, depot_mission_days, depot_kilometer_rate, depot_food_cost, depot_mission_cost, depot_rows,
           created_by, updated_by
-        ) VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8, $9, $10, $11, 0, $12, $13, $14, $15, $16, $17, NULLIF($18, ''), NULLIF($19, ''), NULLIF($20, ''), $21, $22, $23, $24, $25, $26, $27, $28, $29, NULLIF($30, ''), NULLIF($31, ''), NULLIF($32, ''), NULLIF($33, ''), NULLIF($34, ''), NULLIF($35, ''), $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, CASE WHEN $46::text = '' THEN NULL ELSE $46::jsonb END, NULLIF($47, ''), NULLIF($48, ''))
+        ) VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NULLIF($19, ''), NULLIF($20, ''), NULLIF($21, ''), $22, $23, $24, $25, $26, $27, $28, $29, $30, NULLIF($31, ''), NULLIF($32, ''), NULLIF($33, ''), NULLIF($34, ''), NULLIF($35, ''), NULLIF($36, ''), $37, $38, $39, $40, $41, $42, $43, $44, $45, CASE WHEN $46::text = '' THEN NULL ELSE $46::jsonb END, NULLIF($47, ''), NULLIF($48, ''))
       `;
       
       const insertParams = [
