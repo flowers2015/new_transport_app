@@ -403,15 +403,30 @@ async function saveDriverCalculation(req, res) {
       });
       
       // استفاده از query text به جای prepared statement برای جلوگیری از cache
-      await pool.query({
+      const updateResult = await pool.query({
         text: updateQuery,
         values: sanitizedParams
       });
 
+      console.log('✅ [saveDriverCalculation] نتیجه UPDATE:', {
+        rowCount: updateResult.rowCount,
+        command: updateResult.command,
+        id: existingCheck.rows[0].id
+      });
+
+      if (updateResult.rowCount === 0) {
+        console.warn('⚠️ [saveDriverCalculation] هیچ ردیفی آپدیت نشد!');
+        return res.status(404).json({ 
+          message: 'رکورد مورد نظر یافت نشد یا آپدیت نشد.',
+          id: existingCheck.rows[0].id 
+        });
+      }
+
       console.log('✅ [saveDriverCalculation] اطلاعات به‌روزرسانی شد:', existingCheck.rows[0].id);
       return res.json({ 
         message: 'اطلاعات محاسباتی به‌روزرسانی شد.',
-        id: existingCheck.rows[0].id 
+        id: existingCheck.rows[0].id,
+        rowCount: updateResult.rowCount
       });
     } else {
       // ایجاد رکورد جدید
@@ -478,15 +493,30 @@ async function saveDriverCalculation(req, res) {
         safeString(userId), // updated_by
       ];
       
-      await pool.query({
+      const insertResult = await pool.query({
         text: insertQuery,
         values: insertParams
       });
 
+      console.log('✅ [saveDriverCalculation] نتیجه INSERT:', {
+        rowCount: insertResult.rowCount,
+        command: insertResult.command,
+        id
+      });
+
+      if (insertResult.rowCount === 0) {
+        console.error('❌ [saveDriverCalculation] هیچ ردیفی insert نشد!');
+        return res.status(500).json({ 
+          message: 'خطا در ثبت اطلاعات.',
+          id 
+        });
+      }
+
       console.log('✅ [saveDriverCalculation] اطلاعات جدید ثبت شد:', id);
       return res.status(201).json({ 
         message: 'اطلاعات محاسباتی ثبت شد.',
-        id 
+        id,
+        rowCount: insertResult.rowCount
       });
     }
   } catch (error) {
@@ -496,11 +526,18 @@ async function saveDriverCalculation(req, res) {
       stack: error.stack,
       code: error.code,
       detail: error.detail,
-      constraint: error.constraint
+      constraint: error.constraint,
+      position: error.position,
+      hint: error.hint
     });
     res.status(500).json({ 
       message: 'خطا در ذخیره اطلاعات محاسباتی.',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? {
+        code: error.code,
+        detail: error.detail,
+        constraint: error.constraint
+      } : undefined
     });
   }
 }
