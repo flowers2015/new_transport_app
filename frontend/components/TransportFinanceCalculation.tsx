@@ -570,11 +570,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 console.warn('⚠️ [loadSavedCalculations] خطا در خواندن cache:', e);
             }
             
-            // صبر کن تا announcements بارگذاری شوند
-            if (!announcements.length) {
-                console.log('⏳ [loadSavedCalculations] در انتظار announcements...');
+            // اگر announcements نداریم اما savedData داریم، از savedData استفاده کن
+            // اما اگر announcements داریم، از آن استفاده کن
+            if (!announcements.length && !drivers.length && !vehicles.length) {
+                console.log('⏳ [loadSavedCalculations] در انتظار announcements, drivers, vehicles...');
                 return;
             }
+            
+            // اگر announcements نداریم، اما drivers و vehicles داریم، از savedData استفاده کن
+            // این کار در ادامه انجام می‌شود (در بخش ساخت baseData از savedData)
             
             // بررسی cache قبل از fetch از سرور (فقط برای نمایش سریع)
             // اما همیشه از سرور fetch کن تا داده‌های جدید را بگیریم
@@ -1450,11 +1454,43 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     };
 
     const handleEditData = async (driverId: string, tourId: string) => {
+        console.log('🔍 [handleEditData] شروع ویرایش:', { driverId, tourId, calculationsCount: calculations.length });
+        
+        // اگر calculations خالی است، سعی کن از cache یا سرور load کن
+        if (calculations.length === 0) {
+            console.log('⚠️ [handleEditData] calculations خالی است، تلاش برای load...');
+            // تلاش برای load از cache
+            try {
+                const cacheStr = localStorage.getItem('transport_calculations_cache');
+                if (cacheStr) {
+                    const cache = JSON.parse(cacheStr);
+                    if (cache.data && cache.data.length > 0) {
+                        console.log('📦 [handleEditData] استفاده از cache');
+                        setCalculations(cache.data);
+                        // صبر کن تا state update شود
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+            } catch (e) {
+                console.error('❌ [handleEditData] خطا در خواندن cache:', e);
+            }
+        }
+        
         const calc = calculations.find(c => c.driverId === driverId);
-        if (!calc) return;
+        if (!calc) {
+            console.error('❌ [handleEditData] راننده پیدا نشد:', driverId);
+            alert('خطا: راننده پیدا نشد. لطفاً صفحه را refresh کنید.');
+            return;
+        }
         
         const tour = calc.tours.find(t => t.announcementId === tourId);
-        if (!tour) return;
+        if (!tour) {
+            console.error('❌ [handleEditData] تور پیدا نشد:', tourId);
+            alert('خطا: تور پیدا نشد. لطفاً صفحه را refresh کنید.');
+            return;
+        }
+        
+        console.log('✅ [handleEditData] راننده و تور پیدا شدند');
 
         // اگر داده‌ای ثبت شده، آن را نمایش بده
         if (tour.isDataRecorded) {
