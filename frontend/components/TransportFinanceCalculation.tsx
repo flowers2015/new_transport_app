@@ -2390,144 +2390,21 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             return;
         }
         
-        // بعد از ثبت موفق، دوباره داده‌های ذخیره شده را از سرور fetch کن
+        // پاک کردن cache برای اطمینان از دریافت داده‌های جدید
         try {
-            const token = localStorage.getItem('token');
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            };
-            
-            const savedRes = await fetch(getApiUrl('driver-calculations'), { headers });
-            if (savedRes.ok) {
-                const savedData = await savedRes.json();
-                console.log('🔄 [handleSaveInputData] داده‌های به‌روز شده از سرور:', savedData.length, 'رکورد');
-                
-                // فیلتر کردن تورهایی که دوره‌شان بسته شده
-                const closedTourIds = new Set(
-                    savedData
-                        .filter((s: any) => s.commission_status === 'commission_calculated' || s.commission_status === 'paid')
-                        .map((s: any) => s.announcement_id)
-                );
-                
-                // Merge کردن داده‌های ذخیره شده با calculations فعلی
-                setCalculations(prev => {
-                    return prev.map(calc => {
-                        const openTours = calc.tours.filter(tour => !closedTourIds.has(tour.announcementId));
-                        
-                        const updatedTours = openTours.map(tour => {
-                            const saved = savedData.find((s: any) => 
-                                s.driver_id === calc.driverId && s.announcement_id === tour.announcementId
-                            );
-                            
-                            if (saved) {
-                                return {
-                                    ...tour,
-                                    billOfLadingNumber: saved.bill_of_lading_number || saved.billOfLadingNumber || '',
-                                    billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
-                                    calculationDate: saved.calculation_date || saved.calculationDate || '',
-                                    approvedKilometers: saved.approved_kilometers || saved.approvedKilometers || 0,
-                                    excessKilometers: saved.excess_kilometers || saved.excessKilometers || 0,
-                                    approvedMissionDays: saved.approved_mission_days || saved.approvedMissionDays || 1,
-                                    excessMissionDays: saved.excess_mission_days || saved.excessMissionDays || 0,
-                                    tollCost: saved.toll_cost || saved.tollCost || 0,
-                                    loadingCost: saved.loading_cost || saved.loadingCost || 0,
-                                    billOfLadingCost: saved.bill_of_lading_cost || saved.billOfLadingCost || 0,
-                                    returnCargoCost: saved.return_cargo_cost || saved.returnCargoCost || 0,
-                                    returnBillOfLadingCost: saved.return_bill_of_lading_cost || saved.returnBillOfLadingCost || 0,
-                                    multiUnloadCost: saved.multi_unload_cost || saved.multiUnloadCost || 0,
-                                    excessMissionCost: saved.excess_mission_cost || saved.excessMissionCost || 0,
-                                    helperDriverCost: saved.helper_driver_cost || saved.helperDriverCost || 0,
-                                    fixedAllowance: ((saved.queue_type || saved.queueType || calc.queueType) === 'porsant' ? 0 : (saved.fixed_allowance || saved.fixedAllowance || 0)),
-                                    foodCost: saved.food_cost || saved.foodCost || 0,
-                                    fuelCost: saved.fuel_cost || saved.fuelCost || 0,
-                                    tourCost: saved.tour_cost || saved.tourCost || 0,
-                                    totalCost: saved.total_cost || saved.totalCost || 0,
-                                    notes: saved.notes || '',
-                                    isDataRecorded: true,
-                                    commissionStatus: saved.commission_status || 'recorded',
-                                    helperDriverId: saved.helper_driver_id || saved.helperDriverId || '',
-                                    helperDriverEmployeeId: saved.helper_driver_employee_id || saved.helperDriverEmployeeId || '',
-                                    helperDriverName: saved.helper_driver_name || saved.helperDriverName || '',
-                                    helperDriverAllowance: saved.helper_driver_allowance || saved.helperDriverAllowance || 0,
-                                    helperDriverFoodCost: saved.helper_driver_food_cost || saved.helperDriverFoodCost || 0,
-                                    helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || saved.helperDriverExcessMissionDays || 0,
-                                    helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || saved.helperDriverExcessMissionCost || 0,
-                                    helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || saved.helperDriverExcessKilometers || 0,
-                                    isPaid: saved.is_paid || saved.isPaid || false,
-                                    depotMissionDays: saved.depot_mission_days || saved.depotMissionDays || 0,
-                                    depotShipmentCount: saved.depot_shipment_count || saved.depotShipmentCount || 0,
-                                    depotCargoHandlingCost: saved.depot_cargo_handling_cost || saved.depotCargoHandlingCost || 0,
-                                    depotKilometerRate: ((saved.queue_type || saved.queueType || calc.queueType) === 'porsant' ? 0 : (saved.depot_kilometer_rate || saved.depotKilometerRate || 0)),
-                                    depotTotalMileage: saved.depot_total_mileage || saved.depotTotalMileage || 0,
-                                    depotFoodCost: saved.depot_food_cost || saved.depotFoodCost || 0,
-                                    depotMissionCost: saved.depot_mission_cost || saved.depotMissionCost || 0,
-                                    depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows).map((row: any) => ({
-                                        ...row,
-                                        billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
-                                    })) : []) : saved.depot_rows.map((row: any) => ({
-                                        ...row,
-                                        billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
-                                    }))) : (saved.depotRows || []),
-                                    advancePayment: saved.advance_payment || saved.advancePayment || 0,
-                                } as any;
-                            }
-                            return tour;
-                        });
-                        
-                        const driverTotalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
-                        const driverTotalKm = updatedTours.reduce((sum, tour) => {
-                            const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                            return sum + tourTotalKm;
-                        }, 0);
-                        
-                        return {
-                            ...calc,
-                            tours: updatedTours,
-                            tourCost: driverTotalCost,
-                            totalKilometers: driverTotalKm,
-                        };
-                    });
-                });
-                
-                // پاک کردن cache برای اطمینان از دریافت داده‌های جدید
-                try {
-                    localStorage.removeItem('transport_calculations_cache');
-                    console.log('🗑️ [handleSaveInputData] cache پاک شد');
-                } catch (e) {
-                    console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
-                }
-                
-                // Trigger refresh با تاخیر برای اطمینان از به‌روزرسانی کامل
-                setTimeout(() => {
-                    setRefreshTrigger(prev => prev + 1);
-                }, 500);
-            } else {
-                console.warn('⚠️ [handleSaveInputData] خطا در دریافت داده‌های به‌روز شده:', savedRes.status);
-                // پاک کردن cache
-                try {
-                    localStorage.removeItem('transport_calculations_cache');
-                } catch (e) {
-                    console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
-                }
-                // Trigger refresh با تاخیر برای اجرای دوباره loadSavedCalculations
-                setTimeout(() => {
-                    setRefreshTrigger(prev => prev + 1);
-                }, 500);
-            }
-        } catch (fetchErr) {
-            console.warn('⚠️ [handleSaveInputData] خطا در دریافت داده‌های به‌روز شده:', fetchErr);
-            // پاک کردن cache
-            try {
-                localStorage.removeItem('transport_calculations_cache');
-            } catch (e) {
-                console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
-            }
-            // Trigger refresh با تاخیر برای اجرای دوباره loadSavedCalculations
-            setTimeout(() => {
-                setRefreshTrigger(prev => prev + 1);
-            }, 500);
+            localStorage.removeItem('transport_calculations_cache');
+            console.log('🗑️ [handleSaveInputData] cache پاک شد');
+        } catch (e) {
+            console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
         }
+        
+        // Trigger refresh فوری برای اطمینان از به‌روزرسانی کامل
+        // استفاده از timeout کوتاه برای به‌روزرسانی سریع‌تر
+        // loadSavedCalculations خودش داده‌ها را از سرور fetch می‌کند
+        setTimeout(() => {
+            console.log('🔄 [handleSaveInputData] Trigger refresh برای loadSavedCalculations...');
+            setRefreshTrigger(prev => prev + 1);
+        }, 200);
         
         // بستن دیالوگ بعد از به‌روزرسانی موفق
         setShowInputDialog(false);
