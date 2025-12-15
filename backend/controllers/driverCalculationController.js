@@ -349,22 +349,17 @@ async function saveDriverCalculation(req, res) {
       console.log('🔍 [saveDriverCalculation] تعداد پارامترهای منحصر به فرد در UPDATE Query:', queryParamCount);
       console.log('🔍 [saveDriverCalculation] بیشترین پارامتر:', maxParam);
       console.log('🔍 [saveDriverCalculation] تعداد پارامترهای ارسالی:', updateParams.length);
-      console.log('🔍 [saveDriverCalculation] جزئیات پارامترها:', updateParams.map((p, i) => ({ 
-        index: i + 1, 
-        value: p, 
-        type: typeof p,
-        isUndefined: p === undefined,
-        isNull: p === null
-      })));
       
-      if (updateParams.length !== queryParamCount) {
+      // بررسی تطابق تعداد پارامترها - باید برابر با بیشترین پارامتر باشد
+      if (updateParams.length !== maxParam) {
         console.error('❌ [saveDriverCalculation] تعداد پارامترها نادرست است!', {
           count: updateParams.length,
-          expected: queryParamCount,
+          expected: maxParam,
+          uniqueParamsCount: queryParamCount,
           params: updateParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
         });
         return res.status(500).json({ 
-          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای ${queryParamCount}`,
+          message: `خطا در تعداد پارامترها: ${updateParams.length} به جای ${maxParam}`,
           error: 'PARAMETER_COUNT_MISMATCH'
         });
       }
@@ -558,6 +553,7 @@ async function getDriverCalculations(req, res) {
       LEFT JOIN drivers d ON dc.driver_id = d.id
       WHERE 1=1
         AND (dc.is_paid IS NULL OR dc.is_paid = FALSE)
+        AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
     `;
     const params = [];
     let paramIndex = 1;
