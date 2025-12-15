@@ -1203,16 +1203,8 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
             const today = getTodayJalali();
             const filename = `آمار_ترابری_${today.dateStr}.pdf`;
 
-            // Save PDF with blob approach to avoid HTTP warning
-            const blob = pdf.output('blob');
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            // استفاده از pdf.save() مستقیم برای جلوگیری از هشدار blob URL
+            pdf.save(filename);
         } catch (error) {
             console.error('Error exporting PDF:', error);
             alert('خطا در ایجاد فایل PDF. لطفاً دوباره تلاش کنید.');

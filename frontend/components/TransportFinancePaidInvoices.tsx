@@ -354,18 +354,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             const filename = `صورتحساب_های_پرداخت_شده_${dateRange}.pdf`;
             console.log('📄 [PDF_AFTER] filename:', filename);
             
-            // استفاده از output('blob') برای ایجاد blob و سپس دانلود
-            const blob = pdf.output('blob');
-            console.log('📄 [PDF_AFTER] blob size:', blob.size, 'bytes');
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            // پاک کردن blob URL بعد از استفاده
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            // استفاده از pdf.save() مستقیم برای جلوگیری از هشدار blob URL
+            pdf.save(filename);
             
             console.log('✅ [PDF_AFTER] ========== PDF با موفقیت تولید شد ==========');
             console.log('✅ [PDF_AFTER] تعداد رکوردها:', filteredRecords.length);

@@ -677,17 +677,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 heightLeft -= pageHeight;
             }
 
-            // ذخیره PDF با استفاده از blob
+            // ذخیره PDF با استفاده از pdf.save() مستقیم
             const filename = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.pdf`;
-            const blob = pdf.output('blob');
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            pdf.save(filename);
         } catch (err: any) {
             console.error('❌ [exportInvoiceToPDF] Error:', err);
             alert(`خطا در تولید PDF: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
@@ -858,15 +850,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             const dateRange = startDate && endDate ? `${startDate}_${endDate}` : new Date().toISOString().split('T')[0];
             const filename = `صورتحساب_های_پرداخت_نشده_${dateRange}.pdf`;
             
-            const blob = pdf.output('blob');
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            // استفاده از pdf.save() مستقیم برای جلوگیری از هشدار blob URL
+            pdf.save(filename);
             
             alert(`✅ PDF برای ${filteredRecords.length} راننده با موفقیت تولید شد.`);
         } catch (error) {
