@@ -773,7 +773,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         loadSavedCalculations();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [announcements.length, calculateDriverData.length, refreshTrigger]);
+    }, [announcements.length, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger]);
 
     // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
     useEffect(() => {
