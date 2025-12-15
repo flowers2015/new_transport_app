@@ -672,7 +672,67 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         count: baseData.length
                     });
                     
-                    // اگر baseData هنوز خالی است، یعنی داده‌ای نداریم - صبر کن
+                    // اگر baseData هنوز خالی است، اما savedData داریم، از savedData استفاده کن
+                    if (baseData.length === 0 && savedData.length > 0) {
+                        console.log('⚠️ [loadSavedCalculations] baseData خالی است اما savedData داریم، استفاده از savedData...');
+                        // ساخت baseData از savedData (بدون announcements - فقط برای نمایش)
+                        const driverMap = new Map<string, DriverCalculationRow>();
+                        
+                        savedData.forEach((saved: any) => {
+                            if (closedTourIds.has(saved.announcement_id)) return;
+                            
+                            const driver = drivers.find(d => d.id === saved.driver_id);
+                            if (!driver) return;
+                            
+                            const driverId = driver.id;
+                            const existing = driverMap.get(driverId);
+                            
+                            // اگر announcement نداریم، از saved data استفاده کن
+                            const ann = announcements.find(a => a.id === saved.announcement_id);
+                            const roundTripKm = ann?.route?.round_trip_km || (saved.approved_kilometers || 0) + (saved.excess_kilometers || 0);
+                            
+                            // پیدا کردن vehicle از announcements یا vehicles
+                            const vehicle = ann ? vehicles.find(v => v.id === ann.assigned_vehicle_id) : null;
+                            
+                            const tourDetail: DriverTourDetailWithCalculation = {
+                                announcementId: saved.announcement_id,
+                                announcementCode: ann?.announcement_code || saved.announcement_code || saved.announcement_id.substring(0, 8) || '',
+                                vehicleType: ann?.vehicle_type || saved.vehicle_type || '',
+                                vehicleId: ann?.assigned_vehicle_id || vehicle?.id || '',
+                                vehicleCode: saved.vehicle_code || vehicle?.vehicleCode || '',
+                                plateNumber: saved.vehicle_plate || (vehicle?.plateNumber ? `${vehicle.plateNumber.part1}${vehicle.plateNumber.letter}${vehicle.plateNumber.part2}-${vehicle.plateNumber.cityCode}` : ''),
+                                lineType: ann?.line_type || saved.line_type || '',
+                                destinations: ann?.destinations ? (ann.destinations.map((d: any) => d.city || '').filter(Boolean)) : (saved.destinations ? (typeof saved.destinations === 'string' ? saved.destinations.split(',').filter(Boolean) : [saved.destinations].filter(Boolean)) : []),
+                                roundTripKm,
+                                billOfLadingNumber: saved.bill_of_lading_number || '',
+                                billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                                announcementDate: ann?.created_at ? new Date(ann.created_at) : undefined,
+                            };
+                            
+                            if (existing) {
+                                existing.tourCount += 1;
+                                existing.totalKilometers += roundTripKm;
+                                existing.tours.push(tourDetail);
+                            } else {
+                                driverMap.set(driverId, {
+                                    id: generateUUID(),
+                                    driverId: driver.id,
+                                    employeeId: driver.employeeId,
+                                    driverName: driver.name,
+                                    queueType: (saved.queue_type || saved.queueType || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
+                                    tourCount: 1,
+                                    totalKilometers: roundTripKm,
+                                    tourCost: 0,
+                                    tours: [tourDetail],
+                                });
+                            }
+                        });
+                        
+                        baseData = Array.from(driverMap.values());
+                        console.log('✅ [loadSavedCalculations] baseData از savedData ساخته شد (بدون announcements):', baseData.length, 'راننده');
+                    }
+                    
+                    // اگر baseData هنوز خالی است، یعنی داده‌ای نداریم
                     if (baseData.length === 0) {
                         console.log('⏳ [loadSavedCalculations] baseData هنوز خالی است، صبر می‌کنیم...');
                         return;

@@ -237,17 +237,18 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 // ایجاد div موقت برای render کردن HTML صورتحساب
                 const tempDiv = document.createElement('div');
                 tempDiv.id = `temp-invoice-${i}`;
-                tempDiv.style.position = 'fixed';
+                tempDiv.style.position = 'absolute';
                 tempDiv.style.top = '0';
-                tempDiv.style.left = '0';
+                tempDiv.style.left = '-9999px'; // خارج از viewport اما در DOM
                 tempDiv.style.width = '1200px';
                 tempDiv.style.height = 'auto';
                 tempDiv.style.backgroundColor = '#ffffff';
                 tempDiv.style.padding = '20px';
                 tempDiv.style.boxSizing = 'border-box';
                 tempDiv.style.overflow = 'visible';
-                tempDiv.style.zIndex = '9999';
-                tempDiv.style.transform = 'translateX(-200%)'; // خارج از صفحه اما قابل دسترسی برای html2canvas
+                tempDiv.style.zIndex = '-1';
+                tempDiv.style.visibility = 'visible'; // مهم: باید visible باشد
+                tempDiv.style.opacity = '1'; // مهم: باید opacity 1 باشد
                 document.body.appendChild(tempDiv);
 
                 // تولید HTML صورتحساب
