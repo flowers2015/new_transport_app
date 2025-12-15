@@ -2398,17 +2398,31 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
         }
         
-        // Trigger refresh فوری برای اطمینان از به‌روزرسانی کامل
-        // استفاده از timeout کوتاه برای به‌روزرسانی سریع‌تر
-        // loadSavedCalculations خودش داده‌ها را از سرور fetch می‌کند
-        setTimeout(() => {
-            console.log('🔄 [handleSaveInputData] Trigger refresh برای loadSavedCalculations...');
-            setRefreshTrigger(prev => prev + 1);
-        }, 200);
-        
-        // بستن دیالوگ بعد از به‌روزرسانی موفق
+        // بستن دیالوگ قبل از refresh
         setShowInputDialog(false);
         setInputDialogData(null);
+        
+        // Trigger refresh با تاخیر بیشتر برای اطمینان از به‌روزرسانی کامل
+        // استفاده از timeout بیشتر برای اطمینان از اینکه سرور داده‌ها را به‌روزرسانی کرده است
+        // همچنین force refresh با دو بار trigger برای اطمینان از به‌روزرسانی
+        setTimeout(() => {
+            console.log('🔄 [handleSaveInputData] Trigger refresh #1 برای loadSavedCalculations...');
+            setRefreshTrigger(prev => {
+                const newValue = prev + 1;
+                console.log('🔄 [handleSaveInputData] refreshTrigger تغییر کرد:', prev, '→', newValue);
+                return newValue;
+            });
+            
+            // یک refresh دیگر بعد از 300ms برای اطمینان از به‌روزرسانی کامل
+            setTimeout(() => {
+                console.log('🔄 [handleSaveInputData] Trigger refresh #2 برای loadSavedCalculations...');
+                setRefreshTrigger(prev => {
+                    const newValue = prev + 1;
+                    console.log('🔄 [handleSaveInputData] refreshTrigger تغییر کرد (دوم):', prev, '→', newValue);
+                    return newValue;
+                });
+            }, 300);
+        }, 500);
     };
 
     if (loading) {
