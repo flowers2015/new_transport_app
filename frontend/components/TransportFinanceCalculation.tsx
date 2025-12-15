@@ -1841,8 +1841,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const handleSaveInputData = async () => {
         if (!inputDialogData) return;
 
+        console.log('📝 [SAVE_BEFORE] ========== شروع ثبت اطلاعات ==========');
+        console.log('📝 [SAVE_BEFORE] inputDialogData:', JSON.stringify(inputDialogData, null, 2));
+        console.log('📝 [SAVE_BEFORE] driverId:', inputDialogData.driverId);
+        console.log('📝 [SAVE_BEFORE] announcementId:', inputDialogData.tourId);
+        console.log('📝 [SAVE_BEFORE] calculations.length:', calculations.length);
+
         const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
-        if (!calc) return;
+        if (!calc) {
+            console.error('❌ [SAVE_BEFORE] راننده یافت نشد:', inputDialogData.driverId);
+            return;
+        }
+        console.log('📝 [SAVE_BEFORE] راننده یافت شد:', calc.driverName);
 
         const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
         if (!tour) return;
@@ -1981,9 +1991,70 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         // ذخیره در دیتابیس
         try {
+            console.log('💾 [SAVE_BEFORE] آماده ارسال به سرور...');
+            console.log('💾 [SAVE_BEFORE] محاسبات نهایی:', {
+                tourCost,
+                foodCost,
+                fuelCost,
+                tollCost: tollCostNum,
+                totalCost,
+                helperDriverTotalCost,
+                activeQueueType
+            });
             
             // دریافت userId از currentUser
             const userId = currentUser?.id || currentUser?.userId || '';
+            console.log('💾 [SAVE_BEFORE] userId:', userId);
+            
+            const requestBody = {
+                driverId: inputDialogData.driverId,
+                announcementId: inputDialogData.tourId,
+                billOfLadingNumber: inputDialogData.billOfLadingNumber,
+                billOfLadingCost: billOfLadingCostNum,
+                approvedKilometers: Number(inputDialogData.approvedKilometers) || 0,
+                excessKilometers: Number(inputDialogData.excessKilometers) || 0,
+                approvedMissionDays: Number(inputDialogData.approvedMissionDays) || 0,
+                excessMissionDays: Number(inputDialogData.excessMissionDays) || 0,
+                tollCost: tollCostNum,
+                loadingCost: 0,
+                returnCargoCost: returnCargoCostNum,
+                returnBillOfLadingCost: returnBillOfLadingCostNum,
+                multiUnloadCost: multiUnloadCostNum,
+                excessMissionCost: excessMissionCostNum,
+                fixedAllowance: activeQueueType === 'fixed_allowance' ? tourCost : 0,
+                foodCost: foodCost,
+                fuelCost: fuelCost,
+                tourCost: tourCost,
+                totalCost: totalCost,
+                notes: inputDialogData.notes,
+                queueType: activeQueueType,
+                billOfLadingDate: inputDialogData.billOfLadingDate,
+                calculationDate: inputDialogData.calculationDate,
+                depotTotalMileage: Number(inputDialogData.depotTotalMileage) || 0,
+                depotShipmentCount: Number(inputDialogData.depotShipmentCount) || 0,
+                depotCargoHandlingCost: Number(inputDialogData.depotCargoHandlingCost) || 0,
+                depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
+                depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
+                depotFoodCost: Number(inputDialogData.depotFoodCost) || 0,
+                depotMissionCost: Number(inputDialogData.depotMissionCost) || 0,
+                depotRows: inputDialogData.depotRows || [],
+                userId,
+                helperDriverId: inputDialogData.helperDriverId || null,
+                helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || null,
+                helperDriverName: inputDialogData.helperDriverName || null,
+                helperDriverAllowance: calculatedHelperDriverAllowance,
+                helperDriverFoodCost: calculatedHelperDriverFoodCost,
+                helperDriverExcessMissionDays: helperExcessMissionDays,
+                helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
+                helperDriverExcessKilometers: helperExcessKilometers,
+                vehicleCode: inputDialogData.vehicleCode || null,
+                vehiclePlate: inputDialogData.vehiclePlate || null,
+                destinations: inputDialogData.destinations || null,
+                multiUnloadCount: inputDialogData.multiUnloadCount || 0,
+                advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,
+            };
+            
+            console.log('💾 [SAVE_BEFORE] Request Body:', JSON.stringify(requestBody, null, 2));
             
             const saveRes = await fetch(getApiUrl('driver-calculations'), {
                 method: 'POST',
@@ -2046,7 +2117,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }
             
             const saveResult = await saveRes.json();
-            console.log('✅ [handleSaveInputData] اطلاعات با موفقیت ذخیره شد:', saveResult);
+            console.log('✅ [SAVE_AFTER] ========== ثبت موفق ==========');
+            console.log('✅ [SAVE_AFTER] Response:', JSON.stringify(saveResult, null, 2));
+            console.log('✅ [SAVE_AFTER] Status:', saveRes.status);
         } catch (err: any) {
             console.error('❌ [handleSaveInputData] خطا در ذخیره اطلاعات:', err);
             alert(`خطا در ذخیره اطلاعات: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);

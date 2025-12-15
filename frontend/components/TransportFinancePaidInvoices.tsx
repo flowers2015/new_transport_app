@@ -143,6 +143,16 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
     // تولید PDF یکجا از تصاویر صورتحساب‌های پرداخت شده
     const exportAllInvoicesToPDF = async () => {
+        console.log('📄 [PDF_BEFORE] ========== شروع تولید PDF ==========');
+        console.log('📄 [PDF_BEFORE] filteredRecords.length:', filteredRecords.length);
+        console.log('📄 [PDF_BEFORE] filteredRecords:', JSON.stringify(filteredRecords.map(r => ({
+            driverId: r.driverId,
+            driverName: r.driverName,
+            employeeId: r.employeeId,
+            calculationDateFrom: r.calculationDateFrom,
+            calculationDateTo: r.calculationDateTo
+        })), null, 2));
+        
         if (filteredRecords.length === 0) {
             alert('هیچ صورتحساب پرداخت شده‌ای برای تولید PDF وجود ندارد.');
             return;
@@ -159,13 +169,16 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             const pdf = new jsPDF('l', 'mm', 'a4'); // landscape orientation
             const pageWidth = 297; // A4 landscape width in mm
             const pageHeight = 210; // A4 landscape height in mm
+            console.log('📄 [PDF_BEFORE] PDF object created');
 
             // برای هر رکورد پرداخت شده
             for (let i = 0; i < filteredRecords.length; i++) {
                 const record = filteredRecords[i];
                 
-                // نمایش پیشرفت
-                console.log(`📄 در حال تولید صورتحساب ${i + 1} از ${filteredRecords.length}: ${record.driverName}`);
+                console.log(`📄 [PDF_BEFORE] ========== پردازش رکورد ${i + 1}/${filteredRecords.length} ==========`);
+                console.log(`📄 [PDF_BEFORE] driverId: ${record.driverId}`);
+                console.log(`📄 [PDF_BEFORE] driverName: ${record.driverName}`);
+                console.log(`📄 [PDF_BEFORE] employeeId: ${record.employeeId}`);
 
                 // دریافت محاسبات مربوط به این راننده
                 const calcDateFrom = record.calculationDateFrom || '';
@@ -182,14 +195,25 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
                 const calculationsData = await calculationsRes.json();
                 const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
+                console.log(`📄 [PDF_BEFORE] calculationsArray.length: ${calculationsArray.length}`);
+                console.log(`📄 [PDF_BEFORE] calculationsArray:`, JSON.stringify(calculationsArray.slice(0, 2), null, 2));
                 
                 // فقط محاسبات پرداخت شده را نمایش بده
                 const paidCalculations = calculationsArray.filter((calc: any) => 
                     calc.is_paid || calc.isPaid
                 );
+                console.log(`📄 [PDF_BEFORE] paidCalculations.length: ${paidCalculations.length}`);
+                console.log(`📄 [PDF_BEFORE] paidCalculations:`, JSON.stringify(paidCalculations.map((c: any) => ({
+                    id: c.id,
+                    announcement_id: c.announcement_id,
+                    is_paid: c.is_paid,
+                    isPaid: c.isPaid,
+                    total_cost: c.total_cost,
+                    driver_id: c.driver_id
+                })), null, 2));
 
                 if (paidCalculations.length === 0) {
-                    console.warn(`⚠️ هیچ محاسبه پرداخت شده‌ای برای ${record.driverName} یافت نشد`);
+                    console.warn(`⚠️ [PDF_BEFORE] هیچ محاسبه پرداخت شده‌ای برای ${record.driverName} یافت نشد`);
                     continue;
                 }
 
@@ -227,8 +251,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 document.body.appendChild(tempDiv);
 
                 // تولید HTML صورتحساب
+                console.log(`📄 [PDF_BEFORE] تولید HTML برای ${record.driverName}...`);
                 const htmlContent = renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
-                console.log(`📄 [PDF ${i+1}/${filteredRecords.length}] HTML content length:`, htmlContent.length);
+                console.log(`📄 [PDF_BEFORE] HTML content length: ${htmlContent.length}`);
+                console.log(`📄 [PDF_BEFORE] HTML preview (first 500 chars):`, htmlContent.substring(0, 500));
                 
                 // HTML را به div اضافه می‌کنیم
                 tempDiv.innerHTML = htmlContent;
@@ -237,25 +263,37 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
                 // بررسی محتوا
+                console.log(`📄 [PDF_BEFORE] بررسی محتوای tempDiv...`);
+                console.log(`📄 [PDF_BEFORE] tempDiv.innerHTML.length: ${tempDiv.innerHTML.length}`);
                 if (!tempDiv.innerHTML || tempDiv.innerHTML.length < 100) {
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] HTML content is empty!`);
+                    console.error(`❌ [PDF_BEFORE] HTML content is empty!`);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
 
                 // پیدا کردن div اصلی صورتحساب
                 const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.firstElementChild;
+                console.log(`📄 [PDF_BEFORE] invoiceDiv found:`, invoiceDiv ? 'YES' : 'NO');
+                console.log(`📄 [PDF_BEFORE] invoiceDiv === tempDiv:`, invoiceDiv === tempDiv);
                 
                 if (!invoiceDiv || invoiceDiv === tempDiv) {
-                    console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Cannot find invoice div!`);
+                    console.error(`❌ [PDF_BEFORE] Cannot find invoice div!`);
                     document.body.removeChild(tempDiv);
                     continue;
                 }
+                
+                console.log(`📄 [PDF_BEFORE] invoiceDiv.innerHTML.length: ${invoiceDiv.innerHTML.length}`);
+                console.log(`📄 [PDF_BEFORE] invoiceDiv dimensions:`, {
+                    scrollWidth: invoiceDiv.scrollWidth,
+                    scrollHeight: invoiceDiv.scrollHeight,
+                    offsetWidth: invoiceDiv.offsetWidth,
+                    offsetHeight: invoiceDiv.offsetHeight
+                });
 
                 // تبدیل به canvas
                 let canvas;
                 try {
-                    console.log(`🔄 [PDF ${i+1}/${filteredRecords.length}] Starting html2canvas...`);
+                    console.log(`📄 [PDF_BEFORE] شروع html2canvas...`);
                     
                     canvas = await html2canvas(invoiceDiv as HTMLElement, {
                         scale: 1.5,
@@ -268,13 +306,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         windowHeight: invoiceDiv.scrollHeight || 2000,
                     });
                     
+                    console.log(`📄 [PDF_AFTER] Canvas created: ${canvas?.width}x${canvas?.height}`);
                     if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                        console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Canvas is empty!`);
+                        console.error(`❌ [PDF_AFTER] Canvas is empty! width: ${canvas?.width}, height: ${canvas?.height}`);
                         document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    console.log(`✅ [PDF ${i+1}/${filteredRecords.length}] Canvas: ${canvas.width}x${canvas.height}`);
+                    console.log(`✅ [PDF_AFTER] Canvas OK: ${canvas.width}x${canvas.height}`);
                 } catch (canvasError: any) {
                     console.error(`❌ [PDF ${i+1}/${filteredRecords.length}] Error:`, canvasError);
                     document.body.removeChild(tempDiv);
@@ -309,11 +348,15 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             }
 
             // ذخیره PDF با استفاده از blob برای جلوگیری از هشدار HTTP
+            console.log('📄 [PDF_AFTER] ========== آماده ذخیره PDF ==========');
+            console.log('📄 [PDF_AFTER] تعداد صفحات PDF:', pdf.getNumberOfPages());
             const dateRange = startDate && endDate ? `${startDate}_${endDate}` : new Date().toISOString().split('T')[0];
             const filename = `صورتحساب_های_پرداخت_شده_${dateRange}.pdf`;
+            console.log('📄 [PDF_AFTER] filename:', filename);
             
             // استفاده از output('blob') برای ایجاد blob و سپس دانلود
             const blob = pdf.output('blob');
+            console.log('📄 [PDF_AFTER] blob size:', blob.size, 'bytes');
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -324,6 +367,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             // پاک کردن blob URL بعد از استفاده
             setTimeout(() => URL.revokeObjectURL(url), 100);
             
+            console.log('✅ [PDF_AFTER] ========== PDF با موفقیت تولید شد ==========');
+            console.log('✅ [PDF_AFTER] تعداد رکوردها:', filteredRecords.length);
+            console.log('✅ [PDF_AFTER] تعداد صفحات:', pdf.getNumberOfPages());
             alert(`✅ PDF با موفقیت تولید شد. تعداد ${filteredRecords.length} صورتحساب در فایل قرار گرفت.`);
         } catch (err: any) {
             console.error('❌ [exportAllInvoicesToPDF] Error:', err);
