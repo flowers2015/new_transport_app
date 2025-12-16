@@ -1179,14 +1179,23 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }
         });
 
+        console.log('✅ [filteredAndSortedCalculations] فیلتر و مرتب‌سازی انجام شد:', filtered.length, 'calculation');
         return filtered;
-    }, [refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [calculations, refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
     const paginatedCalculations = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredAndSortedCalculations.slice(startIndex, startIndex + itemsPerPage);
+        const paginated = filteredAndSortedCalculations.slice(startIndex, startIndex + itemsPerPage);
+        console.log('📄 [paginatedCalculations] محاسبه شد:', {
+            total: filteredAndSortedCalculations.length,
+            startIndex,
+            endIndex: startIndex + itemsPerPage,
+            paginatedLength: paginated.length,
+            currentPage
+        });
+        return paginated;
     }, [filteredAndSortedCalculations, currentPage, itemsPerPage]);
 
     const handleSort = (field: SortField) => {
