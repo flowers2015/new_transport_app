@@ -3894,7 +3894,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 <th className="p-2 border-l border-slate-300 text-center min-w-[60px]">شماره ردیف</th>
                                                 <th className="p-2 border-l border-slate-300 min-w-[200px]">مقاصد اعزامی دپو</th>
                                                 <th className="p-2 border-l border-slate-300 min-w-[150px]">پیمایش حمل دپو (کیلومتر)</th>
-                                                <th className="p-2 min-w-[200px]">شماره بارنامه</th>
+                                                <th className="p-2 border-l border-slate-300 min-w-[200px]">شماره بارنامه</th>
+                                                <th className="p-2 text-center min-w-[50px]">عملیات</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -3903,7 +3904,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 destination: '',
                                                 mileage: 0,
                                                 billOfLadingNumber: ''
-                                            }))).map((row, index) => (
+                                            }))).map((row, index) => {
+                                                // بررسی اینکه آیا این ردیف در depotRows واقعی وجود دارد
+                                                const existingRow = inputDialogData.depotRows?.find(r => r.id === row.id);
+                                                const isInDepotRows = !!existingRow;
+                                                
+                                                return (
                                                 <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
                                                     <td className="p-2 border-l border-slate-200 text-center">
                                                         {index + 1}
@@ -3911,30 +3917,40 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     <td className="p-2 border-l border-slate-200">
                                                         <input
                                                             type="text"
-                                                            value={row.destination}
+                                                            value={row.destination || ''}
                                                             onChange={(e) => {
-                                                                const updatedRows = (inputDialogData.depotRows || []).map(r => 
+                                                                let currentRows = inputDialogData.depotRows || [];
+                                                                
+                                                                // اگر ردیف در depotRows نیست، ابتدا آن را اضافه کن
+                                                                if (!isInDepotRows) {
+                                                                    // اگر depotRows خالی است، ابتدا ردیف‌های پیش‌فرض را ایجاد کن
+                                                                    if (currentRows.length === 0) {
+                                                                        currentRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                            id: `depot-default-${i}`,
+                                                                            destination: '',
+                                                                            mileage: 0,
+                                                                            billOfLadingNumber: ''
+                                                                        }));
+                                                                    } else {
+                                                                        // ردیف جدید را اضافه کن
+                                                                        currentRows = [...currentRows, {
+                                                                            id: row.id,
+                                                                            destination: '',
+                                                                            mileage: 0,
+                                                                            billOfLadingNumber: ''
+                                                                        }];
+                                                                    }
+                                                                }
+                                                                
+                                                                // حالا ردیف را به‌روزرسانی کن
+                                                                const updatedRows = currentRows.map(r => 
                                                                     r.id === row.id ? { ...r, destination: e.target.value } : r
                                                                 );
-                                                                // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
-                                                                if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
-                                                                    const defaultRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                        id: `depot-default-${i}`,
-                                                                        destination: '',
-                                                                        mileage: 0,
-                                                                        billOfLadingNumber: ''
-                                                                    }));
-                                                                    defaultRows[index].destination = e.target.value;
-                                                                    setInputDialogData({
-                                                                        ...inputDialogData,
-                                                                        depotRows: defaultRows
-                                                                    });
-                                                                } else {
-                                                                    setInputDialogData({
-                                                                        ...inputDialogData,
-                                                                        depotRows: updatedRows
-                                                                    });
-                                                                }
+                                                                
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    depotRows: updatedRows
+                                                                });
                                                             }}
                                                             className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                                             placeholder="مقصد"
@@ -3949,67 +3965,106 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                 const inputValue = e.target.value.replace(/,/g, '');
                                                                 const cleaned = inputValue.replace(/[^\d]/g, '');
                                                                 const numValue = cleaned ? Number(cleaned) : 0;
-                                                                const updatedRows = (inputDialogData.depotRows || []).map(r => 
+                                                                
+                                                                let currentRows = inputDialogData.depotRows || [];
+                                                                
+                                                                // اگر ردیف در depotRows نیست، ابتدا آن را اضافه کن
+                                                                if (!isInDepotRows) {
+                                                                    // اگر depotRows خالی است، ابتدا ردیف‌های پیش‌فرض را ایجاد کن
+                                                                    if (currentRows.length === 0) {
+                                                                        currentRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                            id: `depot-default-${i}`,
+                                                                            destination: '',
+                                                                            mileage: 0,
+                                                                            billOfLadingNumber: ''
+                                                                        }));
+                                                                    } else {
+                                                                        // ردیف جدید را اضافه کن
+                                                                        currentRows = [...currentRows, {
+                                                                            id: row.id,
+                                                                            destination: '',
+                                                                            mileage: 0,
+                                                                            billOfLadingNumber: ''
+                                                                        }];
+                                                                    }
+                                                                }
+                                                                
+                                                                // حالا ردیف را به‌روزرسانی کن
+                                                                const updatedRows = currentRows.map(r => 
                                                                     r.id === row.id ? { ...r, mileage: numValue } : r
                                                                 );
-                                                                // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
-                                                                if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
-                                                                    const defaultRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                        id: `depot-default-${i}`,
-                                                                        destination: '',
-                                                                        mileage: 0,
-                                                                        billOfLadingNumber: ''
-                                                                    }));
-                                                                    defaultRows[index].mileage = numValue;
-                                                                    setInputDialogData({
-                                                                        ...inputDialogData,
-                                                                        depotRows: defaultRows
-                                                                    });
-                                                                } else {
-                                                                    setInputDialogData({
-                                                                        ...inputDialogData,
-                                                                        depotRows: updatedRows
-                                                                    });
-                                                                }
+                                                                
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    depotRows: updatedRows
+                                                                });
                                                             }}
                                                             className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                                             placeholder="0"
                                                         />
                                                     </td>
-                                                    <td className="p-2">
+                                                    <td className="p-2 border-l border-slate-200">
                                                         <input
                                                             type="text"
-                                                    value={row.billOfLadingNumber || ''}
-                                                    onChange={(e) => {
-                                                        const updatedRows = (inputDialogData.depotRows || []).map(r => 
-                                                            r.id === row.id ? { ...r, billOfLadingNumber: e.target.value } : r
-                                                        );
-                                                        // اگر ردیف پیش‌فرض است، آن را به لیست اضافه کن
-                                                        if (!inputDialogData.depotRows || inputDialogData.depotRows.length === 0) {
-                                                            const defaultRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                id: `depot-default-${i}`,
-                                                                destination: '',
-                                                                mileage: 0,
-                                                                billOfLadingNumber: ''
-                                                            }));
-                                                            defaultRows[index].billOfLadingNumber = e.target.value;
-                                                                    setInputDialogData({
-                                                                        ...inputDialogData,
-                                                                        depotRows: defaultRows
-                                                                    });
-                                                                } else {
-                                                                    setInputDialogData({
-                                                                        ...inputDialogData,
-                                                                        depotRows: updatedRows
-                                                                    });
+                                                            value={row.billOfLadingNumber || ''}
+                                                            onChange={(e) => {
+                                                                let currentRows = inputDialogData.depotRows || [];
+                                                                
+                                                                // اگر ردیف در depotRows نیست، ابتدا آن را اضافه کن
+                                                                if (!isInDepotRows) {
+                                                                    // اگر depotRows خالی است، ابتدا ردیف‌های پیش‌فرض را ایجاد کن
+                                                                    if (currentRows.length === 0) {
+                                                                        currentRows = Array.from({ length: 4 }, (_, i) => ({
+                                                                            id: `depot-default-${i}`,
+                                                                            destination: '',
+                                                                            mileage: 0,
+                                                                            billOfLadingNumber: ''
+                                                                        }));
+                                                                    } else {
+                                                                        // ردیف جدید را اضافه کن
+                                                                        currentRows = [...currentRows, {
+                                                                            id: row.id,
+                                                                            destination: '',
+                                                                            mileage: 0,
+                                                                            billOfLadingNumber: ''
+                                                                        }];
+                                                                    }
                                                                 }
+                                                                
+                                                                // حالا ردیف را به‌روزرسانی کن
+                                                                const updatedRows = currentRows.map(r => 
+                                                                    r.id === row.id ? { ...r, billOfLadingNumber: e.target.value } : r
+                                                                );
+                                                                
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    depotRows: updatedRows
+                                                                });
                                                             }}
                                                             className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                                             placeholder="توضیحات"
                                                         />
                                                     </td>
+                                                    <td className="p-2 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const currentRows = inputDialogData.depotRows || [];
+                                                                const filteredRows = currentRows.filter(r => r.id !== row.id);
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    depotRows: filteredRows.length > 0 ? filteredRows : undefined
+                                                                });
+                                                            }}
+                                                            className="px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded text-xs transition-colors"
+                                                            title="حذف ردیف"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
