@@ -873,6 +873,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     // تنظیم calculations با داده‌های merge شده
                     // همیشه setCalculations را فراخوانی کن، حتی اگر خالی است
+                    console.log('🔄 [loadSavedCalculations] در حال setCalculations با', filteredUpdated.length, 'راننده');
+                    console.log('📊 [loadSavedCalculations] نمونه filteredUpdated:', filteredUpdated.length > 0 ? {
+                        firstDriver: {
+                            driverId: filteredUpdated[0].driverId,
+                            driverName: filteredUpdated[0].driverName,
+                            tourCount: filteredUpdated[0].tourCount,
+                            toursLength: filteredUpdated[0].tours.length
+                        }
+                    } : 'خالی');
                     setCalculations(filteredUpdated);
                     console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
                     
@@ -982,6 +991,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
         // استفاده از JSON.parse(JSON.stringify()) برای deep copy و جلوگیری از reference issues
         const currentCalculations = calculations || [];
+        console.log('🔄 [filteredAndSortedCalculations] اجرا شد با', currentCalculations.length, 'calculation');
         if (currentCalculations.length === 0) {
             console.log('⚠️ [filteredAndSortedCalculations] calculations خالی است');
             return [];
