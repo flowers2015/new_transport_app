@@ -2555,8 +2555,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     });
                     
                     // محاسبه مجدد مجموع هزینه و پیمایش
-                    const totalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
-                    const totalKm = updatedTours.reduce((sum, tour) => {
+                    // استفاده از نام متفاوت برای جلوگیری از مشکل TDZ (Cannot access 's' before initialization)
+                    const recalculatedTotalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+                    const recalculatedTotalKm = updatedTours.reduce((sum, tour) => {
                         const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
                         return sum + tourTotalKm;
                     }, 0);
@@ -2564,8 +2565,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     return {
                         ...calc,
                         tours: updatedTours,
-                        tourCost: totalCost,
-                        totalKilometers: totalKm,
+                        tourCost: recalculatedTotalCost,
+                        totalKilometers: recalculatedTotalKm,
                     };
                 });
             });
