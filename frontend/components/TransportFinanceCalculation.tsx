@@ -979,11 +979,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const filteredAndSortedCalculations = useMemo(() => {
         // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
         // استفاده از JSON.parse(JSON.stringify()) برای deep copy و جلوگیری از reference issues
-        if (!calculations || calculations.length === 0) {
+        const currentCalculations = calculations || [];
+        if (currentCalculations.length === 0) {
             console.log('⚠️ [filteredAndSortedCalculations] calculations خالی است');
             return [];
         }
-        const currentCalculations = calculations;
         let filtered = [...currentCalculations];
 
         // فیلتر بر اساس جستجو (کد پرسنلی و نام)
@@ -1209,7 +1209,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         let recordedUnpaidCost = 0;
 
         // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
-        if (!calculations || calculations.length === 0) {
+        const currentCalculations = calculations || [];
+        if (currentCalculations.length === 0) {
             return {
                 totalTours: 0,
                 unrecordedTours: 0,
@@ -1220,7 +1221,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             };
         }
 
-        calculations.forEach(calc => {
+        currentCalculations.forEach(calc => {
             if (!calc.tours || calc.tours.length === 0) return;
             
             calc.tours.forEach(tour => {
@@ -1280,7 +1281,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [refreshTrigger, searchTerm, startDate, endDate]);
+    }, [calculations, refreshTrigger, searchTerm, startDate, endDate]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
