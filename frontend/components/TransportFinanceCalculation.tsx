@@ -1152,7 +1152,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return filtered;
-    }, [calculations, refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1280,7 +1280,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [calculations, refreshTrigger, searchTerm, startDate, endDate]);
+    }, [refreshTrigger, searchTerm, startDate, endDate]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
@@ -2535,7 +2535,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('⚡ [handleSaveInputData] به‌روزرسانی فوری state انجام شد!');
             
             // فوراً refreshTrigger را به‌روزرسانی کن تا useMemo دوباره اجرا شود
-            setRefreshTrigger(prev => prev + 1);
+            setTimeout(() => {
+                setRefreshTrigger(prev => prev + 1);
+            }, 50);
             
         } catch (err: any) {
             console.error('❌ [handleSaveInputData] خطا در ذخیره اطلاعات:', err);

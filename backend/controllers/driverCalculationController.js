@@ -638,13 +638,15 @@ async function saveDriverCalculation(req, res) {
       // شمارش تعداد expressions در VALUES - استفاده از insertMaxParam به عنوان معیار اصلی
       // چون هر expression یک مقدار دارد و ما می‌دانیم که بیشترین پارامتر $48 است
       // پس باید 48 expression داشته باشیم
+      // اما باید مطمئن شویم که تعداد پارامترها درست است
       const valuesExpressions = insertMaxParam; // تعداد expressions برابر با بیشترین پارامتر است
       
       console.log('🔍 [saveDriverCalculation] شمارش دقیق:', {
         columnCount,
         valuesExpressions,
         insertMaxParam,
-        insertParamsLength: insertParams.length
+        insertParamsLength: insertParams.length,
+        insertUniqueParamsCount: insertUniqueParams.length
       });
       
       // بررسی تعداد ستون‌های واقعی در دیتابیس
@@ -670,24 +672,39 @@ async function saveDriverCalculation(req, res) {
       console.log('🔍 [saveDriverCalculation] INSERT - بیشترین پارامتر:', insertMaxParam);
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای ارسالی:', insertParams.length);
       
-      // بررسی تطابق: تعداد ستون‌ها باید برابر با تعداد expressions باشد
-      // و تعداد expressions برابر با بیشترین پارامتر است
-      if (columnCount !== valuesExpressions || columnCount !== insertMaxParam) {
-        console.error('❌ [saveDriverCalculation] INSERT - تعداد ستون‌ها و expressions برابر نیست!', {
+      // بررسی تطابق: تعداد ستون‌ها باید برابر با بیشترین پارامتر باشد
+      // و تعداد پارامترهای ارسالی باید برابر با بیشترین پارامتر باشد
+      if (columnCount !== insertMaxParam) {
+        console.error('❌ [saveDriverCalculation] INSERT - تعداد ستون‌ها با بیشترین پارامتر برابر نیست!', {
           columnCount,
-          valuesExpressions,
           insertMaxParam,
           insertParamsLength: insertParams.length,
-          query: insertQuery.substring(0, 800)
+          query: insertQuery.substring(0, 500)
         });
         return res.status(500).json({ 
-          message: `خطا: تعداد ستون‌ها (${columnCount}) با تعداد expressions (${valuesExpressions}) یا پارامترها (${insertMaxParam}) برابر نیست`,
-          error: 'COLUMN_EXPRESSION_MISMATCH',
+          message: `خطا: تعداد ستون‌ها (${columnCount}) با تعداد پارامترها (${insertMaxParam}) برابر نیست`,
+          error: 'COLUMN_PARAM_MISMATCH',
           details: {
             columnCount,
-            valuesExpressions,
             insertMaxParam,
             insertParamsLength: insertParams.length
+          }
+        });
+      }
+      
+      if (insertParams.length !== insertMaxParam) {
+        console.error('❌ [saveDriverCalculation] INSERT - تعداد پارامترهای ارسالی با بیشترین پارامتر برابر نیست!', {
+          insertParamsLength: insertParams.length,
+          insertMaxParam,
+          columnCount
+        });
+        return res.status(500).json({ 
+          message: `خطا: تعداد پارامترهای ارسالی (${insertParams.length}) با تعداد پارامترها (${insertMaxParam}) برابر نیست`,
+          error: 'PARAM_COUNT_MISMATCH',
+          details: {
+            insertParamsLength: insertParams.length,
+            insertMaxParam,
+            columnCount
           }
         });
       }
