@@ -844,9 +844,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     // فیلتر کردن رانندگانی که تور باز ندارند
                     const filteredUpdated = updated.filter(calc => calc.tours.length > 0);
                     console.log('📊 [loadSavedCalculations] رانندگان با تور باز:', filteredUpdated.length, 'از', updated.length);
+                    console.log('📊 [loadSavedCalculations] نمونه filteredUpdated:', filteredUpdated.length > 0 ? {
+                        driverId: filteredUpdated[0].driverId,
+                        driverName: filteredUpdated[0].driverName,
+                        tourCount: filteredUpdated[0].tours.length,
+                        firstTour: filteredUpdated[0].tours[0] ? {
+                            announcementId: filteredUpdated[0].tours[0].announcementId,
+                            isDataRecorded: filteredUpdated[0].tours[0].isDataRecorded
+                        } : null
+                    } : 'خالی');
                     
                     // تنظیم calculations با داده‌های merge شده
                     setCalculations(filteredUpdated);
+                    console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
                     
                     // ذخیره در localStorage برای cache
                     try {
@@ -1109,7 +1119,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return filtered;
-    }, [refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [calculations.length, refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1239,7 +1249,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [refreshTrigger, searchTerm, startDate, endDate]);
+    }, [calculations.length, refreshTrigger, searchTerm, startDate, endDate]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
