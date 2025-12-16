@@ -118,6 +118,34 @@ async function saveDriverCalculation(req, res) {
       excessMissionDays,
     });
 
+    // ⚡ اضافه کردن ستون‌های گمشده - همیشه اجرا می‌شود
+    try {
+      await pool.query(`
+        ALTER TABLE driver_calculations 
+        ADD COLUMN IF NOT EXISTS helper_driver_excess_kilometers INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS vehicle_code VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS vehicle_plate VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS destinations TEXT,
+        ADD COLUMN IF NOT EXISTS multi_unload_count INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS advance_payment INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_total_mileage INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_shipment_count INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_cargo_handling_cost INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_mission_days INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_kilometer_rate INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_food_cost INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_mission_cost INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS depot_rows JSONB,
+        ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'recorded',
+        ADD COLUMN IF NOT EXISTS period_id VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS created_by VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255)
+      `);
+      console.log('✅ [saveDriverCalculation] ستون‌های گمشده بررسی و اضافه شدند');
+    } catch (colErr) {
+      console.warn('⚠️ [saveDriverCalculation] خطا در اضافه کردن ستون‌ها (ممکن است از قبل وجود داشته باشند):', colErr.message);
+    }
+
     // بررسی وجود جدول driver_calculations
     const tableCheck = await pool.query(`
       SELECT EXISTS (
@@ -607,10 +635,17 @@ async function saveDriverCalculation(req, res) {
       const columnMatches = insertQuery.match(/INSERT INTO driver_calculations\s*\(([^)]+)\)/);
       const columnCount = columnMatches ? columnMatches[1].split(',').map(c => c.trim()).filter(c => c).length : 0;
       
-      // شمارش تعداد expressions در VALUES - استفاده از تعداد پارامترها به عنوان معیار
+      // شمارش تعداد expressions در VALUES - استفاده از insertMaxParam به عنوان معیار اصلی
       // چون هر expression یک مقدار دارد و ما می‌دانیم که بیشترین پارامتر $48 است
       // پس باید 48 expression داشته باشیم
       const valuesExpressions = insertMaxParam; // تعداد expressions برابر با بیشترین پارامتر است
+      
+      console.log('🔍 [saveDriverCalculation] شمارش دقیق:', {
+        columnCount,
+        valuesExpressions,
+        insertMaxParam,
+        insertParamsLength: insertParams.length
+      });
       
       // بررسی تعداد ستون‌های واقعی در دیتابیس
       let actualColumnCount = 0;
