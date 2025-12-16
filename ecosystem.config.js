@@ -9,7 +9,7 @@ module.exports = {
     max_memory_restart: '1G',
     env: {
       NODE_ENV: 'production',
-      PORT: process.env.PORT || 5000
+      PORT: process.env.PORT || 3000
     },
     error_file: '/root/.pm2/logs/transport-backend-error.log',
     out_file: '/root/.pm2/logs/transport-backend-out.log',

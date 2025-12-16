@@ -717,19 +717,6 @@ async function saveDriverCalculation(req, res) {
         console.log('ℹ️ [saveDriverCalculation] ستون‌های موجود در دیتابیس که در INSERT نیستند (خودکار):', missingColumns);
       }
       
-      if (insertParams.length !== insertMaxParam) {
-        console.error('❌ [saveDriverCalculation] INSERT - تعداد پارامترها نادرست است!', {
-          count: insertParams.length,
-          expected: insertMaxParam,
-          uniqueParamsCount: insertUniqueParams.length,
-          params: insertParams.map((p, i) => ({ index: i + 1, value: p, type: typeof p }))
-        });
-        return res.status(500).json({ 
-          message: `خطا در تعداد پارامترها (INSERT): ${insertParams.length} به جای ${insertMaxParam}`,
-          error: 'PARAMETER_COUNT_MISMATCH'
-        });
-      }
-      
       const insertResult = await pool.query({
         text: insertQuery,
         values: insertParams
