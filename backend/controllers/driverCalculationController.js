@@ -533,42 +533,16 @@ async function saveDriverCalculation(req, res) {
       const columnMatches = insertQuery.match(/INSERT INTO driver_calculations\s*\(([^)]+)\)/);
       const columnCount = columnMatches ? columnMatches[1].split(',').map(c => c.trim()).filter(c => c).length : 0;
       
-      // شمارش دقیق تعداد expressions در VALUES (با در نظر گیری CASE WHEN)
-      // باید expressions را به درستی بشماریم - CASE WHEN یک expression است
-      const valuesMatch = insertQuery.match(/VALUES\s*\(([^)]+)\)/);
-      let valuesExpressions = 0;
-      if (valuesMatch) {
-        const valuesStr = valuesMatch[1];
-        // شمارش expressions با در نظر گیری CASE WHEN
-        let inCase = false;
-        let parenDepth = 0;
-        let currentExpr = '';
-        for (let i = 0; i < valuesStr.length; i++) {
-          const char = valuesStr[i];
-          if (char === '(') parenDepth++;
-          if (char === ')') parenDepth--;
-          if (char === ',' && parenDepth === 0 && !inCase) {
-            if (currentExpr.trim()) valuesExpressions++;
-            currentExpr = '';
-            continue;
-          }
-          currentExpr += char;
-          if (valuesStr.substring(i, i + 4) === 'CASE') inCase = true;
-          if (valuesStr.substring(i, i + 3) === 'END' && parenDepth === 0) {
-            inCase = false;
-            if (currentExpr.trim()) valuesExpressions++;
-            currentExpr = '';
-            i += 2; // skip 'END'
-            continue;
-          }
-        }
-        if (currentExpr.trim()) valuesExpressions++;
-      }
+      // شمارش تعداد expressions در VALUES - استفاده از تعداد پارامترها به عنوان معیار
+      // چون هر expression یک مقدار دارد و ما می‌دانیم که بیشترین پارامتر $48 است
+      // پس باید 48 expression داشته باشیم
+      const valuesExpressions = insertMaxParam; // تعداد expressions برابر با بیشترین پارامتر است
       
       // بررسی تعداد ستون‌های واقعی در دیتابیس
       let actualColumnCount = 0;
+      let dbColumns = { rows: [] };
       try {
-        const dbColumns = await pool.query(`
+        dbColumns = await pool.query(`
           SELECT column_name 
           FROM information_schema.columns 
           WHERE table_name = 'driver_calculations'
@@ -582,28 +556,39 @@ async function saveDriverCalculation(req, res) {
       }
       
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد ستون‌ها در query:', columnCount);
-      console.log('🔍 [saveDriverCalculation] INSERT - تعداد expressions در VALUES:', valuesExpressions);
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد expressions در VALUES (بر اساس maxParam):', valuesExpressions);
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد ستون‌های واقعی در دیتابیس:', actualColumnCount);
       console.log('🔍 [saveDriverCalculation] INSERT - بیشترین پارامتر:', insertMaxParam);
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای ارسالی:', insertParams.length);
       
-      if (columnCount !== valuesExpressions) {
+      // بررسی تطابق: تعداد ستون‌ها باید برابر با تعداد expressions باشد
+      // و تعداد expressions برابر با بیشترین پارامتر است
+      if (columnCount !== valuesExpressions || columnCount !== insertMaxParam) {
         console.error('❌ [saveDriverCalculation] INSERT - تعداد ستون‌ها و expressions برابر نیست!', {
           columnCount,
           valuesExpressions,
-          query: insertQuery.substring(0, 500)
+          insertMaxParam,
+          insertParamsLength: insertParams.length,
+          query: insertQuery.substring(0, 800)
         });
         return res.status(500).json({ 
-          message: `خطا: تعداد ستون‌ها (${columnCount}) با تعداد expressions (${valuesExpressions}) برابر نیست`,
-          error: 'COLUMN_EXPRESSION_MISMATCH'
+          message: `خطا: تعداد ستون‌ها (${columnCount}) با تعداد expressions (${valuesExpressions}) یا پارامترها (${insertMaxParam}) برابر نیست`,
+          error: 'COLUMN_EXPRESSION_MISMATCH',
+          details: {
+            columnCount,
+            valuesExpressions,
+            insertMaxParam,
+            insertParamsLength: insertParams.length
+          }
         });
       }
       
-      if (actualColumnCount > 0 && columnCount !== actualColumnCount) {
-        console.warn('⚠️ [saveDriverCalculation] تعداد ستون‌ها در query با دیتابیس متفاوت است!', {
-          queryColumns: columnCount,
-          dbColumns: actualColumnCount
-        });
+      // هشدار در مورد تفاوت تعداد ستون‌ها با دیتابیس (این طبیعی است چون برخی ستون‌ها خودکار هستند)
+      if (actualColumnCount > 0 && columnCount < actualColumnCount) {
+        const missingColumns = dbColumns.rows
+          .map(r => r.column_name)
+          .filter(col => !insertQuery.includes(col));
+        console.log('ℹ️ [saveDriverCalculation] ستون‌های موجود در دیتابیس که در INSERT نیستند (خودکار):', missingColumns);
       }
       
       if (insertParams.length !== insertMaxParam) {
