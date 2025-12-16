@@ -604,15 +604,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده از سرور:', savedData.length, 'رکورد');
                     
                     // فیلتر کردن تورهایی که دوره‌شان بسته شده (commission_calculated یا paid)
+                    // استفاده از نام متغیر متفاوت برای جلوگیری از مشکل "Cannot access 's' before initialization"
                     const closedTourIds = new Set(
                         savedData
-                            .filter((s: any) => s.commission_status === 'commission_calculated' || s.commission_status === 'paid')
-                            .map((s: any) => s.announcement_id)
+                            .filter((item: any) => item.commission_status === 'commission_calculated' || item.commission_status === 'paid')
+                            .map((item: any) => item.announcement_id)
                     );
                     console.log('🔒 [loadSavedCalculations] تورهای بسته شده:', closedTourIds.size, 'تور');
                     
                     // استفاده از calculateDriverData به عنوان base - اگر خالی بود، از calculations فعلی استفاده کن
-                    let baseData = calculateDriverData.length > 0 ? calculateDriverData : calculations;
+                    // استفاده از calculations.length برای جلوگیری از مشکل "Cannot access 's' before initialization"
+                    const currentCalculations = calculations || [];
+                    let baseData = calculateDriverData.length > 0 ? calculateDriverData : currentCalculations;
                     
                     // اگر baseData خالی است اما announcements, drivers, vehicles موجودند، 
                     // از savedData برای ساخت baseData استفاده کن
@@ -754,8 +757,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             const openTours = calc.tours.filter(tour => !closedTourIds.has(tour.announcementId));
                             
                             const updatedTours = openTours.map(tour => {
-                                const saved = savedData.find((s: any) => 
-                                    s.driver_id === calc.driverId && s.announcement_id === tour.announcementId
+                                // استفاده از نام متغیر متفاوت برای جلوگیری از مشکل "Cannot access 's' before initialization"
+                                const saved = savedData.find((item: any) => 
+                                    item.driver_id === calc.driverId && item.announcement_id === tour.announcementId
                                 );
                                 
                                 if (saved) {
@@ -1105,7 +1109,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return filtered;
-    }, [calculations.length, searchTerm, startDate, endDate, sortField, sortDirection, refreshTrigger]);
+    }, [refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1235,7 +1239,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [calculations.length, searchTerm, startDate, endDate, refreshTrigger]);
+    }, [refreshTrigger, searchTerm, startDate, endDate]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
