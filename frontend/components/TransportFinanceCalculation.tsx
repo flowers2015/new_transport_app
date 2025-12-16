@@ -904,6 +904,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
                     return sum + tourTotalKm;
                 }, 0);
+                
+                // فقط اگر تغییر کرده باشد، object جدید بساز
+                if (calc.tourCost === totalCost && calc.totalKilometers === totalKm) {
+                    return calc;
+                }
+                
                 return {
                     ...calc,
                     tourCost: totalCost,
@@ -912,7 +918,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             });
             return updated;
         });
-    }, [calculations.length]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [refreshTrigger]);
 
     const handleExpandRow = (driverId: string) => {
         const calc = calculations.find(c => c.driverId === driverId);
