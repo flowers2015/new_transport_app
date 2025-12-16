@@ -2199,31 +2199,36 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
     const handleSaveInputData = async () => {
         if (!inputDialogData) return;
+        
+        // ⚡ بستن فوری دیالوگ برای تجربه کاربری بهتر (Optimistic UI)
+        const savedInputDialogData = { ...inputDialogData };
+        setShowInputDialog(false);
+        setInputDialogData(null);
 
         console.log('📝 [SAVE_BEFORE] ========== شروع ثبت اطلاعات ==========');
-        console.log('📝 [SAVE_BEFORE] inputDialogData:', JSON.stringify(inputDialogData, null, 2));
-        console.log('📝 [SAVE_BEFORE] driverId:', inputDialogData.driverId);
-        console.log('📝 [SAVE_BEFORE] announcementId:', inputDialogData.tourId);
+        console.log('📝 [SAVE_BEFORE] inputDialogData:', JSON.stringify(savedInputDialogData, null, 2));
+        console.log('📝 [SAVE_BEFORE] driverId:', savedInputDialogData.driverId);
+        console.log('📝 [SAVE_BEFORE] announcementId:', savedInputDialogData.tourId);
         console.log('📝 [SAVE_BEFORE] calculations.length:', calculations.length);
 
-        const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
+        const calc = calculations.find(c => c.driverId === savedInputDialogData.driverId);
         if (!calc) {
-            console.error('❌ [SAVE_BEFORE] راننده یافت نشد:', inputDialogData.driverId);
+            console.error('❌ [SAVE_BEFORE] راننده یافت نشد:', savedInputDialogData.driverId);
             return;
         }
         console.log('📝 [SAVE_BEFORE] راننده یافت شد:', calc.driverName);
 
-        const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
+        const tour = calc.tours.find(t => t.announcementId === savedInputDialogData.tourId);
         if (!tour) return;
 
         // محاسبات خودکار برای این تور خاص
         
         // 1. هزینه غذا راننده اصلی = ماموریت مصوب × بخشنامه غذا
-        const approvedMissionDays = Number(inputDialogData.approvedMissionDays) || 0;
+        const approvedMissionDays = Number(savedInputDialogData.approvedMissionDays) || 0;
         const foodCost = Math.round(approvedMissionDays * (Number(foodCostPerDay) || 0)) || 0;
         
         // 2. هزینه ماموریت مازاد = ماموریت مازاد × بخشنامه ماموریت مازاد
-        const excessMissionDays = Number(inputDialogData.excessMissionDays) || 0;
+        const excessMissionDays = Number(savedInputDialogData.excessMissionDays) || 0;
         const calculatedExcessMissionCost = Math.round(excessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
         
         // 3. هزینه چندجا تخلیه = (تعداد مقاصد - 1) × بخشنامه چندجا تخلیه
@@ -2232,15 +2237,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const calculatedMultiUnloadCost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
         
         // 4. اجرت راننده کمکی = بخشنامه اجرت راننده کمکی × (کیلومتر مصوب + کیلومتر مازاد راننده کمکی)
-        const helperExcessKilometers = Number(inputDialogData.helperDriverExcessKilometers) || 0;
-        const totalKmForHelper = (Number(inputDialogData.approvedKilometers) || 0) + helperExcessKilometers;
+        const helperExcessKilometers = Number(savedInputDialogData.helperDriverExcessKilometers) || 0;
+        const totalKmForHelper = (Number(savedInputDialogData.approvedKilometers) || 0) + helperExcessKilometers;
         const calculatedHelperDriverAllowance = Math.round(totalKmForHelper * (Number(helperAllowancePerKm) || 0)) || 0;
         
         // 5. هزینه غذا راننده کمکی = ماموریت مصوب × بخشنامه غذا
         const calculatedHelperDriverFoodCost = Math.round(approvedMissionDays * (Number(foodCostPerDay) || 0)) || 0;
         
         // 6. هزینه ماموریت مازاد راننده کمکی = ماموریت مازاد راننده کمکی × بخشنامه ماموریت مازاد
-        const helperExcessMissionDays = Number(inputDialogData.helperDriverExcessMissionDays) || 0;
+        const helperExcessMissionDays = Number(savedInputDialogData.helperDriverExcessMissionDays) || 0;
         const calculatedHelperDriverExcessMissionCost = Math.round(helperExcessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
         
         // محاسبه هزینه سوخت بر اساس نوع خودرو و بخشنامه مصرف سوخت
@@ -2249,12 +2254,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const fuelReg = fuelConsumptionRegulations[vehicleType];
         if (fuelReg) {
             // محاسبه کل پیمایش
-            const totalKm = (inputDialogData.approvedKilometers || 0) + (inputDialogData.excessKilometers || 0) + (inputDialogData.depotTotalMileage || 0);
+            const totalKm = (savedInputDialogData.approvedKilometers || 0) + (savedInputDialogData.excessKilometers || 0) + (savedInputDialogData.depotTotalMileage || 0);
             // هزینه سوخت = (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر
             fuelCost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
         } else {
-            // اگر بخشنامه مصرف سوخت برای این نوع خودرو وجود نداشت، از مقدار موجود در inputDialogData استفاده کن
-            fuelCost = Math.round(Number(inputDialogData.fuelCost) || 0) || 0;
+            // اگر بخشنامه مصرف سوخت برای این نوع خودرو وجود نداشت، از مقدار موجود در savedInputDialogData استفاده کن
+            fuelCost = Math.round(Number(savedInputDialogData.fuelCost) || 0) || 0;
         }
         
         // دریافت token و headers برای API calls
@@ -2276,11 +2281,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 
                 if (isTrailer || isTenWheeler) {
                     const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
-                    const totalKm = inputDialogData.approvedKilometers + inputDialogData.excessKilometers;
+                    const totalKm = savedInputDialogData.approvedKilometers + savedInputDialogData.excessKilometers;
                     
                     // اضافه کردن تاریخ بارنامه برای انتخاب بخشنامه صحیح
-                    const billOfLadingDateParam = inputDialogData.billOfLadingDate 
-                        ? `&billOfLadingDate=${encodeURIComponent(inputDialogData.billOfLadingDate)}`
+                    const billOfLadingDateParam = savedInputDialogData.billOfLadingDate 
+                        ? `&billOfLadingDate=${encodeURIComponent(savedInputDialogData.billOfLadingDate)}`
                         : '';
                     
                     const allowanceRes = await fetch(
@@ -2305,14 +2310,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }
         } else if (activeQueueType === 'fixed_allowance') {
             // اجرت ثابت - از فیلد اجرت ثابت در دیالوگ استفاده می‌کنیم (محاسبه شده از بخشنامه)
-            tourCost = Math.round(Number(inputDialogData.fixedAllowance) || 0) || 0;
+            tourCost = Math.round(Number(savedInputDialogData.fixedAllowance) || 0) || 0;
         }
         
-        const tollCostNum = Math.round(Number(inputDialogData.tollCost) || 0) || 0;
-        const billOfLadingCostNum = Math.round(Number(inputDialogData.billOfLadingCost) || 0) || 0;
-        const loadingCostNum = Math.round(Number(inputDialogData.loadingCost) || 0) || 0;
-        const returnCargoCostNum = Math.round(Number(inputDialogData.returnCargoCost) || 0) || 0;
-        const returnBillOfLadingCostNum = Math.round(Number(inputDialogData.returnBillOfLadingCost) || 0) || 0;
+        const tollCostNum = Math.round(Number(savedInputDialogData.tollCost) || 0) || 0;
+        const billOfLadingCostNum = Math.round(Number(savedInputDialogData.billOfLadingCost) || 0) || 0;
+        const loadingCostNum = Math.round(Number(savedInputDialogData.loadingCost) || 0) || 0;
+        const returnCargoCostNum = Math.round(Number(savedInputDialogData.returnCargoCost) || 0) || 0;
+        const returnBillOfLadingCostNum = Math.round(Number(savedInputDialogData.returnBillOfLadingCost) || 0) || 0;
         
         // استفاده از مقادیر محاسبه شده خودکار
         const multiUnloadCostNum = calculatedMultiUnloadCost;
@@ -2323,17 +2328,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         // هزینه راننده کمکی = اجرت راننده کمکی + هزینه غذا راننده کمکی + هزینه ماموریت مازاد راننده کمکی
         // فقط در صورتی که اطلاعات راننده کمکی ثبت شده باشد
-        const hasHelperDriver = inputDialogData.helperDriverId && inputDialogData.helperDriverId.trim() !== '';
+        const hasHelperDriver = savedInputDialogData.helperDriverId && savedInputDialogData.helperDriverId.trim() !== '';
         const helperDriverTotalCost = hasHelperDriver 
             ? (calculatedHelperDriverAllowance + calculatedHelperDriverFoodCost + calculatedHelperDriverExcessMissionCost)
             : 0;
         
         // هزینه جابجایی بار در دپو
-        const depotCargoHandlingCostNum = Number(inputDialogData.depotCargoHandlingCost) || 0;
+        const depotCargoHandlingCostNum = Number(savedInputDialogData.depotCargoHandlingCost) || 0;
         
         // هزینه‌های دپو
-        const depotMissionCostNum = Number(inputDialogData.depotMissionCost) || 0;
-        const depotAllowanceNum = Number(inputDialogData.depotKilometerRate) || 0;
+        const depotMissionCostNum = Number(savedInputDialogData.depotMissionCost) || 0;
+        const depotAllowanceNum = Number(savedInputDialogData.depotKilometerRate) || 0;
         
         // محاسبه سایر هزینه‌های راننده اصلی (بدون اجرت/پورسانت):
         // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
@@ -2366,14 +2371,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('💾 [SAVE_BEFORE] userId:', userId);
             
             const requestBody = {
-                driverId: inputDialogData.driverId,
-                announcementId: inputDialogData.tourId,
-                billOfLadingNumber: inputDialogData.billOfLadingNumber,
+                driverId: savedInputDialogData.driverId,
+                announcementId: savedInputDialogData.tourId,
+                billOfLadingNumber: savedInputDialogData.billOfLadingNumber,
                 billOfLadingCost: billOfLadingCostNum,
-                approvedKilometers: Number(inputDialogData.approvedKilometers) || 0,
-                excessKilometers: Number(inputDialogData.excessKilometers) || 0,
-                approvedMissionDays: Number(inputDialogData.approvedMissionDays) || 0,
-                excessMissionDays: Number(inputDialogData.excessMissionDays) || 0,
+                approvedKilometers: Number(savedInputDialogData.approvedKilometers) || 0,
+                excessKilometers: Number(savedInputDialogData.excessKilometers) || 0,
+                approvedMissionDays: Number(savedInputDialogData.approvedMissionDays) || 0,
+                excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
                 tollCost: tollCostNum,
                 loadingCost: 0,
                 returnCargoCost: returnCargoCostNum,
@@ -2385,32 +2390,32 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: fuelCost,
                 tourCost: tourCost,
                 totalCost: totalCost,
-                notes: inputDialogData.notes,
+                notes: savedInputDialogData.notes,
                 queueType: activeQueueType,
-                billOfLadingDate: inputDialogData.billOfLadingDate,
-                calculationDate: inputDialogData.calculationDate,
-                depotTotalMileage: Number(inputDialogData.depotTotalMileage) || 0,
-                depotShipmentCount: Number(inputDialogData.depotShipmentCount) || 0,
-                depotCargoHandlingCost: Number(inputDialogData.depotCargoHandlingCost) || 0,
-                depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
-                depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
-                depotFoodCost: Number(inputDialogData.depotFoodCost) || 0,
-                depotMissionCost: Number(inputDialogData.depotMissionCost) || 0,
-                depotRows: inputDialogData.depotRows || [],
+                billOfLadingDate: savedInputDialogData.billOfLadingDate,
+                calculationDate: savedInputDialogData.calculationDate,
+                depotTotalMileage: Number(savedInputDialogData.depotTotalMileage) || 0,
+                depotShipmentCount: Number(savedInputDialogData.depotShipmentCount) || 0,
+                depotCargoHandlingCost: Number(savedInputDialogData.depotCargoHandlingCost) || 0,
+                depotMissionDays: Number(savedInputDialogData.depotMissionDays) || 0,
+                depotKilometerRate: Number(savedInputDialogData.depotKilometerRate) || 0,
+                depotFoodCost: Number(savedInputDialogData.depotFoodCost) || 0,
+                depotMissionCost: Number(savedInputDialogData.depotMissionCost) || 0,
+                depotRows: savedInputDialogData.depotRows || [],
                 userId,
-                helperDriverId: inputDialogData.helperDriverId || null,
-                helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || null,
-                helperDriverName: inputDialogData.helperDriverName || null,
+                helperDriverId: savedInputDialogData.helperDriverId || null,
+                helperDriverEmployeeId: savedInputDialogData.helperDriverEmployeeId || null,
+                helperDriverName: savedInputDialogData.helperDriverName || null,
                 helperDriverAllowance: calculatedHelperDriverAllowance,
                 helperDriverFoodCost: calculatedHelperDriverFoodCost,
                 helperDriverExcessMissionDays: helperExcessMissionDays,
                 helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
                 helperDriverExcessKilometers: helperExcessKilometers,
-                vehicleCode: inputDialogData.vehicleCode || null,
-                vehiclePlate: inputDialogData.vehiclePlate || null,
-                destinations: inputDialogData.destinations || null,
-                multiUnloadCount: inputDialogData.multiUnloadCount || 0,
-                advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,
+                vehicleCode: savedInputDialogData.vehicleCode || null,
+                vehiclePlate: savedInputDialogData.vehiclePlate || null,
+                destinations: savedInputDialogData.destinations || null,
+                multiUnloadCount: savedInputDialogData.multiUnloadCount || 0,
+                advancePayment: Math.round(Number(savedInputDialogData.advancePayment) || 0) || 0,
             };
             
             console.log('💾 [SAVE_BEFORE] Request Body:', JSON.stringify(requestBody, null, 2));
@@ -2418,55 +2423,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const saveRes = await fetch(getApiUrl('driver-calculations'), {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({
-                    driverId: inputDialogData.driverId,
-                    announcementId: inputDialogData.tourId,
-                    billOfLadingNumber: inputDialogData.billOfLadingNumber,
-                    billOfLadingCost: billOfLadingCostNum,
-                    approvedKilometers: Number(inputDialogData.approvedKilometers) || 0,
-                    excessKilometers: Number(inputDialogData.excessKilometers) || 0,
-                    approvedMissionDays: Number(inputDialogData.approvedMissionDays) || 0,
-                    excessMissionDays: Number(inputDialogData.excessMissionDays) || 0,
-                    tollCost: tollCostNum,
-                    loadingCost: 0, // هزینه بارگیری کل - این فیلد دیگر استفاده نمی‌شود
-                    returnCargoCost: returnCargoCostNum,
-                    returnBillOfLadingCost: returnBillOfLadingCostNum,
-                    multiUnloadCost: multiUnloadCostNum,
-                    excessMissionCost: excessMissionCostNum,
-                    fixedAllowance: activeQueueType === 'fixed_allowance' ? tourCost : 0,
-                    foodCost: foodCost,
-                    fuelCost: fuelCost,
-                    tourCost: tourCost,
-                    totalCost: totalCost,
-                    notes: inputDialogData.notes,
-                    queueType: activeQueueType,
-                    billOfLadingDate: inputDialogData.billOfLadingDate,
-                    calculationDate: inputDialogData.calculationDate,
-                    depotTotalMileage: Number(inputDialogData.depotTotalMileage) || 0,
-                    depotShipmentCount: Number(inputDialogData.depotShipmentCount) || 0,
-                    depotCargoHandlingCost: Number(inputDialogData.depotCargoHandlingCost) || 0,
-                    depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
-                    depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
-                    depotFoodCost: Number(inputDialogData.depotFoodCost) || 0,
-                    depotMissionCost: Number(inputDialogData.depotMissionCost) || 0,
-                    depotRows: inputDialogData.depotRows || [],
-                    userId, // اضافه کردن userId
-                    // فیلدهای راننده کمکی
-                    helperDriverId: inputDialogData.helperDriverId || null,
-                    helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || null,
-                    helperDriverName: inputDialogData.helperDriverName || null,
-                    helperDriverAllowance: calculatedHelperDriverAllowance,
-                    helperDriverFoodCost: calculatedHelperDriverFoodCost,
-                    helperDriverExcessMissionDays: helperExcessMissionDays, // استفاده از ماموریت مازاد راننده کمکی
-                    helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
-                    helperDriverExcessKilometers: helperExcessKilometers,
-                    // فیلدهای جدید
-                    vehicleCode: inputDialogData.vehicleCode || null,
-                    vehiclePlate: inputDialogData.vehiclePlate || null,
-                    destinations: inputDialogData.destinations || null,
-                    multiUnloadCount: inputDialogData.multiUnloadCount || 0,
-                    advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,
-                }),
+                body: JSON.stringify(requestBody),
             });
             
             if (!saveRes.ok) {
@@ -2484,35 +2441,35 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('⚡ [handleSaveInputData] شروع به‌روزرسانی فوری state...');
             setCalculations(prevCalculations => {
                 return prevCalculations.map(calc => {
-                    if (calc.driverId !== inputDialogData.driverId) {
+                    if (calc.driverId !== savedInputDialogData.driverId) {
                         return calc;
                     }
                     
                     const updatedTours = calc.tours.map(t => {
-                        if (t.announcementId !== inputDialogData.tourId) {
+                        if (t.announcementId !== savedInputDialogData.tourId) {
                             return t;
                         }
                         
                         // تبدیل تاریخ بارنامه از string به Date اگر لازم باشد
                         let billOfLadingDateValue: Date | undefined = undefined;
-                        if (inputDialogData.billOfLadingDate) {
-                            if (inputDialogData.billOfLadingDate.includes('/')) {
-                                billOfLadingDateValue = parseJalaliDateString(inputDialogData.billOfLadingDate);
+                        if (savedInputDialogData.billOfLadingDate) {
+                            if (savedInputDialogData.billOfLadingDate.includes('/')) {
+                                billOfLadingDateValue = parseJalaliDateString(savedInputDialogData.billOfLadingDate);
                             } else {
-                                billOfLadingDateValue = new Date(inputDialogData.billOfLadingDate);
+                                billOfLadingDateValue = new Date(savedInputDialogData.billOfLadingDate);
                             }
                         }
                         
                         // به‌روزرسانی فوری تور با تمام اطلاعات جدید
                         const updatedTour: DriverTourDetailWithCalculation = {
                             ...t,
-                            billOfLadingNumber: inputDialogData.billOfLadingNumber || '',
+                            billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
                             billOfLadingDate: billOfLadingDateValue,
-                            calculationDate: inputDialogData.calculationDate || '',
-                            approvedKilometers: Number(inputDialogData.approvedKilometers) || 0,
-                            excessKilometers: Number(inputDialogData.excessKilometers) || 0,
-                            approvedMissionDays: Number(inputDialogData.approvedMissionDays) || 0,
-                            excessMissionDays: Number(inputDialogData.excessMissionDays) || 0,
+                            calculationDate: savedInputDialogData.calculationDate || '',
+                            approvedKilometers: Number(savedInputDialogData.approvedKilometers) || 0,
+                            excessKilometers: Number(savedInputDialogData.excessKilometers) || 0,
+                            approvedMissionDays: Number(savedInputDialogData.approvedMissionDays) || 0,
+                            excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
                             tollCost: tollCostNum,
                             loadingCost: loadingCostNum,
                             billOfLadingCost: billOfLadingCostNum,
@@ -2526,28 +2483,28 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             fuelCost: fuelCost,
                             tourCost: tourCost,
                             totalCost: totalCost,
-                            notes: inputDialogData.notes || '',
+                            notes: savedInputDialogData.notes || '',
                             isDataRecorded: true, // ⚡ مهم: فوراً به true تغییر می‌دهد
                             commissionStatus: 'recorded',
                             // فیلدهای راننده کمکی
-                            helperDriverId: inputDialogData.helperDriverId || '',
-                            helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || '',
-                            helperDriverName: inputDialogData.helperDriverName || '',
+                            helperDriverId: savedInputDialogData.helperDriverId || '',
+                            helperDriverEmployeeId: savedInputDialogData.helperDriverEmployeeId || '',
+                            helperDriverName: savedInputDialogData.helperDriverName || '',
                             helperDriverAllowance: calculatedHelperDriverAllowance,
                             helperDriverFoodCost: calculatedHelperDriverFoodCost,
                             helperDriverExcessMissionDays: helperExcessMissionDays,
                             helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
                             helperDriverExcessKilometers: helperExcessKilometers,
                             // فیلدهای محاسبات دپو
-                            depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
-                            depotShipmentCount: Number(inputDialogData.depotShipmentCount) || 0,
+                            depotMissionDays: Number(savedInputDialogData.depotMissionDays) || 0,
+                            depotShipmentCount: Number(savedInputDialogData.depotShipmentCount) || 0,
                             depotCargoHandlingCost: depotCargoHandlingCostNum,
-                            depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
-                            depotTotalMileage: Number(inputDialogData.depotTotalMileage) || 0,
-                            depotFoodCost: Number(inputDialogData.depotFoodCost) || 0,
+                            depotKilometerRate: Number(savedInputDialogData.depotKilometerRate) || 0,
+                            depotTotalMileage: Number(savedInputDialogData.depotTotalMileage) || 0,
+                            depotFoodCost: Number(savedInputDialogData.depotFoodCost) || 0,
                             depotMissionCost: depotMissionCostNum,
-                            depotRows: inputDialogData.depotRows || [],
-                            advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,
+                            depotRows: savedInputDialogData.depotRows || [],
+                            advancePayment: Math.round(Number(savedInputDialogData.advancePayment) || 0) || 0,
                         };
                         
                         console.log('⚡ [handleSaveInputData] تور به‌روزرسانی شد:', updatedTour.announcementId);
@@ -2573,10 +2530,72 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             
             console.log('⚡ [handleSaveInputData] به‌روزرسانی فوری state انجام شد!');
             
-            // فوراً refreshTrigger را به‌روزرسانی کن تا useMemo دوباره اجرا شود
-            setTimeout(() => {
-                setRefreshTrigger(prev => prev + 1);
-            }, 50);
+            // ⚡ به‌روزرسانی فوری selectedTourDetails برای نمایش آنی در جدول جزئیات
+            if (selectedTourDetails && selectedDriverId === savedInputDialogData.driverId) {
+                const updatedSelectedTours = selectedTourDetails.map(t => {
+                    if (t.announcementId !== savedInputDialogData.tourId) {
+                        return t;
+                    }
+                    
+                    let billOfLadingDateValue: Date | undefined = undefined;
+                    if (savedInputDialogData.billOfLadingDate) {
+                        if (savedInputDialogData.billOfLadingDate.includes('/')) {
+                            billOfLadingDateValue = parseJalaliDateString(savedInputDialogData.billOfLadingDate);
+                        } else {
+                            billOfLadingDateValue = new Date(savedInputDialogData.billOfLadingDate);
+                        }
+                    }
+                    
+                    return {
+                        ...t,
+                        billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
+                        billOfLadingDate: billOfLadingDateValue,
+                        calculationDate: savedInputDialogData.calculationDate || '',
+                        approvedKilometers: Number(savedInputDialogData.approvedKilometers) || 0,
+                        excessKilometers: Number(savedInputDialogData.excessKilometers) || 0,
+                        approvedMissionDays: Number(savedInputDialogData.approvedMissionDays) || 0,
+                        excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
+                        tollCost: tollCostNum,
+                        loadingCost: loadingCostNum,
+                        billOfLadingCost: billOfLadingCostNum,
+                        returnCargoCost: returnCargoCostNum,
+                        returnBillOfLadingCost: returnBillOfLadingCostNum,
+                        multiUnloadCost: multiUnloadCostNum,
+                        excessMissionCost: excessMissionCostNum,
+                        helperDriverCost: helperDriverTotalCost,
+                        fixedAllowance: fixedAllowanceNum,
+                        foodCost: foodCost,
+                        fuelCost: fuelCost,
+                        tourCost: tourCost,
+                        totalCost: totalCost,
+                        notes: savedInputDialogData.notes || '',
+                        isDataRecorded: true,
+                        commissionStatus: 'recorded',
+                        helperDriverId: savedInputDialogData.helperDriverId || '',
+                        helperDriverEmployeeId: savedInputDialogData.helperDriverEmployeeId || '',
+                        helperDriverName: savedInputDialogData.helperDriverName || '',
+                        helperDriverAllowance: calculatedHelperDriverAllowance,
+                        helperDriverFoodCost: calculatedHelperDriverFoodCost,
+                        helperDriverExcessMissionDays: helperExcessMissionDays,
+                        helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
+                        helperDriverExcessKilometers: helperExcessKilometers,
+                        depotMissionDays: Number(savedInputDialogData.depotMissionDays) || 0,
+                        depotShipmentCount: Number(savedInputDialogData.depotShipmentCount) || 0,
+                        depotCargoHandlingCost: depotCargoHandlingCostNum,
+                        depotKilometerRate: Number(savedInputDialogData.depotKilometerRate) || 0,
+                        depotTotalMileage: Number(savedInputDialogData.depotTotalMileage) || 0,
+                        depotFoodCost: Number(savedInputDialogData.depotFoodCost) || 0,
+                        depotMissionCost: depotMissionCostNum,
+                        depotRows: savedInputDialogData.depotRows || [],
+                        advancePayment: Math.round(Number(savedInputDialogData.advancePayment) || 0) || 0,
+                    } as DriverTourDetailWithCalculation;
+                });
+                setSelectedTourDetails(updatedSelectedTours);
+                console.log('⚡ [handleSaveInputData] selectedTourDetails به‌روزرسانی شد');
+            }
+            
+            // فوراً refreshTrigger را به‌روزرسانی کن
+            setRefreshTrigger(prev => prev + 1);
             
         } catch (err: any) {
             console.error('❌ [handleSaveInputData] خطا در ذخیره اطلاعات:', err);
@@ -2591,16 +2610,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         } catch (e) {
             console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
         }
-        
-        // بستن دیالوگ فوراً (بعد از به‌روزرسانی state)
-        setShowInputDialog(false);
-        setInputDialogData(null);
-        
-        // در background fetch کن برای sync با سرور (اما با تاخیر کوتاه)
-        setTimeout(() => {
-            console.log('🔄 [handleSaveInputData] Background refresh برای sync با سرور...');
-            setRefreshTrigger(prev => prev + 1);
-        }, 200);
     };
 
     if (loading) {
