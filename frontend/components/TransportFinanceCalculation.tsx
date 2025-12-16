@@ -872,18 +872,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     } : 'خالی');
                     
                     // تنظیم calculations با داده‌های merge شده
-                    if (filteredUpdated.length > 0) {
-                        setCalculations(filteredUpdated);
-                        console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
-                    } else {
+                    // همیشه setCalculations را فراخوانی کن، حتی اگر خالی است
+                    setCalculations(filteredUpdated);
+                    console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
+                    
+                    if (filteredUpdated.length === 0) {
                         console.warn('⚠️ [loadSavedCalculations] filteredUpdated خالی است!', {
                             updatedLength: updated.length,
                             baseDataLength: baseData.length,
                             savedDataLength: savedData.length,
-                            closedTourIdsSize: closedTourIds.size
+                            closedTourIdsSize: closedTourIds.size,
+                            announcementsLength: announcements.length,
+                            driversLength: drivers.length,
+                            vehiclesLength: vehicles.length
                         });
-                        // حتی اگر خالی است، setCalculations را فراخوانی کن تا state به‌روز شود
-                        setCalculations([]);
                     }
                     
                     // ذخیره در localStorage برای cache
