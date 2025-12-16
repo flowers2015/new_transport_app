@@ -1103,7 +1103,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return filtered;
-    }, [calculations, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [calculations.length, searchTerm, startDate, endDate, sortField, sortDirection, refreshTrigger]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1230,7 +1230,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [calculations, searchTerm, startDate, endDate]);
+    }, [calculations.length, searchTerm, startDate, endDate, refreshTrigger]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
