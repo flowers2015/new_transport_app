@@ -1796,6 +1796,69 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }
             
             setShowInputDialog(true);
+        } else {
+            // حتی اگر داده ثبت نشده، باید بتوان ویرایش کرد
+            console.log('⚠️ [handleEditData] داده ثبت نشده، اما دیالوگ باز می‌شود');
+            
+            // تاریخ محاسبه پیش‌فرض: امروز
+            const today = new Date();
+            const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+            const defaultCalculationDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
+            
+            const billDateStr = tour.billOfLadingDate 
+                ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                : '';
+            
+            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            
+            setInputDialogData({
+                tourId: tour.announcementId,
+                driverId: calc.driverId,
+                driverEmployeeId: calc.employeeId || '',
+                driverName: calc.driverName || '',
+                vehicleCode: tour.vehicleCode || '',
+                vehiclePlate: tour.plateNumber || '',
+                vehicleType: tour.vehicleType || '',
+                destinations: Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || ''),
+                billOfLadingNumber: tour.billOfLadingNumber || '',
+                billOfLadingDate: billDateStr,
+                billOfLadingCost: 0,
+                approvedKilometers: tour.roundTripKm || 0,
+                excessKilometers: 0,
+                approvedMissionDays: 1,
+                excessMissionDays: 0,
+                multiUnloadCount: multiUnloadCount,
+                tollCost: 0,
+                fuelCost: 0,
+                loadingCost: 0,
+                returnCargoCost: 0,
+                returnBillOfLadingCost: 0,
+                multiUnloadCost: 0,
+                excessMissionCost: 0,
+                helperDriverCost: 0,
+                fixedAllowance: 0,
+                advancePayment: 0,
+                calculationDate: defaultCalculationDate,
+                notes: '',
+                helperDriverId: '',
+                helperDriverEmployeeId: '',
+                helperDriverName: '',
+                helperDriverAllowance: 0,
+                helperDriverFoodCost: 0,
+                helperDriverExcessMissionDays: 0,
+                helperDriverExcessMissionCost: 0,
+                helperDriverExcessKilometers: 0,
+                depotMissionDays: 0,
+                depotShipmentCount: 0,
+                depotCargoHandlingCost: 0,
+                depotKilometerRate: 0,
+                depotTotalMileage: 0,
+                depotFoodCost: 0,
+                depotMissionCost: 0,
+                depotRows: [],
+            });
+            
+            setShowInputDialog(true);
         }
     };
 
