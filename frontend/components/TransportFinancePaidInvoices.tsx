@@ -180,46 +180,32 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 console.log(`📄 [PDF_BEFORE] driverName: ${record.driverName}`);
                 console.log(`📄 [PDF_BEFORE] employeeId: ${record.employeeId}`);
 
-                // دریافت محاسبات مربوط به این راننده
+                // دریافت محاسبات پرداخت شده مربوط به این راننده
                 const calcDateFrom = record.calculationDateFrom || '';
                 const calcDateTo = record.calculationDateTo || '';
-                let calculationsUrl = `driver-calculations?driverId=${record.driverId}`;
+                let calculationsUrl = `driver-calculations/paid?driverId=${record.driverId}`;
                 if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
                 if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
 
                 const calculationsRes = await fetch(getApiUrl(calculationsUrl), { headers });
                 if (!calculationsRes.ok) {
-                    console.warn(`⚠️ خطا در دریافت محاسبات برای ${record.driverName}`);
+                    console.warn(`⚠️ خطا در دریافت محاسبات پرداخت شده برای ${record.driverName}:`, calculationsRes.status);
                     continue;
                 }
 
-                const calculationsData = await calculationsRes.json();
-                const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
-                console.log(`📄 [PDF_BEFORE] calculationsArray.length: ${calculationsArray.length}`);
-                console.log(`📄 [PDF_BEFORE] calculationsArray:`, JSON.stringify(calculationsArray.slice(0, 2), null, 2));
-                
-                // فقط محاسبات پرداخت شده را نمایش بده
-                const paidCalculations = calculationsArray.filter((calc: any) => 
-                    calc.is_paid || calc.isPaid
-                );
-                console.log(`📄 [PDF_BEFORE] paidCalculations.length: ${paidCalculations.length}`);
-                console.log(`📄 [PDF_BEFORE] paidCalculations:`, JSON.stringify(paidCalculations.map((c: any) => ({
-                    id: c.id,
-                    announcement_id: c.announcement_id,
-                    is_paid: c.is_paid,
-                    isPaid: c.isPaid,
-                    total_cost: c.total_cost,
-                    driver_id: c.driver_id
-                })), null, 2));
+                const paidCalculations = await calculationsRes.json();
+                const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
+                console.log(`📄 [PDF_BEFORE] paidCalculations.length: ${calculationsArray.length}`);
+                console.log(`📄 [PDF_BEFORE] paidCalculations:`, JSON.stringify(calculationsArray.slice(0, 2), null, 2));
 
-                if (paidCalculations.length === 0) {
+                if (calculationsArray.length === 0) {
                     console.warn(`⚠️ [PDF_BEFORE] هیچ محاسبه پرداخت شده‌ای برای ${record.driverName} یافت نشد`);
                     continue;
                 }
 
                 // دریافت اطلاعات اعلام بار
                 const announcementsMap = new Map<string, any>();
-                await Promise.all(paidCalculations.map(async (calc: any) => {
+                await Promise.all(calculationsArray.map(async (calc: any) => {
                     const announcementId = calc.announcement_id || calc.announcementId;
                     if (announcementId && !announcementsMap.has(announcementId)) {
                         try {
@@ -255,7 +241,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
                 // تولید HTML صورتحساب
                 console.log(`📄 [PDF_BEFORE] تولید HTML برای ${record.driverName}...`);
-                const htmlContent = renderInvoiceHTML(record, paidCalculations, announcementsMap, calcDateFrom, calcDateTo);
+                const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo);
                 console.log(`📄 [PDF_BEFORE] HTML content length: ${htmlContent.length}`);
                 console.log(`📄 [PDF_BEFORE] HTML preview (first 500 chars):`, htmlContent.substring(0, 500));
                 

@@ -2384,6 +2384,99 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('✅ [SAVE_AFTER] ========== ثبت موفق ==========');
             console.log('✅ [SAVE_AFTER] Response:', JSON.stringify(saveResult, null, 2));
             console.log('✅ [SAVE_AFTER] Status:', saveRes.status);
+            
+            // ⚡ OPTIMISTIC UPDATE: فوراً state را به‌روزرسانی کن (بدون منتظر fetch)
+            console.log('⚡ [handleSaveInputData] شروع به‌روزرسانی فوری state...');
+            setCalculations(prevCalculations => {
+                return prevCalculations.map(calc => {
+                    if (calc.driverId !== inputDialogData.driverId) {
+                        return calc;
+                    }
+                    
+                    const updatedTours = calc.tours.map(t => {
+                        if (t.announcementId !== inputDialogData.tourId) {
+                            return t;
+                        }
+                        
+                        // تبدیل تاریخ بارنامه از string به Date اگر لازم باشد
+                        let billOfLadingDateValue: Date | undefined = undefined;
+                        if (inputDialogData.billOfLadingDate) {
+                            if (inputDialogData.billOfLadingDate.includes('/')) {
+                                billOfLadingDateValue = parseJalaliDateString(inputDialogData.billOfLadingDate);
+                            } else {
+                                billOfLadingDateValue = new Date(inputDialogData.billOfLadingDate);
+                            }
+                        }
+                        
+                        // به‌روزرسانی فوری تور با تمام اطلاعات جدید
+                        const updatedTour: DriverTourDetailWithCalculation = {
+                            ...t,
+                            billOfLadingNumber: inputDialogData.billOfLadingNumber || '',
+                            billOfLadingDate: billOfLadingDateValue,
+                            calculationDate: inputDialogData.calculationDate || '',
+                            approvedKilometers: Number(inputDialogData.approvedKilometers) || 0,
+                            excessKilometers: Number(inputDialogData.excessKilometers) || 0,
+                            approvedMissionDays: Number(inputDialogData.approvedMissionDays) || 0,
+                            excessMissionDays: Number(inputDialogData.excessMissionDays) || 0,
+                            tollCost: tollCostNum,
+                            loadingCost: loadingCostNum,
+                            billOfLadingCost: billOfLadingCostNum,
+                            returnCargoCost: returnCargoCostNum,
+                            returnBillOfLadingCost: returnBillOfLadingCostNum,
+                            multiUnloadCost: multiUnloadCostNum,
+                            excessMissionCost: excessMissionCostNum,
+                            helperDriverCost: helperDriverTotalCost,
+                            fixedAllowance: fixedAllowanceNum,
+                            foodCost: foodCost,
+                            fuelCost: fuelCost,
+                            tourCost: tourCost,
+                            totalCost: totalCost,
+                            notes: inputDialogData.notes || '',
+                            isDataRecorded: true, // ⚡ مهم: فوراً به true تغییر می‌دهد
+                            commissionStatus: 'recorded',
+                            // فیلدهای راننده کمکی
+                            helperDriverId: inputDialogData.helperDriverId || '',
+                            helperDriverEmployeeId: inputDialogData.helperDriverEmployeeId || '',
+                            helperDriverName: inputDialogData.helperDriverName || '',
+                            helperDriverAllowance: calculatedHelperDriverAllowance,
+                            helperDriverFoodCost: calculatedHelperDriverFoodCost,
+                            helperDriverExcessMissionDays: helperExcessMissionDays,
+                            helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
+                            helperDriverExcessKilometers: helperExcessKilometers,
+                            // فیلدهای محاسبات دپو
+                            depotMissionDays: Number(inputDialogData.depotMissionDays) || 0,
+                            depotShipmentCount: Number(inputDialogData.depotShipmentCount) || 0,
+                            depotCargoHandlingCost: depotCargoHandlingCostNum,
+                            depotKilometerRate: Number(inputDialogData.depotKilometerRate) || 0,
+                            depotTotalMileage: Number(inputDialogData.depotTotalMileage) || 0,
+                            depotFoodCost: Number(inputDialogData.depotFoodCost) || 0,
+                            depotMissionCost: depotMissionCostNum,
+                            depotRows: inputDialogData.depotRows || [],
+                            advancePayment: Math.round(Number(inputDialogData.advancePayment) || 0) || 0,
+                        };
+                        
+                        console.log('⚡ [handleSaveInputData] تور به‌روزرسانی شد:', updatedTour.announcementId);
+                        return updatedTour;
+                    });
+                    
+                    // محاسبه مجدد مجموع هزینه و پیمایش
+                    const totalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
+                    const totalKm = updatedTours.reduce((sum, tour) => {
+                        const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
+                        return sum + tourTotalKm;
+                    }, 0);
+                    
+                    return {
+                        ...calc,
+                        tours: updatedTours,
+                        tourCost: totalCost,
+                        totalKilometers: totalKm,
+                    };
+                });
+            });
+            
+            console.log('⚡ [handleSaveInputData] به‌روزرسانی فوری state انجام شد!');
+            
         } catch (err: any) {
             console.error('❌ [handleSaveInputData] خطا در ذخیره اطلاعات:', err);
             alert(`خطا در ذخیره اطلاعات: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
@@ -2398,31 +2491,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.warn('⚠️ [handleSaveInputData] خطا در پاک کردن cache:', e);
         }
         
-        // بستن دیالوگ قبل از refresh
+        // بستن دیالوگ فوراً (بعد از به‌روزرسانی state)
         setShowInputDialog(false);
         setInputDialogData(null);
         
-        // Trigger refresh با تاخیر بیشتر برای اطمینان از به‌روزرسانی کامل
-        // استفاده از timeout بیشتر برای اطمینان از اینکه سرور داده‌ها را به‌روزرسانی کرده است
-        // همچنین force refresh با دو بار trigger برای اطمینان از به‌روزرسانی
+        // در background fetch کن برای sync با سرور (اما با تاخیر کوتاه)
         setTimeout(() => {
-            console.log('🔄 [handleSaveInputData] Trigger refresh #1 برای loadSavedCalculations...');
-            setRefreshTrigger(prev => {
-                const newValue = prev + 1;
-                console.log('🔄 [handleSaveInputData] refreshTrigger تغییر کرد:', prev, '→', newValue);
-                return newValue;
-            });
-            
-            // یک refresh دیگر بعد از 300ms برای اطمینان از به‌روزرسانی کامل
-            setTimeout(() => {
-                console.log('🔄 [handleSaveInputData] Trigger refresh #2 برای loadSavedCalculations...');
-                setRefreshTrigger(prev => {
-                    const newValue = prev + 1;
-                    console.log('🔄 [handleSaveInputData] refreshTrigger تغییر کرد (دوم):', prev, '→', newValue);
-                    return newValue;
-                });
-            }, 300);
-        }, 500);
+            console.log('🔄 [handleSaveInputData] Background refresh برای sync با سرور...');
+            setRefreshTrigger(prev => prev + 1);
+        }, 100);
     };
 
     if (loading) {

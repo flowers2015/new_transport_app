@@ -5,6 +5,7 @@ const {
   saveDriverCalculation,
   getDriverCalculations,
   getCalculationsByDateRange,
+  getPaidCalculations,
 } = require('../controllers/driverCalculationController');
 
 const financeRoles = ['finance', 'central_finance', 'transport_finance', 'admin'];
@@ -17,6 +18,9 @@ router.get('/', authenticateToken, authorizeRole(financeRoles), getDriverCalcula
 
 // GET /api/v1/driver-calculations/by-date-range - دریافت محاسبات بر اساس بازه تاریخ صدور بارنامه
 router.get('/by-date-range', authenticateToken, authorizeRole(financeRoles), getCalculationsByDateRange);
+
+// GET /api/v1/driver-calculations/paid - دریافت محاسبات پرداخت شده
+router.get('/paid', authenticateToken, authorizeRole(financeRoles), getPaidCalculations);
 
 module.exports = router;
 

@@ -755,9 +755,85 @@ async function getCalculationsByDateRange(req, res) {
   }
 }
 
+/**
+ * دریافت محاسبات پرداخت شده برای یک راننده در بازه تاریخ محاسبه
+ */
+async function getPaidCalculations(req, res) {
+  try {
+    const { driverId, startDate, endDate } = req.query;
+
+    if (!driverId) {
+      return res.status(400).json({ message: 'شناسه راننده الزامی است.' });
+    }
+
+    console.log('💰 [getPaidCalculations] دریافت محاسبات پرداخت شده:', {
+      driverId,
+      startDate,
+      endDate
+    });
+
+    let query = `
+      SELECT dc.*, 
+             fa.announcement_code,
+             fa.loading_date,
+             fa.line_type,
+             fa.vehicle_type,
+             COALESCE(
+               NULLIF(dc.bill_of_lading_date, ''),
+               (SELECT TO_CHAR(transaction_date, 'YYYY/MM/DD') FROM freight_transactions WHERE announcement_id = dc.announcement_id ORDER BY created_at DESC LIMIT 1)
+             ) as bill_of_lading_date,
+             d.employee_id,
+             d.name as driver_name
+      FROM driver_calculations dc
+      LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+      LEFT JOIN drivers d ON dc.driver_id = d.id
+      WHERE dc.driver_id = $1
+        AND dc.is_paid = TRUE
+    `;
+    const params = [driverId];
+    let paramIndex = 2;
+
+    // فیلتر بر اساس تاریخ محاسبه (calculation_date)
+    if (startDate) {
+      query += ` AND dc.calculation_date >= $${paramIndex++}`;
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      query += ` AND dc.calculation_date <= $${paramIndex++}`;
+      params.push(endDate);
+    }
+
+    query += ` ORDER BY dc.calculation_date ASC, dc.created_at ASC`;
+
+    console.log('🔍 [getPaidCalculations] Query:', query);
+    console.log('🔍 [getPaidCalculations] Params:', params);
+    
+    const { rows } = await pool.query(query, params);
+    
+    console.log('✅ [getPaidCalculations] تعداد رکوردهای برگشتی:', rows.length);
+    if (rows.length > 0) {
+      console.log('📊 [getPaidCalculations] نمونه اولین رکورد:', {
+        id: rows[0].id,
+        driver_id: rows[0].driver_id,
+        announcement_id: rows[0].announcement_id,
+        is_paid: rows[0].is_paid,
+        calculation_date: rows[0].calculation_date,
+        total_cost: rows[0].total_cost
+      });
+    }
+    
+    res.json(rows);
+  } catch (error) {
+    console.error('❌ [getPaidCalculations] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت محاسبات پرداخت شده.' });
+  }
+}
+
 module.exports = {
   saveDriverCalculation,
   getDriverCalculations,
   getCalculationsByDateRange,
+  getPaidCalculations,
 };
 
