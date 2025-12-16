@@ -1,3 +1,7 @@
+// Load environment variables from backend/.env
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, 'backend', '.env') });
+
 module.exports = {
   apps: [{
     name: 'transport-backend',
