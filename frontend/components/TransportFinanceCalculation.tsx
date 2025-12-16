@@ -598,10 +598,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 };
                 
                 // دریافت همه محاسبات ذخیره شده
-                const savedRes = await fetch(getApiUrl('driver-calculations'), { headers });
+                const apiUrl = getApiUrl('driver-calculations');
+                console.log('🌐 [loadSavedCalculations] در حال fetch از:', apiUrl);
+                const savedRes = await fetch(apiUrl, { headers });
+                console.log('📡 [loadSavedCalculations] Response status:', savedRes.status, savedRes.statusText);
                 if (savedRes.ok) {
                     const savedData = await savedRes.json();
                     console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده از سرور:', savedData.length, 'رکورد');
+                    if (savedData.length > 0) {
+                        console.log('📦 [loadSavedCalculations] نمونه اولین رکورد:', savedData[0]);
+                    }
                     
                     // فیلتر کردن تورهایی که دوره‌شان بسته شده (commission_calculated یا paid)
                     // استفاده از نام متغیر متفاوت برای جلوگیری از مشکل "Cannot access 's' before initialization"
@@ -911,14 +917,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     console.log('✅ [loadSavedCalculations] داده‌ها با موفقیت load شدند');
                 } else {
-                    console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText);
+                    const errorText = await savedRes.text().catch(() => '');
+                    console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText, errorText);
                     // اگر خطا داد و calculateDriverData داریم، از آن استفاده کن
                     if (calculateDriverData.length > 0) {
+                        console.log('🔄 [loadSavedCalculations] استفاده از calculateDriverData به دلیل خطا');
                         setCalculations(calculateDriverData);
+                    } else {
+                        console.warn('⚠️ [loadSavedCalculations] calculateDriverData هم خالی است');
+                        setCalculations([]);
                     }
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error('❌ [loadSavedCalculations] خطا در بارگذاری داده‌های ذخیره شده:', err);
+                console.error('❌ [loadSavedCalculations] Error details:', {
+                    message: err?.message,
+                    stack: err?.stack,
+                    name: err?.name
+                });
                 // اگر خطا داد، ابتدا از cache استفاده کن
                 try {
                     const cacheStr = localStorage.getItem('transport_calculations_cache');
