@@ -912,7 +912,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             });
             return updated;
         });
-    }, [calculations.map(c => `${c.driverId}-${c.tours.map(t => `${t.announcementId}-${t.totalCost || 0}-${t.approvedKilometers || 0}-${t.excessKilometers || 0}`).join('|')}`).join('||')]);
+    }, [calculations.length, calculations.map ? calculations.map(c => `${c.driverId}-${c.tours.length}`).join('||') : '']);
 
     const handleExpandRow = (driverId: string) => {
         const calc = calculations.find(c => c.driverId === driverId);

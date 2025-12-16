@@ -429,6 +429,26 @@ async function saveDriverCalculation(req, res) {
         rowCount: updateResult.rowCount
       });
     } else {
+      // بررسی وجود ستون‌های مورد نیاز قبل از INSERT
+      try {
+        const columnCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'driver_calculations' 
+          AND column_name IN ('depot_rows', 'created_by', 'updated_by', 'depot_food_cost', 'depot_mission_cost')
+        `);
+        const existingCols = columnCheck.rows.map(r => r.column_name);
+        console.log('🔍 [saveDriverCalculation] ستون‌های موجود:', existingCols);
+        
+        // اگر ستون‌های مورد نیاز وجود ندارند، اضافه کن
+        if (!existingCols.includes('depot_rows')) {
+          await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_rows JSONB`);
+          console.log('✅ [saveDriverCalculation] ستون depot_rows اضافه شد');
+        }
+      } catch (colErr) {
+        console.warn('⚠️ [saveDriverCalculation] خطا در بررسی ستون‌ها:', colErr);
+      }
+      
       // ایجاد رکورد جدید
       // شمارش دقیق ستون‌ها: 48 ستون
       // شمارش دقیق VALUES: 48 expression
@@ -509,9 +529,30 @@ async function saveDriverCalculation(req, res) {
       const insertUniqueParams = [...new Set(insertParamMatches.map(m => parseInt(m.replace('$', ''))))].sort((a, b) => a - b);
       const insertMaxParam = insertUniqueParams.length > 0 ? Math.max(...insertUniqueParams) : 0;
       
-      console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای منحصر به فرد:', insertUniqueParams.length);
+      // شمارش تعداد ستون‌ها از INSERT query
+      const columnMatches = insertQuery.match(/INSERT INTO driver_calculations\s*\(([^)]+)\)/);
+      const columnCount = columnMatches ? columnMatches[1].split(',').length : 0;
+      
+      // شمارش تعداد expressions در VALUES
+      const valuesMatch = insertQuery.match(/VALUES\s*\(([^)]+)\)/);
+      const valuesExpressions = valuesMatch ? valuesMatch[1].split(',').length : 0;
+      
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد ستون‌ها:', columnCount);
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد expressions در VALUES:', valuesExpressions);
       console.log('🔍 [saveDriverCalculation] INSERT - بیشترین پارامتر:', insertMaxParam);
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای ارسالی:', insertParams.length);
+      
+      if (columnCount !== valuesExpressions) {
+        console.error('❌ [saveDriverCalculation] INSERT - تعداد ستون‌ها و expressions برابر نیست!', {
+          columnCount,
+          valuesExpressions,
+          query: insertQuery.substring(0, 500)
+        });
+        return res.status(500).json({ 
+          message: `خطا: تعداد ستون‌ها (${columnCount}) با تعداد expressions (${valuesExpressions}) برابر نیست`,
+          error: 'COLUMN_EXPRESSION_MISMATCH'
+        });
+      }
       
       if (insertParams.length !== insertMaxParam) {
         console.error('❌ [saveDriverCalculation] INSERT - تعداد پارامترها نادرست است!', {
