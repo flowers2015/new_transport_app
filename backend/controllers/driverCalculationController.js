@@ -529,16 +529,61 @@ async function saveDriverCalculation(req, res) {
       const insertUniqueParams = [...new Set(insertParamMatches.map(m => parseInt(m.replace('$', ''))))].sort((a, b) => a - b);
       const insertMaxParam = insertUniqueParams.length > 0 ? Math.max(...insertUniqueParams) : 0;
       
-      // شمارش تعداد ستون‌ها از INSERT query
+      // شمارش دقیق تعداد ستون‌ها از INSERT query (با trim کردن فضاهای خالی)
       const columnMatches = insertQuery.match(/INSERT INTO driver_calculations\s*\(([^)]+)\)/);
-      const columnCount = columnMatches ? columnMatches[1].split(',').length : 0;
+      const columnCount = columnMatches ? columnMatches[1].split(',').map(c => c.trim()).filter(c => c).length : 0;
       
-      // شمارش تعداد expressions در VALUES
+      // شمارش دقیق تعداد expressions در VALUES (با در نظر گیری CASE WHEN)
+      // باید expressions را به درستی بشماریم - CASE WHEN یک expression است
       const valuesMatch = insertQuery.match(/VALUES\s*\(([^)]+)\)/);
-      const valuesExpressions = valuesMatch ? valuesMatch[1].split(',').length : 0;
+      let valuesExpressions = 0;
+      if (valuesMatch) {
+        const valuesStr = valuesMatch[1];
+        // شمارش expressions با در نظر گیری CASE WHEN
+        let inCase = false;
+        let parenDepth = 0;
+        let currentExpr = '';
+        for (let i = 0; i < valuesStr.length; i++) {
+          const char = valuesStr[i];
+          if (char === '(') parenDepth++;
+          if (char === ')') parenDepth--;
+          if (char === ',' && parenDepth === 0 && !inCase) {
+            if (currentExpr.trim()) valuesExpressions++;
+            currentExpr = '';
+            continue;
+          }
+          currentExpr += char;
+          if (valuesStr.substring(i, i + 4) === 'CASE') inCase = true;
+          if (valuesStr.substring(i, i + 3) === 'END' && parenDepth === 0) {
+            inCase = false;
+            if (currentExpr.trim()) valuesExpressions++;
+            currentExpr = '';
+            i += 2; // skip 'END'
+            continue;
+          }
+        }
+        if (currentExpr.trim()) valuesExpressions++;
+      }
       
-      console.log('🔍 [saveDriverCalculation] INSERT - تعداد ستون‌ها:', columnCount);
+      // بررسی تعداد ستون‌های واقعی در دیتابیس
+      let actualColumnCount = 0;
+      try {
+        const dbColumns = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'driver_calculations'
+          ORDER BY ordinal_position
+        `);
+        actualColumnCount = dbColumns.rows.length;
+        console.log('🔍 [saveDriverCalculation] تعداد ستون‌های واقعی در دیتابیس:', actualColumnCount);
+        console.log('🔍 [saveDriverCalculation] لیست ستون‌های دیتابیس:', dbColumns.rows.map(r => r.column_name).join(', '));
+      } catch (dbErr) {
+        console.warn('⚠️ [saveDriverCalculation] خطا در بررسی ستون‌های دیتابیس:', dbErr);
+      }
+      
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد ستون‌ها در query:', columnCount);
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد expressions در VALUES:', valuesExpressions);
+      console.log('🔍 [saveDriverCalculation] INSERT - تعداد ستون‌های واقعی در دیتابیس:', actualColumnCount);
       console.log('🔍 [saveDriverCalculation] INSERT - بیشترین پارامتر:', insertMaxParam);
       console.log('🔍 [saveDriverCalculation] INSERT - تعداد پارامترهای ارسالی:', insertParams.length);
       
@@ -551,6 +596,13 @@ async function saveDriverCalculation(req, res) {
         return res.status(500).json({ 
           message: `خطا: تعداد ستون‌ها (${columnCount}) با تعداد expressions (${valuesExpressions}) برابر نیست`,
           error: 'COLUMN_EXPRESSION_MISMATCH'
+        });
+      }
+      
+      if (actualColumnCount > 0 && columnCount !== actualColumnCount) {
+        console.warn('⚠️ [saveDriverCalculation] تعداد ستون‌ها در query با دیتابیس متفاوت است!', {
+          queryColumns: columnCount,
+          dbColumns: actualColumnCount
         });
       }
       

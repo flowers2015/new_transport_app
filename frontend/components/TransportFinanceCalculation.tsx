@@ -912,7 +912,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             });
             return updated;
         });
-    }, [calculations.length, calculations.map ? calculations.map(c => `${c.driverId}-${c.tours.length}`).join('||') : '']);
+    }, [calculations.length]);
 
     const handleExpandRow = (driverId: string) => {
         const calc = calculations.find(c => c.driverId === driverId);
