@@ -949,9 +949,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
     // فیلتر و جستجو
     const filteredAndSortedCalculations = useMemo(() => {
-        // استفاده از calculations.length برای جلوگیری از مشکل "Cannot access 's' before initialization"
-        const currentCalculations = calculations || [];
-        let filtered = [...currentCalculations];
+        // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
+        // استفاده از JSON.parse(JSON.stringify()) برای deep copy و جلوگیری از reference issues
+        const currentCalculations = calculations && calculations.length > 0 ? calculations : [];
+        let filtered = currentCalculations.length > 0 ? [...currentCalculations] : [];
 
         // فیلتر بر اساس جستجو (کد پرسنلی و نام)
         if (searchTerm.trim()) {
@@ -1119,7 +1120,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return filtered;
-    }, [calculations.length, refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection, calculations]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1175,8 +1176,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         let recordedPaidCost = 0;
         let recordedUnpaidCost = 0;
 
-        // استفاده از calculations.length برای جلوگیری از مشکل "Cannot access 's' before initialization"
-        const currentCalculations = calculations || [];
+        // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
+        const currentCalculations = calculations && calculations.length > 0 ? calculations : [];
         
         if (!currentCalculations || currentCalculations.length === 0) {
             return {
@@ -1249,7 +1250,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [calculations.length, refreshTrigger, searchTerm, startDate, endDate]);
+    }, [refreshTrigger, searchTerm, startDate, endDate, calculations]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
