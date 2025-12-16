@@ -431,19 +431,93 @@ async function saveDriverCalculation(req, res) {
     } else {
       // بررسی وجود ستون‌های مورد نیاز قبل از INSERT
       try {
+        const requiredColumns = [
+          'depot_rows', 'created_by', 'updated_by', 'depot_food_cost', 'depot_mission_cost',
+          'helper_driver_excess_kilometers', 'vehicle_code', 'vehicle_plate', 'destinations',
+          'multi_unload_count', 'advance_payment', 'depot_total_mileage', 'depot_shipment_count',
+          'depot_cargo_handling_cost', 'depot_mission_days', 'depot_kilometer_rate',
+          'commission_status', 'period_id'
+        ];
+        
         const columnCheck = await pool.query(`
           SELECT column_name 
           FROM information_schema.columns 
           WHERE table_name = 'driver_calculations' 
-          AND column_name IN ('depot_rows', 'created_by', 'updated_by', 'depot_food_cost', 'depot_mission_cost')
-        `);
+          AND column_name = ANY($1::text[])
+        `, [requiredColumns]);
         const existingCols = columnCheck.rows.map(r => r.column_name);
         console.log('🔍 [saveDriverCalculation] ستون‌های موجود:', existingCols);
         
-        // اگر ستون‌های مورد نیاز وجود ندارند، اضافه کن
-        if (!existingCols.includes('depot_rows')) {
-          await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_rows JSONB`);
-          console.log('✅ [saveDriverCalculation] ستون depot_rows اضافه شد');
+        // اضافه کردن ستون‌های گمشده
+        const missingCols = requiredColumns.filter(col => !existingCols.includes(col));
+        if (missingCols.length > 0) {
+          console.log('⚠️ [saveDriverCalculation] ستون‌های گمشده:', missingCols);
+          
+          // اضافه کردن ستون‌ها
+          if (missingCols.includes('helper_driver_excess_kilometers')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS helper_driver_excess_kilometers INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون helper_driver_excess_kilometers اضافه شد');
+          }
+          if (missingCols.includes('vehicle_code')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS vehicle_code VARCHAR(255)`);
+            console.log('✅ [saveDriverCalculation] ستون vehicle_code اضافه شد');
+          }
+          if (missingCols.includes('vehicle_plate')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS vehicle_plate VARCHAR(255)`);
+            console.log('✅ [saveDriverCalculation] ستون vehicle_plate اضافه شد');
+          }
+          if (missingCols.includes('destinations')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS destinations TEXT`);
+            console.log('✅ [saveDriverCalculation] ستون destinations اضافه شد');
+          }
+          if (missingCols.includes('multi_unload_count')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS multi_unload_count INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون multi_unload_count اضافه شد');
+          }
+          if (missingCols.includes('advance_payment')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS advance_payment INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون advance_payment اضافه شد');
+          }
+          if (missingCols.includes('depot_total_mileage')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_total_mileage INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_total_mileage اضافه شد');
+          }
+          if (missingCols.includes('depot_shipment_count')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_shipment_count INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_shipment_count اضافه شد');
+          }
+          if (missingCols.includes('depot_cargo_handling_cost')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_cargo_handling_cost INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_cargo_handling_cost اضافه شد');
+          }
+          if (missingCols.includes('depot_mission_days')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_mission_days INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_mission_days اضافه شد');
+          }
+          if (missingCols.includes('depot_kilometer_rate')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_kilometer_rate INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_kilometer_rate اضافه شد');
+          }
+          if (missingCols.includes('depot_food_cost')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_food_cost INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_food_cost اضافه شد');
+          }
+          if (missingCols.includes('depot_mission_cost')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_mission_cost INTEGER DEFAULT 0`);
+            console.log('✅ [saveDriverCalculation] ستون depot_mission_cost اضافه شد');
+          }
+          if (missingCols.includes('depot_rows')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS depot_rows JSONB`);
+            console.log('✅ [saveDriverCalculation] ستون depot_rows اضافه شد');
+          }
+          if (missingCols.includes('commission_status')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'recorded'`);
+            console.log('✅ [saveDriverCalculation] ستون commission_status اضافه شد');
+          }
+          if (missingCols.includes('period_id')) {
+            await pool.query(`ALTER TABLE driver_calculations ADD COLUMN IF NOT EXISTS period_id VARCHAR(255)`);
+            console.log('✅ [saveDriverCalculation] ستون period_id اضافه شد');
+          }
         }
       } catch (colErr) {
         console.warn('⚠️ [saveDriverCalculation] خطا در بررسی ستون‌ها:', colErr);

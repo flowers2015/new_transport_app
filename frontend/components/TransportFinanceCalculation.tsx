@@ -745,10 +745,27 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         console.log('✅ [loadSavedCalculations] baseData از savedData ساخته شد (بدون announcements):', baseData.length, 'راننده');
                     }
                     
-                    // اگر baseData هنوز خالی است، یعنی داده‌ای نداریم
+                    // اگر baseData هنوز خالی است، سعی کن از savedData بسازی
                     if (baseData.length === 0) {
-                        console.log('⏳ [loadSavedCalculations] baseData هنوز خالی است، صبر می‌کنیم...');
-                        return;
+                        console.log('⏳ [loadSavedCalculations] baseData خالی است، بررسی savedData...', {
+                            savedDataLength: savedData.length,
+                            announcementsLength: announcements.length,
+                            driversLength: drivers.length,
+                            vehiclesLength: vehicles.length
+                        });
+                        // اگر savedData داریم و announcements, drivers, vehicles موجودند، از savedData استفاده کن
+                        if (savedData.length > 0 && announcements.length > 0 && drivers.length > 0 && vehicles.length > 0) {
+                            console.log('🔄 [loadSavedCalculations] ساخت baseData از savedData (دوباره)...');
+                            // منطق ساخت baseData از savedData در خطوط 622-745 اجرا شده است
+                            // اگر هنوز خالی است، صبر کن
+                            if (baseData.length === 0) {
+                                console.log('⏳ [loadSavedCalculations] baseData هنوز خالی است، صبر می‌کنیم...');
+                                return;
+                            }
+                        } else {
+                            console.log('⏳ [loadSavedCalculations] baseData هنوز خالی است و نمی‌توانیم از savedData بسازیم، صبر می‌کنیم...');
+                            return;
+                        }
                     }
                     
                     // Merge کردن داده‌های ذخیره شده با baseData
@@ -855,8 +872,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     } : 'خالی');
                     
                     // تنظیم calculations با داده‌های merge شده
-                    setCalculations(filteredUpdated);
-                    console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
+                    if (filteredUpdated.length > 0) {
+                        setCalculations(filteredUpdated);
+                        console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
+                    } else {
+                        console.warn('⚠️ [loadSavedCalculations] filteredUpdated خالی است!', {
+                            updatedLength: updated.length,
+                            baseDataLength: baseData.length,
+                            savedDataLength: savedData.length,
+                            closedTourIdsSize: closedTourIds.size
+                        });
+                        // حتی اگر خالی است، setCalculations را فراخوانی کن تا state به‌روز شود
+                        setCalculations([]);
+                    }
                     
                     // ذخیره در localStorage برای cache
                     try {
@@ -951,8 +979,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const filteredAndSortedCalculations = useMemo(() => {
         // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
         // استفاده از JSON.parse(JSON.stringify()) برای deep copy و جلوگیری از reference issues
-        const currentCalculations = calculations && calculations.length > 0 ? calculations : [];
-        let filtered = currentCalculations.length > 0 ? [...currentCalculations] : [];
+        if (!calculations || calculations.length === 0) {
+            console.log('⚠️ [filteredAndSortedCalculations] calculations خالی است');
+            return [];
+        }
+        const currentCalculations = calculations;
+        let filtered = [...currentCalculations];
 
         // فیلتر بر اساس جستجو (کد پرسنلی و نام)
         if (searchTerm.trim()) {
@@ -1120,7 +1152,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return filtered;
-    }, [refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [calculations, refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1177,9 +1209,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         let recordedUnpaidCost = 0;
 
         // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
-        const currentCalculations = calculations && calculations.length > 0 ? calculations : [];
-        
-        if (!currentCalculations || currentCalculations.length === 0) {
+        if (!calculations || calculations.length === 0) {
             return {
                 totalTours: 0,
                 unrecordedTours: 0,
@@ -1190,7 +1220,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             };
         }
 
-        currentCalculations.forEach(calc => {
+        calculations.forEach(calc => {
             if (!calc.tours || calc.tours.length === 0) return;
             
             calc.tours.forEach(tour => {
@@ -1250,7 +1280,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [refreshTrigger, searchTerm, startDate, endDate]);
+    }, [calculations, refreshTrigger, searchTerm, startDate, endDate]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
