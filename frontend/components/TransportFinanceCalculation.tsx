@@ -935,7 +935,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
     // فیلتر و جستجو
     const filteredAndSortedCalculations = useMemo(() => {
-        let filtered = [...calculations];
+        // استفاده از calculations.length برای جلوگیری از مشکل "Cannot access 's' before initialization"
+        const currentCalculations = calculations || [];
+        let filtered = [...currentCalculations];
 
         // فیلتر بر اساس جستجو (کد پرسنلی و نام)
         if (searchTerm.trim()) {
@@ -1159,7 +1161,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         let recordedPaidCost = 0;
         let recordedUnpaidCost = 0;
 
-        if (!calculations || calculations.length === 0) {
+        // استفاده از calculations.length برای جلوگیری از مشکل "Cannot access 's' before initialization"
+        const currentCalculations = calculations || [];
+        
+        if (!currentCalculations || currentCalculations.length === 0) {
             return {
                 totalTours: 0,
                 unrecordedTours: 0,
@@ -1170,7 +1175,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             };
         }
 
-        calculations.forEach(calc => {
+        currentCalculations.forEach(calc => {
             if (!calc.tours || calc.tours.length === 0) return;
             
             calc.tours.forEach(tour => {
