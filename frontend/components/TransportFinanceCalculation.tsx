@@ -864,6 +864,101 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             };
                     });
                     
+                    // 🔧 اضافه کردن تورهای ذخیره شده که در baseData نیستند
+                    // این مهم است برای زمانی که announcement از لیست حذف شده ولی داده ذخیره شده موجود است
+                    const baseDriverIds = new Set(baseData.map(c => c.driverId));
+                    const baseTourIds = new Set(baseData.flatMap(c => c.tours.map(t => t.announcementId)));
+                    
+                    savedData.forEach((saved: any) => {
+                        // اگر این تور بسته شده، نادیده بگیر
+                        if (closedTourIds.has(saved.announcement_id)) return;
+                        
+                        // اگر این تور قبلاً در baseData هست، نادیده بگیر
+                        if (baseTourIds.has(saved.announcement_id)) return;
+                        
+                        // پیدا کردن یا ساختن راننده
+                        const driver = drivers.find(d => d.id === saved.driver_id);
+                        if (!driver) return;
+                        
+                        // ساختن tour از savedData
+                        const tourFromSaved: DriverTourDetailWithCalculation = {
+                            announcementId: saved.announcement_id,
+                            announcementCode: saved.announcement_code || '',
+                            vehicleType: saved.vehicle_type || '',
+                            vehicleId: saved.vehicle_id || '',
+                            vehicleCode: saved.vehicle_code || '',
+                            plateNumber: saved.plate_number || '',
+                            lineType: saved.line_type || '',
+                            destinations: saved.destinations ? (typeof saved.destinations === 'string' ? [saved.destinations] : saved.destinations) : [],
+                            roundTripKm: saved.approved_kilometers || 0,
+                            billOfLadingNumber: saved.bill_of_lading_number || '',
+                            billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                            calculationDate: saved.calculation_date || '',
+                            approvedKilometers: saved.approved_kilometers || 0,
+                            excessKilometers: saved.excess_kilometers || 0,
+                            approvedMissionDays: saved.approved_mission_days || 1,
+                            excessMissionDays: saved.excess_mission_days || 0,
+                            tollCost: saved.toll_cost || 0,
+                            loadingCost: saved.loading_cost || 0,
+                            billOfLadingCost: saved.bill_of_lading_cost || 0,
+                            returnCargoCost: saved.return_cargo_cost || 0,
+                            returnBillOfLadingCost: saved.return_bill_of_lading_cost || 0,
+                            multiUnloadCost: saved.multi_unload_cost || 0,
+                            excessMissionCost: saved.excess_mission_cost || 0,
+                            helperDriverCost: saved.helper_driver_cost || 0,
+                            fixedAllowance: saved.fixed_allowance || 0,
+                            foodCost: saved.food_cost || 0,
+                            fuelCost: saved.fuel_cost || 0,
+                            tourCost: saved.tour_cost || 0,
+                            totalCost: saved.total_cost || 0,
+                            notes: saved.notes || '',
+                            isDataRecorded: true,
+                            commissionStatus: saved.commission_status || 'recorded',
+                            helperDriverId: saved.helper_driver_id || '',
+                            helperDriverEmployeeId: saved.helper_driver_employee_id || '',
+                            helperDriverName: saved.helper_driver_name || '',
+                            helperDriverAllowance: saved.helper_driver_allowance || 0,
+                            helperDriverFoodCost: saved.helper_driver_food_cost || 0,
+                            helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || 0,
+                            helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || 0,
+                            helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || 0,
+                            isPaid: saved.is_paid || false,
+                            depotMissionDays: saved.depot_mission_days || 0,
+                            depotShipmentCount: saved.depot_shipment_count || 0,
+                            depotCargoHandlingCost: saved.depot_cargo_handling_cost || 0,
+                            depotKilometerRate: saved.depot_kilometer_rate || 0,
+                            depotTotalMileage: saved.depot_total_mileage || 0,
+                            depotFoodCost: saved.depot_food_cost || 0,
+                            depotMissionCost: saved.depot_mission_cost || 0,
+                            depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows) : []) : saved.depot_rows) : [],
+                            advancePayment: saved.advance_payment || 0,
+                        } as any;
+                        
+                        // اگر راننده در updated هست، تور را اضافه کن
+                        const existingCalc = updated.find(c => c.driverId === saved.driver_id);
+                        if (existingCalc) {
+                            existingCalc.tours.push(tourFromSaved);
+                            existingCalc.tourCount = existingCalc.tours.length;
+                            existingCalc.tourCost += Number(saved.total_cost) || 0;
+                            existingCalc.totalKilometers += (Number(saved.approved_kilometers) || 0) + (Number(saved.excess_kilometers) || 0);
+                        } else {
+                            // راننده جدید اضافه کن
+                            updated.push({
+                                id: generateUUID(),
+                                driverId: driver.id,
+                                employeeId: driver.employeeId,
+                                driverName: driver.name,
+                                queueType: (saved.queue_type || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
+                                tourCount: 1,
+                                totalKilometers: (Number(saved.approved_kilometers) || 0) + (Number(saved.excess_kilometers) || 0),
+                                tourCost: Number(saved.total_cost) || 0,
+                                tours: [tourFromSaved],
+                            });
+                        }
+                        
+                        console.log('🔧 [loadSavedCalculations] تور از savedData اضافه شد:', saved.announcement_id);
+                    });
+                    
                     // فیلتر کردن رانندگانی که تور باز ندارند
                     const filteredUpdated = updated.filter(calc => calc.tours.length > 0);
                     console.log('📊 [loadSavedCalculations] رانندگان با تور باز:', filteredUpdated.length, 'از', updated.length);
@@ -2657,8 +2752,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 console.log('⚡ [handleSaveInputData] selectedTourDetails به‌روزرسانی شد');
             }
             
-            // فوراً refreshTrigger را به‌روزرسانی کن
-            setRefreshTrigger(prev => prev + 1);
+            // ⚠️ نکته: setRefreshTrigger را حذف کردیم چون optimistic update کافی است
+            // و فراخوانی مجدد loadSavedCalculations ممکن است optimistic update را overwrite کند
+            // داده‌ها در بک‌اند ذخیره شده‌اند و در بارگذاری بعدی صفحه نمایش داده می‌شوند
             
         } catch (err: any) {
             console.error('❌ [handleSaveInputData] خطا در ذخیره اطلاعات:', err);
