@@ -600,6 +600,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 console.log('📡 [loadSavedCalculations] Response status:', savedRes.status, savedRes.statusText);
                 if (savedRes.ok) {
                     const savedData = await savedRes.json();
+                    
+                    // 🔴 DEBUG با alert (چون console.log در production حذف می‌شود)
+                    // این alert را بعد از رفع مشکل حذف کنید
+                    if (typeof window !== 'undefined' && savedData.length > 0) {
+                        const debugInfo = `savedData: ${savedData.length} records, calculateDriverData: ${calculateDriverData.length} drivers`;
+                        window.__DEBUG_SAVED_DATA__ = savedData;
+                        window.__DEBUG_BASE_DATA__ = calculateDriverData;
+                        // alert('DEBUG: ' + debugInfo); // Uncomment to see alert
+                    }
+                    
                     console.log('📦 [loadSavedCalculations] داده‌های ذخیره شده از سرور:', savedData.length, 'رکورد');
                     if (savedData.length > 0) {
                         console.log('📦 [loadSavedCalculations] نمونه اولین رکورد:', savedData[0]);
@@ -614,10 +624,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     );
                     console.log('🔒 [loadSavedCalculations] تورهای بسته شده:', closedTourIds.size, 'تور');
                     
-                    // استفاده از calculateDriverData به عنوان base - اگر خالی بود، از calculations فعلی استفاده کن
-                    // استفاده از calculations.length برای جلوگیری از مشکل "Cannot access 's' before initialization"
+                    // 🔧 رویکرد جدید: savedData را با calculateDriverData ترکیب می‌کنیم
+                    // اول همه تورها را از calculateDriverData می‌گیریم
+                    // سپس داده‌های ذخیره شده را روی آن‌ها اعمال می‌کنیم
                     const currentCalculations = calculations || [];
                     let baseData = calculateDriverData.length > 0 ? calculateDriverData : currentCalculations;
+                    
+                    // ساخت یک Map از savedData برای دسترسی سریع
+                    const savedDataMap = new Map<string, any>();
+                    savedData.forEach((item: any) => {
+                        const key = `${item.driver_id}_${item.announcement_id}`;
+                        savedDataMap.set(key, item);
+                    });
+                    
+                    // 🔴 DEBUG: ذخیره در window برای بررسی
+                    if (typeof window !== 'undefined') {
+                        (window as any).__DEBUG_SAVED_MAP__ = savedDataMap;
+                        (window as any).__DEBUG_BASE_DATA__ = baseData;
+                    }
                     
                     // اگر baseData خالی است اما announcements, drivers, vehicles موجودند، 
                     // از savedData برای ساخت baseData استفاده کن
@@ -779,17 +803,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     });
                     
                     // Merge کردن داده‌های ذخیره شده با baseData
+                    let mergeCount = 0; // شمارش تعداد merge موفق
+                    
                     const updated = baseData.map(calc => {
                             // فیلتر کردن تورهایی که بسته نشده‌اند
                             const openTours = calc.tours.filter(tour => !closedTourIds.has(tour.announcementId));
                             
                             const updatedTours = openTours.map(tour => {
-                                // استفاده از نام متغیر متفاوت برای جلوگیری از مشکل "Cannot access 's' before initialization"
-                                const saved = savedData.find((item: any) => 
-                                    item.driver_id === calc.driverId && item.announcement_id === tour.announcementId
-                                );
+                                // استفاده از Map برای دسترسی سریع‌تر
+                                const key = `${calc.driverId}_${tour.announcementId}`;
+                                const saved = savedDataMap.get(key);
                                 
                                 if (saved) {
+                                    mergeCount++;
                                     console.log('✅ [loadSavedCalculations] پیدا شد:', {
                                         driverId: calc.driverId,
                                         announcementId: tour.announcementId,
@@ -989,6 +1015,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     } : 'خالی');
                     setCalculations(filteredUpdated);
                     console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
+                    
+                    // 🔴 DEBUG: ذخیره نتیجه برای بررسی در console
+                    if (typeof window !== 'undefined') {
+                        (window as any).__DEBUG_MERGE_RESULT__ = {
+                            mergeCount,
+                            driversCount: filteredUpdated.length,
+                            toursWithData: filteredUpdated.flatMap(c => c.tours).filter((t: any) => t.isDataRecorded).length
+                        };
+                    }
                     
                     if (filteredUpdated.length === 0) {
                         console.warn('⚠️ [loadSavedCalculations] filteredUpdated خالی است!', {
