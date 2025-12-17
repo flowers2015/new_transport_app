@@ -832,6 +832,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     console.log('✅ [loadSavedCalculations] پیدا شد:', {
                                         driverId: calc.driverId,
                                         announcementId: tour.announcementId,
+                                        is_paid_raw: saved.is_paid,
+                                        is_paid_type: typeof saved.is_paid,
+                                        isPaid_raw: saved.isPaid,
+                                        isPaid_type: typeof saved.isPaid,
                                         saved
                                     });
                                     return {
@@ -869,7 +873,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || saved.helperDriverExcessMissionDays || 0,
                                         helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || saved.helperDriverExcessMissionCost || 0,
                                         helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || saved.helperDriverExcessKilometers || 0,
-                                        isPaid: saved.is_paid || saved.isPaid || false,
+                                        isPaid: saved.is_paid === true || saved.is_paid === 'true' || saved.is_paid === 't' || saved.isPaid === true || saved.isPaid === 'true' || false,
                                         // فیلدهای محاسبات دپو
                                         depotMissionDays: saved.depot_mission_days || saved.depotMissionDays || 0,
                                         depotShipmentCount: saved.depot_shipment_count || saved.depotShipmentCount || 0,
@@ -965,7 +969,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || 0,
                             helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || 0,
                             helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || 0,
-                            isPaid: saved.is_paid || false,
+                            isPaid: saved.is_paid === true || saved.is_paid === 'true' || saved.is_paid === 't' || saved.isPaid === true || saved.isPaid === 'true' || false,
                             depotMissionDays: saved.depot_mission_days || 0,
                             depotShipmentCount: saved.depot_shipment_count || 0,
                             depotCargoHandlingCost: saved.depot_cargo_handling_cost || 0,
@@ -1745,7 +1749,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     helperDriverExcessMissionDays: saved.helper_driver_excess_mission_days || 0,
                                     helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || 0,
                                     helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || 0,
-                                    isPaid: saved.is_paid || false,
+                                    isPaid: saved.is_paid === true || saved.is_paid === 'true' || saved.is_paid === 't' || saved.isPaid === true || saved.isPaid === 'true' || false,
                                     depotMissionDays: saved.depot_mission_days || 0,
                                     depotShipmentCount: saved.depot_shipment_count || 0,
                                     depotCargoHandlingCost: saved.depot_cargo_handling_cost || 0,
