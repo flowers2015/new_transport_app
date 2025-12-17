@@ -557,20 +557,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 return;
             }
             
-            // همیشه ابتدا از cache استفاده کن (اگر موجود باشد)
+            // ⚠️ غیرفعال کردن cache برای حل مشکل sync
+            // Cache باعث می‌شد داده‌های قدیمی نمایش داده شوند
+            // همیشه از سرور fetch می‌کنیم تا داده‌های به‌روز داشته باشیم
             try {
-                const cacheStr = localStorage.getItem('transport_calculations_cache');
-                if (cacheStr) {
-                    const cache = JSON.parse(cacheStr);
-                    // اگر cache کمتر از 5 دقیقه قدیمی است، استفاده کن
-                    if (Date.now() - cache.timestamp < 5 * 60 * 1000 && cache.data && cache.data.length > 0) {
-                        console.log('📦 [loadSavedCalculations] استفاده از cache (فوری)');
-                        setCalculations(cache.data);
-                        // اما در background از سرور fetch کن
-                    }
-                }
+                localStorage.removeItem('transport_calculations_cache');
             } catch (e) {
-                console.warn('⚠️ [loadSavedCalculations] خطا در خواندن cache:', e);
+                // ignore
             }
             
             // اگر announcements نداریم اما savedData داریم، از savedData استفاده کن
@@ -1009,17 +1002,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         });
                     }
                     
-                    // ذخیره در localStorage برای cache
-                    try {
-                        localStorage.setItem('transport_calculations_cache', JSON.stringify({
-                            data: filteredUpdated,
-                            timestamp: Date.now(),
-                            announcementsCount: announcements.length
-                        }));
-                        console.log('💾 [loadSavedCalculations] داده‌ها در localStorage ذخیره شدند');
-                    } catch (e) {
-                        console.warn('⚠️ [loadSavedCalculations] خطا در ذخیره localStorage:', e);
-                    }
+                    // ⚠️ Cache غیرفعال شده - داده‌ها همیشه از سرور خوانده می‌شوند
+                    // این باعث می‌شود داده‌های به‌روز همیشه نمایش داده شوند
                     
                     console.log('✅ [loadSavedCalculations] داده‌ها با موفقیت load شدند');
                 } else {
@@ -1036,26 +1020,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 }
             } catch (err: any) {
                 console.error('❌ [loadSavedCalculations] خطا در بارگذاری داده‌های ذخیره شده:', err);
-                console.error('❌ [loadSavedCalculations] Error details:', {
-                    message: err?.message,
-                    stack: err?.stack,
-                    name: err?.name
-                });
-                // اگر خطا داد، ابتدا از cache استفاده کن
-                try {
-                    const cacheStr = localStorage.getItem('transport_calculations_cache');
-                    if (cacheStr) {
-                        const cache = JSON.parse(cacheStr);
-                        if (cache.data && cache.data.length > 0) {
-                            console.log('📦 [loadSavedCalculations] استفاده از cache (به دلیل خطا)');
-                            setCalculations(cache.data);
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('⚠️ [loadSavedCalculations] خطا در خواندن cache:', e);
-                }
-                // اگر cache نداریم و calculateDriverData داریم، از آن استفاده کن
+                // اگر خطا داد و calculateDriverData داریم، از آن استفاده کن
                 if (calculateDriverData.length > 0) {
                     setCalculations(calculateDriverData);
                 }
@@ -1657,26 +1622,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const handleEditData = async (driverId: string, tourId: string) => {
         console.log('🔍 [handleEditData] شروع ویرایش:', { driverId, tourId, calculationsCount: calculations.length });
         
-        // اگر calculations خالی است، سعی کن از cache یا سرور load کن
+        // اگر calculations خالی است، از سرور load کن (بدون cache)
         let currentCalculations = calculations;
         if (currentCalculations.length === 0) {
-            console.log('⚠️ [handleEditData] calculations خالی است، تلاش برای load...');
-            // تلاش برای load از cache
-            try {
-                const cacheStr = localStorage.getItem('transport_calculations_cache');
-                if (cacheStr) {
-                    const cache = JSON.parse(cacheStr);
-                    if (cache.data && cache.data.length > 0) {
-                        console.log('📦 [handleEditData] استفاده از cache');
-                        currentCalculations = cache.data;
-                        setCalculations(cache.data);
-                        // صبر کن تا state update شود
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                    }
-                }
-            } catch (e) {
-                console.error('❌ [handleEditData] خطا در خواندن cache:', e);
-            }
+            console.log('⚠️ [handleEditData] calculations خالی است، تلاش برای load از سرور...');
             
             // اگر هنوز خالی است، از سرور fetch کن
             if (currentCalculations.length === 0) {
