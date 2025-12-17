@@ -826,7 +826,6 @@ async function getDriverCalculations(req, res) {
       LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
       LEFT JOIN drivers d ON dc.driver_id = d.id
       WHERE 1=1
-        AND (dc.is_paid IS NULL OR dc.is_paid = FALSE)
         AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
     `;
     const params = [];
@@ -876,8 +875,7 @@ async function getDriverCalculations(req, res) {
         const filteredCountQuery = `
           SELECT COUNT(*) as count 
           FROM driver_calculations dc
-          WHERE (dc.is_paid IS NULL OR dc.is_paid = FALSE)
-            AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
+          WHERE (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
         `;
         const filteredCountResult = await pool.query(filteredCountQuery);
         console.log('⚠️ [getDriverCalculations] تعداد رکوردهای فیلتر شده:', filteredCountResult.rows[0].count);

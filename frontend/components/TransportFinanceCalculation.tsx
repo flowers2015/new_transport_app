@@ -1804,6 +1804,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             return;
         }
         
+        // بررسی اینکه آیا این تور پرداخت شده است
+        if ((tour as any).isPaid) {
+            alert('این تور پرداخت شده است و امکان ویرایش ندارد.');
+            return;
+        }
+        
         console.log('✅ [handleEditData] راننده و تور پیدا شدند');
 
         // اگر داده‌ای ثبت شده، آن را نمایش بده
@@ -1971,6 +1977,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         const tour = calc.tours.find(t => t.announcementId === tourId);
         if (!tour) return;
+        
+        // بررسی اینکه آیا این تور پرداخت شده است
+        if ((tour as any).isPaid) {
+            alert('این تور پرداخت شده است و امکان ثبت اطلاعات ندارد.');
+            return;
+        }
 
         // دریافت اطلاعات مصوب از API بر اساس مسیر و شهر
         try {
@@ -4693,7 +4705,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 handleRecordData(calc.driverId, tour.announcementId);
                                                                             }
                                                                         }}
-                                                                        className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                                                        disabled={(tour as any).isPaid}
+                                                                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                                                                            (tour as any).isPaid
+                                                                                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                                                                : 'bg-green-600 text-white hover:bg-green-700'
+                                                                        }`}
                                                                     >
                                                                         ثبت اطلاعات
                                                                     </button>
@@ -4705,7 +4722,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 handleEditData(calc.driverId, tour.announcementId);
                                                                             }
                                                                         }}
-                                                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                                        disabled={(tour as any).isPaid}
+                                                                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                                                                            (tour as any).isPaid
+                                                                                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                                                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                                        }`}
                                                                     >
                                                                         ویرایش
                                                                     </button>
