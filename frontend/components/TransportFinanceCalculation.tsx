@@ -548,12 +548,23 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // بارگذاری داده‌های ذخیره شده از دیتابیس - بعد از fetchData
     useEffect(() => {
         const loadSavedCalculations = async () => {
-            // 🔴 DEBUG: این لاگ باید حتماً نمایش داده شود
-            console.log('🔴🔴🔴 [loadSavedCalculations] START - loading:', loading, 'announcements:', announcements.length, 'drivers:', drivers.length);
+            // 🔴 DEBUG: ذخیره در window در ابتدای تابع
+            if (typeof window !== 'undefined') {
+                (window as any).__DEBUG_LOAD_CALLED__ = {
+                    time: new Date().toISOString(),
+                    loading,
+                    announcementsLength: announcements.length,
+                    driversLength: drivers.length,
+                    vehiclesLength: vehicles.length,
+                    calculateDriverDataLength: calculateDriverData.length
+                };
+            }
             
             // اگر هنوز در حال loading هستیم، صبر کن
             if (loading) {
-                console.log('⏳ [loadSavedCalculations] در انتظار fetchData...');
+                if (typeof window !== 'undefined') {
+                    (window as any).__DEBUG_EARLY_RETURN__ = 'loading is true';
+                }
                 return;
             }
             
@@ -569,7 +580,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // اگر announcements نداریم اما savedData داریم، از savedData استفاده کن
             // اما اگر announcements داریم، از آن استفاده کن
             if (!announcements.length && !drivers.length && !vehicles.length) {
-                console.log('⏳ [loadSavedCalculations] در انتظار announcements, drivers, vehicles...');
+                if (typeof window !== 'undefined') {
+                    (window as any).__DEBUG_EARLY_RETURN__ = 'no announcements/drivers/vehicles';
+                }
                 return;
             }
             
