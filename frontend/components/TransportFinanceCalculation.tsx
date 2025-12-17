@@ -548,6 +548,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // بارگذاری داده‌های ذخیره شده از دیتابیس - بعد از fetchData
     useEffect(() => {
         const loadSavedCalculations = async () => {
+            // 🔴 DEBUG: این لاگ باید حتماً نمایش داده شود
+            console.log('🔴🔴🔴 [loadSavedCalculations] START - loading:', loading, 'announcements:', announcements.length, 'drivers:', drivers.length);
+            
             // اگر هنوز در حال loading هستیم، صبر کن
             if (loading) {
                 console.log('⏳ [loadSavedCalculations] در انتظار fetchData...');
@@ -773,6 +776,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             return;
                         }
                     }
+                    
+                    // 🔴 DEBUG: نمایش داده‌ها قبل از merge
+                    console.log('🔴🔴🔴 [loadSavedCalculations] MERGE START:', {
+                        baseDataLength: baseData.length,
+                        savedDataLength: savedData.length,
+                        sampleBaseData: baseData.slice(0, 2).map(c => ({ driverId: c.driverId, driverName: c.driverName, toursCount: c.tours.length })),
+                        sampleSavedData: savedData.slice(0, 2).map((s: any) => ({ driver_id: s.driver_id, announcement_id: s.announcement_id, bill: s.bill_of_lading_number }))
+                    });
                     
                     // Merge کردن داده‌های ذخیره شده با baseData
                     const updated = baseData.map(calc => {
