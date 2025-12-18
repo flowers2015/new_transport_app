@@ -4961,18 +4961,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                     <span className={tour.isDataRecorded ? 'text-purple-700 font-semibold' : 'text-slate-400'}>{depotMissionCost.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
-                                                                            {/* اجرت ثابت فقط برای راننده اجرت ثابت */}
+                                                                            {/* اجرت تور فقط برای راننده اجرت ثابت (نه پورسانتی، چون پورسانتی در انتهای دوره محاسبه می‌شود) */}
                                                                             {isFixedAllowance && fixedAllowance > 0 && (
                                                                                 <div className="flex items-center gap-2">
-                                                                                    <span className="text-slate-600 font-bold whitespace-nowrap">اجرت ثابت:</span>
-                                                                                    <span className={tour.isDataRecorded ? 'text-amber-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
-                                                                                </div>
-                                                                            )}
-                                                                            {/* اجرت تور فقط برای راننده اجرت ثابت (نه پورسانتی، چون پورسانتی در انتهای دوره محاسبه می‌شود) */}
-                                                                            {isFixedAllowance && tourCost > 0 && (
-                                                                                <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 font-bold whitespace-nowrap">اجرت تور:</span>
-                                                                                    <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>{tourCost.toLocaleString('fa-IR')} ریال</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             <div className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-300">
