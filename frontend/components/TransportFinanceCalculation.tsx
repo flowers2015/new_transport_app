@@ -902,6 +902,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
                                         }))) : (saved.depotRows || []),
                                         advancePayment: saved.advance_payment || saved.advancePayment || 0,
+                                        queueType: (saved.queue_type || saved.queueType || calc.queueType || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
                                     } as any;
                                 }
                                 return tour;
@@ -990,6 +991,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             depotMissionCost: saved.depot_mission_cost || 0,
                             depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows) : []) : saved.depot_rows) : [],
                             advancePayment: saved.advance_payment || 0,
+                            queueType: (saved.queue_type || saved.queueType || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
                         } as any;
                         
                         // اگر راننده در updated هست، تور را اضافه کن
@@ -1800,6 +1802,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     depotMissionCost: saved.depot_mission_cost || 0,
                                     depotRows: saved.depot_rows ? (typeof saved.depot_rows === 'string' ? (saved.depot_rows.trim() ? JSON.parse(saved.depot_rows) : []) : saved.depot_rows) : [],
                                     advancePayment: saved.advance_payment || 0,
+                                    queueType: (saved.queue_type || saved.queueType || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
                                 } as any;
                                 
                                 const driverId = driver.id;
@@ -4658,11 +4661,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const tourCostRaw = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
                                             
                                             // برای راننده پورسانتی: fixedAllowance و depotAllowance را 0 می‌کنیم
-                                            // برای راننده اجرت ثابت: tourCost را 0 نمی‌کنیم (چون اجرت تور برای اجرت ثابت معنی دارد)
+                                            // برای راننده اجرت ثابت: tourCost را 0 می‌کنیم (چون اجرت در fixedAllowance است)
                                             const fixedAllowance = isPorsant ? 0 : fixedAllowanceRaw;
                                             const depotAllowance = isPorsant ? 0 : depotAllowanceRaw;
-                                            // tourCost برای اجرت ثابت نمایش داده می‌شود (نه پورسانتی)
-                                            const tourCost = isPorsant ? 0 : tourCostRaw;
+                                            // tourCost فقط برای پورسانتی است، برای اجرت ثابت باید 0 باشد
+                                            const tourCost = isPorsant ? tourCostRaw : 0;
                                             
                                             const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
                                             const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
