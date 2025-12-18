@@ -54,6 +54,29 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // انتخاب روش صورتحساب (دیفالت: روش 1)
     const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.STANDARD_ACCOUNTING);
 
+    // توابع محاسبه هزینه‌ها (مشترک برای همه layoutها)
+    const calculateMainDriverCostGlobal = (calc: any): number => {
+        const food = parseFloat(calc.food_cost || calc.foodCost || 0);
+        const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
+        const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
+        const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
+        const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
+        const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
+        const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
+        const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
+        // هزینه‌های دپو
+        const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
+        const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
+        return food + fuel + toll + bill + returnCargo + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotMissionCost;
+    };
+
+    const calculateHelperDriverCostGlobal = (calc: any): number => {
+        const helperAllowance = parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0);
+        const helperFoodCost = parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0);
+        const helperExcessMissionCost = parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0);
+        return helperAllowance + helperFoodCost + helperExcessMissionCost;
+    };
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -385,44 +408,32 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         layout: InvoiceLayoutType = InvoiceLayoutType.STANDARD_ACCOUNTING
     ): string => {
         // این تابع HTML صورتحساب را برمی‌گرداند (مشابه آنچه در TransportFinancePaymentList است)
-        // TODO: در آینده می‌توان از renderInvoiceLayout1, renderInvoiceLayout2, renderInvoiceLayout3 استفاده کرد
-        // با استفاده از ReactDOMServer.renderToString برای تبدیل React component به HTML string
-        // فعلاً از همان ساختار HTML استفاده می‌کنیم
+        // بر اساس layout انتخابی، HTML مناسب را تولید می‌کند
         
-        // تابع محاسبه هزینه‌های راننده اصلی (مطابق با TransportFinancePaymentList)
-        const calculateMainDriverCostGlobal = (calc: any): number => {
-            const food = parseFloat(calc.food_cost || calc.foodCost || 0);
-            const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
-            const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
-            const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
-            const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
-            const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
-            const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
-            const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
-            // هزینه‌های دپو
-            const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
-            const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
-            return food + fuel + toll + bill + returnCargo + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotMissionCost;
-        };
+        // بررسی layout انتخابی و تولید HTML مناسب
+        if (layout === InvoiceLayoutType.STANDARD_ACCOUNTING) {
+            return renderInvoiceHTMLLayout1(record, calculations, announcementsMap, calcDateFrom, calcDateTo);
+        } else if (layout === InvoiceLayoutType.COMPACT) {
+            return renderInvoiceHTMLLayout2(record, calculations, announcementsMap, calcDateFrom, calcDateTo);
+        } else if (layout === InvoiceLayoutType.DETAILED) {
+            return renderInvoiceHTMLLayout3(record, calculations, announcementsMap, calcDateFrom, calcDateTo);
+        }
+        
+        // به صورت دیفالت روش 1 را استفاده می‌کنیم
+        return renderInvoiceHTMLLayout1(record, calculations, announcementsMap, calcDateFrom, calcDateTo);
+    };
 
-        const calculateMainDriverCost = (calc: any) => {
-            return calculateMainDriverCostGlobal(calc);
-        };
-
-        // تابع محاسبه هزینه‌های راننده کمکی (مطابق با TransportFinancePaymentList)
-        const calculateHelperDriverCostGlobal = (calc: any): number => {
-            const helperAllowance = parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0);
-            const helperFoodCost = parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0);
-            const helperExcessMissionCost = parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0);
-            return helperAllowance + helperFoodCost + helperExcessMissionCost;
-        };
-
-        const calculateHelperDriverCost = (calc: any) => {
-            return calculateHelperDriverCostGlobal(calc);
-        };
+    // تابع helper برای تولید HTML روش 1 (استاندارد حسابداری)
+    const renderInvoiceHTMLLayout1 = (
+        record: PaidInvoiceRecord,
+        calculations: any[],
+        announcementsMap: Map<string, any>,
+        calcDateFrom: string,
+        calcDateTo: string
+    ): string => {
 
         // محاسبه جمع کل
-        const totalMainAll = calculations.reduce((sum, calc) => sum + calculateMainDriverCost(calc), 0);
+        const totalMainAll = calculations.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
         const helperCostsByEmployee = new Map<string, number>();
         calculations.forEach((calc: any) => {
             const helperId = calc.helper_driver_id || calc.helperDriverId;
@@ -523,7 +534,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 const announcementId = calc.announcement_id || calc.announcementId;
                 const announcement = announcementsMap.get(announcementId);
                 const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
-                const mainCost = calculateMainDriverCost(calc);
+                const mainCost = calculateMainDriverCostGlobal(calc);
                 
                 html += `
                     <tr style="border-bottom: 1px solid #cbd5e1;">
@@ -586,6 +597,32 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             </div>`;
 
         return html;
+    };
+
+    // تابع helper برای تولید HTML روش 2 (فشرده) - فعلاً همان روش 1
+    const renderInvoiceHTMLLayout2 = (
+        record: PaidInvoiceRecord,
+        calculations: any[],
+        announcementsMap: Map<string, any>,
+        calcDateFrom: string,
+        calcDateTo: string
+    ): string => {
+        // TODO: پیاده‌سازی روش 2 (فشرده)
+        // فعلاً همان روش 1 را برمی‌گردانیم
+        return renderInvoiceHTMLLayout1(record, calculations, announcementsMap, calcDateFrom, calcDateTo);
+    };
+
+    // تابع helper برای تولید HTML روش 3 (تفصیلی) - فعلاً همان روش 1
+    const renderInvoiceHTMLLayout3 = (
+        record: PaidInvoiceRecord,
+        calculations: any[],
+        announcementsMap: Map<string, any>,
+        calcDateFrom: string,
+        calcDateTo: string
+    ): string => {
+        // TODO: پیاده‌سازی روش 3 (تفصیلی)
+        // فعلاً همان روش 1 را برمی‌گردانیم
+        return renderInvoiceHTMLLayout1(record, calculations, announcementsMap, calcDateFrom, calcDateTo);
     };
 
     // خروجی اکسل
