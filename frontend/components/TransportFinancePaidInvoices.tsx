@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactDOMServer from 'react-dom/server';
 import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
-import { formatJalali } from '../utils/jalali';
+import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+
+// انواع ساختار صورتحساب
+enum InvoiceLayoutType {
+    STANDARD_ACCOUNTING = 'standard_accounting', // روش 1: استاندارد حسابداری با سرفصل‌ها
+    COMPACT = 'compact', // روش 2: فشرده
+    DETAILED = 'detailed', // روش 3: تفصیلی
+}
 
 interface TransportFinancePaidInvoicesProps {
     currentUser: User;
@@ -42,6 +50,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // صفحه‌بندی
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [itemsPerPage, setItemsPerPage] = useState<number>(30);
+    
+    // انتخاب روش صورتحساب (دیفالت: روش 1)
+    const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.STANDARD_ACCOUNTING);
 
     useEffect(() => {
         fetchData();
@@ -239,9 +250,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 tempDiv.style.pointerEvents = 'none'; // جلوگیری از تداخل با کاربر
                 document.body.appendChild(tempDiv);
 
-                // تولید HTML صورتحساب
-                console.log(`📄 [PDF_BEFORE] تولید HTML برای ${record.driverName}...`);
-                const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo);
+                // تولید HTML صورتحساب بر اساس روش انتخابی
+                console.log(`📄 [PDF_BEFORE] تولید HTML برای ${record.driverName} با روش ${invoiceLayout}...`);
+                const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo, invoiceLayout);
                 console.log(`📄 [PDF_BEFORE] HTML content length: ${htmlContent.length}`);
                 console.log(`📄 [PDF_BEFORE] HTML preview (first 500 chars):`, htmlContent.substring(0, 500));
                 
@@ -370,29 +381,44 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         calculations: any[],
         announcementsMap: Map<string, any>,
         calcDateFrom: string,
-        calcDateTo: string
+        calcDateTo: string,
+        layout: InvoiceLayoutType = InvoiceLayoutType.STANDARD_ACCOUNTING
     ): string => {
         // این تابع HTML صورتحساب را برمی‌گرداند (مشابه آنچه در TransportFinancePaymentList است)
-        // برای سادگی، از همان ساختار استفاده می‌کنیم
+        // TODO: در آینده می‌توان از renderInvoiceLayout1, renderInvoiceLayout2, renderInvoiceLayout3 استفاده کرد
+        // با استفاده از ReactDOMServer.renderToString برای تبدیل React component به HTML string
+        // فعلاً از همان ساختار HTML استفاده می‌کنیم
         
+        // تابع محاسبه هزینه‌های راننده اصلی (مطابق با TransportFinancePaymentList)
+        const calculateMainDriverCostGlobal = (calc: any): number => {
+            const food = parseFloat(calc.food_cost || calc.foodCost || 0);
+            const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
+            const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
+            const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
+            const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
+            const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
+            const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
+            const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
+            // هزینه‌های دپو
+            const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
+            const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
+            return food + fuel + toll + bill + returnCargo + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotMissionCost;
+        };
+
         const calculateMainDriverCost = (calc: any) => {
-            const food = calc.food_cost || calc.foodCost || 0;
-            const fuel = calc.fuel_cost || calc.fuelCost || 0;
-            const toll = calc.toll_cost || calc.tollCost || 0;
-            const bill = calc.bill_of_lading_cost || calc.billOfLadingCost || 0;
-            const returnCargo = calc.return_cargo_cost || calc.returnCargoCost || 0;
-            const returnBill = calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0;
-            const multiUnload = calc.multi_unload_cost || calc.multiUnloadCost || 0;
-            const excessMission = calc.excess_mission_cost || calc.excessMissionCost || 0;
-            const fixedAllowance = calc.fixed_allowance || calc.fixedAllowance || 0;
-            return food + fuel + toll + bill + returnCargo + returnBill + multiUnload + excessMission + fixedAllowance;
+            return calculateMainDriverCostGlobal(calc);
+        };
+
+        // تابع محاسبه هزینه‌های راننده کمکی (مطابق با TransportFinancePaymentList)
+        const calculateHelperDriverCostGlobal = (calc: any): number => {
+            const helperAllowance = parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0);
+            const helperFoodCost = parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0);
+            const helperExcessMissionCost = parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0);
+            return helperAllowance + helperFoodCost + helperExcessMissionCost;
         };
 
         const calculateHelperDriverCost = (calc: any) => {
-            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
-            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
-            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
-            return helperAllowance + helperFoodCost + helperExcessMissionCost;
+            return calculateHelperDriverCostGlobal(calc);
         };
 
         // محاسبه جمع کل
@@ -701,6 +727,20 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             />
                         </div>
                         <div className="flex gap-2 items-end">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    نوع صورتحساب
+                                </label>
+                                <select
+                                    value={invoiceLayout}
+                                    onChange={(e) => setInvoiceLayout(e.target.value as InvoiceLayoutType)}
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-sm"
+                                >
+                                    <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 1: استاندارد حسابداری</option>
+                                    <option value={InvoiceLayoutType.COMPACT}>روش 2: فشرده</option>
+                                    <option value={InvoiceLayoutType.DETAILED}>روش 3: تفصیلی</option>
+                                </select>
+                            </div>
                             <button
                                 onClick={exportAllInvoicesToPDF}
                                 disabled={filteredRecords.length === 0}

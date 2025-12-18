@@ -126,10 +126,10 @@ const renderInvoiceLayout1 = (
                                 <th colSpan={2} className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '6%' }}>پیمایش (کیلومتر)</th>
                                 <th colSpan={2} className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '6%' }}>ماموریت (روز)</th>
                                 <th colSpan={7} className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '25%' }}>هزینه‌های مستقیم (ریال)</th>
-                                <th colSpan={5} className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '18%' }}>هزینه‌های دپو</th>
-                                <th rowSpan={2} className="p-3 border border-slate-600 text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '5%' }}>پیمایش کل (کیلومتر)</th>
-                                <th rowSpan={2} className="p-3 border border-slate-600 text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '6%' }}>اجرت کل تور (ریال)</th>
-                                <th rowSpan={2} className="p-3 border border-slate-600 text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', width: '7%' }}>جمع کل هزینه (ریال)</th>
+                                <th colSpan={5} className="p-2 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', width: '22%', lineHeight: '1.3' }}>هزینه‌های دپو</th>
+                                <th rowSpan={2} className="p-2 border border-slate-600 text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', width: '6%', lineHeight: '1.3' }}>پیمایش کل<br/>(کیلومتر)</th>
+                                <th rowSpan={2} className="p-2 border border-slate-600 text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', width: '7%', lineHeight: '1.3' }}>اجرت کل تور<br/>(ریال)</th>
+                                <th rowSpan={2} className="p-2 border border-slate-600 text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', width: '8%', lineHeight: '1.3' }}>جمع کل هزینه<br/>(ریال)</th>
                             </tr>
                             <tr className="bg-slate-800 text-white">
                                 <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>مصوب</th>
@@ -143,11 +143,11 @@ const renderInvoiceLayout1 = (
                                 <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>بار برگشتی</th>
                                 <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>چندجا تخلیه</th>
                                 <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>ماموریت مازاد</th>
-                                <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>تعداد</th>
-                                <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>ماموریت (روز)</th>
-                                <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>پیمایش (کیلومتر)</th>
-                                <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>جابجایی بار (ریال)</th>
-                                <th className="p-3 border border-slate-600 text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>حق ماموریت (ریال)</th>
+                                <th className="p-2 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', lineHeight: '1.3' }}>تعداد</th>
+                                <th className="p-2 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', lineHeight: '1.3' }}>ماموریت<br/>(روز)</th>
+                                <th className="p-2 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', lineHeight: '1.3' }}>پیمایش<br/>(کیلومتر)</th>
+                                <th className="p-2 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', lineHeight: '1.3' }}>جابجایی بار<br/>(ریال)</th>
+                                <th className="p-2 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', lineHeight: '1.3' }}>حق ماموریت<br/>(ریال)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -227,31 +227,31 @@ const renderInvoiceLayout1 = (
                                             {(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* هزینه‌های دپو */}
-                                        <td className="p-3 border border-slate-300 text-center" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {depotShipmentCount.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-3 border border-slate-300 text-center" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {depotMissionDays.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-3 border border-slate-300 text-center" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {depotTotalMileage.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-3 border border-slate-300 text-center" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {depotCargoHandling.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-3 border border-slate-300 text-center" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {depotMissionCost.toLocaleString('fa-IR')}
                                         </td>
                                         {/* پیمایش کل */}
-                                        <td className="p-3 border border-slate-300 text-center font-semibold" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center font-semibold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {totalMileage.toLocaleString('fa-IR')}
                                         </td>
                                         {/* اجرت کل تور (فقط برای اجرت ثابت) */}
-                                        <td className="p-3 border border-slate-300 text-center font-semibold" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center font-semibold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {isFixedAllowance ? fixedAllowance.toLocaleString('fa-IR') : '-'}
                                         </td>
                                         {/* جمع کل هزینه */}
-                                        <td className="p-3 border border-slate-300 text-center font-semibold" style={{ fontSize: '10px' }}>
+                                        <td className="p-2 border border-slate-300 text-center font-semibold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                             {mainCost.toLocaleString('fa-IR')}
                                         </td>
                                     </tr>
@@ -300,23 +300,23 @@ const renderInvoiceLayout1 = (
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه‌های دپو */}
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل پیمایش کل */}
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
                                         const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
@@ -325,7 +325,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل اجرت تور */}
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const queueType = calc.queue_type || calc.queueType || 'porsant';
                                         if (queueType === 'fixed_allowance') {
@@ -335,7 +335,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه */}
-                                <td className="p-3 border border-slate-300 text-center font-bold" style={{ fontSize: '10px' }}>
+                                <td className="p-2 border border-slate-300 text-center font-bold" style={{ fontSize: '9px', wordBreak: 'break-word' }}>
                                     {(() => {
                                         const total = calculations.reduce((sum, calc) => {
                                             return sum + calculateMainDriverCostGlobal(calc);
@@ -2168,14 +2168,59 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 (table as HTMLElement).style.tableLayout = 'fixed';
                             });
                             
-                            // اعمال padding به سلول‌ها
+                            // اعمال استایل‌های سلول‌ها (td و th)
                             const clonedCells = clonedDiv.querySelectorAll('td, th');
                             clonedCells.forEach((cell) => {
                                 const cellEl = cell as HTMLElement;
+                                
+                                // padding
                                 if (cellEl.style.padding === '' || !cellEl.style.padding) {
-                                    cellEl.style.padding = '8px';
+                                    cellEl.style.padding = '6px';
                                 }
+                                
+                                // text-align
                                 cellEl.style.textAlign = 'center';
+                                
+                                // word-break برای جلوگیری از overflow
+                                cellEl.style.wordBreak = 'break-word';
+                                cellEl.style.overflowWrap = 'break-word';
+                                
+                                // بررسی محتوای سلول برای تشخیص ستون‌های دپو و آخرین ستون‌ها
+                                const cellText = cellEl.textContent || '';
+                                const isDepotColumn = cellText.includes('دپو') || 
+                                                     cellText.includes('تعداد') || 
+                                                     (cellText.includes('ماموریت') && cellText.includes('روز')) ||
+                                                     (cellText.includes('پیمایش') && cellText.includes('کیلومتر')) ||
+                                                     cellText.includes('جابجایی') ||
+                                                     cellText.includes('حق ماموریت') ||
+                                                     cellText.includes('پیمایش کل') ||
+                                                     cellText.includes('اجرت کل تور') ||
+                                                     cellText.includes('جمع کل هزینه');
+                                
+                                // بررسی font-size از style attribute یا computed style
+                                let currentFontSize = cellEl.style.fontSize || '';
+                                if (!currentFontSize) {
+                                    // اگر در style attribute نیست، از computed style استفاده کن
+                                    try {
+                                        const computedStyle = clonedDoc.defaultView?.getComputedStyle(cellEl);
+                                        currentFontSize = computedStyle?.fontSize || '';
+                                    } catch (e) {
+                                        // ignore
+                                    }
+                                }
+                                
+                                // اگر font-size بیشتر از 9px است و در ستون‌های دپو یا آخرین ستون‌هاست، کاهش بده
+                                if (isDepotColumn) {
+                                    cellEl.style.fontSize = '9px';
+                                } else if (currentFontSize && parseFloat(currentFontSize) > 10) {
+                                    cellEl.style.fontSize = '10px';
+                                }
+                                
+                                // white-space برای headerهای طولانی
+                                if (cellEl.tagName === 'TH' && cellText.length > 15) {
+                                    cellEl.style.whiteSpace = 'normal';
+                                    cellEl.style.lineHeight = '1.3';
+                                }
                             });
                             
                             console.log('✅ Cloned div styled, content length:', clonedDiv.innerHTML.length);
@@ -2351,14 +2396,59 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             (table as HTMLElement).style.tableLayout = 'fixed';
                         });
                         
-                        // اعمال padding به سلول‌ها
+                        // اعمال استایل‌های سلول‌ها (td و th)
                         const clonedCells = clonedInvoice.querySelectorAll('td, th');
                         clonedCells.forEach((cell) => {
                             const cellEl = cell as HTMLElement;
+                            
+                            // padding
                             if (cellEl.style.padding === '' || !cellEl.style.padding) {
-                                cellEl.style.padding = '8px';
+                                cellEl.style.padding = '6px';
                             }
+                            
+                            // text-align
                             cellEl.style.textAlign = 'center';
+                            
+                            // word-break برای جلوگیری از overflow
+                            cellEl.style.wordBreak = 'break-word';
+                            cellEl.style.overflowWrap = 'break-word';
+                            
+                            // بررسی محتوای سلول برای تشخیص ستون‌های دپو و آخرین ستون‌ها
+                            const cellText = cellEl.textContent || '';
+                            const isDepotColumn = cellText.includes('دپو') || 
+                                                 cellText.includes('تعداد') || 
+                                                 (cellText.includes('ماموریت') && cellText.includes('روز')) ||
+                                                 (cellText.includes('پیمایش') && cellText.includes('کیلومتر')) ||
+                                                 cellText.includes('جابجایی') ||
+                                                 cellText.includes('حق ماموریت') ||
+                                                 cellText.includes('پیمایش کل') ||
+                                                 cellText.includes('اجرت کل تور') ||
+                                                 cellText.includes('جمع کل هزینه');
+                            
+                            // بررسی font-size از style attribute یا computed style
+                            let currentFontSize = cellEl.style.fontSize || '';
+                            if (!currentFontSize) {
+                                // اگر در style attribute نیست، از computed style استفاده کن
+                                try {
+                                    const computedStyle = clonedDoc.defaultView?.getComputedStyle(cellEl);
+                                    currentFontSize = computedStyle?.fontSize || '';
+                                } catch (e) {
+                                    // ignore
+                                }
+                            }
+                            
+                            // اگر font-size بیشتر از 9px است و در ستون‌های دپو یا آخرین ستون‌هاست، کاهش بده
+                            if (isDepotColumn) {
+                                cellEl.style.fontSize = '9px';
+                            } else if (currentFontSize && parseFloat(currentFontSize) > 10) {
+                                cellEl.style.fontSize = '10px';
+                            }
+                            
+                            // white-space برای headerهای طولانی
+                            if (cellEl.tagName === 'TH' && cellText.length > 15) {
+                                cellEl.style.whiteSpace = 'normal';
+                                cellEl.style.lineHeight = '1.3';
+                            }
                         });
                     }
                 }
