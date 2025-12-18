@@ -109,9 +109,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
     const [calculations, setCalculations] = useState<DriverCalculationRow[]>([]);
     
-    // فیلتر تاریخ (تاریخ صدور بارنامه)
+    // نوع فیلتر تاریخ (تاریخ صدور بارنامه یا تاریخ محاسبه)
+    const [dateFilterType, setDateFilterType] = useState<'billOfLading' | 'calculation'>('billOfLading');
+    
+    // فیلتر تاریخ (که با دکمه جستجو اعمال می‌شود)
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
+    
+    // تاریخ‌های موقت برای ورودی کاربر (قبل از اعمال فیلتر)
+    const [tempStartDate, setTempStartDate] = useState<string>('');
+    const [tempEndDate, setTempEndDate] = useState<string>('');
     
     // فیلتر تاریخ برای خروجی اکسل (پیش‌فرض: 26 ماه قبل تا 25 ماه جاری)
     const getDefaultExcelDateRange = (): { start: string; end: string } => {
@@ -144,6 +151,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     
     // جستجو
     const [searchTerm, setSearchTerm] = useState<string>(''); // جستجو بر اساس کد پرسنلی و نام
+    
+    // نمایش/مخفی کردن دکمه‌های Excel
+    const [showExcelButtons, setShowExcelButtons] = useState<boolean>(false);
     
     // مرتب‌سازی
     type SortField = 'employeeId' | 'driverName' | 'queueType' | 'tourCount' | 'recordedTours' | 'unrecordedTours' | 'totalKilometers' | 'tourCost' | 'billOfLadingDate' | 'trailerCount' | 'miniTrailerCount' | 'tenWheelerCount' | 'commissionBase';
@@ -1146,30 +1156,47 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             );
         }
 
-        // فیلتر بر اساس تاریخ صدور بارنامه
+        // فیلتر بر اساس تاریخ (صدور بارنامه یا تاریخ محاسبه)
         if (startDate || endDate) {
             filtered = filtered.filter(calc => {
-                // پیدا کردن اولین تاریخ صدور بارنامه از تورها
-                const billOfLadingDates = calc.tours
-                    .map(t => t.billOfLadingDate)
-                    .filter(Boolean)
-                    .map(d => {
-                        if (typeof d === 'string') return parseJalaliDateString(d);
-                        return d instanceof Date ? d : null;
-                    })
-                    .filter(Boolean) as Date[];
-                
-                if (billOfLadingDates.length === 0) return false;
-                
-                const firstDate = billOfLadingDates[0];
-                if (!firstDate) return false;
-                
-                const jalaliDate = formatJalali(firstDate);
-                
-                if (startDate && jalaliDate < startDate) return false;
-                if (endDate && jalaliDate > endDate) return false;
-                
-                return true;
+                if (dateFilterType === 'billOfLading') {
+                    // فیلتر بر اساس تاریخ صدور بارنامه
+                    const billOfLadingDates = calc.tours
+                        .map(t => t.billOfLadingDate)
+                        .filter(Boolean)
+                        .map(d => {
+                            if (typeof d === 'string') return parseJalaliDateString(d);
+                            return d instanceof Date ? d : null;
+                        })
+                        .filter(Boolean) as Date[];
+                    
+                    if (billOfLadingDates.length === 0) return false;
+                    
+                    const firstDate = billOfLadingDates[0];
+                    if (!firstDate) return false;
+                    
+                    const jalaliDate = formatJalali(firstDate);
+                    
+                    if (startDate && jalaliDate < startDate) return false;
+                    if (endDate && jalaliDate > endDate) return false;
+                    
+                    return true;
+                } else {
+                    // فیلتر بر اساس تاریخ محاسبه
+                    const calculationDates = calc.tours
+                        .map(t => t.calculationDate)
+                        .filter(Boolean) as string[];
+                    
+                    if (calculationDates.length === 0) return false;
+                    
+                    const firstDate = calculationDates[0];
+                    if (!firstDate) return false;
+                    
+                    if (startDate && firstDate < startDate) return false;
+                    if (endDate && firstDate > endDate) return false;
+                    
+                    return true;
+                }
             });
         }
 
@@ -1304,7 +1331,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
         console.log('✅ [filteredAndSortedCalculations] فیلتر و مرتب‌سازی انجام شد:', filtered.length, 'calculation');
         return filtered;
-    }, [calculations, refreshTrigger, searchTerm, startDate, endDate, sortField, sortDirection]);
+    }, [calculations, refreshTrigger, searchTerm, startDate, endDate, dateFilterType, sortField, sortDirection]);
 
     // محاسبه صفحه‌بندی
     const totalPages = Math.ceil(filteredAndSortedCalculations.length / itemsPerPage);
@@ -1399,17 +1426,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     // تورهای محاسبه شده باید تاریخ صدور بارنامه داشته باشند
                     if (!tour.billOfLadingDate) return;
                     
-                    // فیلتر تاریخ صدور بارنامه
-                    let jalaliDate: string;
-                    if (typeof tour.billOfLadingDate === 'string') {
-                        jalaliDate = tour.billOfLadingDate;
+                    // فیلتر تاریخ (صدور بارنامه یا تاریخ محاسبه)
+                    if (dateFilterType === 'billOfLading') {
+                        // فیلتر بر اساس تاریخ صدور بارنامه
+                        if (!tour.billOfLadingDate) return;
+                        
+                        let jalaliDate: string;
+                        if (typeof tour.billOfLadingDate === 'string') {
+                            jalaliDate = tour.billOfLadingDate;
+                        } else {
+                            jalaliDate = formatJalali(tour.billOfLadingDate as Date);
+                        }
+                        
+                        if (startDate || endDate) {
+                            if (startDate && jalaliDate < startDate) return;
+                            if (endDate && jalaliDate > endDate) return;
+                        }
                     } else {
-                        jalaliDate = formatJalali(tour.billOfLadingDate as Date);
-                    }
-                    
-                    if (startDate || endDate) {
-                        if (startDate && jalaliDate < startDate) return;
-                        if (endDate && jalaliDate > endDate) return;
+                        // فیلتر بر اساس تاریخ محاسبه
+                        if (!tour.calculationDate) return;
+                        
+                        if (startDate || endDate) {
+                            if (startDate && tour.calculationDate < startDate) return;
+                            if (endDate && tour.calculationDate > endDate) return;
+                        }
                     }
 
                     // محاسبه هزینه
@@ -1441,7 +1481,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             recordedPaidCost,
             recordedUnpaidCost,
         };
-    }, [calculations, refreshTrigger, searchTerm, startDate, endDate]);
+    }, [calculations, refreshTrigger, searchTerm, startDate, endDate, dateFilterType]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
     const exportToExcelMainRows = () => {
@@ -1580,16 +1620,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const excelData = getExcelFilteredData();
         
         const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره تور', 'نوع خودرو', 'کد * پلاک', 'لاین', 'مقاصد', 'شماره بارنامه', 'تاریخ صدور بارنامه', 'پیمایش مصوب (کیلومتر)', 'پیمایش مازاد (کیلومتر)', 'ماموریت مصوب (روز)', 'ماموریت مازاد (روز)', 'هزینه عوارض (ریال)', 'هزینه غذا (ریال)', 'هزینه سوخت (ریال)', 'هزینه تور (ریال)', 'هزینه کل (ریال)', 'توضیحات']
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره تور', 'نوع خودرو', 'کد * پلاک', 'لاین', 'مقاصد', 'شماره بارنامه', 'پیمایش مصوب (کیلومتر)', 'پیمایش مازاد (کیلومتر)', 'ماموریت مصوب (روز)', 'ماموریت مازاد (روز)', 'هزینه عوارض (ریال)', 'هزینه غذا (ریال)', 'هزینه سوخت (ریال)', 'هزینه تور (ریال)', 'هزینه کل (ریال)', 'توضیحات']
         ];
 
         let rowIndex = 1;
         excelData.forEach((calc) => {
             calc.tours.forEach((tour) => {
-                const billDateStr = tour.billOfLadingDate 
-                    ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
-                    : '';
-
                 wsData.push([
                     rowIndex++,
                     calc.employeeId || '',
@@ -1600,7 +1636,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     tour.lineType || '',
                     (Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')) || '',
                     tour.billOfLadingNumber || '',
-                    billDateStr,
                     tour.approvedKilometers || 0,
                     tour.excessKilometers || 0,
                     tour.approvedMissionDays || 0,
@@ -2819,12 +2854,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         محاسبه هزینه تور
                     </h1>
 
-                    {/* فیلتر و جستجو - در یک ردیف */}
-                    <div className="flex gap-3 items-end flex-wrap">
+                    {/* فیلتر و جستجو - compact */}
+                    <div className="flex gap-2 items-end flex-wrap">
                         {/* بخش جستجو بر اساس کد پرسنلی و نام */}
-                        <div className="flex-1 min-w-[200px] bg-blue-50 p-3 rounded-lg border border-blue-200">
-                            <label className="block text-xs font-semibold text-blue-800 mb-1">
-                                جستجو (کد پرسنلی / نام)
+                        <div className="min-w-[180px] bg-blue-50 p-2 rounded border border-blue-200">
+                            <label className="block text-xs font-semibold text-blue-800 mb-0.5">
+                                جستجو
                             </label>
                             <input
                                 type="text"
@@ -2833,87 +2868,130 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     setSearchTerm(e.target.value);
                                     setCurrentPage(1);
                                 }}
-                                placeholder="جستجو بر اساس کد پرسنلی یا نام..."
-                                className="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                placeholder="کد پرسنلی / نام..."
+                                className="block w-full px-2 py-1 border border-blue-300 rounded text-xs focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
                         
-                        {/* بخش فیلتر تاریخ صدور بارنامه */}
-                        <div className="flex gap-2 items-end bg-green-50 p-3 rounded-lg border border-green-200">
-                            <div>
-                                <label className="block text-xs font-semibold text-green-800 mb-1">
-                                    از تاریخ (صدور بارنامه)
+                        {/* بخش فیلتر تاریخ */}
+                        <div className="flex gap-1.5 items-end bg-green-50 p-2 rounded border border-green-200">
+                            <div className="min-w-[100px]">
+                                <label className="block text-xs font-semibold text-green-800 mb-0.5">
+                                    نوع فیلتر
+                                </label>
+                                <select
+                                    value={dateFilterType}
+                                    onChange={(e) => {
+                                        setDateFilterType(e.target.value as 'billOfLading' | 'calculation');
+                                        setTempStartDate('');
+                                        setTempEndDate('');
+                                    }}
+                                    className="block w-full px-2 py-1 border border-green-300 rounded text-xs focus:outline-none focus:ring-green-500 focus:border-green-500"
+                                >
+                                    <option value="billOfLading">تاریخ صدور بارنامه</option>
+                                    <option value="calculation">تاریخ محاسبه</option>
+                                </select>
+                            </div>
+                            <div className="min-w-[90px]">
+                                <label className="block text-xs font-semibold text-green-800 mb-0.5">
+                                    از تاریخ
                                 </label>
                                 <input
                                     type="text"
-                                    value={startDate}
-                                    onChange={(e) => {
-                                        setStartDate(e.target.value);
-                                        setCurrentPage(1);
-                                    }}
+                                    value={tempStartDate}
+                                    onChange={(e) => setTempStartDate(e.target.value)}
                                     placeholder="1403/01/01"
-                                    className="block w-full px-2 py-1.5 border border-green-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                                    className="block w-full px-2 py-1 border border-green-300 rounded text-xs focus:outline-none focus:ring-green-500 focus:border-green-500"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-green-800 mb-1">
-                                    تا تاریخ (صدور بارنامه)
+                            <div className="min-w-[90px]">
+                                <label className="block text-xs font-semibold text-green-800 mb-0.5">
+                                    تا تاریخ
                                 </label>
                                 <input
                                     type="text"
-                                    value={endDate}
-                                    onChange={(e) => {
-                                        setEndDate(e.target.value);
+                                    value={tempEndDate}
+                                    onChange={(e) => setTempEndDate(e.target.value)}
+                                    placeholder="1403/12/29"
+                                    className="block w-full px-2 py-1 border border-green-300 rounded text-xs focus:outline-none focus:ring-green-500 focus:border-green-500"
+                                />
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setStartDate(tempStartDate);
+                                    setEndDate(tempEndDate);
+                                    setCurrentPage(1);
+                                }}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium whitespace-nowrap"
+                            >
+                                جستجو
+                            </button>
+                            {(startDate || endDate) && (
+                                <button
+                                    onClick={() => {
+                                        setStartDate('');
+                                        setEndDate('');
+                                        setTempStartDate('');
+                                        setTempEndDate('');
                                         setCurrentPage(1);
                                     }}
-                                    placeholder="1403/12/29"
-                                    className="block w-full px-2 py-1.5 border border-green-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                                />
-                            </div>
+                                    className="px-2 py-1.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 font-medium"
+                                    title="پاک کردن فیلتر"
+                                >
+                                    ✕
+                                </button>
+                            )}
                         </div>
                         
-                        {/* بخش بازه زمانی خروجی اکسل */}
-                        <div className="flex gap-2 items-end bg-purple-50 p-3 rounded-lg border border-purple-200">
-                            <div>
-                                <label className="block text-xs font-semibold text-purple-800 mb-1">
-                                    از تاریخ (تاریخ محاسبه)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={excelStartDate}
-                                    onChange={(e) => setExcelStartDate(e.target.value)}
-                                    placeholder="1403/01/26"
-                                    className="block w-full px-2 py-1.5 border border-purple-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-purple-800 mb-1">
-                                    تا تاریخ (تاریخ محاسبه)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={excelEndDate}
-                                    onChange={(e) => setExcelEndDate(e.target.value)}
-                                    placeholder="1403/02/25"
-                                    className="block w-full px-2 py-1.5 border border-purple-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm"
-                                />
-                            </div>
-                        </div>
-                        
-                        {/* دکمه‌های خروجی اکسل */}
-                        <div className="flex gap-2 items-end">
+                        {/* دکمه toggle برای Excel */}
+                        <div className="flex gap-1 items-end">
                             <button
-                                onClick={exportToExcelMainRows}
-                                className="px-3 py-2 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 font-medium"
+                                onClick={() => setShowExcelButtons(!showExcelButtons)}
+                                className="px-2 py-1.5 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 font-medium whitespace-nowrap"
+                                title={showExcelButtons ? "مخفی کردن خروجی Excel" : "نمایش خروجی Excel"}
                             >
-                                خروجی اکسل (ردیف‌های اصلی)
+                                {showExcelButtons ? '✕ Excel' : '📊 Excel'}
                             </button>
-                            <button
-                                onClick={exportToExcelDetailRows}
-                                className="px-3 py-2 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 font-medium"
-                            >
-                                خروجی اکسل (جزئیات)
-                            </button>
+                            {showExcelButtons && (
+                                <div className="flex gap-1 items-end bg-purple-50 p-2 rounded border border-purple-200">
+                                    <div className="min-w-[90px]">
+                                        <label className="block text-xs font-semibold text-purple-800 mb-0.5">
+                                            از تاریخ
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={excelStartDate}
+                                            onChange={(e) => setExcelStartDate(e.target.value)}
+                                            placeholder="1403/01/26"
+                                            className="block w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                                        />
+                                    </div>
+                                    <div className="min-w-[90px]">
+                                        <label className="block text-xs font-semibold text-purple-800 mb-0.5">
+                                            تا تاریخ
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={excelEndDate}
+                                            onChange={(e) => setExcelEndDate(e.target.value)}
+                                            placeholder="1403/02/25"
+                                            className="block w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={exportToExcelMainRows}
+                                        className="px-2 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium whitespace-nowrap"
+                                    >
+                                        Excel اصلی
+                                    </button>
+                                    <button
+                                        onClick={exportToExcelDetailRows}
+                                        className="px-2 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium whitespace-nowrap"
+                                    >
+                                        Excel جزئیات
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -2924,7 +3002,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 خلاصه تورها در بازه فیلتر شده
                             </h2>
                             <span className="text-xs text-sky-700">
-                                مبنا: تاریخ صدور بارنامه و فیلترهای بالا
+                                مبنا: {dateFilterType === 'billOfLading' ? 'تاریخ صدور بارنامه' : 'تاریخ محاسبه'} و فیلترهای بالا
                             </span>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
@@ -4545,7 +4623,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             <th className="p-3 text-right border-l border-slate-600">لاین</th>
                                             <th className="p-3 text-right border-l border-slate-600">مقاصد</th>
                                             <th className="p-3 text-right border-l border-slate-600">شماره بارنامه</th>
-                                            <th className="p-3 text-right border-l border-slate-600">تاریخ صدور بارنامه</th>
                                             <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
                                             <th className="p-3 text-right border-l border-slate-600">پیمایش کل (کیلومتر)</th>
                                             <th className="p-3 text-right border-l border-slate-600">مجموع ماموریت (روز)</th>
@@ -4664,9 +4741,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         <td className="p-3 border-l border-slate-200">{Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')}</td>
                                                         <td className="p-3 border-l border-slate-200">
                                                             {tour.billOfLadingNumber || '-'}
-                                                        </td>
-                                                        <td className="p-3 border-l border-slate-200 text-xs">
-                                                            {tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '-'}
                                                         </td>
                                                         <td className="p-3 border-l border-slate-200 text-xs">
                                                             {tour.calculationDate || '-'}
