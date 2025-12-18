@@ -4646,8 +4646,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
                                             const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
                                             const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
-                                            // بررسی نوع صف راننده برای این تور - اگر queue_type در تور وجود داشت، استفاده می‌کنیم، در غیر این صورت از selectedDriverQueueType استفاده می‌کنیم
-                                            const tourQueueType = (tour as any).queueType || (tour as any).queue_type || selectedDriverQueueType;
+                                            // بررسی نوع صف راننده برای این تور - از queueType تور استفاده می‌کنیم
+                                            const tourQueueType = (tour as any).queueType || (tour as any).queue_type || 'porsant';
                                             
                                             // اگر راننده پورسانتی است، fixedAllowance و depotAllowance باید 0 باشند
                                             // اگر راننده اجرت ثابت است، tourCost باید 0 باشد
@@ -4682,25 +4682,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             // چون totalCost از دیتابیس ممکن است شامل loadingCost باشد که دیگر استفاده نمی‌شود
                                             const totalCost = calculatedTotalCost;
                                             
-                                            // لاگ برای دیباگ
-                                            if (tourIdx === 0 && tour.announcementId) {
-                                                console.log('💰 [Tour Cost Breakdown]', {
+                                            // لاگ برای دیباگ - فقط برای اجرت ثابت
+                                            if (isFixedAllowance && tour.announcementId) {
+                                                console.log('💰 [Tour Cost Breakdown - Fixed Allowance]', {
                                                     announcementId: tour.announcementId,
-                                                    foodCost,
-                                                    fuelCost,
-                                                    tollCost,
-                                                    billOfLadingCost,
-                                                    returnCargo,
-                                                    multiUnloadCost,
-                                                    excessMissionCost,
+                                                    tourQueueType,
+                                                    isFixedAllowance,
+                                                    isPorsant,
+                                                    fixedAllowanceRaw: (tour as any).fixedAllowance || (tour as any).fixed_allowance,
                                                     fixedAllowance,
-                                                    depotMissionCost,
-                                                    depotAllowance,
-                                                    depotCargoHandlingCost,
+                                                    tourCostRaw: (tour as any).tourCost || (tour as any).tour_cost,
                                                     tourCost,
-                                                    otherMainDriverCosts,
-                                                    calculatedTotalCost,
-                                                    totalCostFromDB: tour.totalCost,
                                                     totalCost
                                                 });
                                             }
@@ -4892,7 +4884,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             
                                                             {/* ردیف جزئیات هزینه‌ها */}
-                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || depotCargoHandlingCost > 0 || tourCost > 0) && (
+                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || depotCargoHandlingCost > 0 || tourCost > 0 || isFixedAllowance) && (
                                                                 <tr className="bg-slate-50 border-b-2 border-slate-300">
                                                                     <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
                                                                     <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
@@ -4962,10 +4954,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 </div>
                                                                             )}
                                                                             {/* اجرت تور فقط برای راننده اجرت ثابت (نه پورسانتی، چون پورسانتی در انتهای دوره محاسبه می‌شود) */}
-                                                                            {isFixedAllowance && fixedAllowance > 0 && (
+                                                                            {isFixedAllowance && (
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 font-bold whitespace-nowrap">اجرت تور:</span>
-                                                                                    <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>{fixedAllowance.toLocaleString('fa-IR')} ریال</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>
+                                                                                        {fixedAllowance > 0 ? fixedAllowance.toLocaleString('fa-IR') : '0'} ریال
+                                                                                    </span>
                                                                                 </div>
                                                                             )}
                                                                             <div className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-300">
