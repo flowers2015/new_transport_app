@@ -488,7 +488,7 @@ const renderInvoiceLayout1 = (
 };
 
 // ============================================================================
-// روش 2: فشرده (برای آینده - آماده برای پیاده‌سازی)
+// روش 2: فشرده (بدون سرفصل‌ها - همه ستون‌ها در یک ردیف)
 // ============================================================================
 const renderInvoiceLayout2 = (
     selectedInvoiceRecord: PaymentRecord,
@@ -497,11 +497,390 @@ const renderInvoiceLayout2 = (
     startDate: string,
     endDate: string
 ) => {
-    // TODO: پیاده‌سازی روش 2
+    // جدا کردن محاسبات با راننده کمکی و بدون راننده کمکی
+    const calculationsWithoutHelper = invoiceCalculations.filter((calc: any) => {
+        const helperId = calc.helper_driver_id || calc.helperDriverId;
+        const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+        const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+        const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+        return !helperId || (helperAllowance + helperFoodCost + helperExcessMissionCost === 0);
+    });
+    
+    const calculationsWithHelper = invoiceCalculations.filter((calc: any) => {
+        const helperId = calc.helper_driver_id || calc.helperDriverId;
+        const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+        const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+        const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+        return helperId && (helperAllowance + helperFoodCost + helperExcessMissionCost > 0);
+    });
+
+    // گروه‌بندی محاسبات با راننده کمکی بر اساس کد پرسنلی راننده کمکی
+    const helperCalculationsByEmployeeId = new Map<string, any[]>();
+    calculationsWithHelper.forEach((calc: any) => {
+        const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+        if (helperEmployeeId) {
+            if (!helperCalculationsByEmployeeId.has(helperEmployeeId)) {
+                helperCalculationsByEmployeeId.set(helperEmployeeId, []);
+            }
+            helperCalculationsByEmployeeId.get(helperEmployeeId)!.push(calc);
+        }
+    });
+
+    // تابع برای ساخت جدول راننده اصلی (روش 2 - فشرده)
+    const renderMainDriverTableLayout2 = (calculations: any[], title: string) => {
+        if (calculations.length === 0) return null;
+
+        return (
+            <div className="mb-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '16px' }}>
+                    {title}
+                </h3>
+                <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-slate-800 mb-3" style={{ fontSize: '9px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'auto' }}>
+                        <thead>
+                            <tr className="bg-slate-800 text-white">
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>ردیف</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>شماره بارنامه</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>مقاصد</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>تاریخ صدور</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>تاریخ محاسبه</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>پیمایش مصوب</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>پیمایش مازاد</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>ماموریت مصوب</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>ماموریت مازاد</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>بارنامه</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>غذا</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>سوخت</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>عوارض</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>بار برگشتی</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>چندجا تخلیه</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>ماموریت مازاد</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>جابجایی دپو</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>اجرت کیلومتر دپو</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>حق ماموریت دپو</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>اجرت تور</th>
+                                <th className="p-1 border border-slate-600 text-left font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>جمع کل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {calculations.map((calc, idx) => {
+                                const announcementId = calc.announcement_id || calc.announcementId;
+                                const announcement = invoiceAnnouncements.get(announcementId);
+                                const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                const mainCost = calculateMainDriverCostGlobal(calc);
+                                
+                                // بررسی نوع اجرت (پورسانت یا اجرت ثابت)
+                                const queueType = calc.queue_type || calc.queueType || 'porsant';
+                                const isFixedAllowance = queueType === 'fixed_allowance';
+                                const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
+                                
+                                // هزینه‌های دپو
+                                const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
+                                const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0);
+                                const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
+                                
+                                return (
+                                    <tr key={calc.id || idx} className="border-b border-slate-300">
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '9px' }}>{(idx + 1).toLocaleString('fa-IR')}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '9px', whiteSpace: 'nowrap' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '9px', whiteSpace: 'nowrap' }}>{destinations}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '9px', whiteSpace: 'nowrap' }}>
+                                            {calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                                                (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                                                    ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                                                    : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate))
+                                                : '-'}
+                                        </td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '9px', whiteSpace: 'nowrap' }}>
+                                            {calc.calculation_date || calc.calculationDate || '-'}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {depotCargoHandling.toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {depotAllowance.toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '9px' }}>
+                                            {depotMissionCost.toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left font-semibold" style={{ fontSize: '9px' }}>
+                                            {isFixedAllowance ? fixedAllowance.toLocaleString('fa-IR') : '-'}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left font-semibold" style={{ fontSize: '9px' }}>
+                                            {mainCost.toLocaleString('fa-IR')}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                        <tfoot>
+                            <tr className="bg-slate-100 font-bold">
+                                <td colSpan={19} className="p-1 border border-slate-300 text-right" style={{ fontSize: '9px' }}>
+                                    جمع کل:
+                                </td>
+                                <td className="p-1 border border-slate-300 text-left font-bold" style={{ fontSize: '9px' }}>
+                                    {(() => {
+                                        const total = calculations.reduce((sum, calc) => {
+                                            return sum + calculateMainDriverCostGlobal(calc);
+                                        }, 0);
+                                        return total.toLocaleString('fa-IR');
+                                    })()} ریال
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    // تابع برای ساخت جدول راننده کمکی (روش 2 - فشرده)
+    const renderHelperDriverTableLayout2 = (calculations: any[], helperEmployeeId: string, helperName: string) => {
+        if (calculations.length === 0) return null;
+
+        return (
+            <div className="mb-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '16px' }}>
+                    راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
+                </h3>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse border border-slate-800 mb-3" style={{ fontSize: '8px' }}>
+                        <thead>
+                            <tr className="bg-slate-800 text-white">
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px' }}>ردیف</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '8px' }}>کد پرسنلی</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '8px' }}>نام</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '8px' }}>شماره بارنامه</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '8px' }}>مقاصد</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '8px' }}>تاریخ صدور</th>
+                                <th className="p-1 border border-slate-600" style={{ fontSize: '8px' }}>تاریخ محاسبه</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>پیمایش مصوب</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>پیمایش مازاد</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>ماموریت مصوب</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>ماموریت مازاد</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>اجرت</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>غذا</th>
+                                <th className="p-1 border border-slate-600 text-left" style={{ fontSize: '8px' }}>ماموریت مازاد</th>
+                                <th className="p-1 border border-slate-600 text-left font-semibold" style={{ fontSize: '8px' }}>جمع کل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {calculations.map((calc, idx) => {
+                                const announcementId = calc.announcement_id || calc.announcementId;
+                                const announcement = invoiceAnnouncements.get(announcementId);
+                                const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                const helperCost = calculateHelperDriverCostGlobal(calc);
+                                
+                                return (
+                                    <tr key={calc.id || idx} className="border-b border-slate-300">
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px' }}>{idx + 1}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '8px' }}>{helperEmployeeId}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '8px' }}>{helperName}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '8px' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '8px' }}>{destinations}</td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '8px' }}>
+                                            {calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                                                (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                                                    ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                                                    : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate))
+                                                : '-'}
+                                        </td>
+                                        <td className="p-1 border border-slate-300" style={{ fontSize: '8px' }}>
+                                            {calc.calculation_date || calc.calculationDate || '-'}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {(calc.helper_driver_excess_kilometers || calc.helperDriverExcessKilometers || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {calc.approved_mission_days || calc.approvedMissionDays || 0}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {(calc.helper_driver_excess_mission_days || calc.helperDriverExcessMissionDays || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {(calc.helper_driver_allowance || calc.helperDriverAllowance || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left" style={{ fontSize: '8px' }}>
+                                            {(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 text-left font-semibold" style={{ fontSize: '8px' }}>
+                                            {helperCost.toLocaleString('fa-IR')}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                        <tfoot>
+                            <tr className="bg-slate-100 font-bold">
+                                <td colSpan={15} className="p-1 border border-slate-300 text-right" style={{ fontSize: '8px' }}>
+                                    جمع کل:
+                                </td>
+                                <td className="p-1 border border-slate-300 text-left font-bold" style={{ fontSize: '8px' }}>
+                                    {(() => {
+                                        const total = calculations.reduce((sum, calc) => {
+                                            return sum + calculateHelperDriverCostGlobal(calc);
+                                        }, 0);
+                                        return total.toLocaleString('fa-IR');
+                                    })} ریال
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    // محاسبه جمع کل نهایی
+    const totalMainAll = invoiceCalculations.reduce((sum, calc) => {
+        return sum + calculateMainDriverCostGlobal(calc);
+    }, 0);
+    
+    const helperCostsByEmployee = new Map<string, number>();
+    invoiceCalculations.forEach((calc: any) => {
+        const helperId = calc.helper_driver_id || calc.helperDriverId;
+        const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+        const helperTotal = calculateHelperDriverCostGlobal(calc);
+        
+        if (helperId && helperEmployeeId && helperTotal > 0) {
+            if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                helperCostsByEmployee.set(helperEmployeeId, 0);
+            }
+            const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+            helperCostsByEmployee.set(helperEmployeeId, existing + helperTotal);
+        }
+    });
+    const totalHelper = Array.from(helperCostsByEmployee.values()).reduce((sum, h) => sum + h, 0);
+    const grandTotal = totalMainAll + totalHelper;
+    
+    const totalAdvancePayment = invoiceCalculations.reduce((sum, calc) => {
+        return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
+    }, 0);
+    
+    const mainDriverPayable = totalMainAll - totalAdvancePayment;
+    const payableAmount = mainDriverPayable + totalHelper;
+
     return (
-        <div className="p-4 text-center text-slate-500">
-            روش 2: فشرده (در حال توسعه)
-        </div>
+        <>
+            {/* تورهای بدون راننده کمکی */}
+            {calculationsWithoutHelper.length > 0 && (
+                <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+                    <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2">
+                        تورهای بدون راننده کمکی
+                    </h2>
+                    {renderMainDriverTableLayout2(calculationsWithoutHelper, 'هزینه‌های راننده اصلی')}
+                </div>
+            )}
+            
+            {/* تورهای با راننده کمکی */}
+            {calculationsWithHelper.length > 0 && (
+                <div className="mb-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+                    <h2 className="text-xl font-bold text-green-900 mb-4 border-b-2 border-green-600 pb-2">
+                        تورهای با راننده کمکی
+                    </h2>
+                    
+                    {/* راننده اصلی برای تورهای با راننده کمکی */}
+                    {renderMainDriverTableLayout2(calculationsWithHelper, 'هزینه‌های راننده اصلی')}
+                    
+                    {/* راننده‌های کمکی تفکیک شده بر اساس کد پرسنلی */}
+                    {Array.from(helperCalculationsByEmployeeId.entries()).map(([employeeId, calcs]) => {
+                        const firstCalc = calcs[0];
+                        const helperName = firstCalc.helper_driver_name || firstCalc.helperDriverName || '-';
+                        return (
+                            <div key={employeeId}>
+                                {renderHelperDriverTableLayout2(calcs, employeeId, helperName)}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+            
+            {/* جمع کل نهایی */}
+            {invoiceCalculations.length > 0 && (
+                <div className="mt-4 p-4 bg-slate-200 rounded-lg border-2 border-slate-600">
+                    <div className="space-y-2">
+                        <div className="mb-3 pb-3 border-b border-slate-400">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>جمع هزینه راننده اصلی:</span>
+                                <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>
+                                    {totalMainAll.toLocaleString('fa-IR')} ریال
+                                </span>
+                            </div>
+                            {totalHelper > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>جمع هزینه راننده کمکی:</span>
+                                    <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>
+                                        {totalHelper.toLocaleString('fa-IR')} ریال
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                            <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>جمع کل هزینه سفر:</span>
+                            <span className="text-xl font-bold text-green-700" style={{ fontSize: '18px' }}>
+                                {grandTotal.toLocaleString('fa-IR')} ریال
+                            </span>
+                        </div>
+                        {totalAdvancePayment !== 0 && (
+                            <div className="flex justify-between items-center border-t border-slate-400 pt-2 mt-2">
+                                <span className="text-base font-semibold text-slate-800" style={{ fontSize: '15px' }}>کسور (پیش پرداخت - فقط از راننده اصلی):</span>
+                                <span className="text-lg font-bold text-orange-700" style={{ fontSize: '17px' }}>
+                                    {totalAdvancePayment < 0 ? '−' : ''}{Math.abs(totalAdvancePayment).toLocaleString('fa-IR')} ریال
+                                </span>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center border-t-2 border-slate-600 pt-2 mt-2">
+                            <span className="text-lg font-bold text-slate-900" style={{ fontSize: '16px' }}>مبلغ قابل پرداخت:</span>
+                            <span className={`text-xl font-bold ${payableAmount < 0 ? 'text-red-700' : 'text-blue-700'}`} style={{ fontSize: '18px' }}>
+                                <span dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>
+                                    {payableAmount < 0 ? '−' : ''}{Math.abs(payableAmount).toLocaleString('fa-IR')} ریال
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 
@@ -1542,7 +1921,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         className="px-3 py-1 border border-slate-300 rounded-md text-sm"
                                     >
                                         <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 1: استاندارد حسابداری</option>
-                                        <option value={InvoiceLayoutType.COMPACT} disabled>روش 2: فشرده (در حال توسعه)</option>
+                                        <option value={InvoiceLayoutType.COMPACT}>روش 2: فشرده</option>
                                         <option value={InvoiceLayoutType.DETAILED} disabled>روش 3: تفصیلی (در حال توسعه)</option>
                                     </select>
                                 </div>
@@ -1633,7 +2012,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 startDate,
                                 endDate
                             )}
-                            {/* منطق قدیمی - برای مرجع (غیرفعال) */}
+                            {/* منطق قدیمی - حذف شده (برای مرجع در git history) */}
                             {false && (() => {
                                 // جدا کردن محاسبات با راننده کمکی و بدون راننده کمکی
                                 const calculationsWithoutHelper = invoiceCalculations.filter((calc: any) => {
