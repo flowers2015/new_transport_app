@@ -1881,6 +1881,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // محاسبه تعداد چندجا تخلیه
             const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
             
+            // تعیین نوع محاسبه اجرت - از تور ذخیره شده یا پیش‌فرض
+            const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';
+            const isPaid = (tour as any).isPaid === true || (tour as any).is_paid === true || (tour as any).is_paid === 't' || (tour as any).is_paid === 'true';
+            
             setInputDialogData({
                 tourId: tour.announcementId,
                 driverId: calc.driverId,
@@ -1907,7 +1911,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 excessMissionCost: (tour as any).excessMissionCost || 0,
                 helperDriverCost: (tour as any).helperDriverCost || 0,
                 // اگر راننده پورسانتی است، fixedAllowance باید 0 باشد
-                fixedAllowance: (calc.queueType === 'porsant' ? 0 : ((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0)),
+                fixedAllowance: (tourQueueType === 'porsant' ? 0 : ((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0)),
                 advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
@@ -1941,7 +1945,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     ...row,
                     billOfLadingNumber: row.billOfLadingNumber || row.notes || ''
                 }))) : []),
-            });
+                queueType: tourQueueType as 'porsant' | 'fixed_allowance' | 'helper',
+                isPaid: isPaid,
+            } as any);
             
             // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
             const hasDepotData = (tour as any).depotRows || (tour as any).depot_rows || (tour as any).depotTotalMileage || (tour as any).depot_total_mileage || (tour as any).depotShipmentCount || (tour as any).depot_shipment_count || (tour as any).depotMissionDays || (tour as any).depot_mission_days;
@@ -1964,6 +1970,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 : '';
             
             const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            
+            // تعیین نوع محاسبه اجرت - پیش‌فرض پورسانت
+            const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';
+            const isPaid = (tour as any).isPaid === true || (tour as any).is_paid === true || (tour as any).is_paid === 't' || (tour as any).is_paid === 'true';
             
             setInputDialogData({
                 tourId: tour.announcementId,
@@ -2010,7 +2020,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotFoodCost: 0,
                 depotMissionCost: 0,
                 depotRows: [],
-            });
+                queueType: tourQueueType as 'porsant' | 'fixed_allowance' | 'helper',
+                isPaid: isPaid,
+            } as any);
             
             setShowInputDialog(true);
         }
