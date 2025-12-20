@@ -384,14 +384,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     // padding - داینامیک بر اساس نوع سلول
                                     const rowSpan = cellEl.getAttribute('rowspan');
                                     if (cellEl.tagName === 'TH' && rowSpan === '2') {
-                                        // برای headerهای rowspan=2، padding بیشتر
-                                        cellEl.style.padding = '8px 4px';
-                                        cellEl.style.paddingTop = '12px';
-                                        cellEl.style.paddingBottom = '12px';
-                                        cellEl.style.minHeight = '50px';
+                                        // برای headerهای rowspan=2، padding بیشتر و height ثابت
+                                        cellEl.style.padding = '10px 4px';
+                                        cellEl.style.height = '50px';
                                     } else if (cellEl.tagName === 'TH') {
                                         // برای headerهای عادی
-                                        cellEl.style.padding = '6px 4px';
+                                        cellEl.style.padding = '8px 4px';
                                     } else {
                                         // برای سلول‌های داده
                                         cellEl.style.padding = '8px 6px';
@@ -400,19 +398,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     // text-align و vertical-align
                                     cellEl.style.textAlign = 'center';
                                     cellEl.style.verticalAlign = 'middle';
-                                    cellEl.style.display = 'table-cell';
                                     
                                     // word-break برای جلوگیری از overflow
                                     cellEl.style.wordBreak = 'break-word';
                                     cellEl.style.overflowWrap = 'break-word';
                                     cellEl.style.whiteSpace = 'normal';
-                                    
-                                    // line-height داینامیک
-                                    if (cellEl.tagName === 'TH' && rowSpan === '2') {
-                                        cellEl.style.lineHeight = '1.4';
-                                    } else {
-                                        cellEl.style.lineHeight = '1.5';
-                                    }
+                                    cellEl.style.lineHeight = '1.5';
                                     
                                     // border
                                     if (!cellEl.style.border || cellEl.style.border === 'none') {
