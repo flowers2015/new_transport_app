@@ -177,8 +177,8 @@ const renderInvoiceLayout1 = (
                                 
                                 return (
                                     <tr key={calc.id || idx} className="border-b border-slate-300">
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>{(idx + 1).toLocaleString('fa-IR')}</td>
-                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>{(idx + 1).toLocaleString('fa-IR')}</td>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
                                         <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>{destinations}</td>
                                         <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {calc.bill_of_lading_date || calc.billOfLadingDate ? 
@@ -191,67 +191,67 @@ const renderInvoiceLayout1 = (
                                             {calc.calculation_date || calc.calculationDate || '-'}
                                         </td>
                                         {/* پیمایش */}
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {approvedKm.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {excessKm.toLocaleString('fa-IR')}
                                         </td>
                                         {/* ماموریت */}
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* هزینه‌های مستقیم */}
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* هزینه‌های دپو */}
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {depotShipmentCount.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {depotMissionDays.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {depotTotalMileage.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {depotCargoHandling.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td className="text-center" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle' }}>
                                             {depotMissionCost.toLocaleString('fa-IR')}
                                         </td>
                                         {/* پیمایش کل */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>
                                             {totalMileage.toLocaleString('fa-IR')}
                                         </td>
                                         {/* اجرت کل تور (فقط برای اجرت ثابت) */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>
                                             {isFixedAllowance ? fixedAllowance.toLocaleString('fa-IR') : '-'}
                                         </td>
                                         {/* جمع کل هزینه */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold' }}>
                                             {mainCost.toLocaleString('fa-IR')}
                                         </td>
                                     </tr>
@@ -264,59 +264,59 @@ const renderInvoiceLayout1 = (
                                     جمع کل سراسری:
                                 </td>
                                 {/* جمع کل پیمایش */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_kilometers || calc.excessKilometers || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل ماموریت */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه‌های مستقیم */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.food_cost || calc.foodCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.fuel_cost || calc.fuelCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.toll_cost || calc.tollCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه‌های دپو */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل پیمایش کل */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
                                         const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
@@ -325,7 +325,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل اجرت تور */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const queueType = calc.queue_type || calc.queueType || 'porsant';
                                         if (queueType === 'fixed_allowance') {
@@ -335,7 +335,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه */}
-                                <td className="text-center font-bold" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '11px', whiteSpace: 'nowrap', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {(() => {
                                         const total = calculations.reduce((sum, calc) => {
                                             return sum + calculateMainDriverCostGlobal(calc);
@@ -2174,7 +2174,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 tableEl.style.minWidth = '100%';
                                 tableEl.style.tableLayout = 'fixed';
                                 tableEl.style.borderCollapse = 'collapse';
-                                tableEl.style.fontSize = '8px';
+                                tableEl.style.fontSize = '11px';
                                 tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
                             });
                             
@@ -2231,16 +2231,21 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     cellEl.style.fontSize = '11px';
                                     cellEl.style.lineHeight = '1.6';
                                     cellEl.style.verticalAlign = 'middle';
+                                    
+                                    // برای اعداد: nowrap، برای متن: normal
+                                    const cellText = cellEl.textContent || '';
+                                    const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim());
+                                    if (isNumber) {
+                                        cellEl.style.whiteSpace = 'nowrap';
+                                    } else {
+                                        cellEl.style.whiteSpace = 'normal';
+                                        cellEl.style.wordBreak = 'break-word';
+                                        cellEl.style.overflowWrap = 'break-word';
+                                    }
                                 }
                                 
                                 // text-align
                                 cellEl.style.textAlign = 'center';
-                                
-                                // word-break برای جلوگیری از overflow
-                                cellEl.style.wordBreak = 'break-word';
-                                cellEl.style.overflowWrap = 'break-word';
-                                cellEl.style.whiteSpace = 'normal';
-                                cellEl.style.lineHeight = '1.5';
                                 
                                 // border
                                 if (!cellEl.style.border || cellEl.style.border === 'none') {
@@ -2445,7 +2450,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             tableEl.style.minWidth = '100%';
                             tableEl.style.tableLayout = 'fixed';
                             tableEl.style.borderCollapse = 'collapse';
-                            tableEl.style.fontSize = '8px';
+                            tableEl.style.fontSize = '11px';
                             tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
                         });
                         
@@ -2487,29 +2492,36 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 cellEl.style.paddingLeft = '6px';
                                 cellEl.style.paddingRight = '6px';
                                 cellEl.style.height = '70px';
-                                cellEl.style.fontSize = '10px';
+                                cellEl.style.fontSize = '11px';
                                 cellEl.style.lineHeight = '1.8';
                                 cellEl.style.verticalAlign = 'top';
                                 cellEl.style.display = 'table-cell';
                             } else if (cellEl.tagName === 'TH') {
                                 // برای headerهای عادی
                                 cellEl.style.padding = '8px 4px';
-                                cellEl.style.fontSize = '9px';
+                                cellEl.style.fontSize = '10px';
                                 cellEl.style.verticalAlign = 'middle';
                             } else {
                                 // برای سلول‌های داده
-                                cellEl.style.padding = '8px 6px';
+                                cellEl.style.padding = '10px 8px';
+                                cellEl.style.fontSize = '11px';
+                                cellEl.style.lineHeight = '1.6';
                                 cellEl.style.verticalAlign = 'middle';
+                                
+                                // برای اعداد: nowrap، برای متن: normal
+                                const cellText = cellEl.textContent || '';
+                                const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim());
+                                if (isNumber) {
+                                    cellEl.style.whiteSpace = 'nowrap';
+                                } else {
+                                    cellEl.style.whiteSpace = 'normal';
+                                    cellEl.style.wordBreak = 'break-word';
+                                    cellEl.style.overflowWrap = 'break-word';
+                                }
                             }
                             
                             // text-align
                             cellEl.style.textAlign = 'center';
-                            
-                            // word-break برای جلوگیری از overflow
-                            cellEl.style.wordBreak = 'break-word';
-                            cellEl.style.overflowWrap = 'break-word';
-                            cellEl.style.whiteSpace = 'normal';
-                            cellEl.style.lineHeight = '1.5';
                             
                             // border
                             if (!cellEl.style.border || cellEl.style.border === 'none') {
