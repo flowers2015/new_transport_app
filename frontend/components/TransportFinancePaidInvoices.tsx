@@ -381,8 +381,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedCells.forEach((cell) => {
                                     const cellEl = cell as HTMLElement;
                                     
-                                    // padding
-                                    cellEl.style.padding = '4px';
+                                    // padding - داینامیک بر اساس نوع سلول
+                                    const rowSpan = cellEl.getAttribute('rowspan');
+                                    if (cellEl.tagName === 'TH' && rowSpan === '2') {
+                                        // برای headerهای rowspan=2، padding بیشتر
+                                        cellEl.style.padding = '8px 4px';
+                                        cellEl.style.paddingTop = '12px';
+                                        cellEl.style.paddingBottom = '12px';
+                                        cellEl.style.minHeight = '50px';
+                                    } else if (cellEl.tagName === 'TH') {
+                                        // برای headerهای عادی
+                                        cellEl.style.padding = '6px 4px';
+                                    } else {
+                                        // برای سلول‌های داده
+                                        cellEl.style.padding = '8px 6px';
+                                    }
                                     
                                     // text-align و vertical-align
                                     cellEl.style.textAlign = 'center';
@@ -393,7 +406,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     cellEl.style.wordBreak = 'break-word';
                                     cellEl.style.overflowWrap = 'break-word';
                                     cellEl.style.whiteSpace = 'normal';
-                                    cellEl.style.lineHeight = '1.2';
+                                    
+                                    // line-height داینامیک
+                                    if (cellEl.tagName === 'TH' && rowSpan === '2') {
+                                        cellEl.style.lineHeight = '1.4';
+                                    } else {
+                                        cellEl.style.lineHeight = '1.5';
+                                    }
                                     
                                     // border
                                     if (!cellEl.style.border || cellEl.style.border === 'none') {
