@@ -385,11 +385,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     const rowSpan = cellEl.getAttribute('rowspan');
                                     if (cellEl.tagName === 'TH' && rowSpan === '2') {
                                         // برای headerهای rowspan=2، padding بیشتر و height ثابت
-                                        cellEl.style.padding = '10px 4px';
-                                        cellEl.style.height = '50px';
+                                        cellEl.style.padding = '12px 6px';
+                                        cellEl.style.height = '70px';
+                                        cellEl.style.fontSize = '9px';
                                     } else if (cellEl.tagName === 'TH') {
                                         // برای headerهای عادی
                                         cellEl.style.padding = '8px 4px';
+                                        cellEl.style.fontSize = '9px';
                                     } else {
                                         // برای سلول‌های داده
                                         cellEl.style.padding = '8px 6px';
