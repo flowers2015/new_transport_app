@@ -115,39 +115,39 @@ const renderInvoiceLayout1 = (
                     {title}
                 </h3>
                 <div style={{ overflow: 'hidden', width: '100%' }}>
-                    <table className="w-full border-collapse border border-slate-800 mb-3" style={{ fontSize: '10px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                    <table className="w-full border-collapse border border-slate-800 mb-3" style={{ fontSize: '8px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'fixed', width: '100%', minWidth: '100%', borderCollapse: 'collapse' }}>
                         <thead>
-                            <tr className="bg-slate-800 text-white">
-                                <th rowSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '3%' }}>ردیف</th>
-                                <th rowSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%' }}>شماره<br/>بارنامه</th>
-                                <th rowSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '7%' }}>مقاصد</th>
-                                <th rowSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%' }}>تاریخ<br/>صدور</th>
-                                <th rowSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%' }}>تاریخ<br/>محاسبه</th>
-                                <th colSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>پیمایش<br/>(کیلومتر)</th>
-                                <th colSpan={2} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>ماموریت<br/>(روز)</th>
-                                <th colSpan={7} className="p-2 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '24%' }}>هزینه‌های<br/>مستقیم<br/>(ریال)</th>
-                                <th colSpan={5} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '22%' }}>هزینه‌های<br/>دپو</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>پیمایش<br/>کل<br/>(کیلومتر)</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '7%' }}>اجرت<br/>کل تور<br/>(ریال)</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%' }}>جمع کل<br/>هزینه<br/>(ریال)</th>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '3%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ردیف</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>شماره<br/>بارنامه</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '7%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مقاصد</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>تاریخ<br/>صدور</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>تاریخ<br/>محاسبه</th>
+                                <th colSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>پیمایش<br/>(کیلومتر)</th>
+                                <th colSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ماموریت<br/>(روز)</th>
+                                <th colSpan={7} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '24%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>هزینه‌های<br/>مستقیم<br/>(ریال)</th>
+                                <th colSpan={5} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '22%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>هزینه‌های<br/>دپو</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>پیمایش<br/>کل<br/>(کیلومتر)</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '7%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>اجرت<br/>کل تور<br/>(ریال)</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>جمع کل<br/>هزینه<br/>(ریال)</th>
                             </tr>
-                            <tr className="bg-slate-800 text-white">
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مصوب</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مازاد</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مصوب</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مازاد</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>بارنامه</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>غذا</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>سوخت</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>عوارض</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>بار<br/>برگشتی</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>چندجا<br/>تخلیه</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>ماموریت<br/>مازاد</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>تعداد</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>ماموریت<br/>(روز)</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>پیمایش<br/>(کیلومتر)</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>جابجایی<br/>بار<br/>(ریال)</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>حق<br/>ماموریت<br/>(ریال)</th>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مصوب</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مازاد</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مصوب</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مازاد</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>بارنامه</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>غذا</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>سوخت</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>عوارض</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>بار<br/>برگشتی</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>چندجا<br/>تخلیه</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ماموریت<br/>مازاد</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>تعداد</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ماموریت<br/>(روز)</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>پیمایش<br/>(کیلومتر)</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>جابجایی<br/>بار<br/>(ریال)</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>حق<br/>ماموریت<br/>(ریال)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -177,81 +177,81 @@ const renderInvoiceLayout1 = (
                                 
                                 return (
                                     <tr key={calc.id || idx} className="border-b border-slate-300">
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>{(idx + 1).toLocaleString('fa-IR')}</td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>{destinations}</td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>{(idx + 1).toLocaleString('fa-IR')}</td>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>{calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>{destinations}</td>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {calc.bill_of_lading_date || calc.billOfLadingDate ? 
                                                 (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
                                                     ? (calc.bill_of_lading_date || calc.billOfLadingDate)
                                                     : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate))
                                                 : '-'}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {calc.calculation_date || calc.calculationDate || '-'}
                                         </td>
                                         {/* پیمایش */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {approvedKm.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {excessKm.toLocaleString('fa-IR')}
                                         </td>
                                         {/* ماموریت */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* هزینه‌های مستقیم */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* هزینه‌های دپو */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {depotShipmentCount.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {depotMissionDays.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {depotTotalMileage.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {depotCargoHandling.toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {depotMissionCost.toLocaleString('fa-IR')}
                                         </td>
                                         {/* پیمایش کل */}
-                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
                                             {totalMileage.toLocaleString('fa-IR')}
                                         </td>
                                         {/* اجرت کل تور (فقط برای اجرت ثابت) */}
-                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
                                             {isFixedAllowance ? fixedAllowance.toLocaleString('fa-IR') : '-'}
                                         </td>
                                         {/* جمع کل هزینه */}
-                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
                                             {mainCost.toLocaleString('fa-IR')}
                                         </td>
                                     </tr>
@@ -260,63 +260,63 @@ const renderInvoiceLayout1 = (
                         </tbody>
                         <tfoot>
                             <tr className="bg-slate-100 font-bold">
-                                <td colSpan={5} className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td colSpan={5} className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     جمع کل سراسری:
                                 </td>
                                 {/* جمع کل پیمایش */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_kilometers || calc.excessKilometers || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل ماموریت */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه‌های مستقیم */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.food_cost || calc.foodCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.fuel_cost || calc.fuelCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.toll_cost || calc.tollCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه‌های دپو */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل پیمایش کل */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
                                         const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
@@ -325,7 +325,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل اجرت تور */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const queueType = calc.queue_type || calc.queueType || 'porsant';
                                         if (queueType === 'fixed_allowance') {
@@ -335,7 +335,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه */}
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {(() => {
                                         const total = calculations.reduce((sum, calc) => {
                                             return sum + calculateMainDriverCostGlobal(calc);
@@ -361,30 +361,30 @@ const renderInvoiceLayout1 = (
                     راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
                 </h3>
                 <div style={{ overflow: 'hidden', width: '100%' }}>
-                    <table className="w-full border-collapse border border-slate-800 mb-3" style={{ fontSize: '8px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                    <table className="w-full border-collapse border border-slate-800 mb-3" style={{ fontSize: '8px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'fixed', width: '100%', minWidth: '100%', borderCollapse: 'collapse' }}>
                         <thead>
-                            <tr className="bg-slate-800 text-white">
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '3%' }}>ردیف</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%' }}>کد<br/>پرسنلی</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%' }}>نام و نام<br/>خانوادگی</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>شماره<br/>بارنامه</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%' }}>مقاصد</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>تاریخ<br/>صدور</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>تاریخ<br/>محاسبه</th>
-                                <th colSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>پیمایش<br/>(کیلومتر)</th>
-                                <th colSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%' }}>ماموریت<br/>(روز)</th>
-                                <th colSpan={3} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '20%' }}>هزینه‌های<br/>راننده کمکی<br/>(ریال)</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%' }}>پیمایش<br/>مازاد<br/>راننده کمکی</th>
-                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%' }}>جمع کل<br/>(ریال)</th>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '3%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ردیف</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '5%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>کد<br/>پرسنلی</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>نام و نام<br/>خانوادگی</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>شماره<br/>بارنامه</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مقاصد</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>تاریخ<br/>صدور</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>تاریخ<br/>محاسبه</th>
+                                <th colSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>پیمایش<br/>(کیلومتر)</th>
+                                <th colSpan={2} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '6%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ماموریت<br/>(روز)</th>
+                                <th colSpan={3} className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '20%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>هزینه‌های<br/>راننده کمکی<br/>(ریال)</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>پیمایش<br/>مازاد<br/>راننده کمکی</th>
+                                <th rowSpan={2} className="p-1 border border-slate-600 text-center font-semibold" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', width: '8%', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>جمع کل<br/>(ریال)</th>
                             </tr>
-                            <tr className="bg-slate-800 text-white">
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مصوب</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مازاد</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مصوب</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>مازاد</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>اجرت</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>غذا</th>
-                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>ماموریت<br/>مازاد</th>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مصوب</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مازاد</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مصوب</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>مازاد</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>اجرت</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>غذا</th>
+                                <th className="p-1 border border-slate-600 text-center" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #475569', textAlign: 'center' }}>ماموریت<br/>مازاد</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -412,35 +412,35 @@ const renderInvoiceLayout1 = (
                                             {calc.calculation_date || calc.calculationDate || '-'}
                                         </td>
                                         {/* پیمایش */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.helper_driver_excess_kilometers || calc.helperDriverExcessKilometers || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* ماموریت */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.helper_driver_excess_mission_days || calc.helperDriverExcessMissionDays || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* هزینه‌های راننده کمکی */}
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0).toLocaleString('fa-IR')}
                                         </td>
-                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                                             {(calc.helper_driver_allowance || calc.helperDriverAllowance || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* پیمایش مازاد راننده کمکی */}
-                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
                                             {(calc.helper_driver_excess_kilometers || calc.helperDriverExcessKilometers || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* جمع کل */}
-                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                        <td className="p-1 border border-slate-300 text-center font-semibold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
                                             {helperCost.toLocaleString('fa-IR')}
                                         </td>
                                     </tr>
@@ -448,11 +448,11 @@ const renderInvoiceLayout1 = (
                             })}
                         </tbody>
                         <tfoot>
-                            <tr className="bg-slate-100 font-bold">
-                                <td colSpan={14} className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                            <tr className="bg-slate-100 font-bold" style={{ backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td colSpan={14} className="p-1 border border-slate-300 text-center" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     جمع کل:
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     {(() => {
                                         const total = calculations.reduce((sum, calc) => {
                                             return sum + calculateHelperDriverCostGlobal(calc);
@@ -2169,8 +2169,36 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             // اعمال استایل‌های جدول
                             const clonedTables = clonedDiv.querySelectorAll('table');
                             clonedTables.forEach((table) => {
-                                (table as HTMLElement).style.width = '100%';
-                                (table as HTMLElement).style.tableLayout = 'fixed';
+                                const tableEl = table as HTMLElement;
+                                tableEl.style.width = '100%';
+                                tableEl.style.minWidth = '100%';
+                                tableEl.style.tableLayout = 'fixed';
+                                tableEl.style.borderCollapse = 'collapse';
+                                tableEl.style.fontSize = '8px';
+                                tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                            });
+                            
+                            // اعمال استایل‌های thead و tbody
+                            const clonedTheads = clonedDiv.querySelectorAll('thead');
+                            clonedTheads.forEach((thead) => {
+                                const theadEl = thead as HTMLElement;
+                                const headerRows = theadEl.querySelectorAll('tr');
+                                headerRows.forEach((row) => {
+                                    const rowEl = row as HTMLElement;
+                                    rowEl.style.backgroundColor = '#1e293b';
+                                    rowEl.style.color = '#ffffff';
+                                });
+                            });
+                            
+                            const clonedTfoots = clonedDiv.querySelectorAll('tfoot');
+                            clonedTfoots.forEach((tfoot) => {
+                                const tfootEl = tfoot as HTMLElement;
+                                const footerRows = tfootEl.querySelectorAll('tr');
+                                footerRows.forEach((row) => {
+                                    const rowEl = row as HTMLElement;
+                                    rowEl.style.backgroundColor = '#f1f5f9';
+                                    rowEl.style.fontWeight = 'bold';
+                                });
                             });
                             
                             // اعمال استایل‌های سلول‌ها (td و th)
@@ -2178,10 +2206,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             clonedCells.forEach((cell) => {
                                 const cellEl = cell as HTMLElement;
                                 
-                                // padding - کاهش padding برای فضای بیشتر
-                                if (cellEl.style.padding === '' || !cellEl.style.padding) {
-                                    cellEl.style.padding = '4px';
-                                }
+                                // padding
+                                cellEl.style.padding = '4px';
                                 
                                 // text-align
                                 cellEl.style.textAlign = 'center';
@@ -2192,33 +2218,30 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 cellEl.style.whiteSpace = 'normal';
                                 cellEl.style.lineHeight = '1.2';
                                 
-                                // بررسی font-size از style attribute یا computed style
-                                let currentFontSize = cellEl.style.fontSize || '';
-                                if (!currentFontSize) {
-                                    // اگر در style attribute نیست، از computed style استفاده کن
-                                    try {
-                                        const computedStyle = clonedDoc.defaultView?.getComputedStyle(cellEl);
-                                        currentFontSize = computedStyle?.fontSize || '';
-                                    } catch (e) {
-                                        // ignore
+                                // border
+                                if (!cellEl.style.border || cellEl.style.border === 'none') {
+                                    if (cellEl.tagName === 'TH') {
+                                        cellEl.style.border = '1px solid #475569';
+                                    } else {
+                                        cellEl.style.border = '1px solid #cbd5e1';
                                     }
                                 }
                                 
-                                // کاهش font-size برای همه سلول‌ها
+                                // font-size
+                                cellEl.style.fontSize = '8px';
+                                
+                                // برای headerها
                                 if (cellEl.tagName === 'TH') {
-                                    // برای headerها
-                                    if (currentFontSize && parseFloat(currentFontSize) > 8) {
-                                        cellEl.style.fontSize = '8px';
-                                    } else if (!currentFontSize) {
-                                        cellEl.style.fontSize = '8px';
-                                    }
-                                } else {
-                                    // برای سلول‌های داده
-                                    if (currentFontSize && parseFloat(currentFontSize) > 8) {
-                                        cellEl.style.fontSize = '8px';
-                                    } else if (!currentFontSize) {
-                                        cellEl.style.fontSize = '8px';
-                                    }
+                                    cellEl.style.fontWeight = 'bold';
+                                    cellEl.style.backgroundColor = '#1e293b';
+                                    cellEl.style.color = '#ffffff';
+                                }
+                                
+                                // برای footer
+                                const parentRow = cellEl.parentElement;
+                                if (parentRow && parentRow.tagName === 'TR' && parentRow.parentElement?.tagName === 'TFOOT') {
+                                    cellEl.style.backgroundColor = '#f1f5f9';
+                                    cellEl.style.fontWeight = 'bold';
                                 }
                             });
                             
@@ -2387,12 +2410,42 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         clonedInvoice.style.width = '100%';
                         clonedInvoice.style.maxWidth = '100%';
                         clonedInvoice.style.overflow = 'hidden';
+                        clonedInvoice.style.visibility = 'visible';
+                        clonedInvoice.style.opacity = '1';
                         
                         // اعمال استایل‌های جدول
                         const clonedTables = clonedInvoice.querySelectorAll('table');
                         clonedTables.forEach((table) => {
-                            (table as HTMLElement).style.width = '100%';
-                            (table as HTMLElement).style.tableLayout = 'fixed';
+                            const tableEl = table as HTMLElement;
+                            tableEl.style.width = '100%';
+                            tableEl.style.minWidth = '100%';
+                            tableEl.style.tableLayout = 'fixed';
+                            tableEl.style.borderCollapse = 'collapse';
+                            tableEl.style.fontSize = '8px';
+                            tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                        });
+                        
+                        // اعمال استایل‌های thead و tbody
+                        const clonedTheads = clonedInvoice.querySelectorAll('thead');
+                        clonedTheads.forEach((thead) => {
+                            const theadEl = thead as HTMLElement;
+                            const headerRows = theadEl.querySelectorAll('tr');
+                            headerRows.forEach((row) => {
+                                const rowEl = row as HTMLElement;
+                                rowEl.style.backgroundColor = '#1e293b';
+                                rowEl.style.color = '#ffffff';
+                            });
+                        });
+                        
+                        const clonedTfoots = clonedInvoice.querySelectorAll('tfoot');
+                        clonedTfoots.forEach((tfoot) => {
+                            const tfootEl = tfoot as HTMLElement;
+                            const footerRows = tfootEl.querySelectorAll('tr');
+                            footerRows.forEach((row) => {
+                                const rowEl = row as HTMLElement;
+                                rowEl.style.backgroundColor = '#f1f5f9';
+                                rowEl.style.fontWeight = 'bold';
+                            });
                         });
                         
                         // اعمال استایل‌های سلول‌ها (td و th)
@@ -2400,10 +2453,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         clonedCells.forEach((cell) => {
                             const cellEl = cell as HTMLElement;
                             
-                            // padding - کاهش padding برای فضای بیشتر
-                            if (cellEl.style.padding === '' || !cellEl.style.padding) {
-                                cellEl.style.padding = '4px';
-                            }
+                            // padding
+                            cellEl.style.padding = '4px';
                             
                             // text-align
                             cellEl.style.textAlign = 'center';
@@ -2414,33 +2465,30 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             cellEl.style.whiteSpace = 'normal';
                             cellEl.style.lineHeight = '1.2';
                             
-                            // بررسی font-size از style attribute یا computed style
-                            let currentFontSize = cellEl.style.fontSize || '';
-                            if (!currentFontSize) {
-                                // اگر در style attribute نیست، از computed style استفاده کن
-                                try {
-                                    const computedStyle = clonedDoc.defaultView?.getComputedStyle(cellEl);
-                                    currentFontSize = computedStyle?.fontSize || '';
-                                } catch (e) {
-                                    // ignore
+                            // border
+                            if (!cellEl.style.border || cellEl.style.border === 'none') {
+                                if (cellEl.tagName === 'TH') {
+                                    cellEl.style.border = '1px solid #475569';
+                                } else {
+                                    cellEl.style.border = '1px solid #cbd5e1';
                                 }
                             }
                             
-                            // کاهش font-size برای همه سلول‌ها
+                            // font-size
+                            cellEl.style.fontSize = '8px';
+                            
+                            // برای headerها
                             if (cellEl.tagName === 'TH') {
-                                // برای headerها
-                                if (currentFontSize && parseFloat(currentFontSize) > 8) {
-                                    cellEl.style.fontSize = '8px';
-                                } else if (!currentFontSize) {
-                                    cellEl.style.fontSize = '8px';
-                                }
-                            } else {
-                                // برای سلول‌های داده
-                                if (currentFontSize && parseFloat(currentFontSize) > 8) {
-                                    cellEl.style.fontSize = '8px';
-                                } else if (!currentFontSize) {
-                                    cellEl.style.fontSize = '8px';
-                                }
+                                cellEl.style.fontWeight = 'bold';
+                                cellEl.style.backgroundColor = '#1e293b';
+                                cellEl.style.color = '#ffffff';
+                            }
+                            
+                            // برای footer
+                            const parentRow = cellEl.parentElement;
+                            if (parentRow && parentRow.tagName === 'TR' && parentRow.parentElement?.tagName === 'TFOOT') {
+                                cellEl.style.backgroundColor = '#f1f5f9';
+                                cellEl.style.fontWeight = 'bold';
                             }
                         });
                     }
