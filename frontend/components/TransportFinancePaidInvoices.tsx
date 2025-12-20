@@ -349,8 +349,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     tableEl.style.minWidth = '100%';
                                     tableEl.style.tableLayout = 'fixed';
                                     tableEl.style.borderCollapse = 'collapse';
-                                    tableEl.style.fontSize = '8px';
+                                    tableEl.style.fontSize = '11px';
                                     tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                                    tableEl.style.boxSizing = 'border-box';
                                 });
                                 
                                 // اعمال استایل‌های thead و tbody
@@ -389,31 +390,51 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         cellEl.style.paddingTop = '15px';
                                         cellEl.style.paddingBottom = '5px';
                                         cellEl.style.paddingLeft = '6px';
-                                        cellEl.style.paddingRight = '6px';
+                                        // برای ستون‌های آخر paddingRight بیشتر
+                                        const cellText = cellEl.textContent || '';
+                                        const isLastColumn = cellText.includes('پیمایش کل') || cellText.includes('اجرت کل تور') || cellText.includes('جمع کل هزینه') || cellText.includes('جمع کل') || cellText.includes('پیمایش مازاد');
+                                        cellEl.style.paddingRight = isLastColumn ? '12px' : '6px';
                                         cellEl.style.height = '70px';
-                                        cellEl.style.fontSize = '10px';
+                                        cellEl.style.fontSize = '11px';
                                         cellEl.style.lineHeight = '1.8';
                                         cellEl.style.verticalAlign = 'top';
                                         cellEl.style.display = 'table-cell';
+                                        cellEl.style.boxSizing = 'border-box';
                                     } else if (cellEl.tagName === 'TH') {
                                         // برای headerهای عادی
                                         cellEl.style.padding = '8px 4px';
-                                        cellEl.style.fontSize = '9px';
+                                        cellEl.style.fontSize = '10px';
                                         cellEl.style.verticalAlign = 'middle';
+                                        cellEl.style.boxSizing = 'border-box';
                                     } else {
                                         // برای سلول‌های داده
-                                        cellEl.style.padding = '8px 6px';
+                                        // برای ستون‌های آخر paddingRight بیشتر
+                                        const cellIndex = Array.from(cellEl.parentElement?.children || []).indexOf(cellEl);
+                                        const totalCells = cellEl.parentElement?.children.length || 0;
+                                        const isLastColumn = cellIndex >= totalCells - 3; // 3 ستون آخر
+                                        cellEl.style.padding = isLastColumn ? '10px 12px 10px 8px' : '10px 8px';
+                                        cellEl.style.fontSize = '11px';
+                                        cellEl.style.lineHeight = '1.6';
                                         cellEl.style.verticalAlign = 'middle';
+                                        cellEl.style.boxSizing = 'border-box';
+                                        
+                                        // برای اعداد: nowrap، برای متن: normal
+                                        const cellText = cellEl.textContent || '';
+                                        const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim());
+                                        if (isNumber) {
+                                            cellEl.style.whiteSpace = 'nowrap';
+                                        } else {
+                                            cellEl.style.whiteSpace = 'normal';
+                                            cellEl.style.wordBreak = 'break-word';
+                                            cellEl.style.overflowWrap = 'break-word';
+                                        }
                                     }
                                     
                                     // text-align
                                     cellEl.style.textAlign = 'center';
                                     
-                                    // word-break برای جلوگیری از overflow
-                                    cellEl.style.wordBreak = 'break-word';
-                                    cellEl.style.overflowWrap = 'break-word';
-                                    cellEl.style.whiteSpace = 'normal';
-                                    cellEl.style.lineHeight = '1.5';
+                                    // box-sizing برای همه سلول‌ها
+                                    cellEl.style.boxSizing = 'border-box';
                                     
                                     // border
                                     if (!cellEl.style.border || cellEl.style.border === 'none') {
@@ -423,9 +444,6 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             cellEl.style.border = '1px solid #cbd5e1';
                                         }
                                     }
-                                    
-                                    // font-size
-                                    cellEl.style.fontSize = '8px';
                                     
                                     // برای headerها
                                     if (cellEl.tagName === 'TH') {
