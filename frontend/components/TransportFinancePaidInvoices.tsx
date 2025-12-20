@@ -472,15 +472,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         },
                         removeContainer: false,
                         windowWidth: 2000,
-                        windowHeight: invoiceDiv.scrollHeight || 2000,
-                        onclone: (clonedDoc) => {
-                            // در cloned document، opacity را 1 کن تا render شود
-                            const clonedDiv = clonedDoc.querySelector(`#temp-invoice-${i}`);
-                            if (clonedDiv) {
-                                (clonedDiv as HTMLElement).style.opacity = '1';
-                                (clonedDiv as HTMLElement).style.visibility = 'visible';
-                            }
-                        }
+                        windowHeight: invoiceDiv.scrollHeight || 2000
                     });
                     
                     console.log(`📄 [PDF_AFTER] Canvas created: ${canvas?.width}x${canvas?.height}`);
