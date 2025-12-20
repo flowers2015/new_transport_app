@@ -261,7 +261,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 tempDiv.style.position = 'fixed';
                 tempDiv.style.top = '0';
                 tempDiv.style.left = '0';
-                tempDiv.style.width = '1600px';
+                tempDiv.style.width = '2000px';
                 tempDiv.style.height = 'auto';
                 tempDiv.style.backgroundColor = '#ffffff';
                 tempDiv.style.padding = '20px';
@@ -347,7 +347,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     const tableEl = table as HTMLElement;
                                     tableEl.style.width = '100%';
                                     tableEl.style.minWidth = '100%';
-                                    tableEl.style.tableLayout = 'fixed';
+                                    tableEl.style.tableLayout = 'auto';
                                     tableEl.style.borderCollapse = 'collapse';
                                     tableEl.style.fontSize = '11px';
                                     tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
@@ -418,45 +418,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         cellEl.style.boxSizing = 'border-box';
                                         cellEl.style.overflow = 'hidden';
                                         
-                                        // برای اعداد: nowrap، برای متن: normal
+                                        // برای همه سلول‌ها: font-size ثابت 11px و nowrap برای اعداد و تاریخ
                                         const cellText = cellEl.textContent || '';
-                                        const dataValue = cellEl.getAttribute('data-value');
                                         // تشخیص تاریخ (فرمت 1404/09/21 یا 1404/9/21)
                                         const isDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cellText.trim()) || /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cellText.replace(/\s/g, ''));
-                                        const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim()) || /^[\d\s،,.-]+$/.test(cellText.trim()) || dataValue !== null;
+                                        const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim()) || /^[\d\s،,.-]+$/.test(cellText.trim());
                                         
-                                        if (isDate) {
-                                            // برای تاریخ: nowrap و font-size ثابت
+                                        // font-size ثابت برای همه
+                                        cellEl.style.fontSize = '11px';
+                                        
+                                        if (isDate || isNumber) {
+                                            // برای تاریخ و اعداد: nowrap
                                             cellEl.style.whiteSpace = 'nowrap';
-                                            cellEl.style.fontSize = '11px';
                                             cellEl.style.textOverflow = 'ellipsis';
-                                        } else if (isNumber) {
-                                            cellEl.style.whiteSpace = 'nowrap';
-                                            cellEl.style.textOverflow = 'ellipsis';
-                                            // تنظیم font-size بر اساس مقدار عددی
-                                            let numValue = 0;
-                                            if (dataValue) {
-                                                numValue = parseFloat(dataValue) || 0;
-                                            } else {
-                                                numValue = parseFloat(cellText.replace(/[\s،,]/g, '')) || 0;
-                                            }
-                                            const numLength = Math.abs(numValue).toString().length;
-                                            // تنظیم font-size بر اساس طول عدد - محدوده‌های بهتر
-                                            if (numLength > 10) {
-                                                cellEl.style.fontSize = '6px';
-                                            } else if (numLength > 8) {
-                                                cellEl.style.fontSize = '7px';
-                                            } else if (numLength > 6) {
-                                                cellEl.style.fontSize = '8px';
-                                            } else if (numLength > 4) {
-                                                cellEl.style.fontSize = '9px';
-                                            } else if (numLength > 2) {
-                                                cellEl.style.fontSize = '10px';
-                                            } else {
-                                                cellEl.style.fontSize = '11px';
-                                            }
                                         } else {
-                                            cellEl.style.fontSize = '11px';
+                                            // برای متن: normal با word-break
                                             cellEl.style.whiteSpace = 'normal';
                                             cellEl.style.wordBreak = 'break-word';
                                             cellEl.style.overflowWrap = 'break-word';
@@ -495,7 +471,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             }
                         },
                         removeContainer: false,
-                        windowWidth: 1600,
+                        windowWidth: 2000,
                         windowHeight: invoiceDiv.scrollHeight || 2000,
                         onclone: (clonedDoc) => {
                             // در cloned document، opacity را 1 کن تا render شود
@@ -674,7 +650,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         هزینه‌های راننده اصلی
                     </h3>
                     <div style="overflow: hidden; width: 100%;">
-                        <table style="width: 100%; font-size: 11px; border-collapse: collapse; border: 2px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: fixed; box-sizing: border-box;">
+                        <table style="width: 100%; font-size: 11px; border-collapse: collapse; border: 2px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; box-sizing: border-box; min-width: 100%;">
                             <thead>
                                 <tr style="background-color: #1e293b; color: white;">
                                     <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 3%; height: 70px; display: table-cell; box-sizing: border-box;">ردیف</th>
@@ -737,11 +713,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 
                 html += `
                     <tr style="border-bottom: 1px solid #cbd5e1;">
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${(idx + 1).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${destinations}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.calculation_date || calc.calculationDate || '-'}</td>
+                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 40px;">${(idx + 1).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 80px;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
+                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${destinations}</td>
+                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
+                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.calculation_date || calc.calculationDate || '-'}</td>
                         <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${approvedKm}">${approvedKm.toLocaleString('fa-IR')}</td>
                         <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${excessKm}">${excessKm.toLocaleString('fa-IR')}</td>
                         <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.approved_mission_days || calc.approvedMissionDays || 0)}">${(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
@@ -851,7 +827,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             راننده کمکی - کد پرسنلی: ${helperEmployeeId} - ${helperData.name}
                         </h3>
                         <div style="overflow: hidden; width: 100%;">
-                            <table style="width: 100%; font-size: 11px; border-collapse: collapse; border: 2px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: fixed; box-sizing: border-box;">
+                            <table style="width: 100%; font-size: 11px; border-collapse: collapse; border: 2px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; box-sizing: border-box; min-width: 100%;">
                                 <thead>
                                     <tr style="background-color: #1e293b; color: white;">
                                         <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 3%; height: 70px; display: table-cell; box-sizing: border-box;">ردیف</th>
@@ -894,17 +870,17 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${helperData.name}</td>
                             <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
                             <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${destinations}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.calculation_date || calc.calculationDate || '-'}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.approved_kilometers || calc.approvedKilometers || 0)}">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${helperExcessKm}">${helperExcessKm.toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.approved_mission_days || calc.approvedMissionDays || 0)}">${(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.helper_driver_excess_mission_days || calc.helperDriverExcessMissionDays || 0)}">${(calc.helper_driver_excess_mission_days || calc.helperDriverExcessMissionDays || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0)}">${(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0)}">${(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.helper_driver_allowance || calc.helperDriverAllowance || 0)}">${(calc.helper_driver_allowance || calc.helperDriverAllowance || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${helperExcessKm}">${helperExcessKm.toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${helperCost}">${helperCost.toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.calculation_date || calc.calculationDate || '-'}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 50px;">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 50px;">${helperExcessKm.toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 40px;">${(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 40px;">${(calc.helper_driver_excess_mission_days || calc.helperDriverExcessMissionDays || 0).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${(calc.helper_driver_allowance || calc.helperDriverAllowance || 0).toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 80px;">${helperExcessKm.toLocaleString('fa-IR')}</td>
+                            <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 120px;">${helperCost.toLocaleString('fa-IR')}</td>
                         </tr>
                     `;
                 });
