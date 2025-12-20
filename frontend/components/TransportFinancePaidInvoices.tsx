@@ -385,21 +385,29 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     const rowSpan = cellEl.getAttribute('rowspan');
                                     if (cellEl.tagName === 'TH' && rowSpan === '2') {
                                         // برای headerهای rowspan=2، padding بیشتر و height ثابت
-                                        cellEl.style.padding = '12px 6px';
+                                        cellEl.style.padding = '0';
+                                        cellEl.style.paddingTop = '15px';
+                                        cellEl.style.paddingBottom = '5px';
+                                        cellEl.style.paddingLeft = '6px';
+                                        cellEl.style.paddingRight = '6px';
                                         cellEl.style.height = '70px';
-                                        cellEl.style.fontSize = '9px';
+                                        cellEl.style.fontSize = '10px';
+                                        cellEl.style.lineHeight = '1.8';
+                                        cellEl.style.verticalAlign = 'top';
+                                        cellEl.style.display = 'table-cell';
                                     } else if (cellEl.tagName === 'TH') {
                                         // برای headerهای عادی
                                         cellEl.style.padding = '8px 4px';
                                         cellEl.style.fontSize = '9px';
+                                        cellEl.style.verticalAlign = 'middle';
                                     } else {
                                         // برای سلول‌های داده
                                         cellEl.style.padding = '8px 6px';
+                                        cellEl.style.verticalAlign = 'middle';
                                     }
                                     
-                                    // text-align و vertical-align
+                                    // text-align
                                     cellEl.style.textAlign = 'center';
-                                    cellEl.style.verticalAlign = 'middle';
                                     
                                     // word-break برای جلوگیری از overflow
                                     cellEl.style.wordBreak = 'break-word';
