@@ -23,14 +23,14 @@ async function fixPermissionTypes() {
     }
     
     // بررسی وجود ستون permission_type
-    const columnCheck = await client.query(`
+    const permissionTypeCheck = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'planning_manager_approval_permissions' 
       AND column_name = 'permission_type'
     `);
     
-    if (columnCheck.rows.length === 0) {
+    if (permissionTypeCheck.rows.length === 0) {
       console.log('⚠️  ستون permission_type وجود ندارد. ابتدا migration add_permission_type را اجرا کنید.');
       await client.query('ROLLBACK');
       return;
