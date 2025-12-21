@@ -262,9 +262,27 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                 }}
                 className="w-full px-3 py-2 border rounded-lg"
               >
-                <option value="manager">مدیر برنامه‌ریزی (مجوز تاییدیه)</option>
-                <option value="employee">کارمند برنامه‌ریزی (مجوز ایجاد اعلام بار)</option>
+                <option value="manager">مدیر برنامه‌ریزی</option>
+                <option value="employee">کارمند برنامه‌ریزی</option>
               </select>
+              {selectedUserType && (
+                <div className="mt-2 p-3 rounded-lg bg-white border-2 border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      selectedUserType === 'manager' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {selectedUserType === 'manager' ? '📋 مجوز تاییدیه' : '➕ مجوز ایجاد اعلام بار'}
+                    </span>
+                    <span className="text-sm text-gray-700">
+                      {selectedUserType === 'manager' 
+                        ? 'این کاربر می‌تواند اعلام بارها را تایید کند و فقط بارهای لاین‌های مجاز را می‌بیند'
+                        : 'این کاربر می‌تواند اعلام بار ایجاد کند و فقط تب‌های لاین‌های مجاز را می‌بیند'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -286,8 +304,15 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
             
             <div>
               <label className="block text-sm font-medium mb-2">
-                انتخاب لاین‌های مجاز ({selectedUserType === 'manager' ? 'برای تاییدیه' : 'برای ایجاد اعلام بار'}):
+                انتخاب لاین‌های مجاز:
               </label>
+              {selectedUserType && (
+                <p className="text-xs text-gray-600 mb-2">
+                  {selectedUserType === 'manager' 
+                    ? 'لاین‌هایی که این مدیر می‌تواند برای آن‌ها تاییدیه بدهد:'
+                    : 'لاین‌هایی که این کارمند می‌تواند برای آن‌ها اعلام بار ایجاد کند:'}
+                </p>
+              )}
               <div className="flex gap-2 flex-wrap">
                 {lineTypes.map(lt => (
                   <label key={lt.value} className="flex items-center gap-2 cursor-pointer">
@@ -380,8 +405,16 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
         {/* لیست مجوزهای فعلی */}
         <div className="p-4">
           <h3 className="font-semibold mb-3">
-            مدیران دارای مجوز تاییدیه:
+            مجوزهای ثبت شده برای لاین "{getLineTypeLabel(selectedLineType)}":
           </h3>
+          <div className="mb-3 flex gap-2">
+            <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
+              📋 تاییدیه = مدیر برنامه‌ریزی
+            </span>
+            <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-800">
+              ➕ ایجاد اعلام بار = کارمند برنامه‌ریزی
+            </span>
+          </div>
           {filteredPermissions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               هیچ مجوزی ثبت نشده است
@@ -410,12 +443,12 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                         <td className="px-4 py-3 text-sm">{permission.full_name}</td>
                         <td className="px-4 py-3 text-sm">{user?.employee_id || '-'}</td>
                         <td className="px-4 py-3 text-sm">
-                          <span className={`px-2 py-1 rounded text-xs ${
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                             permission.permission_type === 'approval' 
-                              ? 'bg-blue-100 text-blue-800' 
-                              : 'bg-green-100 text-green-800'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-300' 
+                              : 'bg-green-100 text-green-800 border border-green-300'
                           }`}>
-                            {permission.permission_type === 'approval' ? 'تاییدیه' : 'ایجاد اعلام بار'}
+                            {permission.permission_type === 'approval' ? '📋 تاییدیه (مدیر)' : '➕ ایجاد اعلام بار (کارمند)'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm">{getLineTypeLabel(permission.line_type)}</td>
