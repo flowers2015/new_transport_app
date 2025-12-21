@@ -374,32 +374,32 @@ const renderInvoiceLayout1 = (
             { key: 'total', label: 'جمع کل', getValue: (calc: any) => calculateMainDriverCostGlobal(calc), isTotal: true },
         ];
 
-        // محاسبه عرض ستون‌ها - جمع و جورتر
-        const firstColumnWidth = '140px'; // ستون عنوان هزینه
-        const billColumnWidth = calculations.length > 5 ? '80px' : '90px'; // ستون‌های بارنامه (کوچکتر برای تعداد بیشتر)
-        const totalColumnWidth = '150px'; // ستون جمع کل
+        // محاسبه عرض ستون‌ها - جمع و جورتر و فونت‌های بزرگتر
+        const firstColumnWidth = '160px'; // ستون عنوان هزینه (بزرگتر برای فونت درشت)
+        const billColumnWidth = calculations.length > 3 ? '100px' : '120px'; // ستون‌های بارنامه
+        const totalColumnWidth = '170px'; // ستون جمع کل (بزرگتر برای اعداد)
 
         return (
             <div className="mb-6">
-                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '20px', fontWeight: 'bold' }}>
                     {title}
                 </h3>
-                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
                     <table className="w-full border-collapse mb-3" style={{ 
-                        fontSize: '14px', 
+                        fontSize: '16px', 
                         fontFamily: 'Vazirmatn, Arial, sans-serif', 
                         tableLayout: 'fixed', 
                         width: '100%', 
+                        maxWidth: '100%',
                         borderCollapse: 'collapse', 
-                        border: '2px solid #1e293b',
-                        minWidth: `${parseInt(firstColumnWidth) + (calculations.length * parseInt(billColumnWidth)) + parseInt(totalColumnWidth)}px`
+                        border: '2px solid #1e293b'
                     }}>
                         <thead>
                             <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
                                 <th rowSpan={2} className="text-center" style={{ 
-                                    fontSize: '15px', 
+                                    fontSize: '17px', 
                                     fontWeight: 'bold', 
-                                    padding: '10px 8px', 
+                                    padding: '12px 10px', 
                                     border: '1px solid #475569', 
                                     textAlign: 'center', 
                                     verticalAlign: 'middle', 
@@ -412,9 +412,9 @@ const renderInvoiceLayout1 = (
                                     عنوان هزینه
                                 </th>
                                 <th colSpan={calculations.length} className="text-center" style={{ 
-                                    fontSize: '15px', 
+                                    fontSize: '17px', 
                                     fontWeight: 'bold', 
-                                    padding: '10px 8px', 
+                                    padding: '12px 10px', 
                                     border: '1px solid #475569', 
                                     textAlign: 'center', 
                                     verticalAlign: 'middle' 
@@ -422,9 +422,9 @@ const renderInvoiceLayout1 = (
                                     شماره بارنامه
                                 </th>
                                 <th rowSpan={2} className="text-center font-bold" style={{ 
-                                    fontSize: '16px', 
+                                    fontSize: '18px', 
                                     fontWeight: 'bold', 
-                                    padding: '10px 8px', 
+                                    padding: '12px 10px', 
                                     border: '1px solid #475569', 
                                     textAlign: 'center', 
                                     verticalAlign: 'middle', 
@@ -439,9 +439,9 @@ const renderInvoiceLayout1 = (
                                     const billNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
                                     return (
                                         <th key={idx} className="text-center" style={{ 
-                                            fontSize: '13px', 
+                                            fontSize: '15px', 
                                             fontWeight: 'bold', 
-                                            padding: '8px 4px', 
+                                            padding: '10px 6px', 
                                             border: '1px solid #475569', 
                                             textAlign: 'center', 
                                             verticalAlign: 'middle', 
@@ -460,8 +460,8 @@ const renderInvoiceLayout1 = (
                             {costRows.map((row, rowIdx) => (
                                 <tr key={row.key} className={row.isTotal ? "bg-slate-100 font-bold" : "border-b border-slate-300"}>
                                     <td className="text-right font-semibold" style={{ 
-                                        fontSize: row.isTotal ? '16px' : '14px', 
-                                        padding: '10px 8px', 
+                                        fontSize: row.isTotal ? '18px' : '16px', 
+                                        padding: '12px 10px', 
                                         border: '1px solid #cbd5e1', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
@@ -478,8 +478,8 @@ const renderInvoiceLayout1 = (
                                         const value = row.getValue(calc);
                                         return (
                                             <td key={calcIdx} className="text-center" style={{ 
-                                                fontSize: row.isTotal ? '16px' : '14px', 
-                                                padding: '10px 6px', 
+                                                fontSize: row.isTotal ? '18px' : '16px', 
+                                                padding: '12px 8px', 
                                                 border: '1px solid #cbd5e1', 
                                                 textAlign: 'center', 
                                                 verticalAlign: 'middle',
@@ -495,8 +495,8 @@ const renderInvoiceLayout1 = (
                                         );
                                     })}
                                     <td className="text-center font-bold" style={{ 
-                                        fontSize: '16px', 
-                                        padding: '10px 8px', 
+                                        fontSize: '18px', 
+                                        padding: '12px 10px', 
                                         border: '1px solid #cbd5e1', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
@@ -530,32 +530,32 @@ const renderInvoiceLayout1 = (
             { key: 'total', label: 'جمع کل', getValue: (calc: any) => calculateHelperDriverCostGlobal(calc), isTotal: true },
         ];
 
-        // محاسبه عرض ستون‌ها - جمع و جورتر
-        const firstColumnWidth = '160px'; // ستون عنوان هزینه (بزرگتر برای راننده کمکی)
-        const billColumnWidth = calculations.length > 5 ? '80px' : '90px';
-        const totalColumnWidth = '150px';
+        // محاسبه عرض ستون‌ها - جمع و جورتر و فونت‌های بزرگتر
+        const firstColumnWidth = '180px'; // ستون عنوان هزینه (بزرگتر برای راننده کمکی)
+        const billColumnWidth = calculations.length > 3 ? '100px' : '120px';
+        const totalColumnWidth = '170px';
 
         return (
             <div className="mb-6">
-                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '20px', fontWeight: 'bold' }}>
                     راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
                 </h3>
-                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
                     <table className="w-full border-collapse mb-3" style={{ 
-                        fontSize: '14px', 
+                        fontSize: '16px', 
                         fontFamily: 'Vazirmatn, Arial, sans-serif', 
                         tableLayout: 'fixed', 
                         width: '100%', 
+                        maxWidth: '100%',
                         borderCollapse: 'collapse', 
-                        border: '2px solid #1e293b',
-                        minWidth: `${parseInt(firstColumnWidth) + (calculations.length * parseInt(billColumnWidth)) + parseInt(totalColumnWidth)}px`
+                        border: '2px solid #1e293b'
                     }}>
                         <thead>
                             <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
                                 <th rowSpan={2} className="text-center" style={{ 
-                                    fontSize: '15px', 
+                                    fontSize: '17px', 
                                     fontWeight: 'bold', 
-                                    padding: '10px 8px', 
+                                    padding: '12px 10px', 
                                     border: '1px solid #475569', 
                                     textAlign: 'center', 
                                     verticalAlign: 'middle', 
@@ -568,9 +568,9 @@ const renderInvoiceLayout1 = (
                                     عنوان هزینه
                                 </th>
                                 <th colSpan={calculations.length} className="text-center" style={{ 
-                                    fontSize: '15px', 
+                                    fontSize: '17px', 
                                     fontWeight: 'bold', 
-                                    padding: '10px 8px', 
+                                    padding: '12px 10px', 
                                     border: '1px solid #475569', 
                                     textAlign: 'center', 
                                     verticalAlign: 'middle' 
@@ -578,9 +578,9 @@ const renderInvoiceLayout1 = (
                                     شماره بارنامه
                                 </th>
                                 <th rowSpan={2} className="text-center font-bold" style={{ 
-                                    fontSize: '16px', 
+                                    fontSize: '18px', 
                                     fontWeight: 'bold', 
-                                    padding: '10px 8px', 
+                                    padding: '12px 10px', 
                                     border: '1px solid #475569', 
                                     textAlign: 'center', 
                                     verticalAlign: 'middle', 
@@ -595,9 +595,9 @@ const renderInvoiceLayout1 = (
                                     const billNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
                                     return (
                                         <th key={idx} className="text-center" style={{ 
-                                            fontSize: '13px', 
+                                            fontSize: '15px', 
                                             fontWeight: 'bold', 
-                                            padding: '8px 4px', 
+                                            padding: '10px 6px', 
                                             border: '1px solid #475569', 
                                             textAlign: 'center', 
                                             verticalAlign: 'middle', 
@@ -616,8 +616,8 @@ const renderInvoiceLayout1 = (
                             {costRows.map((row, rowIdx) => (
                                 <tr key={row.key} className={row.isTotal ? "bg-slate-100 font-bold" : "border-b border-slate-300"}>
                                     <td className="text-right font-semibold" style={{ 
-                                        fontSize: row.isTotal ? '16px' : '14px', 
-                                        padding: '10px 8px', 
+                                        fontSize: row.isTotal ? '18px' : '16px', 
+                                        padding: '12px 10px', 
                                         border: '1px solid #cbd5e1', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
@@ -634,8 +634,8 @@ const renderInvoiceLayout1 = (
                                         const value = row.getValue(calc);
                                         return (
                                             <td key={calcIdx} className="text-center" style={{ 
-                                                fontSize: row.isTotal ? '16px' : '14px', 
-                                                padding: '10px 6px', 
+                                                fontSize: row.isTotal ? '18px' : '16px', 
+                                                padding: '12px 8px', 
                                                 border: '1px solid #cbd5e1', 
                                                 textAlign: 'center', 
                                                 verticalAlign: 'middle',
@@ -651,8 +651,8 @@ const renderInvoiceLayout1 = (
                                         );
                                     })}
                                     <td className="text-center font-bold" style={{ 
-                                        fontSize: '16px', 
-                                        padding: '10px 8px', 
+                                        fontSize: '18px', 
+                                        padding: '12px 10px', 
                                         border: '1px solid #cbd5e1', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
@@ -2414,10 +2414,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 }
                 // textAlign و verticalAlign را فقط اگر تعریف نشده باشد تنظیم کن
                 if (!cellEl.style.textAlign || cellEl.style.textAlign === '') {
-                    cellEl.style.textAlign = 'center';
+                cellEl.style.textAlign = 'center';
                 }
                 if (!cellEl.style.verticalAlign || cellEl.style.verticalAlign === '') {
-                    cellEl.style.verticalAlign = 'middle';
+                cellEl.style.verticalAlign = 'middle';
                 }
                 // حفظ fontSize از JSX - override نکن
             });
