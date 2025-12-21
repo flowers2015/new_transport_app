@@ -860,7 +860,8 @@ async function createFreightAnnouncement(req, res) {
     }
 
     // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی
-    const { userId, role } = req.user;
+    const userId = req.user?.id || req.user?.userId;
+    const role = req.user?.role;
     if (role === 'planner' || role === 'کارمند برنامه‌ریزی' || role === 'PlanningEmployee' || role === 'planning_employee') {
       // تبدیل lineType به فرمت استاندارد
       let normalizedLineType = lineType;
@@ -908,8 +909,7 @@ async function createFreightAnnouncement(req, res) {
       ? destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0)
       : 0;
 
-    // Get user ID from request (set by authMiddleware)
-    const userId = req.user?.id || req.user?.userId;
+    // userId already extracted from req.user above (line 863)
     
     const insertAnnouncementQuery = `
       INSERT INTO freight_announcements (
