@@ -127,9 +127,9 @@ const renderInvoiceLayout1 = (
                                 <th colSpan={2} className="text-center" style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.8', width: '6%', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>ماموریت<br/>(روز)</th>
                                 <th colSpan={7} className="text-center" style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.8', width: '24%', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>هزینه‌های<br/>مستقیم<br/>(ریال)</th>
                                 <th colSpan={5} className="text-center" style={{ fontSize: '11px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.8', width: '22%', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>هزینه‌های<br/>دپو</th>
-                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '5.5%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '4px', paddingRight: '4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>پیمایش<br/>کل<br/>(کیلومتر)</th>
-                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '6%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '4px', paddingRight: '4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>اجرت<br/>کل تور<br/>(ریال)</th>
-                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '6.5%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '4px', paddingRight: '4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>جمع کل<br/>هزینه<br/>(ریال)</th>
+                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '6%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '5px', paddingRight: '5px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>پیمایش<br/>کل<br/>(کیلومتر)</th>
+                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '7%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '5px', paddingRight: '5px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>اجرت<br/>کل تور<br/>(ریال)</th>
+                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '9%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '6px', paddingRight: '6px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>جمع کل<br/>هزینه<br/>(ریال)</th>
                             </tr>
                             <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
                                 <th className="text-center" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>مصوب</th>
@@ -243,15 +243,15 @@ const renderInvoiceLayout1 = (
                                             {depotMissionCost.toLocaleString('fa-IR')}
                                         </td>
                                         {/* پیمایش کل */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 5px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box' }}>
                                             {totalMileage.toLocaleString('fa-IR')}
                                         </td>
                                         {/* اجرت کل تور (فقط برای اجرت ثابت) */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 5px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box' }}>
                                             {isFixedAllowance ? fixedAllowance.toLocaleString('fa-IR') : '-'}
                                         </td>
                                         {/* جمع کل هزینه */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 6px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box', minWidth: '80px' }}>
                                             {mainCost.toLocaleString('fa-IR')}
                                         </td>
                                     </tr>
@@ -316,7 +316,7 @@ const renderInvoiceLayout1 = (
                                     {calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)), 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل پیمایش کل */}
-                                <td className="text-center font-bold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 5px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold', boxSizing: 'border-box' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
                                         const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
@@ -325,7 +325,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل اجرت تور */}
-                                <td className="text-center font-bold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 5px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold', boxSizing: 'border-box' }}>
                                     {calculations.reduce((sum, calc) => {
                                         const queueType = calc.queue_type || calc.queueType || 'porsant';
                                         if (queueType === 'fixed_allowance') {
@@ -335,7 +335,7 @@ const renderInvoiceLayout1 = (
                                     }, 0).toLocaleString('fa-IR')}
                                 </td>
                                 {/* جمع کل هزینه */}
-                                <td className="text-center font-bold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                <td className="text-center font-bold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 6px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', fontWeight: 'bold', boxSizing: 'border-box', minWidth: '80px' }}>
                                     {(() => {
                                         const total = calculations.reduce((sum, calc) => {
                                             return sum + calculateMainDriverCostGlobal(calc);
@@ -375,7 +375,7 @@ const renderInvoiceLayout1 = (
                                 <th colSpan={2} className="p-1 border border-slate-600 text-center align-middle" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '6%', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>ماموریت<br/>(روز)</th>
                                 <th colSpan={3} className="p-1 border border-slate-600 text-center align-middle" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '20%', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>هزینه‌های<br/>راننده کمکی<br/>(ریال)</th>
                                 <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '7%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '4px', paddingRight: '4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>پیمایش<br/>مازاد<br/>راننده کمکی</th>
-                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '9px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '7%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '4px', paddingRight: '4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>جمع کل<br/>(ریال)</th>
+                                <th rowSpan={2} className="text-center font-semibold" style={{ fontSize: '10px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', width: '9%', padding: '0', paddingTop: '15px', paddingBottom: '5px', paddingLeft: '6px', paddingRight: '6px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'top', height: '70px', display: 'table-cell', boxSizing: 'border-box' }}>جمع کل<br/>(ریال)</th>
                             </tr>
                             <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
                                 <th className="p-1 border border-slate-600 text-center align-middle" style={{ fontSize: '8px', fontWeight: 'bold', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.5', padding: '8px 4px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>مصوب</th>
@@ -440,7 +440,7 @@ const renderInvoiceLayout1 = (
                                             {(calc.helper_driver_excess_kilometers || calc.helperDriverExcessKilometers || 0).toLocaleString('fa-IR')}
                                         </td>
                                         {/* جمع کل */}
-                                        <td className="text-center font-semibold" style={{ fontSize: '9px', whiteSpace: 'nowrap', lineHeight: '1.4', padding: '8px 4px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                                        <td className="text-center font-semibold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 6px', border: '1px solid #cbd5e1', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', boxSizing: 'border-box', minWidth: '80px' }}>
                                             {helperCost.toLocaleString('fa-IR')}
                                         </td>
                                     </tr>
@@ -452,7 +452,7 @@ const renderInvoiceLayout1 = (
                                 <td colSpan={14} className="text-center" style={{ fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.6', padding: '10px 8px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
                                     جمع کل:
                                 </td>
-                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '8px', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2', padding: '4px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                <td className="p-1 border border-slate-300 text-center font-bold" style={{ fontSize: '10px', whiteSpace: 'nowrap', lineHeight: '1.5', padding: '10px 6px', border: '1px solid #cbd5e1', textAlign: 'center', backgroundColor: '#f1f5f9', fontWeight: 'bold', minWidth: '80px' }}>
                                     {(() => {
                                         const total = calculations.reduce((sum, calc) => {
                                             return sum + calculateHelperDriverCostGlobal(calc);
