@@ -1432,16 +1432,6 @@ const AnnouncementPanel: React.FC<{
                     rawData: data
                 });
                 setLineType(data.lineType);
-            } else { // Create mode
-                // اگر کارمند برنامه‌ریزی است و مجوزها محدود است، به اولین لاین مجاز برو
-                if (currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی')) {
-                    if (allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
-                        if (!allowedLineTypes.includes(lineType as any)) {
-                            setLineType(allowedLineTypes[0]);
-                        }
-                    }
-                }
-            }
                 // Check if loadingDate is already in Jalali format or needs conversion
                 let loadingDateStr;
                 
