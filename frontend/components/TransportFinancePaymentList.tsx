@@ -2112,7 +2112,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             // اعمال استایل‌های نهایی
             invoiceDiv.style.width = '100%';
             invoiceDiv.style.maxWidth = '100%';
-            invoiceDiv.style.overflow = 'hidden';
+            invoiceDiv.style.overflowX = 'visible';
+            invoiceDiv.style.overflowY = 'visible';
             invoiceDiv.style.backgroundColor = '#ffffff';
             
             if (!invoiceDiv || invoiceDiv === tempDiv) {
@@ -2167,7 +2168,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             clonedDiv.style.overflowX = 'visible';
                             clonedDiv.style.overflowY = 'visible';
                             
-                            // اعمال استایل‌های جدول
+                            // اعمال استایل‌های جدول - بدون override کردن fontSize تا استایل‌های inline حفظ شوند
                             const clonedTables = clonedDiv.querySelectorAll('table');
                             clonedTables.forEach((table) => {
                                 const tableEl = table as HTMLElement;
@@ -2175,7 +2176,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 tableEl.style.minWidth = '100%';
                                 tableEl.style.tableLayout = 'fixed';
                                 tableEl.style.borderCollapse = 'collapse';
-                                tableEl.style.fontSize = '11px';
+                                // حذف override کردن fontSize تا استایل‌های inline از JSX حفظ شوند
+                                // tableEl.style.fontSize = '11px'; // این خط باعث override شدن فونت‌های بزرگتر می‌شد
                                 tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
                             });
                             
@@ -2212,7 +2214,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 });
                             });
                             
-                            // اعمال استایل‌های سلول‌ها (td و th)
+                            // اعمال استایل‌های سلول‌ها (td و th) - بدون override کردن fontSize
                             const clonedCells = clonedDiv.querySelectorAll('td, th');
                             clonedCells.forEach((cell) => {
                                 const cellEl = cell as HTMLElement;
@@ -2221,25 +2223,26 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 const rowSpan = cellEl.getAttribute('rowspan');
                                 if (cellEl.tagName === 'TH' && rowSpan === '2') {
                                     // برای headerهای rowspan=2، padding بیشتر و height ثابت
+                                    // حذف override کردن fontSize تا استایل‌های inline حفظ شوند
                                     cellEl.style.padding = '0';
                                     cellEl.style.paddingTop = '15px';
                                     cellEl.style.paddingBottom = '5px';
-                                    cellEl.style.paddingLeft = '6px';
-                                    cellEl.style.paddingRight = '6px';
+                                    cellEl.style.paddingLeft = '8px';
+                                    cellEl.style.paddingRight = '8px';
                                     cellEl.style.height = '70px';
-                                    cellEl.style.fontSize = '11px';
+                                    // cellEl.style.fontSize = '11px'; // حذف شد - استایل inline حفظ می‌شود
                                     cellEl.style.lineHeight = '1.8';
                                     cellEl.style.verticalAlign = 'top';
                                     cellEl.style.display = 'table-cell';
                                 } else if (cellEl.tagName === 'TH') {
                                     // برای headerهای عادی
-                                    cellEl.style.padding = '8px 4px';
-                                    cellEl.style.fontSize = '10px';
+                                    cellEl.style.padding = '10px 6px';
+                                    // cellEl.style.fontSize = '10px'; // حذف شد - استایل inline حفظ می‌شود
                                     cellEl.style.verticalAlign = 'middle';
                                 } else {
                                     // برای سلول‌های داده
-                                    cellEl.style.padding = '10px 8px';
-                                    cellEl.style.fontSize = '11px';
+                                    cellEl.style.padding = '12px 10px';
+                                    // cellEl.style.fontSize = '11px'; // حذف شد - استایل inline حفظ می‌شود
                                     cellEl.style.lineHeight = '1.6';
                                     cellEl.style.verticalAlign = 'middle';
                                     cellEl.style.boxSizing = 'border-box';
