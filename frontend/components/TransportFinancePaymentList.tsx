@@ -351,7 +351,206 @@ const renderInvoiceLayout1 = (
         );
     };
 
-    // تابع برای ساخت جدول راننده کمکی (روش 1)
+    // تابع برای ساخت جدول راننده اصلی با ساختار ستونی (هزینه‌ها در ردیف، بارنامه‌ها در ستون)
+    const renderMainDriverTableLayoutVertical = (calculations: any[], title: string, invoiceAnnouncements: Map<string, any>) => {
+        if (calculations.length === 0) return null;
+
+        // تعریف ردیف‌های هزینه
+        const costRows = [
+            { key: 'bill_of_lading', label: 'بارنامه', getValue: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0) },
+            { key: 'food', label: 'غذا', getValue: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0) },
+            { key: 'fuel', label: 'سوخت', getValue: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0) },
+            { key: 'toll', label: 'عوارض', getValue: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0) },
+            { key: 'return_cargo', label: 'بار برگشتی', getValue: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0) },
+            { key: 'multi_unload', label: 'چندجا تخلیه', getValue: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0) },
+            { key: 'excess_mission', label: 'ماموریت مازاد', getValue: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0) },
+            { key: 'depot_cargo_handling', label: 'جابجایی بار دپو', getValue: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0) },
+            { key: 'depot_mission', label: 'حق ماموریت دپو', getValue: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0) },
+            { key: 'depot_allowance', label: 'اجرت دپو', getValue: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0) },
+            { key: 'fixed_allowance', label: 'اجرت ثابت', getValue: (calc: any) => {
+                const queueType = calc.queue_type || calc.queueType || 'porsant';
+                return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0;
+            }},
+            { key: 'total', label: 'جمع کل', getValue: (calc: any) => calculateMainDriverCostGlobal(calc), isTotal: true },
+        ];
+
+        return (
+            <div className="mb-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '16px' }}>
+                    {title}
+                </h3>
+                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+                    <table className="w-full border-collapse mb-3" style={{ fontSize: '13px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'auto', width: '100%', borderCollapse: 'collapse', border: '2px solid #1e293b' }}>
+                        <thead>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                <th rowSpan={2} className="text-center" style={{ fontSize: '13px', fontWeight: 'bold', padding: '12px 10px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle', width: '120px', position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#1e293b' }}>عنوان هزینه</th>
+                                <th colSpan={calculations.length} className="text-center" style={{ fontSize: '13px', fontWeight: 'bold', padding: '12px 8px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>شماره بارنامه</th>
+                                <th rowSpan={2} className="text-center font-bold" style={{ fontSize: '15px', fontWeight: 'bold', padding: '14px 12px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', minWidth: '180px' }}>جمع کل</th>
+                            </tr>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                {calculations.map((calc, idx) => {
+                                    const announcementId = calc.announcement_id || calc.announcementId;
+                                    const announcement = invoiceAnnouncements.get(announcementId);
+                                    const billNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                                    return (
+                                        <th key={idx} className="text-center" style={{ fontSize: '12px', fontWeight: 'bold', padding: '10px 6px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle', minWidth: '100px', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+                                            {billNumber}
+                                        </th>
+                                    );
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {costRows.map((row, rowIdx) => (
+                                <tr key={row.key} className={row.isTotal ? "bg-slate-100 font-bold" : "border-b border-slate-300"}>
+                                    <td className="text-right font-semibold" style={{ 
+                                        fontSize: row.isTotal ? '15px' : '13px', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #cbd5e1', 
+                                        textAlign: 'right', 
+                                        verticalAlign: 'middle',
+                                        fontWeight: row.isTotal ? 'bold' : 'semibold',
+                                        position: 'sticky',
+                                        left: 0,
+                                        zIndex: 5,
+                                        backgroundColor: row.isTotal ? '#f1f5f9' : 'white'
+                                    }}>
+                                        {row.label}
+                                    </td>
+                                    {calculations.map((calc, calcIdx) => {
+                                        const value = row.getValue(calc);
+                                        return (
+                                            <td key={calcIdx} className="text-center" style={{ 
+                                                fontSize: row.isTotal ? '15px' : '13px', 
+                                                padding: '12px 10px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : 'normal',
+                                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white'
+                                            }}>
+                                                {value > 0 || row.isTotal ? value.toLocaleString('fa-IR') : '-'}
+                                            </td>
+                                        );
+                                    })}
+                                    <td className="text-center font-bold" style={{ 
+                                        fontSize: '15px', 
+                                        padding: '14px 12px', 
+                                        border: '1px solid #cbd5e1', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        fontWeight: 'bold',
+                                        backgroundColor: '#f1f5f9',
+                                        minWidth: '180px'
+                                    }}>
+                                        {(() => {
+                                            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+                                            return total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-';
+                                        })()}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    // تابع برای ساخت جدول راننده کمکی با ساختار ستونی (هزینه‌ها در ردیف، بارنامه‌ها در ستون)
+    const renderHelperDriverTableLayoutVertical = (calculations: any[], helperEmployeeId: string, helperName: string, invoiceAnnouncements: Map<string, any>) => {
+        if (calculations.length === 0) return null;
+
+        // تعریف ردیف‌های هزینه برای راننده کمکی
+        const costRows = [
+            { key: 'helper_allowance', label: 'اجرت راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0) },
+            { key: 'helper_food', label: 'غذای راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0) },
+            { key: 'helper_excess_mission', label: 'ماموریت مازاد راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0) },
+            { key: 'total', label: 'جمع کل', getValue: (calc: any) => calculateHelperDriverCostGlobal(calc), isTotal: true },
+        ];
+
+        return (
+            <div className="mb-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '16px' }}>
+                    راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
+                </h3>
+                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+                    <table className="w-full border-collapse mb-3" style={{ fontSize: '13px', fontFamily: 'Vazirmatn, Arial, sans-serif', tableLayout: 'auto', width: '100%', borderCollapse: 'collapse', border: '2px solid #1e293b' }}>
+                        <thead>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                <th rowSpan={2} className="text-center" style={{ fontSize: '13px', fontWeight: 'bold', padding: '12px 10px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle', width: '120px', position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#1e293b' }}>عنوان هزینه</th>
+                                <th colSpan={calculations.length} className="text-center" style={{ fontSize: '13px', fontWeight: 'bold', padding: '12px 8px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle' }}>شماره بارنامه</th>
+                                <th rowSpan={2} className="text-center font-bold" style={{ fontSize: '15px', fontWeight: 'bold', padding: '14px 12px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#f1f5f9', minWidth: '180px' }}>جمع کل</th>
+                            </tr>
+                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                                {calculations.map((calc, idx) => {
+                                    const billNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                                    return (
+                                        <th key={idx} className="text-center" style={{ fontSize: '12px', fontWeight: 'bold', padding: '10px 6px', border: '1px solid #475569', textAlign: 'center', verticalAlign: 'middle', minWidth: '100px', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+                                            {billNumber}
+                                        </th>
+                                    );
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {costRows.map((row, rowIdx) => (
+                                <tr key={row.key} className={row.isTotal ? "bg-slate-100 font-bold" : "border-b border-slate-300"}>
+                                    <td className="text-right font-semibold" style={{ 
+                                        fontSize: row.isTotal ? '15px' : '13px', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #cbd5e1', 
+                                        textAlign: 'right', 
+                                        verticalAlign: 'middle',
+                                        fontWeight: row.isTotal ? 'bold' : 'semibold',
+                                        position: 'sticky',
+                                        left: 0,
+                                        zIndex: 5,
+                                        backgroundColor: row.isTotal ? '#f1f5f9' : 'white'
+                                    }}>
+                                        {row.label}
+                                    </td>
+                                    {calculations.map((calc, calcIdx) => {
+                                        const value = row.getValue(calc);
+                                        return (
+                                            <td key={calcIdx} className="text-center" style={{ 
+                                                fontSize: row.isTotal ? '15px' : '13px', 
+                                                padding: '12px 10px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : 'normal',
+                                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white'
+                                            }}>
+                                                {value > 0 || row.isTotal ? value.toLocaleString('fa-IR') : '-'}
+                                            </td>
+                                        );
+                                    })}
+                                    <td className="text-center font-bold" style={{ 
+                                        fontSize: '15px', 
+                                        padding: '14px 12px', 
+                                        border: '1px solid #cbd5e1', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        fontWeight: 'bold',
+                                        backgroundColor: '#f1f5f9',
+                                        minWidth: '180px'
+                                    }}>
+                                        {(() => {
+                                            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+                                            return total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-';
+                                        })()}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    // تابع برای ساخت جدول راننده کمکی (روش 1) - نگه داشته شده برای سازگاری
     const renderHelperDriverTableLayout1 = (calculations: any[], helperEmployeeId: string, helperName: string) => {
         if (calculations.length === 0) return null;
 
@@ -505,7 +704,7 @@ const renderInvoiceLayout1 = (
                     <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2">
                         تورهای بدون راننده کمکی
                     </h2>
-                    {renderMainDriverTableLayout1(calculationsWithoutHelper, 'هزینه‌های راننده اصلی')}
+                    {renderMainDriverTableLayoutVertical(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                 </div>
             )}
             
@@ -517,7 +716,7 @@ const renderInvoiceLayout1 = (
                     </h2>
                     
                     {/* راننده اصلی برای تورهای با راننده کمکی */}
-                    {renderMainDriverTableLayout1(calculationsWithHelper, 'هزینه‌های راننده اصلی')}
+                    {renderMainDriverTableLayoutVertical(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                     
                     {/* راننده‌های کمکی تفکیک شده بر اساس کد پرسنلی */}
                     {Array.from(helperCalculationsByEmployeeId.entries()).map(([employeeId, calcs]) => {
@@ -525,7 +724,7 @@ const renderInvoiceLayout1 = (
                         const helperName = firstCalc.helper_driver_name || firstCalc.helperDriverName || '-';
                         return (
                             <div key={employeeId}>
-                                {renderHelperDriverTableLayout1(calcs, employeeId, helperName)}
+                                {renderHelperDriverTableLayoutVertical(calcs, employeeId, helperName, invoiceAnnouncements)}
                             </div>
                         );
                     })}
