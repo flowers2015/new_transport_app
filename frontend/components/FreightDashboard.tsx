@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { FreightAnnouncement, FreightLineType, Destination, FreightAnnouncementStatus, UserRole, User, View, DispatchRouteSuggestion } from '../types';
 import { formatJalaliDateTime, formatJalali, parseJalaliDateString } from '../utils/jalali';
+import { getApiUrl } from '../utils/apiConfig';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
 import { PrinterIcon } from './icons/PrinterIcon';
@@ -470,6 +471,73 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const [routeQuery, setRouteQuery] = useState('');
     const [routeSuggestions, setRouteSuggestions] = useState<DispatchRouteSuggestion[]>([]);
     const routeSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    
+    // مجوزهای کاربر
+    const [userPermissions, setUserPermissions] = useState<{ lineType: string; permissionType: 'approval' | 'create' }[]>([]);
+    const [allowedLineTypes, setAllowedLineTypes] = useState<FreightLineType[]>([]);
+    
+    // دریافت مجوزهای کاربر
+    useEffect(() => {
+        const fetchUserPermissions = async () => {
+            if (!currentUser || currentUser.role === UserRole.Admin) {
+                // Admin همه مجوزها را دارد
+                setAllowedLineTypes([FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+                return;
+            }
+            
+            const isManager = currentUser.role === UserRole.PlanningManager || 
+                             currentUser.role === 'planner_manager' || 
+                             currentUser.role === 'مدیر برنامه‌ریزی';
+            const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
+                              currentUser.role === 'planner' || 
+                              currentUser.role === 'کارمند برنامه‌ریزی';
+            
+            if (!isManager && !isEmployee) {
+                // اگر نه مدیر و نه کارمند، همه مجوزها را دارد
+                setAllowedLineTypes([FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+                return;
+            }
+            
+            try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+                };
+                
+                const res = await fetch(getApiUrl('planning-manager-approval-permissions/permissions'), { headers });
+                if (res.ok) {
+                    const permissions = await res.json();
+                    const userPerms = permissions.filter((p: any) => p.user_id === currentUser.id);
+                    setUserPermissions(userPerms);
+                    
+                    // استخراج لاین‌های مجاز
+                    const permissionType = isManager ? 'approval' : 'create';
+                    const allowed = userPerms
+                        .filter((p: any) => p.permission_type === permissionType)
+                        .map((p: any) => {
+                            if (p.line_type === 'IceCream') return FreightLineType.IceCream;
+                            if (p.line_type === 'Dairy') return FreightLineType.Dairy;
+                            if (p.line_type === 'Ambient') return FreightLineType.Ambient;
+                            return p.line_type;
+                        })
+                        .filter((lt: any) => Object.values(FreightLineType).includes(lt));
+                    
+                    setAllowedLineTypes(allowed.length > 0 ? allowed : [FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+                    
+                    // اگر تب فعلی مجاز نیست، به اولین تب مجاز برو
+                    if (allowed.length > 0 && !allowed.includes(activeTab)) {
+                        setActiveTab(allowed[0]);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching user permissions:', error);
+                // در صورت خطا، همه مجوزها را بده
+                setAllowedLineTypes([FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+            }
+        };
+        
+        fetchUserPermissions();
+    }, [currentUser]);
 
 
     const handleOpenCreatePanel = useCallback(() => {
@@ -894,6 +962,21 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         // فیلتر بر اساس لاین فعلی
         data = data.filter(a => a.lineType === activeTab);
         
+        // فیلتر بر اساس مجوزهای کاربر (برای مدیران و کارمندان برنامه‌ریزی)
+        if (currentUser && currentUser.role !== UserRole.Admin) {
+            const isManager = currentUser.role === UserRole.PlanningManager || 
+                             currentUser.role === 'planner_manager' || 
+                             currentUser.role === 'مدیر برنامه‌ریزی';
+            const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
+                              currentUser.role === 'planner' || 
+                              currentUser.role === 'کارمند برنامه‌ریزی';
+            
+            if (isManager || isEmployee) {
+                // فقط بارهای لاین‌های مجاز را نمایش بده
+                data = data.filter(a => allowedLineTypes.includes(a.lineType as any));
+            }
+        }
+        
         if (isManager && managerView === 'approval') {
             // مدیر در حالت "در انتظار تایید": فقط PendingManagerApproval
             data = data.filter(a => a.status === FreightAnnouncementStatus.PendingManagerApproval);
@@ -1062,9 +1145,18 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                             </div>
                         </div>
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg mb-4 print:hidden">
-                            {Object.values(FreightLineType).map(lt => (
-                                <button key={lt} onClick={() => setActiveTab(lt as any)} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === lt ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>{lt}</button>
-                            ))}
+                            {Object.values(FreightLineType)
+                                .filter(lt => {
+                                    // اگر Admin است یا مجوزی تعریف نشده، همه تب‌ها را نمایش بده
+                                    if (currentUser?.role === UserRole.Admin || allowedLineTypes.length === 0 || allowedLineTypes.length === 3) {
+                                        return true;
+                                    }
+                                    // فقط تب‌های مجاز را نمایش بده
+                                    return allowedLineTypes.includes(lt as any);
+                                })
+                                .map(lt => (
+                                    <button key={lt} onClick={() => setActiveTab(lt as any)} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === lt ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>{lt}</button>
+                                ))}
                         </div>
                         {(
                         <div className="overflow-x-auto">
@@ -1196,6 +1288,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 onSaveEdit={onUpdateAnnouncement}
                 routeOptions={uniqueRouteOptions}
                 onRouteQueryChange={setRouteQuery}
+                currentUser={currentUser}
+                allowedLineTypes={allowedLineTypes}
             />
 
             {rejectInfo && <RejectDialog reason={rejectInfo.reason} onReasonChange={(r) => setRejectInfo({...rejectInfo, reason: r})} onClose={handleCloseRejectDialog} onSubmit={handleRejectSubmit} />}
@@ -1253,7 +1347,9 @@ const AnnouncementPanel: React.FC<{
     onSaveEdit: (data: FreightAnnouncement) => void;
     routeOptions: DispatchRouteSuggestion[];
     onRouteQueryChange: (value: string) => void;
-}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange }) => {
+    currentUser?: User;
+    allowedLineTypes?: FreightLineType[];
+}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [] }) => {
     const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: '', vehicleType: '', notes: '' };
@@ -1336,6 +1432,16 @@ const AnnouncementPanel: React.FC<{
                     rawData: data
                 });
                 setLineType(data.lineType);
+            } else { // Create mode
+                // اگر کارمند برنامه‌ریزی است و مجوزها محدود است، به اولین لاین مجاز برو
+                if (currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی')) {
+                    if (allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
+                        if (!allowedLineTypes.includes(lineType as any)) {
+                            setLineType(allowedLineTypes[0]);
+                        }
+                    }
+                }
+            }
                 // Check if loadingDate is already in Jalali format or needs conversion
                 let loadingDateStr;
                 
@@ -1450,9 +1556,17 @@ const AnnouncementPanel: React.FC<{
                 }
             } else { // Create mode: ensure form is clear
                 resetForm();
+                // اگر کارمند برنامه‌ریزی است و مجوزها محدود است، به اولین لاین مجاز برو
+                if (currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی')) {
+                    if (allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
+                        if (!allowedLineTypes.includes(lineType as any)) {
+                            setLineType(allowedLineTypes[0]);
+                        }
+                    }
+                }
             }
         }
-    }, [data, isOpen]);
+    }, [data, isOpen, currentUser, allowedLineTypes, lineType]);
 
     useEffect(() => {
         // Only run for new announcements and when lineType changes
@@ -1616,6 +1730,20 @@ const AnnouncementPanel: React.FC<{
             return;
         }
         
+        // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی
+        if (!isEditMode && currentUser) {
+            const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
+                              currentUser.role === 'planner' || 
+                              currentUser.role === 'کارمند برنامه‌ریزی';
+            
+            if (isEmployee && allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
+                if (!allowedLineTypes.includes(lineType as any)) {
+                    alert(`شما مجوز ایجاد اعلام بار برای لاین "${lineType}" را ندارید. لطفاً با ادمین تماس بگیرید.`);
+                    return;
+                }
+            }
+        }
+        
         const announcementData: Omit<FreightAnnouncement, 'id' | 'status' | 'announcementCode' | 'createdAt' | 'history'> = lineType === FreightLineType.IceCream
             ? { 
                 loadingDate: jalaliDate, 
@@ -1720,10 +1848,62 @@ const AnnouncementPanel: React.FC<{
                      <div>
                         <label className="font-semibold text-sm">۱. انتخاب نوع لاین</label>
                         <div className="flex flex-wrap gap-2 mt-1">
-                            {Object.values(FreightLineType).map(lt => (
-                                <button type="button" key={lt} onClick={() => setLineType(lt)} className={`px-4 py-2 rounded-lg text-sm ${lineType === lt ? 'bg-sky-600 text-white' : 'bg-slate-200'}`}>{lt}</button>
-                            ))}
+                            {Object.values(FreightLineType)
+                                .filter(lt => {
+                                    // اگر Admin است یا مجوزی تعریف نشده، همه لاین‌ها را نمایش بده
+                                    if (!currentUser || currentUser.role === UserRole.Admin || allowedLineTypes.length === 0 || allowedLineTypes.length === 3) {
+                                        return true;
+                                    }
+                                    // برای کارمندان برنامه‌ریزی: فقط لاین‌های مجاز را نمایش بده
+                                    const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
+                                                      currentUser.role === 'planner' || 
+                                                      currentUser.role === 'کارمند برنامه‌ریزی';
+                                    if (isEmployee) {
+                                        return allowedLineTypes.includes(lt as any);
+                                    }
+                                    // برای مدیران و سایر نقش‌ها: همه لاین‌ها را نمایش بده
+                                    return true;
+                                })
+                                .map(lt => {
+                                    const isAllowed = !currentUser || 
+                                                     currentUser.role === UserRole.Admin || 
+                                                     allowedLineTypes.length === 0 || 
+                                                     allowedLineTypes.length === 3 ||
+                                                     allowedLineTypes.includes(lt as any);
+                                    const isEmployee = currentUser && (
+                                        currentUser.role === UserRole.PlanningEmployee || 
+                                        currentUser.role === 'planner' || 
+                                        currentUser.role === 'کارمند برنامه‌ریزی'
+                                    );
+                                    const isDisabled = isEmployee && !isAllowed;
+                                    
+                                    return (
+                                        <button 
+                                            type="button" 
+                                            key={lt} 
+                                            onClick={() => {
+                                                if (!isDisabled) setLineType(lt);
+                                            }} 
+                                            disabled={isDisabled}
+                                            className={`px-4 py-2 rounded-lg text-sm ${
+                                                lineType === lt 
+                                                    ? 'bg-sky-600 text-white' 
+                                                    : isDisabled
+                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                        : 'bg-slate-200 hover:bg-slate-300'
+                                            }`}
+                                            title={isDisabled ? 'شما مجوز ایجاد اعلام بار برای این لاین را ندارید' : ''}
+                                        >
+                                            {lt}
+                                        </button>
+                                    );
+                                })}
                         </div>
+                        {currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی') && allowedLineTypes.length > 0 && allowedLineTypes.length < 3 && (
+                            <p className="text-xs text-slate-500 mt-1">
+                                فقط لاین‌های مجاز برای شما قابل انتخاب هستند
+                            </p>
+                        )}
                     </div>
 
                     <fieldset className="p-3 border rounded-lg bg-white">

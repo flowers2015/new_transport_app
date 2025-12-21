@@ -58,6 +58,7 @@ const UserManagement = React.lazy(() => import('./components/UserManagement'));
 const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
 const AdminResourceManagement = React.lazy(() => import('./components/AdminResourceManagement'));
 const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
+const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
@@ -638,6 +639,10 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.FinalizePermissionManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <FinalizePermissionManagement currentUser={currentUser} />;
+            case View.PlanningManagerApprovalPermissionManagement:
+                console.log('[App] Render view:', View.PlanningManagerApprovalPermissionManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <PlanningManagerApprovalPermissionManagement />;
             
             // Add cases for other views here as they are implemented
             // e.g., case View.InvoiceDetail: ...

@@ -859,6 +859,46 @@ async function createFreightAnnouncement(req, res) {
       return res.status(400).json({ message: 'loadingDate, lineType and vehicleType are required.' });
     }
 
+    // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی
+    const { userId, role } = req.user;
+    if (role === 'planner' || role === 'کارمند برنامه‌ریزی' || role === 'PlanningEmployee' || role === 'planning_employee') {
+      // تبدیل lineType به فرمت استاندارد
+      let normalizedLineType = lineType;
+      if (lineType === 'بستنی' || lineType === 'IceCream') {
+        normalizedLineType = 'IceCream';
+      } else if (lineType === 'پاستوریزه' || lineType === 'Dairy') {
+        normalizedLineType = 'Dairy';
+      } else if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') {
+        normalizedLineType = 'Ambient';
+      }
+      
+      // بررسی وجود جدول
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'planning_manager_approval_permissions'
+        );
+      `);
+      
+      if (tableCheck.rows[0].exists) {
+        // بررسی مجوز
+        const permissionCheck = await pool.query(`
+          SELECT COUNT(*) as count
+          FROM planning_manager_approval_permissions
+          WHERE user_id = $1 AND line_type = $2 AND permission_type = 'create'
+        `, [userId, normalizedLineType]);
+        
+        const hasPermission = parseInt(permissionCheck.rows[0].count) > 0;
+        
+        if (!hasPermission) {
+          return res.status(403).json({ 
+            message: `شما مجوز ایجاد اعلام بار برای لاین "${lineType}" را ندارید. لطفاً با ادمین تماس بگیرید.` 
+          });
+        }
+      }
+    }
+
     const id = crypto.randomUUID();
     const announcementCode = `ANN-${Date.now()}`;
     const status = isDraft ? 'Draft' : 'PendingManagerApproval';
@@ -1149,7 +1189,7 @@ async function createFreightAnnouncement(req, res) {
 // POST /:id/approve
 async function approveAnnouncement(req, res) {
   const { id: announcementId } = req.params;
-  const { userId, name, username } = req.user;
+  const { userId, name, username, role } = req.user;
   const userName = username 
     ? (name ? `${username} - ${name}` : username)
     : (name || 'مدیر');
@@ -1169,6 +1209,46 @@ async function approveAnnouncement(req, res) {
     }
     
     const { line_type: lineType, status: oldStatus, announcement_code: code } = rows[0];
+    
+    // بررسی مجوز تاییدیه برای مدیران برنامه‌ریزی (غیر از admin)
+    if (role === 'planner_manager' || role === 'مدیر برنامه‌ریزی' || role === 'PlanningManager' || role === 'planning_manager') {
+      // تبدیل lineType به فرمت استاندارد
+      let normalizedLineType = lineType;
+      if (lineType === 'بستنی' || lineType === 'IceCream') {
+        normalizedLineType = 'IceCream';
+      } else if (lineType === 'پاستوریزه' || lineType === 'Dairy') {
+        normalizedLineType = 'Dairy';
+      } else if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') {
+        normalizedLineType = 'Ambient';
+      }
+      
+      // بررسی وجود جدول
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'planning_manager_approval_permissions'
+        );
+      `);
+      
+      if (tableCheck.rows[0].exists) {
+        // بررسی مجوز
+        const permissionCheck = await client.query(`
+          SELECT COUNT(*) as count
+          FROM planning_manager_approval_permissions
+          WHERE user_id = $1 AND line_type = $2
+        `, [userId, normalizedLineType]);
+        
+        const hasPermission = parseInt(permissionCheck.rows[0].count) > 0;
+        
+        if (!hasPermission) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ 
+            message: `شما مجوز تاییدیه برای لاین "${lineType}" را ندارید. لطفاً با ادمین تماس بگیرید.` 
+          });
+        }
+      }
+    }
     
     // گرفتن مقاصد برای نمایش در توضیحات
     const destRows = await client.query(

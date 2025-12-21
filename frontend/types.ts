@@ -46,6 +46,7 @@ export enum View {
     FreightManagement = 'freight-management',
     AdminResourceManagement = 'admin-resource-management',
     FinalizePermissionManagement = 'finalize-permission-management',
+    PlanningManagerApprovalPermissionManagement = 'planning-manager-approval-permission-management',
 }
 
 export enum UserRole {
