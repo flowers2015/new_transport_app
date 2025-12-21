@@ -118,6 +118,7 @@ async function getApprovalPermissions(req, res) {
         pmap.username,
         pmap.full_name,
         pmap.line_type,
+        pmap.permission_type,
         pmap.created_at,
         pmap.updated_at,
         u.role
