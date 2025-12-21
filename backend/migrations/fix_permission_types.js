@@ -36,9 +36,24 @@ async function fixPermissionTypes() {
       return;
     }
     
+    // بررسی اینکه کدام ستون name وجود دارد
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('name', 'full_name')
+    `);
+    
+    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
+    const nameColumn = hasFullName ? 'full_name' : 'name';
+    
     // دریافت لیست مدیران برنامه‌ریزی
     const managersResult = await client.query(`
-      SELECT id, username, full_name, role 
+      SELECT 
+        id, 
+        username, 
+        ${nameColumn} as full_name, 
+        role 
       FROM users 
       WHERE role IN ('planner_manager', 'مدیر برنامه‌ریزی', 'PlanningManager', 'planning_manager')
     `);
@@ -68,7 +83,11 @@ async function fixPermissionTypes() {
     
     // دریافت لیست کارمندان برنامه‌ریزی
     const employeesResult = await client.query(`
-      SELECT id, username, full_name, role 
+      SELECT 
+        id, 
+        username, 
+        ${nameColumn} as full_name, 
+        role 
       FROM users 
       WHERE role IN ('planner', 'کارمند برنامه‌ریزی', 'PlanningEmployee', 'planning_employee')
     `);
