@@ -355,7 +355,7 @@ const renderInvoiceLayout1 = (
     const renderMainDriverTableLayoutVertical = (calculations: any[], title: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
-        // تعریف ردیف‌های هزینه با دسته‌بندی: دسته‌بندی | شرح | تعداد | مبلغ واحد | مبلغ کل
+        // تعریف ردیف‌های هزینه با دسته‌بندی: دسته‌بندی | شرح | مبلغ واحد | مبلغ کل
         const costRows = [
             // هزینه‌های مستقیم
             { 
@@ -500,7 +500,18 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '40%'
+                                        width: '25%'
+                                    }}>
+                                        دسته‌بندی
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'right', 
+                                        verticalAlign: 'middle',
+                                        width: '30%'
                                     }}>
                                         شرح هزینه
                                     </th>
@@ -511,18 +522,7 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '15%'
-                                    }}>
-                                        تعداد
-                                    </th>
-                                    <th style={{ 
-                                        fontSize: '18px', 
-                                        fontWeight: 'bold', 
-                                        padding: '12px 10px', 
-                                        border: '1px solid #1e3a8a', 
-                                        textAlign: 'center', 
-                                        verticalAlign: 'middle',
-                                        width: '20%'
+                                        width: '22%'
                                     }}>
                                         مبلغ واحد
                                     </th>
@@ -533,7 +533,7 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '25%',
+                                        width: '23%',
                                         backgroundColor: '#f1f5f9'
                                     }}>
                                         مبلغ کل
@@ -559,24 +559,20 @@ const renderInvoiceLayout1 = (
                                                 textAlign: 'right', 
                                                 verticalAlign: 'middle',
                                                 fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#1e293b' : '#334155'
+                                                color: row.isTotal ? '#1e293b' : '#64748b'
                                             }}>
-                                                <div style={{ marginBottom: row.isTotal ? '0' : '4px', fontSize: '16px', color: '#64748b', fontWeight: '500' }}>
-                                                    {row.isTotal ? '' : row.category}
-                                                </div>
-                                                <div style={{ fontSize: row.isTotal ? '20px' : '18px', fontWeight: row.isTotal ? 'bold' : '600' }}>
-                                                    {row.label}
-                                                </div>
+                                                {row.isTotal ? '' : row.category}
                                             </td>
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
                                                 padding: '10px 12px', 
                                                 border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
+                                                textAlign: 'right', 
                                                 verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal'
+                                                fontWeight: row.isTotal ? 'bold' : '600',
+                                                color: row.isTotal ? '#1e293b' : '#334155'
                                             }}>
-                                                {row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}
+                                                {row.label}
                                             </td>
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
@@ -641,11 +637,7 @@ const renderInvoiceLayout1 = (
                                 }}>
                                     {row.label}
                                 </div>
-                                <div className="grid grid-cols-3 gap-2" style={{ fontSize: '16px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
-                                    <div>
-                                        <div style={{ color: '#64748b', fontSize: '14px' }}>تعداد</div>
-                                        <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}</div>
-                                    </div>
+                                <div className="grid grid-cols-2 gap-2" style={{ fontSize: '16px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ واحد</div>
                                         <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}</div>
@@ -737,7 +729,18 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '40%'
+                                        width: '25%'
+                                    }}>
+                                        دسته‌بندی
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'right', 
+                                        verticalAlign: 'middle',
+                                        width: '30%'
                                     }}>
                                         شرح هزینه
                                     </th>
@@ -748,18 +751,7 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '15%'
-                                    }}>
-                                        تعداد
-                                    </th>
-                                    <th style={{ 
-                                        fontSize: '18px', 
-                                        fontWeight: 'bold', 
-                                        padding: '12px 10px', 
-                                        border: '1px solid #1e3a8a', 
-                                        textAlign: 'center', 
-                                        verticalAlign: 'middle',
-                                        width: '20%'
+                                        width: '22%'
                                     }}>
                                         مبلغ واحد
                                     </th>
@@ -770,7 +762,7 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '25%',
+                                        width: '23%',
                                         backgroundColor: '#f1f5f9'
                                     }}>
                                         مبلغ کل
@@ -796,24 +788,20 @@ const renderInvoiceLayout1 = (
                                                 textAlign: 'right', 
                                                 verticalAlign: 'middle',
                                                 fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#1e293b' : '#334155'
+                                                color: row.isTotal ? '#1e293b' : '#64748b'
                                             }}>
-                                                <div style={{ marginBottom: row.isTotal ? '0' : '4px', fontSize: '16px', color: '#64748b', fontWeight: '500' }}>
-                                                    {row.isTotal ? '' : row.category}
-                                                </div>
-                                                <div style={{ fontSize: row.isTotal ? '20px' : '18px', fontWeight: row.isTotal ? 'bold' : '600' }}>
-                                                    {row.label}
-                                                </div>
+                                                {row.isTotal ? '' : row.category}
                                             </td>
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
                                                 padding: '10px 12px', 
                                                 border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
+                                                textAlign: 'right', 
                                                 verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal'
+                                                fontWeight: row.isTotal ? 'bold' : '600',
+                                                color: row.isTotal ? '#1e293b' : '#334155'
                                             }}>
-                                                {row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}
+                                                {row.label}
                                             </td>
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
@@ -878,11 +866,7 @@ const renderInvoiceLayout1 = (
                                 }}>
                                     {row.label}
                                 </div>
-                                <div className="grid grid-cols-3 gap-2" style={{ fontSize: '16px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
-                                    <div>
-                                        <div style={{ color: '#64748b', fontSize: '14px' }}>تعداد</div>
-                                        <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}</div>
-                                    </div>
+                                <div className="grid grid-cols-2 gap-2" style={{ fontSize: '16px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ واحد</div>
                                         <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}</div>
