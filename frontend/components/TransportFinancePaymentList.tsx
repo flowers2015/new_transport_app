@@ -547,22 +547,60 @@ const renderInvoiceLayout1 = (
                                     const avgUnitPrice = count > 0 ? total / count : 0;
                                     const isEven = rowIdx % 2 === 0;
                                     
+                                    // محاسبه rowSpan برای merge کردن دسته‌بندی‌های یکسان
+                                    let categoryRowSpan = 1;
+                                    let isFirstInCategory = true;
+                                    
+                                    if (!row.isTotal) {
+                                        // تعداد ردیف‌های متوالی با همین دسته‌بندی
+                                        let sameCategoryCount = 1;
+                                        for (let i = rowIdx + 1; i < costRows.length; i++) {
+                                            if (costRows[i].isTotal) break;
+                                            if (costRows[i].category === row.category) {
+                                                sameCategoryCount++;
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        categoryRowSpan = sameCategoryCount;
+                                        
+                                        // بررسی اینکه آیا این اولین ردیف در این دسته‌بندی است
+                                        if (rowIdx > 0 && !costRows[rowIdx - 1].isTotal && costRows[rowIdx - 1].category === row.category) {
+                                            isFirstInCategory = false;
+                                        }
+                                    }
+                                    
                                     return (
                                         <tr key={row.key} style={{ 
                                             backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
                                             height: '50px'
                                         }}>
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '20px' : '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#1e293b' : '#64748b'
-                                            }}>
-                                                {row.isTotal ? '' : row.category}
-                                            </td>
+                                            {isFirstInCategory && !row.isTotal ? (
+                                                <td rowSpan={categoryRowSpan} style={{ 
+                                                    fontSize: '18px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#64748b',
+                                                    backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                }}>
+                                                    {row.category}
+                                                </td>
+                                            ) : row.isTotal ? (
+                                                <td style={{ 
+                                                    fontSize: '20px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'bold',
+                                                    color: '#1e293b'
+                                                }}>
+                                                    {/* برای جمع کل، سلول خالی */}
+                                                </td>
+                                            ) : null}
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
                                                 padding: '10px 12px', 
@@ -592,7 +630,7 @@ const renderInvoiceLayout1 = (
                                                 verticalAlign: 'middle',
                                                 fontWeight: 'bold',
                                                 backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                color: row.isTotal ? '#1e293b' : '#0f172a'
+                                                color: row.isTotal ? '#1e293b' : '#1e40af'
                                             }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
@@ -644,7 +682,7 @@ const renderInvoiceLayout1 = (
                                     </div>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
-                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#0f172a' }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e40af' }}>
                                             {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                         </div>
                                     </div>
@@ -776,22 +814,60 @@ const renderInvoiceLayout1 = (
                                     const avgUnitPrice = count > 0 ? total / count : 0;
                                     const isEven = rowIdx % 2 === 0;
                                     
+                                    // محاسبه rowSpan برای merge کردن دسته‌بندی‌های یکسان
+                                    let categoryRowSpan = 1;
+                                    let isFirstInCategory = true;
+                                    
+                                    if (!row.isTotal) {
+                                        // تعداد ردیف‌های متوالی با همین دسته‌بندی
+                                        let sameCategoryCount = 1;
+                                        for (let i = rowIdx + 1; i < costRows.length; i++) {
+                                            if (costRows[i].isTotal) break;
+                                            if (costRows[i].category === row.category) {
+                                                sameCategoryCount++;
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        categoryRowSpan = sameCategoryCount;
+                                        
+                                        // بررسی اینکه آیا این اولین ردیف در این دسته‌بندی است
+                                        if (rowIdx > 0 && !costRows[rowIdx - 1].isTotal && costRows[rowIdx - 1].category === row.category) {
+                                            isFirstInCategory = false;
+                                        }
+                                    }
+                                    
                                     return (
                                         <tr key={row.key} style={{ 
                                             backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
                                             height: '50px'
                                         }}>
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '20px' : '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#1e293b' : '#64748b'
-                                            }}>
-                                                {row.isTotal ? '' : row.category}
-                                            </td>
+                                            {isFirstInCategory && !row.isTotal ? (
+                                                <td rowSpan={categoryRowSpan} style={{ 
+                                                    fontSize: '18px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#64748b',
+                                                    backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                }}>
+                                                    {row.category}
+                                                </td>
+                                            ) : row.isTotal ? (
+                                                <td style={{ 
+                                                    fontSize: '20px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'bold',
+                                                    color: '#1e293b'
+                                                }}>
+                                                    {/* برای جمع کل، سلول خالی */}
+                                                </td>
+                                            ) : null}
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
                                                 padding: '10px 12px', 
@@ -821,7 +897,7 @@ const renderInvoiceLayout1 = (
                                                 verticalAlign: 'middle',
                                                 fontWeight: 'bold',
                                                 backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                color: row.isTotal ? '#1e293b' : '#0f172a'
+                                                color: row.isTotal ? '#1e293b' : '#1e40af'
                                             }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
@@ -873,7 +949,7 @@ const renderInvoiceLayout1 = (
                                     </div>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
-                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#0f172a' }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e40af' }}>
                                             {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                         </div>
                                     </div>
@@ -2485,7 +2561,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     const [invoiceCalculations, setInvoiceCalculations] = useState<any[]>([]);
     const [invoiceAnnouncements, setInvoiceAnnouncements] = useState<Map<string, any>>(new Map());
     const invoiceRef = useRef<HTMLDivElement>(null);
-    const [invoiceZoom, setInvoiceZoom] = useState(100);
 
     // تولید تصویر صورتحساب
     const generateInvoiceImage = async (record: PaymentRecord) => {
@@ -3549,32 +3624,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         <option value={InvoiceLayoutType.DETAILED}>روش 3: تفصیلی</option>
                                     </select>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <label className="text-sm text-slate-700">بزرگنمایی:</label>
-                                    <input
-                                        type="range"
-                                        min="50"
-                                        max="200"
-                                        step="10"
-                                        value={invoiceZoom}
-                                        onChange={(e) => setInvoiceZoom(Number(e.target.value))}
-                                        className="w-24"
-                                    />
-                                    <span className="text-sm text-slate-600 w-12">{invoiceZoom}%</span>
-                                </div>
-                                <button
-                                    onClick={handlePrintInvoice}
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 font-semibold"
-                                    style={{ fontFamily: 'Vazirmatn, Arial, sans-serif' }}
-                                >
-                                    🖨️ چاپ صورت وضعیت
-                                </button>
-                                <button
-                                    onClick={exportInvoiceToPDF}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-                                >
-                                    دانلود PDF
-                                </button>
                                 <button
                                     onClick={exportInvoiceToImage}
                                     className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700"
@@ -3587,7 +3636,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         setSelectedInvoiceRecord(null);
                                         setInvoiceCalculations([]);
                                         setInvoiceAnnouncements(new Map());
-                                        setInvoiceZoom(100);
                                     }}
                                     className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
                                 >
