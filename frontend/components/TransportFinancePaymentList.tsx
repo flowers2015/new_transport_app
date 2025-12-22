@@ -355,17 +355,20 @@ const renderInvoiceLayout1 = (
     const renderMainDriverTableLayoutVertical = (calculations: any[], title: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
-        // تعریف ردیف‌های هزینه با ساختار جدید: شرح | تعداد | مبلغ واحد | مبلغ کل
+        // تعریف ردیف‌های هزینه با دسته‌بندی: دسته‌بندی | شرح | تعداد | مبلغ واحد | مبلغ کل
         const costRows = [
+            // هزینه‌های مستقیم
             { 
                 key: 'bill_of_lading', 
+                category: 'هزینه‌های مستقیم',
                 label: 'بارنامه', 
                 getValue: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0),
-                getCount: () => calculations.length,
+                getCount: () => calculations.filter(c => parseFloat(c.bill_of_lading_cost || c.billOfLadingCost || 0) > 0).length,
                 getUnitPrice: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)
             },
             { 
                 key: 'food', 
+                category: 'هزینه‌های مستقیم',
                 label: 'غذا', 
                 getValue: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.food_cost || c.foodCost || 0) > 0).length,
@@ -373,6 +376,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'fuel', 
+                category: 'هزینه‌های مستقیم',
                 label: 'سوخت', 
                 getValue: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.fuel_cost || c.fuelCost || 0) > 0).length,
@@ -380,6 +384,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'toll', 
+                category: 'هزینه‌های مستقیم',
                 label: 'عوارض', 
                 getValue: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.toll_cost || c.tollCost || 0) > 0).length,
@@ -387,6 +392,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'return_cargo', 
+                category: 'هزینه‌های مستقیم',
                 label: 'بار برگشتی', 
                 getValue: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.return_cargo_cost || c.returnCargoCost || 0) > 0).length,
@@ -394,6 +400,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'multi_unload', 
+                category: 'هزینه‌های مستقیم',
                 label: 'چندجا تخلیه', 
                 getValue: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.multi_unload_cost || c.multiUnloadCost || 0) > 0).length,
@@ -401,13 +408,16 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'excess_mission', 
+                category: 'هزینه‌های مستقیم',
                 label: 'ماموریت مازاد', 
                 getValue: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.excess_mission_cost || c.excessMissionCost || 0) > 0).length,
                 getUnitPrice: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)
             },
+            // هزینه‌های دپو
             { 
                 key: 'depot_cargo_handling', 
+                category: 'هزینه‌های دپو',
                 label: 'جابجایی بار دپو', 
                 getValue: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.depot_cargo_handling_cost || c.depotCargoHandlingCost || 0) > 0).length,
@@ -415,6 +425,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'depot_mission', 
+                category: 'هزینه‌های دپو',
                 label: 'حق ماموریت دپو', 
                 getValue: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.depot_mission_cost || c.depotMissionCost || 0) > 0).length,
@@ -422,13 +433,16 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'depot_allowance', 
+                category: 'هزینه‌های دپو',
                 label: 'اجرت دپو', 
                 getValue: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.depot_kilometer_rate || c.depotKilometerRate || 0) > 0).length,
                 getUnitPrice: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0)
             },
+            // اجرت ثابت
             { 
                 key: 'fixed_allowance', 
+                category: 'اجرت ثابت',
                 label: 'اجرت ثابت', 
                 getValue: (calc: any) => {
                     const queueType = calc.queue_type || calc.queueType || 'porsant';
@@ -443,8 +457,10 @@ const renderInvoiceLayout1 = (
                     return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0;
                 }
             },
+            // جمع کل
             { 
                 key: 'total', 
+                category: 'جمع کل',
                 label: 'جمع کل', 
                 getValue: (calc: any) => calculateMainDriverCostGlobal(calc), 
                 isTotal: true,
@@ -484,7 +500,18 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '35%'
+                                        width: '20%'
+                                    }}>
+                                        دسته‌بندی
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'right', 
+                                        verticalAlign: 'middle',
+                                        width: '25%'
                                     }}>
                                         شرح هزینه
                                     </th>
@@ -639,10 +666,11 @@ const renderInvoiceLayout1 = (
     const renderHelperDriverTableLayoutVertical = (calculations: any[], helperEmployeeId: string, helperName: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
-        // تعریف ردیف‌های هزینه برای راننده کمکی
+        // تعریف ردیف‌های هزینه برای راننده کمکی با دسته‌بندی
         const costRows = [
             { 
                 key: 'helper_allowance', 
+                category: 'هزینه‌های مستقیم',
                 label: 'اجرت راننده کمکی', 
                 getValue: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.helper_driver_allowance || c.helperDriverAllowance || 0) > 0).length,
@@ -650,6 +678,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'helper_food', 
+                category: 'هزینه‌های مستقیم',
                 label: 'غذای راننده کمکی', 
                 getValue: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.helper_driver_food_cost || c.helperDriverFoodCost || 0) > 0).length,
@@ -657,6 +686,7 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'helper_excess_mission', 
+                category: 'هزینه‌های مستقیم',
                 label: 'ماموریت مازاد راننده کمکی', 
                 getValue: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0),
                 getCount: () => calculations.filter(c => parseFloat(c.helper_driver_excess_mission_cost || c.helperDriverExcessMissionCost || 0) > 0).length,
@@ -664,17 +694,14 @@ const renderInvoiceLayout1 = (
             },
             { 
                 key: 'total', 
+                category: 'جمع کل',
                 label: 'جمع کل', 
                 getValue: (calc: any) => calculateHelperDriverCostGlobal(calc), 
                 isTotal: true,
                 getCount: () => calculations.length,
                 getUnitPrice: () => 0
             },
-        ].filter(row => {
-            if (row.isTotal) return true;
-            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
-            return total > 0;
-        });
+        ];
 
         return (
             <div className="mb-6">
@@ -707,7 +734,18 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '35%'
+                                        width: '20%'
+                                    }}>
+                                        دسته‌بندی
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'right', 
+                                        verticalAlign: 'middle',
+                                        width: '25%'
                                     }}>
                                         شرح هزینه
                                     </th>
@@ -718,7 +756,7 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '15%'
+                                        width: '12%'
                                     }}>
                                         تعداد
                                     </th>
@@ -729,7 +767,7 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '25%'
+                                        width: '18%'
                                     }}>
                                         مبلغ واحد
                                     </th>
@@ -759,6 +797,18 @@ const renderInvoiceLayout1 = (
                                             backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
                                             height: '50px'
                                         }}>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : '600',
+                                                color: row.isTotal ? '#1e293b' : '#334155',
+                                                fontStyle: row.isTotal ? 'normal' : 'normal'
+                                            }}>
+                                                {row.category}
+                                            </td>
                                             <td style={{ 
                                                 fontSize: row.isTotal ? '20px' : '18px', 
                                                 padding: '10px 12px', 
