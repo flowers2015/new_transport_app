@@ -572,7 +572,7 @@ const renderInvoiceLayout1 = (
                                     
                                     return (
                                         <tr key={row.key} style={{ 
-                                            backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
+                                            backgroundColor: row.isTotal ? '#3b82f6' : (isEven ? '#ffffff' : '#f8fafc'),
                                             height: '50px'
                                         }}>
                                             {isFirstInCategory && !row.isTotal ? (
@@ -580,7 +580,7 @@ const renderInvoiceLayout1 = (
                                                     fontSize: '18px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #cbd5e1', 
-                                                    textAlign: 'right', 
+                                                    textAlign: 'center', 
                                                     verticalAlign: 'middle',
                                                     fontWeight: '600',
                                                     color: '#64748b',
@@ -592,11 +592,12 @@ const renderInvoiceLayout1 = (
                                                 <td style={{ 
                                                     fontSize: '20px', 
                                                     padding: '10px 12px', 
-                                                    border: '1px solid #cbd5e1', 
-                                                    textAlign: 'right', 
+                                                    border: '1px solid #3b82f6', 
+                                                    textAlign: 'center', 
                                                     verticalAlign: 'middle',
                                                     fontWeight: 'bold',
-                                                    color: '#1e293b'
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff'
                                                 }}>
                                                     {/* برای جمع کل، سلول خالی */}
                                                 </td>
@@ -605,10 +606,11 @@ const renderInvoiceLayout1 = (
                                                 fontSize: row.isTotal ? '20px' : '18px', 
                                                 padding: '10px 12px', 
                                                 border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
+                                                textAlign: 'center', 
                                                 verticalAlign: 'middle',
                                                 fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#1e293b' : '#334155'
+                                                color: row.isTotal ? '#ffffff' : '#334155',
+                                                backgroundColor: row.isTotal ? '#3b82f6' : 'transparent'
                                             }}>
                                                 {row.label}
                                             </td>
@@ -618,7 +620,9 @@ const renderInvoiceLayout1 = (
                                                 border: '1px solid #cbd5e1', 
                                                 textAlign: 'center', 
                                                 verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal'
+                                                fontWeight: row.isTotal ? 'bold' : 'normal',
+                                                backgroundColor: row.isTotal ? '#3b82f6' : 'transparent',
+                                                color: row.isTotal ? '#ffffff' : '#334155'
                                             }}>
                                                 {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
                                             </td>
@@ -631,8 +635,8 @@ const renderInvoiceLayout1 = (
                                                     textAlign: 'center', 
                                                     verticalAlign: 'middle',
                                                     fontWeight: 'bold',
-                                                    backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                    color: '#1e293b'
+                                                    backgroundColor: row.isTotal ? '#3b82f6' : '#f1f5f9',
+                                                    color: row.isTotal ? '#ffffff' : '#1e293b'
                                                 }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
@@ -653,7 +657,7 @@ const renderInvoiceLayout1 = (
                         
                         return (
                             <div key={row.key} style={{
-                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
+                                backgroundColor: row.isTotal ? '#3b82f6' : 'white',
                                 border: '2px solid #cbd5e1',
                                 borderRadius: '8px',
                                 padding: '12px',
@@ -672,7 +676,7 @@ const renderInvoiceLayout1 = (
                                     fontSize: row.isTotal ? '20px' : '18px', 
                                     fontWeight: 'bold',
                                     marginBottom: '8px',
-                                    color: row.isTotal ? '#1e293b' : '#334155',
+                                    color: row.isTotal ? '#ffffff' : '#334155',
                                     fontFamily: 'Vazirmatn, Arial, sans-serif'
                                 }}>
                                     {row.label}
@@ -684,7 +688,7 @@ const renderInvoiceLayout1 = (
                                     </div>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
-                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e293b' }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: row.isTotal ? '#ffffff' : '#1e293b' }}>
                                             {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                         </div>
                                     </div>
@@ -849,7 +853,7 @@ const renderInvoiceLayout1 = (
                                                     fontSize: '18px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #cbd5e1', 
-                                                    textAlign: 'right', 
+                                                    textAlign: 'center', 
                                                     verticalAlign: 'middle',
                                                     fontWeight: '600',
                                                     color: '#64748b',
