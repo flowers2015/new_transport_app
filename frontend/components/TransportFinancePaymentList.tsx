@@ -2656,6 +2656,120 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     };
 
     // تبدیل صورتحساب به PDF - روش ساده و مطمئن
+    // چاپ مستقیم صورتحساب - دقیقاً همان چیزی که در دیالوگ می‌بینیم
+    const handlePrintInvoiceDirect = () => {
+        if (!invoiceRef.current || !selectedInvoiceRecord) return;
+
+        try {
+            // ایجاد یک پنجره جدید برای چاپ
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                alert('لطفاً popup blocker را غیرفعال کنید');
+                return;
+            }
+
+            // کپی کردن محتوای invoiceRef
+            const invoiceContent = invoiceRef.current.innerHTML;
+            
+            // ایجاد HTML کامل با استایل‌های چاپ
+            const printHTML = `
+                <!DOCTYPE html>
+                <html dir="rtl" lang="fa">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>صورتحساب - ${selectedInvoiceRecord.driverName}</title>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap');
+                        
+                        * {
+                            margin: 0;
+                            padding: 0;
+                            box-sizing: border-box;
+                        }
+                        
+                        body {
+                            font-family: 'Vazirmatn', Arial, sans-serif;
+                            direction: rtl;
+                            background: white;
+                            padding: 20px;
+                            color: #1e293b;
+                        }
+                        
+                        @media print {
+                            body {
+                                padding: 0;
+                            }
+                            
+                            @page {
+                                margin: 1cm;
+                                size: A4;
+                            }
+                        }
+                        
+                        table {
+                            width: 100%;
+                            max-width: 90%;
+                            margin: 0 auto;
+                            border-collapse: collapse;
+                            font-size: 18px;
+                        }
+                        
+                        th, td {
+                            padding: 10px 12px;
+                            border: 1px solid #cbd5e1;
+                            text-align: center;
+                            vertical-align: middle;
+                        }
+                        
+                        thead tr {
+                            background-color: #1e40af;
+                            color: #ffffff;
+                        }
+                        
+                        tbody tr[style*="background-color: rgb(59, 130, 246)"],
+                        tbody tr[style*="background-color: #3b82f6"] {
+                            background-color: #3b82f6 !important;
+                        }
+                        
+                        tbody tr[style*="background-color: rgb(59, 130, 246)"] td,
+                        tbody tr[style*="background-color: #3b82f6"] td {
+                            background-color: #3b82f6 !important;
+                            color: #ffffff !important;
+                        }
+                        
+                        td[data-total-amount="true"] {
+                            font-weight: bold;
+                        }
+                        
+                        td[data-total-amount="true"][style*="background-color: rgb(59, 130, 246)"],
+                        td[data-total-amount="true"][style*="background-color: #3b82f6"] {
+                            color: #ffffff !important;
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${invoiceContent}
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            window.onafterprint = function() {
+                                window.close();
+                            };
+                        };
+                    </script>
+                </body>
+                </html>
+            `;
+
+            printWindow.document.write(printHTML);
+            printWindow.document.close();
+        } catch (err: any) {
+            console.error('❌ [handlePrintInvoiceDirect] Error:', err);
+            alert(`خطا در چاپ: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
     const handlePrintInvoice = () => {
         if (!invoiceRef.current) {
             alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
@@ -3206,18 +3320,31 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             }
                         });
                         
-                        // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مشکی تنظیم کن
+                        // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مناسب تنظیم کن
                         // استفاده از data attribute برای شناسایی سریع‌تر
                         const totalAmountCells = clonedInvoice.querySelectorAll('td[data-total-amount="true"]');
                         totalAmountCells.forEach((cell) => {
                             const cellEl = cell as HTMLElement;
-                            // مستقیماً رنگ مشکی تنظیم کن
-                            cellEl.style.color = '#1e293b';
-                            cellEl.style.setProperty('color', '#1e293b', 'important');
-                            // همچنین در style attribute هم اضافه کن
-                            const currentStyle = cellEl.getAttribute('style') || '';
-                            if (!currentStyle.includes('color: #1e293b') && !currentStyle.includes('color:#1e293b')) {
-                                cellEl.setAttribute('style', currentStyle + '; color: #1e293b !important;');
+                            const cellBg = cellEl.style.backgroundColor || window.getComputedStyle(cellEl).backgroundColor;
+                            const isTotalRow = cellBg.includes('rgb(59, 130, 246)') || cellBg.includes('#3b82f6') || 
+                                             cellEl.closest('tr')?.getAttribute('style')?.includes('#3b82f6');
+                            
+                            if (isTotalRow) {
+                                // برای ردیف جمع کل: رنگ سفید
+                                cellEl.style.color = '#ffffff';
+                                cellEl.style.setProperty('color', '#ffffff', 'important');
+                                const currentStyle = cellEl.getAttribute('style') || '';
+                                if (!currentStyle.includes('color: #ffffff') && !currentStyle.includes('color:#ffffff')) {
+                                    cellEl.setAttribute('style', currentStyle + '; color: #ffffff !important;');
+                                }
+                            } else {
+                                // برای ردیف‌های عادی: رنگ مشکی
+                                cellEl.style.color = '#1e293b';
+                                cellEl.style.setProperty('color', '#1e293b', 'important');
+                                const currentStyle = cellEl.getAttribute('style') || '';
+                                if (!currentStyle.includes('color: #1e293b') && !currentStyle.includes('color:#1e293b')) {
+                                    cellEl.setAttribute('style', currentStyle + '; color: #1e293b !important;');
+                                }
                             }
                         });
                         
@@ -3797,7 +3924,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     </select>
                                 </div>
                                 <button
-                                    onClick={exportInvoiceToImage}
+                                    onClick={handlePrintInvoiceDirect}
                                     className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700"
                                 >
                                     دانلود عکس
