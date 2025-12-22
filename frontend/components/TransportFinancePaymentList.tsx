@@ -355,320 +355,509 @@ const renderInvoiceLayout1 = (
     const renderMainDriverTableLayoutVertical = (calculations: any[], title: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
-        // تعریف ردیف‌های هزینه
+        // تعریف ردیف‌های هزینه با ساختار جدید: شرح | تعداد | مبلغ واحد | مبلغ کل
         const costRows = [
-            { key: 'bill_of_lading', label: 'بارنامه', getValue: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0) },
-            { key: 'food', label: 'غذا', getValue: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0) },
-            { key: 'fuel', label: 'سوخت', getValue: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0) },
-            { key: 'toll', label: 'عوارض', getValue: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0) },
-            { key: 'return_cargo', label: 'بار برگشتی', getValue: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0) },
-            { key: 'multi_unload', label: 'چندجا تخلیه', getValue: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0) },
-            { key: 'excess_mission', label: 'ماموریت مازاد', getValue: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0) },
-            { key: 'depot_cargo_handling', label: 'جابجایی بار دپو', getValue: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0) },
-            { key: 'depot_mission', label: 'حق ماموریت دپو', getValue: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0) },
-            { key: 'depot_allowance', label: 'اجرت دپو', getValue: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0) },
-            { key: 'fixed_allowance', label: 'اجرت ثابت', getValue: (calc: any) => {
-                const queueType = calc.queue_type || calc.queueType || 'porsant';
-                return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0;
-            }},
-            { key: 'total', label: 'جمع کل', getValue: (calc: any) => calculateMainDriverCostGlobal(calc), isTotal: true },
-        ];
-
-        // محاسبه عرض ستون‌ها - جمع و جورتر و فونت‌های بزرگتر
-        const firstColumnWidth = '160px'; // ستون عنوان هزینه (بزرگتر برای فونت درشت)
-        const billColumnWidth = calculations.length > 3 ? '100px' : '120px'; // ستون‌های بارنامه
-        const totalColumnWidth = '170px'; // ستون جمع کل (بزرگتر برای اعداد)
+            { 
+                key: 'bill_of_lading', 
+                label: 'بارنامه', 
+                getValue: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0),
+                getCount: () => calculations.length,
+                getUnitPrice: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)
+            },
+            { 
+                key: 'food', 
+                label: 'غذا', 
+                getValue: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.food_cost || c.foodCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0)
+            },
+            { 
+                key: 'fuel', 
+                label: 'سوخت', 
+                getValue: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.fuel_cost || c.fuelCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0)
+            },
+            { 
+                key: 'toll', 
+                label: 'عوارض', 
+                getValue: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.toll_cost || c.tollCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0)
+            },
+            { 
+                key: 'return_cargo', 
+                label: 'بار برگشتی', 
+                getValue: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.return_cargo_cost || c.returnCargoCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0)
+            },
+            { 
+                key: 'multi_unload', 
+                label: 'چندجا تخلیه', 
+                getValue: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.multi_unload_cost || c.multiUnloadCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0)
+            },
+            { 
+                key: 'excess_mission', 
+                label: 'ماموریت مازاد', 
+                getValue: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.excess_mission_cost || c.excessMissionCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)
+            },
+            { 
+                key: 'depot_cargo_handling', 
+                label: 'جابجایی بار دپو', 
+                getValue: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.depot_cargo_handling_cost || c.depotCargoHandlingCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0)
+            },
+            { 
+                key: 'depot_mission', 
+                label: 'حق ماموریت دپو', 
+                getValue: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.depot_mission_cost || c.depotMissionCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)
+            },
+            { 
+                key: 'depot_allowance', 
+                label: 'اجرت دپو', 
+                getValue: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.depot_kilometer_rate || c.depotKilometerRate || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0)
+            },
+            { 
+                key: 'fixed_allowance', 
+                label: 'اجرت ثابت', 
+                getValue: (calc: any) => {
+                    const queueType = calc.queue_type || calc.queueType || 'porsant';
+                    return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0;
+                },
+                getCount: () => calculations.filter(c => {
+                    const queueType = c.queue_type || c.queueType || 'porsant';
+                    return queueType === 'fixed_allowance' && parseFloat(c.fixed_allowance || c.fixedAllowance || 0) > 0;
+                }).length,
+                getUnitPrice: (calc: any) => {
+                    const queueType = calc.queue_type || calc.queueType || 'porsant';
+                    return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0;
+                }
+            },
+            { 
+                key: 'total', 
+                label: 'جمع کل', 
+                getValue: (calc: any) => calculateMainDriverCostGlobal(calc), 
+                isTotal: true,
+                getCount: () => calculations.length,
+                getUnitPrice: () => 0
+            },
+        ].filter(row => {
+            // فقط ردیف‌هایی که مقدار دارند یا جمع کل هستند را نمایش بده
+            if (row.isTotal) return true;
+            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+            return total > 0;
+        });
 
         return (
             <div className="mb-6">
-                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '20px', fontWeight: 'bold' }}>
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-blue-600 pb-2" style={{ 
+                    fontSize: '20px', 
+                    fontWeight: 'bold',
+                    fontFamily: 'Vazirmatn, Arial, sans-serif'
+                }}>
                     {title}
                 </h3>
-                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
-                    <table className="w-full border-collapse mb-3" style={{ 
-                        fontSize: '16px', 
-                        fontFamily: 'Vazirmatn, Arial, sans-serif', 
-                        tableLayout: 'fixed', 
-                        width: '100%', 
-                        maxWidth: '100%',
-                        borderCollapse: 'collapse', 
-                        border: '2px solid #1e293b'
-                    }}>
-                        <thead>
-                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
-                                <th rowSpan={2} className="text-center" style={{ 
-                                    fontSize: '17px', 
-                                    fontWeight: 'bold', 
-                                    padding: '12px 10px', 
-                                    border: '1px solid #475569', 
-                                    textAlign: 'center', 
-                                    verticalAlign: 'middle', 
-                                    width: firstColumnWidth,
-                                    position: 'sticky',
-                                    left: 0,
-                                    zIndex: 10,
-                                    backgroundColor: '#1e293b'
-                                }}>
-                                    عنوان هزینه
-                                </th>
-                                <th colSpan={calculations.length} className="text-center" style={{ 
-                                    fontSize: '17px', 
-                                    fontWeight: 'bold', 
-                                    padding: '12px 10px', 
-                                    border: '1px solid #475569', 
-                                    textAlign: 'center', 
-                                    verticalAlign: 'middle' 
-                                }}>
-                                    شماره بارنامه
-                                </th>
-                                <th rowSpan={2} className="text-center font-bold" style={{ 
-                                    fontSize: '18px', 
-                                    fontWeight: 'bold', 
-                                    padding: '12px 10px', 
-                                    border: '1px solid #475569', 
-                                    textAlign: 'center', 
-                                    verticalAlign: 'middle', 
-                                    backgroundColor: '#f1f5f9', 
-                                    width: totalColumnWidth
-                                }}>
-                                    جمع کل
-                                </th>
-                            </tr>
-                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
-                                {calculations.map((calc, idx) => {
-                                    const billNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
-                                    return (
-                                        <th key={idx} className="text-center" style={{ 
-                                            fontSize: '15px', 
-                                            fontWeight: 'bold', 
-                                            padding: '10px 6px', 
-                                            border: '1px solid #475569', 
-                                            textAlign: 'center', 
-                                            verticalAlign: 'middle', 
-                                            width: billColumnWidth,
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis'
-                                        }}>
-                                            {billNumber}
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {costRows.map((row, rowIdx) => (
-                                <tr key={row.key} className={row.isTotal ? "bg-slate-100 font-bold" : "border-b border-slate-300"}>
-                                    <td className="text-right font-semibold" style={{ 
-                                        fontSize: row.isTotal ? '18px' : '16px', 
+                {/* Desktop Table View */}
+                <div className="hidden md:block" style={{ maxWidth: '90%', margin: '0 auto' }}>
+                    <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                        <table className="w-full border-collapse mb-3" style={{ 
+                            fontSize: '18px', 
+                            fontFamily: 'Vazirmatn, Arial, sans-serif', 
+                            tableLayout: 'auto', 
+                            width: '100%', 
+                            borderCollapse: 'collapse', 
+                            border: '2px solid #1e40af',
+                            backgroundColor: 'white',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#1e40af', color: '#ffffff' }}>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
                                         padding: '12px 10px', 
-                                        border: '1px solid #cbd5e1', 
+                                        border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        fontWeight: row.isTotal ? 'bold' : '600',
-                                        position: 'sticky',
-                                        left: 0,
-                                        zIndex: 5,
-                                        backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
-                                        width: firstColumnWidth
+                                        width: '35%'
                                     }}>
-                                        {row.label}
-                                    </td>
-                                    {calculations.map((calc, calcIdx) => {
-                                        const value = row.getValue(calc);
-                                        return (
-                                            <td key={calcIdx} className="text-center" style={{ 
-                                                fontSize: row.isTotal ? '18px' : '16px', 
-                                                padding: '12px 8px', 
+                                        شرح هزینه
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        width: '15%'
+                                    }}>
+                                        تعداد
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        width: '25%'
+                                    }}>
+                                        مبلغ واحد
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '20px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        width: '25%',
+                                        backgroundColor: '#f1f5f9'
+                                    }}>
+                                        مبلغ کل
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {costRows.map((row, rowIdx) => {
+                                    const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+                                    const count = row.getCount();
+                                    const avgUnitPrice = count > 0 ? total / count : 0;
+                                    const isEven = rowIdx % 2 === 0;
+                                    
+                                    return (
+                                        <tr key={row.key} style={{ 
+                                            backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
+                                            height: '50px'
+                                        }}>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : '600',
+                                                color: row.isTotal ? '#1e293b' : '#334155'
+                                            }}>
+                                                {row.label}
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
                                                 border: '1px solid #cbd5e1', 
                                                 textAlign: 'center', 
                                                 verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal',
-                                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
-                                                width: billColumnWidth,
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
+                                                fontWeight: row.isTotal ? 'bold' : 'normal'
                                             }}>
-                                                {value > 0 || row.isTotal ? value.toLocaleString('fa-IR') : '-'}
+                                                {row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}
                                             </td>
-                                        );
-                                    })}
-                                    <td className="text-center font-bold" style={{ 
-                                        fontSize: '18px', 
-                                        padding: '12px 10px', 
-                                        border: '1px solid #cbd5e1', 
-                                        textAlign: 'center', 
-                                        verticalAlign: 'middle',
-                                        fontWeight: 'bold',
-                                        backgroundColor: '#f1f5f9',
-                                        width: totalColumnWidth
-                                    }}>
-                                        {(() => {
-                                            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
-                                            return total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-';
-                                        })()}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : 'normal'
+                                            }}>
+                                                {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '24px' : '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
+                                                color: row.isTotal ? '#1e293b' : '#0f172a'
+                                            }}>
+                                                {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                {/* Mobile Card View */}
+                <div className="md:hidden space-y-3">
+                    {costRows.map((row, rowIdx) => {
+                        const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+                        const count = row.getCount();
+                        const avgUnitPrice = count > 0 ? total / count : 0;
+                        
+                        return (
+                            <div key={row.key} style={{
+                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
+                                border: '2px solid #cbd5e1',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                            }}>
+                                <div style={{ 
+                                    fontSize: row.isTotal ? '20px' : '18px', 
+                                    fontWeight: 'bold',
+                                    marginBottom: '8px',
+                                    color: row.isTotal ? '#1e293b' : '#334155',
+                                    fontFamily: 'Vazirmatn, Arial, sans-serif'
+                                }}>
+                                    {row.label}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2" style={{ fontSize: '16px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
+                                    <div>
+                                        <div style={{ color: '#64748b', fontSize: '14px' }}>تعداد</div>
+                                        <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ واحد</div>
+                                        <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#0f172a' }}>
+                                            {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         );
     };
 
-    // تابع برای ساخت جدول راننده کمکی با ساختار ستونی (هزینه‌ها در ردیف، بارنامه‌ها در ستون)
+    // تابع برای ساخت جدول راننده کمکی با ساختار جدید
     const renderHelperDriverTableLayoutVertical = (calculations: any[], helperEmployeeId: string, helperName: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
         // تعریف ردیف‌های هزینه برای راننده کمکی
         const costRows = [
-            { key: 'helper_allowance', label: 'اجرت راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0) },
-            { key: 'helper_food', label: 'غذای راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0) },
-            { key: 'helper_excess_mission', label: 'ماموریت مازاد راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0) },
-            { key: 'total', label: 'جمع کل', getValue: (calc: any) => calculateHelperDriverCostGlobal(calc), isTotal: true },
-        ];
-
-        // محاسبه عرض ستون‌ها - جمع و جورتر و فونت‌های بزرگتر
-        const firstColumnWidth = '180px'; // ستون عنوان هزینه (بزرگتر برای راننده کمکی)
-        const billColumnWidth = calculations.length > 3 ? '100px' : '120px';
-        const totalColumnWidth = '170px';
+            { 
+                key: 'helper_allowance', 
+                label: 'اجرت راننده کمکی', 
+                getValue: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.helper_driver_allowance || c.helperDriverAllowance || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0)
+            },
+            { 
+                key: 'helper_food', 
+                label: 'غذای راننده کمکی', 
+                getValue: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.helper_driver_food_cost || c.helperDriverFoodCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0)
+            },
+            { 
+                key: 'helper_excess_mission', 
+                label: 'ماموریت مازاد راننده کمکی', 
+                getValue: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.helper_driver_excess_mission_cost || c.helperDriverExcessMissionCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0)
+            },
+            { 
+                key: 'total', 
+                label: 'جمع کل', 
+                getValue: (calc: any) => calculateHelperDriverCostGlobal(calc), 
+                isTotal: true,
+                getCount: () => calculations.length,
+                getUnitPrice: () => 0
+            },
+        ].filter(row => {
+            if (row.isTotal) return true;
+            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+            return total > 0;
+        });
 
         return (
             <div className="mb-6">
-                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-slate-600 pb-2" style={{ fontSize: '20px', fontWeight: 'bold' }}>
+                <h3 className="text-lg font-bold text-slate-800 mb-3 border-b-2 border-blue-600 pb-2" style={{ 
+                    fontSize: '20px', 
+                    fontWeight: 'bold',
+                    fontFamily: 'Vazirmatn, Arial, sans-serif'
+                }}>
                     راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
                 </h3>
-                <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
-                    <table className="w-full border-collapse mb-3" style={{ 
-                        fontSize: '16px', 
-                        fontFamily: 'Vazirmatn, Arial, sans-serif', 
-                        tableLayout: 'fixed', 
-                        width: '100%', 
-                        maxWidth: '100%',
-                        borderCollapse: 'collapse', 
-                        border: '2px solid #1e293b'
-                    }}>
-                        <thead>
-                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
-                                <th rowSpan={2} className="text-center" style={{ 
-                                    fontSize: '17px', 
-                                    fontWeight: 'bold', 
-                                    padding: '12px 10px', 
-                                    border: '1px solid #475569', 
-                                    textAlign: 'center', 
-                                    verticalAlign: 'middle', 
-                                    width: firstColumnWidth,
-                                    position: 'sticky',
-                                    left: 0,
-                                    zIndex: 10,
-                                    backgroundColor: '#1e293b'
-                                }}>
-                                    عنوان هزینه
-                                </th>
-                                <th colSpan={calculations.length} className="text-center" style={{ 
-                                    fontSize: '17px', 
-                                    fontWeight: 'bold', 
-                                    padding: '12px 10px', 
-                                    border: '1px solid #475569', 
-                                    textAlign: 'center', 
-                                    verticalAlign: 'middle' 
-                                }}>
-                                    شماره بارنامه
-                                </th>
-                                <th rowSpan={2} className="text-center font-bold" style={{ 
-                                    fontSize: '18px', 
-                                    fontWeight: 'bold', 
-                                    padding: '12px 10px', 
-                                    border: '1px solid #475569', 
-                                    textAlign: 'center', 
-                                    verticalAlign: 'middle', 
-                                    backgroundColor: '#f1f5f9', 
-                                    width: totalColumnWidth
-                                }}>
-                                    جمع کل
-                                </th>
-                            </tr>
-                            <tr className="bg-slate-800 text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
-                                {calculations.map((calc, idx) => {
-                                    const billNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
-                                    return (
-                                        <th key={idx} className="text-center" style={{ 
-                                            fontSize: '15px', 
-                                            fontWeight: 'bold', 
-                                            padding: '10px 6px', 
-                                            border: '1px solid #475569', 
-                                            textAlign: 'center', 
-                                            verticalAlign: 'middle', 
-                                            width: billColumnWidth,
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis'
-                                        }}>
-                                            {billNumber}
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {costRows.map((row, rowIdx) => (
-                                <tr key={row.key} className={row.isTotal ? "bg-slate-100 font-bold" : "border-b border-slate-300"}>
-                                    <td className="text-right font-semibold" style={{ 
-                                        fontSize: row.isTotal ? '18px' : '16px', 
+                {/* Desktop Table View */}
+                <div className="hidden md:block" style={{ maxWidth: '90%', margin: '0 auto' }}>
+                    <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                        <table className="w-full border-collapse mb-3" style={{ 
+                            fontSize: '18px', 
+                            fontFamily: 'Vazirmatn, Arial, sans-serif', 
+                            tableLayout: 'auto', 
+                            width: '100%', 
+                            borderCollapse: 'collapse', 
+                            border: '2px solid #1e40af',
+                            backgroundColor: 'white',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#1e40af', color: '#ffffff' }}>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
                                         padding: '12px 10px', 
-                                        border: '1px solid #cbd5e1', 
+                                        border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        fontWeight: row.isTotal ? 'bold' : '600',
-                                        position: 'sticky',
-                                        left: 0,
-                                        zIndex: 5,
-                                        backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
-                                        width: firstColumnWidth
+                                        width: '35%'
                                     }}>
-                                        {row.label}
-                                    </td>
-                                    {calculations.map((calc, calcIdx) => {
-                                        const value = row.getValue(calc);
-                                        return (
-                                            <td key={calcIdx} className="text-center" style={{ 
-                                                fontSize: row.isTotal ? '18px' : '16px', 
-                                                padding: '12px 8px', 
+                                        شرح هزینه
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        width: '15%'
+                                    }}>
+                                        تعداد
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '18px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        width: '25%'
+                                    }}>
+                                        مبلغ واحد
+                                    </th>
+                                    <th style={{ 
+                                        fontSize: '20px', 
+                                        fontWeight: 'bold', 
+                                        padding: '12px 10px', 
+                                        border: '1px solid #1e3a8a', 
+                                        textAlign: 'center', 
+                                        verticalAlign: 'middle',
+                                        width: '25%',
+                                        backgroundColor: '#f1f5f9'
+                                    }}>
+                                        مبلغ کل
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {costRows.map((row, rowIdx) => {
+                                    const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+                                    const count = row.getCount();
+                                    const avgUnitPrice = count > 0 ? total / count : 0;
+                                    const isEven = rowIdx % 2 === 0;
+                                    
+                                    return (
+                                        <tr key={row.key} style={{ 
+                                            backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
+                                            height: '50px'
+                                        }}>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : '600',
+                                                color: row.isTotal ? '#1e293b' : '#334155'
+                                            }}>
+                                                {row.label}
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
                                                 border: '1px solid #cbd5e1', 
                                                 textAlign: 'center', 
                                                 verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal',
-                                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
-                                                width: billColumnWidth,
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
+                                                fontWeight: row.isTotal ? 'bold' : 'normal'
                                             }}>
-                                                {value > 0 || row.isTotal ? value.toLocaleString('fa-IR') : '-'}
+                                                {row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}
                                             </td>
-                                        );
-                                    })}
-                                    <td className="text-center font-bold" style={{ 
-                                        fontSize: '18px', 
-                                        padding: '12px 10px', 
-                                        border: '1px solid #cbd5e1', 
-                                        textAlign: 'center', 
-                                        verticalAlign: 'middle',
-                                        fontWeight: 'bold',
-                                        backgroundColor: '#f1f5f9',
-                                        width: totalColumnWidth
-                                    }}>
-                                        {(() => {
-                                            const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
-                                            return total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-';
-                                        })()}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: row.isTotal ? 'bold' : 'normal'
+                                            }}>
+                                                {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: row.isTotal ? '24px' : '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
+                                                color: row.isTotal ? '#1e293b' : '#0f172a'
+                                            }}>
+                                                {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                {/* Mobile Card View */}
+                <div className="md:hidden space-y-3">
+                    {costRows.map((row, rowIdx) => {
+                        const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
+                        const count = row.getCount();
+                        const avgUnitPrice = count > 0 ? total / count : 0;
+                        
+                        return (
+                            <div key={row.key} style={{
+                                backgroundColor: row.isTotal ? '#f1f5f9' : 'white',
+                                border: '2px solid #cbd5e1',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                            }}>
+                                <div style={{ 
+                                    fontSize: row.isTotal ? '20px' : '18px', 
+                                    fontWeight: 'bold',
+                                    marginBottom: '8px',
+                                    color: row.isTotal ? '#1e293b' : '#334155',
+                                    fontFamily: 'Vazirmatn, Arial, sans-serif'
+                                }}>
+                                    {row.label}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2" style={{ fontSize: '16px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
+                                    <div>
+                                        <div style={{ color: '#64748b', fontSize: '14px' }}>تعداد</div>
+                                        <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (count > 0 ? count.toLocaleString('fa-IR') : '-')}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ واحد</div>
+                                        <div style={{ fontWeight: '600' }}>{row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#0f172a' }}>
+                                            {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -2361,6 +2550,86 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     };
 
     // تبدیل صورتحساب به PDF - روش ساده و مطمئن
+    const handlePrintInvoice = () => {
+        if (!invoiceRef.current) {
+            alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
+            return;
+        }
+
+        // ایجاد یک پنجره جدید برای چاپ
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('لطفاً popup blocker را غیرفعال کنید.');
+            return;
+        }
+
+        // کپی کردن محتوای صورتحساب
+        const content = invoiceRef.current.cloneNode(true) as HTMLElement;
+        
+        // استایل‌های چاپ
+        const printStyles = `
+            <style>
+                @page {
+                    size: A4;
+                    margin: 15mm;
+                }
+                * {
+                    font-family: 'Vazirmatn', Arial, sans-serif !important;
+                }
+                body {
+                    direction: rtl;
+                    margin: 0;
+                    padding: 20px;
+                    background: white;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 10px 0;
+                }
+                th, td {
+                    padding: 10px 12px;
+                    border: 1px solid #cbd5e1;
+                    text-align: center;
+                }
+                th {
+                    background-color: #1e40af;
+                    color: white;
+                    font-weight: bold;
+                }
+                @media print {
+                    body {
+                        padding: 0;
+                    }
+                    .no-print {
+                        display: none !important;
+                    }
+                }
+            </style>
+        `;
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html dir="rtl" lang="fa">
+            <head>
+                <meta charset="UTF-8">
+                <title>صورتحساب هزینه</title>
+                ${printStyles}
+            </head>
+            <body>
+                ${content.outerHTML}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        
+        // صبر برای لود شدن فونت‌ها و سپس چاپ
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
+    };
+
     const exportInvoiceToPDF = async () => {
         if (!invoiceRef.current || !selectedInvoiceRecord) {
             alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
@@ -3222,6 +3491,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     />
                                     <span className="text-sm text-slate-600 w-12">{invoiceZoom}%</span>
                                 </div>
+                                <button
+                                    onClick={handlePrintInvoice}
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 font-semibold"
+                                    style={{ fontFamily: 'Vazirmatn, Arial, sans-serif' }}
+                                >
+                                    🖨️ چاپ صورت وضعیت
+                                </button>
                                 <button
                                     onClick={exportInvoiceToPDF}
                                     className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
