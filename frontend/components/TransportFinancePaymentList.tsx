@@ -1014,7 +1014,7 @@ const renderInvoiceLayout1 = (
             {/* تورهای بدون راننده کمکی */}
             {calculationsWithoutHelper.length > 0 && (
                 <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
-                    <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2">
+                    <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2" style={{ fontSize: '22px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                         تورهای بدون راننده کمکی
                     </h2>
                     {renderMainDriverTableLayoutVertical(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
@@ -1024,7 +1024,7 @@ const renderInvoiceLayout1 = (
             {/* تورهای با راننده کمکی */}
             {calculationsWithHelper.length > 0 && (
                 <div className="mb-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
-                    <h2 className="text-xl font-bold text-green-900 mb-4 border-b-2 border-green-600 pb-2">
+                    <h2 className="text-xl font-bold text-green-900 mb-4 border-b-2 border-green-600 pb-2" style={{ fontSize: '22px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                         تورهای با راننده کمکی
                     </h2>
                     
@@ -3045,6 +3045,16 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         if (!invoiceRef.current || !selectedInvoiceRecord) return;
 
         try {
+            // محدود کردن عرض برای عکس - استفاده از max-width: 90%
+            const invoiceElement = invoiceRef.current as HTMLElement;
+            const originalMaxWidth = invoiceElement.style.maxWidth;
+            const originalWidth = invoiceElement.style.width;
+            
+            // اعمال محدودیت عرض موقت
+            invoiceElement.style.maxWidth = '90%';
+            invoiceElement.style.width = 'auto';
+            invoiceElement.style.margin = '0 auto';
+            
             // استفاده از تنظیمات بهینه برای کیفیت مناسب
             const canvas = await html2canvas(invoiceRef.current, {
                 scale: 2, // scale بالاتر برای کیفیت بهتر عکس
@@ -3057,24 +3067,37 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 windowHeight: invoiceRef.current.scrollHeight,
                 onclone: (clonedDoc) => {
                     // اعمال استایل‌های نهایی در cloned document
-                    const clonedInvoice = clonedDoc.querySelector('[dir="rtl"]') as HTMLElement;
+                    const clonedInvoice = clonedDoc.querySelector('[data-invoice-ref="true"]') as HTMLElement || 
+                                         clonedDoc.querySelector('[dir="rtl"]') as HTMLElement;
                     if (clonedInvoice) {
-                        clonedInvoice.style.width = '100%';
-                        clonedInvoice.style.maxWidth = '100%';
-                        clonedInvoice.style.overflow = 'hidden';
+                        clonedInvoice.style.width = 'auto';
+                        clonedInvoice.style.maxWidth = '90%';
+                        clonedInvoice.style.margin = '0 auto';
+                        clonedInvoice.style.overflow = 'visible';
                         clonedInvoice.style.visibility = 'visible';
                         clonedInvoice.style.opacity = '1';
                         
-                        // اعمال استایل‌های جدول
+                        // اعمال استایل‌های جدول - حفظ استایل‌های inline
                         const clonedTables = clonedInvoice.querySelectorAll('table');
                         clonedTables.forEach((table) => {
                             const tableEl = table as HTMLElement;
-                            tableEl.style.width = '100%';
-                            tableEl.style.minWidth = '100%';
-                            tableEl.style.tableLayout = 'fixed';
+                            // حفظ استایل‌های inline موجود - override نکن
+                            if (!tableEl.style.width || tableEl.style.width === '100%') {
+                                tableEl.style.width = 'auto';
+                            }
+                            if (!tableEl.style.maxWidth) {
+                                tableEl.style.maxWidth = '90%';
+                            }
+                            tableEl.style.margin = '0 auto';
+                            tableEl.style.tableLayout = 'auto';
                             tableEl.style.borderCollapse = 'collapse';
-                            tableEl.style.fontSize = '11px';
-                            tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                            // حفظ fontSize و fontFamily از JSX
+                            if (!tableEl.style.fontSize) {
+                                tableEl.style.fontSize = '18px';
+                            }
+                            if (!tableEl.style.fontFamily) {
+                                tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                            }
                         });
                         
                         // اعمال استایل‌های thead و tbody
@@ -3084,7 +3107,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             const headerRows = theadEl.querySelectorAll('tr');
                             headerRows.forEach((row) => {
                                 const rowEl = row as HTMLElement;
-                                rowEl.style.backgroundColor = '#1e293b';
+                                rowEl.style.backgroundColor = '#1e40af';
                                 rowEl.style.color = '#ffffff';
                             });
                         });
@@ -3159,14 +3182,26 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 }
                             }
                             
-                            // font-size
-                            cellEl.style.fontSize = '8px';
+                            // font-size - حفظ استایل‌های inline موجود
+                            if (!cellEl.style.fontSize || cellEl.style.fontSize === '') {
+                                // فقط اگر fontSize تعریف نشده باشد، یک مقدار پیش‌فرض بگذار
+                                const computedStyle = window.getComputedStyle(cellEl);
+                                if (computedStyle.fontSize === '0px' || !computedStyle.fontSize) {
+                                    cellEl.style.fontSize = '18px'; // مقدار پیش‌فرض برای جدول جدید
+                                }
+                            }
                             
-                            // برای headerها
+                            // برای headerها - حفظ استایل‌های inline
                             if (cellEl.tagName === 'TH') {
-                                cellEl.style.fontWeight = 'bold';
-                                cellEl.style.backgroundColor = '#1e293b';
-                                cellEl.style.color = '#ffffff';
+                                if (!cellEl.style.fontWeight) {
+                                    cellEl.style.fontWeight = 'bold';
+                                }
+                                if (!cellEl.style.backgroundColor || cellEl.style.backgroundColor === 'transparent') {
+                                    cellEl.style.backgroundColor = '#1e40af'; // آبی تیره برای هدر
+                                }
+                                if (!cellEl.style.color) {
+                                    cellEl.style.color = '#ffffff';
+                                }
                             }
                             
                             // برای footer
@@ -3183,6 +3218,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             // تبدیل به PNG با کیفیت بالا
             const imgData = canvas.toDataURL('image/png', 1.0);
             
+            // بازگرداندن استایل‌های اصلی
+            invoiceElement.style.maxWidth = originalMaxWidth;
+            invoiceElement.style.width = originalWidth;
+            invoiceElement.style.margin = '';
+            
             // ایجاد لینک دانلود
             const link = document.createElement('a');
             link.download = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.png`;
@@ -3191,6 +3231,14 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         } catch (err: any) {
             console.error('❌ [exportInvoiceToImage] Error:', err);
             alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+            
+            // در صورت خطا هم استایل‌ها را برگردان
+            const invoiceElement = invoiceRef.current as HTMLElement;
+            if (invoiceElement) {
+                invoiceElement.style.maxWidth = '';
+                invoiceElement.style.width = '';
+                invoiceElement.style.margin = '';
+            }
         }
     };
 
