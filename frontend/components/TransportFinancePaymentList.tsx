@@ -2668,8 +2668,50 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 return;
             }
 
-            // کپی کردن محتوای invoiceRef
-            const invoiceContent = invoiceRef.current.innerHTML;
+            // کپی کردن کل element با همه استایل‌ها
+            const invoiceElement = invoiceRef.current.cloneNode(true) as HTMLElement;
+            
+            // اعمال استایل‌های اضافی برای چاپ
+            invoiceElement.style.width = '100%';
+            invoiceElement.style.maxWidth = '100%';
+            invoiceElement.style.margin = '0';
+            invoiceElement.style.padding = '20px';
+            
+            // اطمینان از اینکه همه استایل‌های inline حفظ می‌شوند و رنگ‌ها درست هستند
+            const allRows = invoiceElement.querySelectorAll('tr');
+            allRows.forEach((row) => {
+                const rowEl = row as HTMLElement;
+                const rowStyle = rowEl.getAttribute('style') || '';
+                
+                // بررسی اینکه آیا این ردیف جمع کل است (پس‌زمینه آبی)
+                const isTotalRow = rowStyle.includes('background-color: rgb(59, 130, 246)') || 
+                                   rowStyle.includes('background-color: #3b82f6') ||
+                                   rowStyle.includes('backgroundColor: rgb(59, 130, 246)') ||
+                                   rowStyle.includes('backgroundColor: #3b82f6');
+                
+                if (isTotalRow) {
+                    // برای همه سلول‌های ردیف جمع کل، رنگ سفید
+                    const cells = rowEl.querySelectorAll('td');
+                    cells.forEach((cell) => {
+                        const cellEl = cell as HTMLElement;
+                        const cellStyle = cellEl.getAttribute('style') || '';
+                        
+                        // اضافه کردن رنگ سفید اگر وجود ندارد
+                        if (!cellStyle.includes('color: #ffffff') && !cellStyle.includes('color:#ffffff')) {
+                            cellEl.style.color = '#ffffff';
+                            cellEl.style.setProperty('color', '#ffffff', 'important');
+                            // همچنین در style attribute
+                            cellEl.setAttribute('style', cellStyle + '; color: #ffffff !important;');
+                        }
+                        
+                        // اطمینان از پس‌زمینه آبی
+                        if (!cellStyle.includes('background-color: #3b82f6') && !cellStyle.includes('backgroundColor: #3b82f6')) {
+                            cellEl.style.backgroundColor = '#3b82f6';
+                            cellEl.setAttribute('style', (cellEl.getAttribute('style') || '') + '; background-color: #3b82f6 !important;');
+                        }
+                    });
+                }
+            });
             
             // ایجاد HTML کامل با استایل‌های چاپ
             const printHTML = `
@@ -2683,76 +2725,80 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap');
                         
                         * {
-                            margin: 0;
-                            padding: 0;
                             box-sizing: border-box;
                         }
                         
                         body {
-                            font-family: 'Vazirmatn', Arial, sans-serif;
+                            font-family: 'Vazirmatn', Arial, sans-serif !important;
                             direction: rtl;
                             background: white;
                             padding: 20px;
+                            margin: 0;
                             color: #1e293b;
+                        }
+                        
+                        /* حفظ همه استایل‌های inline - override نکن */
+                        [style] {
+                            /* استایل‌های inline اولویت دارند */
+                        }
+                        
+                        table {
+                            border-collapse: collapse !important;
+                            width: 100% !important;
+                            max-width: 90% !important;
+                            margin: 0 auto !important;
+                        }
+                        
+                        th, td {
+                            border: 1px solid #cbd5e1 !important;
+                        }
+                        
+                        /* برای ردیف جمع کل - پس‌زمینه آبی و رنگ سفید */
+                        tr[style*="background-color: rgb(59, 130, 246)"],
+                        tr[style*="background-color: #3b82f6"] {
+                            background-color: #3b82f6 !important;
+                        }
+                        
+                        tr[style*="background-color: rgb(59, 130, 246)"] td,
+                        tr[style*="background-color: #3b82f6"] td {
+                            background-color: #3b82f6 !important;
+                            color: #ffffff !important;
+                        }
+                        
+                        /* برای سلول "مبلغ کل" در ردیف جمع کل */
+                        tr[style*="background-color: rgb(59, 130, 246)"] td[data-total-amount="true"],
+                        tr[style*="background-color: #3b82f6"] td[data-total-amount="true"] {
+                            color: #ffffff !important;
+                            background-color: #3b82f6 !important;
                         }
                         
                         @media print {
                             body {
-                                padding: 0;
+                                padding: 10px;
                             }
                             
                             @page {
                                 margin: 1cm;
-                                size: A4;
+                                size: A4 landscape;
                             }
-                        }
-                        
-                        table {
-                            width: 100%;
-                            max-width: 90%;
-                            margin: 0 auto;
-                            border-collapse: collapse;
-                            font-size: 18px;
-                        }
-                        
-                        th, td {
-                            padding: 10px 12px;
-                            border: 1px solid #cbd5e1;
-                            text-align: center;
-                            vertical-align: middle;
-                        }
-                        
-                        thead tr {
-                            background-color: #1e40af;
-                            color: #ffffff;
-                        }
-                        
-                        tbody tr[style*="background-color: rgb(59, 130, 246)"],
-                        tbody tr[style*="background-color: #3b82f6"] {
-                            background-color: #3b82f6 !important;
-                        }
-                        
-                        tbody tr[style*="background-color: rgb(59, 130, 246)"] td,
-                        tbody tr[style*="background-color: #3b82f6"] td {
-                            background-color: #3b82f6 !important;
-                            color: #ffffff !important;
-                        }
-                        
-                        td[data-total-amount="true"] {
-                            font-weight: bold;
-                        }
-                        
-                        td[data-total-amount="true"][style*="background-color: rgb(59, 130, 246)"],
-                        td[data-total-amount="true"][style*="background-color: #3b82f6"] {
-                            color: #ffffff !important;
+                            
+                            table {
+                                page-break-inside: avoid;
+                            }
+                            
+                            tr {
+                                page-break-inside: avoid;
+                            }
                         }
                     </style>
                 </head>
                 <body>
-                    ${invoiceContent}
+                    ${invoiceElement.outerHTML}
                     <script>
                         window.onload = function() {
-                            window.print();
+                            setTimeout(function() {
+                                window.print();
+                            }, 500);
                             window.onafterprint = function() {
                                 window.close();
                             };
