@@ -1071,7 +1071,7 @@ const renderInvoiceLayout1 = (
                     <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2" style={{ fontSize: '22px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                         تورهای بدون راننده کمکی
                     </h2>
-                    {renderMainDriverTableLayout1(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
+                    {renderMainDriverTableLayoutVertical(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                 </div>
             )}
             
@@ -1083,7 +1083,7 @@ const renderInvoiceLayout1 = (
                     </h2>
                     
                     {/* راننده اصلی برای تورهای با راننده کمکی */}
-                    {renderMainDriverTableLayout1(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
+                    {renderMainDriverTableLayoutVertical(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                     
                     {/* راننده‌های کمکی تفکیک شده بر اساس کد پرسنلی */}
                     {Array.from(helperCalculationsByEmployeeId.entries()).map(([employeeId, calcs]) => {
@@ -1091,7 +1091,7 @@ const renderInvoiceLayout1 = (
                         const helperName = firstCalc.helper_driver_name || firstCalc.helperDriverName || '-';
                         return (
                             <div key={employeeId}>
-                                {renderHelperDriverTableLayout1(calcs, employeeId, helperName, invoiceAnnouncements)}
+                                {renderHelperDriverTableLayoutVertical(calcs, employeeId, helperName, invoiceAnnouncements)}
                             </div>
                         );
                     })}
