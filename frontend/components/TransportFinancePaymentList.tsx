@@ -500,7 +500,8 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '25%'
+                                        width: '25%',
+                                        color: '#ffffff'
                                     }}>
                                         دسته‌بندی
                                     </th>
@@ -511,7 +512,8 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '30%'
+                                        width: '30%',
+                                        color: '#ffffff'
                                     }}>
                                         شرح هزینه
                                     </th>
@@ -522,7 +524,8 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '22%'
+                                        width: '22%',
+                                        color: '#ffffff'
                                     }}>
                                         مبلغ واحد
                                     </th>
@@ -534,7 +537,7 @@ const renderInvoiceLayout1 = (
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
                                         width: '23%',
-                                        backgroundColor: '#f1f5f9'
+                                        color: '#ffffff'
                                     }}>
                                         مبلغ کل
                                     </th>
@@ -773,7 +776,8 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '25%'
+                                        width: '25%',
+                                        color: '#ffffff'
                                     }}>
                                         دسته‌بندی
                                     </th>
@@ -784,7 +788,8 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'right', 
                                         verticalAlign: 'middle',
-                                        width: '30%'
+                                        width: '30%',
+                                        color: '#ffffff'
                                     }}>
                                         شرح هزینه
                                     </th>
@@ -795,7 +800,8 @@ const renderInvoiceLayout1 = (
                                         border: '1px solid #1e3a8a', 
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
-                                        width: '22%'
+                                        width: '22%',
+                                        color: '#ffffff'
                                     }}>
                                         مبلغ واحد
                                     </th>
@@ -807,7 +813,7 @@ const renderInvoiceLayout1 = (
                                         textAlign: 'center', 
                                         verticalAlign: 'middle',
                                         width: '23%',
-                                        backgroundColor: '#f1f5f9'
+                                        color: '#ffffff'
                                     }}>
                                         مبلغ کل
                                     </th>
@@ -3364,6 +3370,30 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             if (!tableEl.style.fontFamily) {
                             tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
                             }
+                            
+                            // اطمینان از اینکه هدر جدول (thead th) رنگ سفید دارد
+                            const theadRows = tableEl.querySelectorAll('thead tr');
+                            theadRows.forEach((row) => {
+                                const rowEl = row as HTMLElement;
+                                const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
+                                // اگر پس‌زمینه آبی دارد (هدر صورتحساب)
+                                if (rowBg.includes('rgb(30, 64, 175)') || rowBg.includes('#1e40af')) {
+                                    const headerCells = rowEl.querySelectorAll('th');
+                                    headerCells.forEach((th) => {
+                                        const thEl = th as HTMLElement;
+                                        thEl.style.color = '#ffffff';
+                                        thEl.style.setProperty('color', '#ffffff', 'important');
+                                        // حذف backgroundColor روشن اگر وجود دارد
+                                        if (thEl.style.backgroundColor === '#f1f5f9' || thEl.style.backgroundColor === 'rgb(241, 245, 249)') {
+                                            thEl.style.backgroundColor = '';
+                                        }
+                                        const currentStyle = thEl.getAttribute('style') || '';
+                                        if (!currentStyle.includes('color: #ffffff') && !currentStyle.includes('color:#ffffff')) {
+                                            thEl.setAttribute('style', currentStyle.replace(/backgroundColor:\s*[^;]+;?/gi, '') + '; color: #ffffff !important;');
+                                        }
+                                    });
+                                }
+                            });
                         });
                         
                         // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مناسب تنظیم کن
