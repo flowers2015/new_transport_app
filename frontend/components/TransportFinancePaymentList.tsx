@@ -3199,47 +3199,37 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         });
                         
                         // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مشکی تنظیم کن
+                        // استفاده از یک روش ساده‌تر: بررسی مستقیم style attribute
                         const allCells = clonedInvoice.querySelectorAll('td');
                         allCells.forEach((cell) => {
                             const cellEl = cell as HTMLElement;
                             const cellStyle = cellEl.getAttribute('style') || '';
-                            const computedStyle = window.getComputedStyle(cellEl);
-                            
-                            // بررسی backgroundColor از computed style و inline style
-                            const cellBg = computedStyle.backgroundColor || cellEl.style.backgroundColor || '';
-                            const cellBgStr = cellBg.toString().toLowerCase();
-                            
-                            // بررسی fontWeight از computed style و inline style
-                            const cellFontWeight = computedStyle.fontWeight || cellEl.style.fontWeight || '';
-                            const cellFontWeightStr = cellFontWeight.toString().toLowerCase();
-                            
                             const cellText = (cellEl.textContent || '').trim();
                             
-                            // تشخیص سلول "مبلغ کل" بر اساس backgroundColor و fontWeight
+                            // بررسی مستقیم style attribute برای backgroundColor و fontWeight
                             const hasTotalBg = (
-                                cellBgStr.includes('rgb(241, 245, 249)') || 
-                                cellBgStr.includes('rgb(226, 232, 240)') ||
-                                cellStyle.toLowerCase().includes('background-color: #f1f5f9') || 
-                                cellStyle.toLowerCase().includes('background-color: #e2e8f0') ||
-                                cellStyle.toLowerCase().includes('backgroundcolor: #f1f5f9') || 
-                                cellStyle.toLowerCase().includes('backgroundcolor: #e2e8f0') ||
-                                cellStyle.toLowerCase().includes('background-color: rgb(241, 245, 249)') ||
-                                cellStyle.toLowerCase().includes('background-color: rgb(226, 232, 240)')
+                                cellStyle.includes('background-color: #f1f5f9') || 
+                                cellStyle.includes('background-color: #e2e8f0') ||
+                                cellStyle.includes('backgroundColor: #f1f5f9') || 
+                                cellStyle.includes('backgroundColor: #e2e8f0')
                             );
                             
                             const hasBoldFont = (
-                                cellFontWeightStr === 'bold' || 
-                                cellFontWeightStr === '700' ||
-                                cellStyle.toLowerCase().includes('font-weight: bold') || 
-                                cellStyle.toLowerCase().includes('fontweight: bold')
+                                cellStyle.includes('font-weight: bold') || 
+                                cellStyle.includes('fontWeight: bold') ||
+                                cellStyle.includes('font-weight:bold') ||
+                                cellStyle.includes('fontWeight:bold')
                             );
                             
-                            const isTotalAmountCell = hasTotalBg && hasBoldFont && cellText !== '' && cellText !== '-';
-                            
-                            if (isTotalAmountCell) {
+                            // اگر backgroundColor و fontWeight درست باشد و متن خالی نباشد
+                            if (hasTotalBg && hasBoldFont && cellText !== '' && cellText !== '-') {
                                 // همیشه رنگ مشکی - override کن
                                 cellEl.style.color = '#1e293b';
                                 cellEl.style.setProperty('color', '#1e293b', 'important');
+                                // همچنین در style attribute هم اضافه کن
+                                if (!cellStyle.includes('color: #1e293b') && !cellStyle.includes('color:#1e293b')) {
+                                    cellEl.setAttribute('style', cellStyle + '; color: #1e293b !important;');
+                                }
                             }
                         });
                         
@@ -3385,24 +3375,29 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 }
                                 
                                 // برای سلول "مبلغ کل" - رنگ مشکی (همیشه override کن - حتی اگر در inline style تعریف شده باشد)
-                                const computedBg = window.getComputedStyle(cellEl).backgroundColor;
-                                const computedFontWeight = window.getComputedStyle(cellEl).fontWeight;
+                                // بررسی مستقیم style attribute
                                 const cellText = (cellEl.textContent || '').trim();
-                                // بررسی دقیق‌تر برای تشخیص سلول "مبلغ کل"
-                                const bgColorStr = computedBg || cellEl.style.backgroundColor || '';
-                                const isTotalAmount = (
-                                    (bgColorStr.includes('241, 245, 249') || bgColorStr.includes('#f1f5f9') || 
-                                     bgColorStr.includes('226, 232, 240') || bgColorStr.includes('#e2e8f0') ||
-                                     computedBg === 'rgb(241, 245, 249)' || computedBg === 'rgb(226, 232, 240)') &&
-                                    (computedFontWeight === 'bold' || computedFontWeight === '700' || 
-                                     cellEl.style.fontWeight === 'bold' || originalStyle.includes('font-weight: bold')) &&
-                                    cellText !== '' &&
-                                    cellText !== '-'
+                                const hasTotalBg = (
+                                    originalStyle.includes('background-color: #f1f5f9') || 
+                                    originalStyle.includes('background-color: #e2e8f0') ||
+                                    originalStyle.includes('backgroundColor: #f1f5f9') || 
+                                    originalStyle.includes('backgroundColor: #e2e8f0')
                                 );
-                                if (isTotalAmount) {
+                                const hasBoldFont = (
+                                    originalStyle.includes('font-weight: bold') || 
+                                    originalStyle.includes('fontWeight: bold') ||
+                                    originalStyle.includes('font-weight:bold') ||
+                                    originalStyle.includes('fontWeight:bold')
+                                );
+                                
+                                if (hasTotalBg && hasBoldFont && cellText !== '' && cellText !== '-') {
                                     // همیشه رنگ مشکی - override کن حتی اگر در inline style تعریف شده باشد
                                     cellEl.style.color = '#1e293b';
                                     cellEl.style.setProperty('color', '#1e293b', 'important');
+                                    // همچنین در style attribute هم اضافه کن
+                                    if (!originalStyle.includes('color: #1e293b') && !originalStyle.includes('color:#1e293b')) {
+                                        cellEl.setAttribute('style', originalStyle + '; color: #1e293b !important;');
+                                    }
                                 } else {
                                     // حفظ رنگ فونت - اگر در inline style تعریف شده، override نکن
                                     if (!originalStyle.includes('color:')) {
@@ -3415,6 +3410,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 
                                 // حفظ backgroundColor اگر در inline style تعریف شده
                                 if (!originalStyle.includes('background-color:') && !originalStyle.includes('backgroundColor')) {
+                                    const computedBg = window.getComputedStyle(cellEl).backgroundColor;
                                     if (computedBg && computedBg !== 'rgba(0, 0, 0, 0)' && computedBg !== 'transparent') {
                                         cellEl.style.backgroundColor = computedBg;
                                     }
