@@ -3229,39 +3229,82 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             // حفظ rowSpan - مهم برای merge کردن دسته‌بندی‌ها
                             const rowSpan = cellEl.getAttribute('rowspan') || cellEl.getAttribute('rowSpan');
                             if (rowSpan) {
+                                const rowSpanNum = parseInt(rowSpan);
+                                // مطمئن شو که rowSpan در DOM حفظ شده است
                                 cellEl.setAttribute('rowspan', rowSpan);
                                 cellEl.setAttribute('rowSpan', rowSpan); // برای اطمینان
-                                // مطمئن شو که rowSpan در DOM حفظ شده است
-                                (cellEl as any).rowSpan = parseInt(rowSpan);
-                            }
-                            
-                            // حفظ استایل‌های inline موجود - override نکن
-                            const originalStyle = cellEl.getAttribute('style') || '';
-                            
-                            // برای سلول‌های merge شده - مطمئن شو که display درست است
-                            if (rowSpan && parseInt(rowSpan) > 1) {
-                                cellEl.style.display = 'table-cell';
-                                cellEl.style.verticalAlign = 'middle';
-                                // حفظ استایل‌های موجود برای سلول‌های merge شده
-                                if (!originalStyle.includes('fontSize') && !originalStyle.includes('font-size')) {
+                                (cellEl as any).rowSpan = rowSpanNum;
+                                
+                                // برای سلول‌های merge شده - مطمئن شو که display درست است
+                                if (rowSpanNum > 1) {
+                                    cellEl.style.display = 'table-cell';
+                                    cellEl.style.verticalAlign = 'middle';
+                                    
+                                    // حفظ استایل‌های موجود برای سلول‌های merge شده
+                                    const originalStyle = cellEl.getAttribute('style') || '';
                                     const computedStyle = window.getComputedStyle(cellEl);
-                                    if (computedStyle.fontSize && computedStyle.fontSize !== '0px') {
-                                        cellEl.style.fontSize = computedStyle.fontSize;
+                                    
+                                    // حفظ fontSize
+                                    if (!originalStyle.includes('fontSize') && !originalStyle.includes('font-size')) {
+                                        if (computedStyle.fontSize && computedStyle.fontSize !== '0px') {
+                                            cellEl.style.fontSize = computedStyle.fontSize;
+                                        } else {
+                                            cellEl.style.fontSize = '18px';
+                                        }
                                     }
-                                }
-                                if (!originalStyle.includes('color:')) {
-                                    const computedColor = window.getComputedStyle(cellEl).color;
-                                    if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)') {
-                                        cellEl.style.color = computedColor;
+                                    
+                                    // حفظ color
+                                    if (!originalStyle.includes('color:')) {
+                                        const computedColor = computedStyle.color;
+                                        if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)') {
+                                            cellEl.style.color = computedColor;
+                                        } else {
+                                            cellEl.style.color = '#64748b';
+                                        }
                                     }
-                                }
-                                if (!originalStyle.includes('background-color:') && !originalStyle.includes('backgroundColor')) {
-                                    const computedBg = window.getComputedStyle(cellEl).backgroundColor;
-                                    if (computedBg && computedBg !== 'rgba(0, 0, 0, 0)' && computedBg !== 'transparent') {
-                                        cellEl.style.backgroundColor = computedBg;
+                                    
+                                    // حفظ backgroundColor
+                                    if (!originalStyle.includes('background-color:') && !originalStyle.includes('backgroundColor')) {
+                                        const computedBg = computedStyle.backgroundColor;
+                                        if (computedBg && computedBg !== 'rgba(0, 0, 0, 0)' && computedBg !== 'transparent') {
+                                            cellEl.style.backgroundColor = computedBg;
+                                        }
+                                    }
+                                    
+                                    // حفظ padding
+                                    if (!originalStyle.includes('padding:')) {
+                                        const computedPadding = computedStyle.padding;
+                                        if (computedPadding && computedPadding !== '0px') {
+                                            cellEl.style.padding = computedPadding;
+                                        } else {
+                                            cellEl.style.padding = '10px 12px';
+                                        }
+                                    }
+                                    
+                                    // حفظ textAlign
+                                    if (!originalStyle.includes('text-align:') && !originalStyle.includes('textAlign')) {
+                                        const computedTextAlign = computedStyle.textAlign;
+                                        if (computedTextAlign) {
+                                            cellEl.style.textAlign = computedTextAlign;
+                                        } else {
+                                            cellEl.style.textAlign = 'right';
+                                        }
+                                    }
+                                    
+                                    // حفظ fontWeight
+                                    if (!originalStyle.includes('font-weight:') && !originalStyle.includes('fontWeight')) {
+                                        const computedFontWeight = computedStyle.fontWeight;
+                                        if (computedFontWeight) {
+                                            cellEl.style.fontWeight = computedFontWeight;
+                                        } else {
+                                            cellEl.style.fontWeight = '600';
+                                        }
                                     }
                                 }
                             }
+                            
+                            // حفظ استایل‌های inline موجود - override نکن (فقط برای سلول‌های بدون rowSpan)
+                            const originalStyle = cellEl.getAttribute('style') || '';
                             
                             // فقط اگر استایل‌های ضروری وجود ندارند، اضافه کن
                             if (cellEl.tagName === 'TH') {
@@ -3296,21 +3339,26 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     }
                                 }
                                 
-                                // حفظ رنگ فونت - اگر در inline style تعریف شده، override نکن
-                                if (!originalStyle.includes('color:')) {
-                                    const computedColor = window.getComputedStyle(cellEl).color;
-                                    if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)') {
-                                        cellEl.style.color = computedColor;
-                                    }
-                                }
-                                
-                                // برای سلول "مبلغ کل" - رنگ مشکی (override کن)
+                                // برای سلول "مبلغ کل" - رنگ مشکی (همیشه override کن - حتی اگر در inline style تعریف شده باشد)
                                 const computedBg = window.getComputedStyle(cellEl).backgroundColor;
+                                const computedFontWeight = window.getComputedStyle(cellEl).fontWeight;
+                                const cellText = (cellEl.textContent || '').trim();
                                 const isTotalAmount = (computedBg === 'rgb(241, 245, 249)' || computedBg === 'rgb(226, 232, 240)') &&
-                                                      cellEl.style.fontWeight === 'bold' &&
-                                                      (cellEl.textContent || '').trim() !== '';
+                                                      (computedFontWeight === 'bold' || computedFontWeight === '700' || cellEl.style.fontWeight === 'bold') &&
+                                                      cellText !== '' &&
+                                                      cellText !== '-';
                                 if (isTotalAmount) {
-                                    cellEl.style.color = '#1e293b'; // مشکی
+                                    // همیشه رنگ مشکی - override کن حتی اگر در inline style تعریف شده باشد
+                                    cellEl.style.color = '#1e293b';
+                                    cellEl.style.setProperty('color', '#1e293b', 'important');
+                                } else {
+                                    // حفظ رنگ فونت - اگر در inline style تعریف شده، override نکن
+                                    if (!originalStyle.includes('color:')) {
+                                        const computedColor = window.getComputedStyle(cellEl).color;
+                                        if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)') {
+                                            cellEl.style.color = computedColor;
+                                        }
+                                    }
                                 }
                                 
                                 // حفظ backgroundColor اگر در inline style تعریف شده
