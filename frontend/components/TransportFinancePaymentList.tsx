@@ -622,16 +622,18 @@ const renderInvoiceLayout1 = (
                                             }}>
                                                 {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
                                             </td>
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '24px' : '20px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: 'bold',
-                                                backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                color: '#1e293b'
-                                            }}>
+                                            <td 
+                                                data-total-amount="true"
+                                                style={{ 
+                                                    fontSize: row.isTotal ? '24px' : '20px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'bold',
+                                                    backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
+                                                    color: '#1e293b'
+                                                }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
                                         </tr>
@@ -889,16 +891,18 @@ const renderInvoiceLayout1 = (
                                             }}>
                                                 {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
                                             </td>
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '24px' : '20px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: 'bold',
-                                                backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                color: '#1e293b'
-                                            }}>
+                                            <td 
+                                                data-total-amount="true"
+                                                style={{ 
+                                                    fontSize: row.isTotal ? '24px' : '20px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'bold',
+                                                    backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
+                                                    color: '#1e293b'
+                                                }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
                                         </tr>
@@ -3199,36 +3203,53 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         });
                         
                         // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مشکی تنظیم کن
-                        // استفاده از یک روش ساده‌تر: بررسی مستقیم style attribute
+                        // استفاده از data attribute برای شناسایی سریع‌تر
+                        const totalAmountCells = clonedInvoice.querySelectorAll('td[data-total-amount="true"]');
+                        totalAmountCells.forEach((cell) => {
+                            const cellEl = cell as HTMLElement;
+                            // مستقیماً رنگ مشکی تنظیم کن
+                            cellEl.style.color = '#1e293b';
+                            cellEl.style.setProperty('color', '#1e293b', 'important');
+                            // همچنین در style attribute هم اضافه کن
+                            const currentStyle = cellEl.getAttribute('style') || '';
+                            if (!currentStyle.includes('color: #1e293b') && !currentStyle.includes('color:#1e293b')) {
+                                cellEl.setAttribute('style', currentStyle + '; color: #1e293b !important;');
+                            }
+                        });
+                        
+                        // همچنین برای سلول‌هایی که data attribute ندارند اما مشخصات مشابه دارند
                         const allCells = clonedInvoice.querySelectorAll('td');
                         allCells.forEach((cell) => {
                             const cellEl = cell as HTMLElement;
-                            const cellStyle = cellEl.getAttribute('style') || '';
-                            const cellText = (cellEl.textContent || '').trim();
-                            
-                            // بررسی مستقیم style attribute برای backgroundColor و fontWeight
-                            const hasTotalBg = (
-                                cellStyle.includes('background-color: #f1f5f9') || 
-                                cellStyle.includes('background-color: #e2e8f0') ||
-                                cellStyle.includes('backgroundColor: #f1f5f9') || 
-                                cellStyle.includes('backgroundColor: #e2e8f0')
-                            );
-                            
-                            const hasBoldFont = (
-                                cellStyle.includes('font-weight: bold') || 
-                                cellStyle.includes('fontWeight: bold') ||
-                                cellStyle.includes('font-weight:bold') ||
-                                cellStyle.includes('fontWeight:bold')
-                            );
-                            
-                            // اگر backgroundColor و fontWeight درست باشد و متن خالی نباشد
-                            if (hasTotalBg && hasBoldFont && cellText !== '' && cellText !== '-') {
-                                // همیشه رنگ مشکی - override کن
-                                cellEl.style.color = '#1e293b';
-                                cellEl.style.setProperty('color', '#1e293b', 'important');
-                                // همچنین در style attribute هم اضافه کن
-                                if (!cellStyle.includes('color: #1e293b') && !cellStyle.includes('color:#1e293b')) {
-                                    cellEl.setAttribute('style', cellStyle + '; color: #1e293b !important;');
+                            // اگر قبلاً تنظیم نشده باشد
+                            if (!cellEl.hasAttribute('data-total-amount')) {
+                                const cellStyle = cellEl.getAttribute('style') || '';
+                                const cellText = (cellEl.textContent || '').trim();
+                                
+                                // بررسی مستقیم style attribute برای backgroundColor و fontWeight
+                                const hasTotalBg = (
+                                    cellStyle.includes('background-color: #f1f5f9') || 
+                                    cellStyle.includes('background-color: #e2e8f0') ||
+                                    cellStyle.includes('backgroundColor: #f1f5f9') || 
+                                    cellStyle.includes('backgroundColor: #e2e8f0')
+                                );
+                                
+                                const hasBoldFont = (
+                                    cellStyle.includes('font-weight: bold') || 
+                                    cellStyle.includes('fontWeight: bold') ||
+                                    cellStyle.includes('font-weight:bold') ||
+                                    cellStyle.includes('fontWeight:bold')
+                                );
+                                
+                                // اگر backgroundColor و fontWeight درست باشد و متن خالی نباشد
+                                if (hasTotalBg && hasBoldFont && cellText !== '' && cellText !== '-') {
+                                    // همیشه رنگ مشکی - override کن
+                                    cellEl.style.color = '#1e293b';
+                                    cellEl.style.setProperty('color', '#1e293b', 'important');
+                                    // همچنین در style attribute هم اضافه کن
+                                    if (!cellStyle.includes('color: #1e293b') && !cellStyle.includes('color:#1e293b')) {
+                                        cellEl.setAttribute('style', cellStyle + '; color: #1e293b !important;');
+                                    }
                                 }
                             }
                         });
