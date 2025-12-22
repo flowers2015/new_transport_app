@@ -630,7 +630,7 @@ const renderInvoiceLayout1 = (
                                                 verticalAlign: 'middle',
                                                 fontWeight: 'bold',
                                                 backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                color: row.isTotal ? '#1e293b' : '#1e40af'
+                                                color: '#1e293b'
                                             }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
@@ -682,7 +682,7 @@ const renderInvoiceLayout1 = (
                                     </div>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
-                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e40af' }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e293b' }}>
                                             {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                         </div>
                                     </div>
@@ -897,7 +897,7 @@ const renderInvoiceLayout1 = (
                                                 verticalAlign: 'middle',
                                                 fontWeight: 'bold',
                                                 backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                color: row.isTotal ? '#1e293b' : '#1e40af'
+                                                color: '#1e293b'
                                             }}>
                                                 {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                             </td>
@@ -949,7 +949,7 @@ const renderInvoiceLayout1 = (
                                     </div>
                                     <div>
                                         <div style={{ color: '#64748b', fontSize: '14px' }}>مبلغ کل</div>
-                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e40af' }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '20px', color: '#1e293b' }}>
                                             {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
                                         </div>
                                     </div>
@@ -3221,58 +3221,124 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             });
                         });
                         
-                        // اعمال استایل‌های سلول‌ها (td و th)
+                        // اعمال استایل‌های سلول‌ها (td و th) - حفظ استایل‌های inline موجود
                         const clonedCells = clonedInvoice.querySelectorAll('td, th');
                         clonedCells.forEach((cell) => {
                             const cellEl = cell as HTMLElement;
                             
-                            // padding - داینامیک بر اساس نوع سلول
-                            const rowSpan = cellEl.getAttribute('rowspan');
-                            if (cellEl.tagName === 'TH' && rowSpan === '2') {
-                                // برای headerهای rowspan=2، padding بیشتر و height ثابت
-                                cellEl.style.padding = '0';
-                                cellEl.style.paddingTop = '15px';
-                                cellEl.style.paddingBottom = '5px';
-                                cellEl.style.paddingLeft = '6px';
-                                cellEl.style.paddingRight = '6px';
-                                cellEl.style.height = '70px';
-                                cellEl.style.fontSize = '11px';
-                                cellEl.style.lineHeight = '1.8';
-                                cellEl.style.verticalAlign = 'top';
+                            // حفظ rowSpan - مهم برای merge کردن دسته‌بندی‌ها
+                            const rowSpan = cellEl.getAttribute('rowspan') || cellEl.getAttribute('rowSpan');
+                            if (rowSpan) {
+                                cellEl.setAttribute('rowspan', rowSpan);
+                                cellEl.setAttribute('rowSpan', rowSpan); // برای اطمینان
+                                // مطمئن شو که rowSpan در DOM حفظ شده است
+                                (cellEl as any).rowSpan = parseInt(rowSpan);
+                            }
+                            
+                            // حفظ استایل‌های inline موجود - override نکن
+                            const originalStyle = cellEl.getAttribute('style') || '';
+                            
+                            // برای سلول‌های merge شده - مطمئن شو که display درست است
+                            if (rowSpan && parseInt(rowSpan) > 1) {
                                 cellEl.style.display = 'table-cell';
-                            } else if (cellEl.tagName === 'TH') {
-                                // برای headerهای عادی
-                                cellEl.style.padding = '8px 4px';
-                                cellEl.style.fontSize = '10px';
                                 cellEl.style.verticalAlign = 'middle';
-                            } else {
-                                // برای سلول‌های داده
-                                cellEl.style.padding = '10px 8px';
-                                cellEl.style.fontSize = '11px';
-                                cellEl.style.lineHeight = '1.6';
-                                cellEl.style.verticalAlign = 'middle';
-                                cellEl.style.boxSizing = 'border-box';
-                                
-                                // برای اعداد: nowrap، برای متن: normal
-                                const cellText = cellEl.textContent || '';
-                                const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim());
-                                if (isNumber) {
-                                    cellEl.style.whiteSpace = 'nowrap';
-                                } else {
-                                    cellEl.style.whiteSpace = 'normal';
-                                    cellEl.style.wordBreak = 'break-word';
-                                    cellEl.style.overflowWrap = 'break-word';
+                                // حفظ استایل‌های موجود برای سلول‌های merge شده
+                                if (!originalStyle.includes('fontSize') && !originalStyle.includes('font-size')) {
+                                    const computedStyle = window.getComputedStyle(cellEl);
+                                    if (computedStyle.fontSize && computedStyle.fontSize !== '0px') {
+                                        cellEl.style.fontSize = computedStyle.fontSize;
+                                    }
+                                }
+                                if (!originalStyle.includes('color:')) {
+                                    const computedColor = window.getComputedStyle(cellEl).color;
+                                    if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)') {
+                                        cellEl.style.color = computedColor;
+                                    }
+                                }
+                                if (!originalStyle.includes('background-color:') && !originalStyle.includes('backgroundColor')) {
+                                    const computedBg = window.getComputedStyle(cellEl).backgroundColor;
+                                    if (computedBg && computedBg !== 'rgba(0, 0, 0, 0)' && computedBg !== 'transparent') {
+                                        cellEl.style.backgroundColor = computedBg;
+                                    }
                                 }
                             }
                             
-                            // text-align
-                            cellEl.style.textAlign = 'center';
+                            // فقط اگر استایل‌های ضروری وجود ندارند، اضافه کن
+                            if (cellEl.tagName === 'TH') {
+                                // برای headerها
+                                if (!cellEl.style.backgroundColor || cellEl.style.backgroundColor === 'transparent') {
+                                    cellEl.style.backgroundColor = '#1e40af';
+                                }
+                                if (!cellEl.style.color) {
+                                    cellEl.style.color = '#ffffff';
+                                }
+                                if (!cellEl.style.fontWeight) {
+                                    cellEl.style.fontWeight = 'bold';
+                                }
+                            } else {
+                                // برای سلول‌های داده (td)
+                                // حفظ استایل‌های inline موجود - override نکن
+                                if (!cellEl.style.fontSize) {
+                                    const computedStyle = window.getComputedStyle(cellEl);
+                                    if (computedStyle.fontSize && computedStyle.fontSize !== '0px') {
+                                        cellEl.style.fontSize = computedStyle.fontSize;
+                                    } else {
+                                        cellEl.style.fontSize = '18px';
+                                    }
+                                }
+                                
+                                // حفظ استایل‌های inline موجود - override نکن
+                                // فقط اگر استایل‌ها در inline style نیستند، از computed style استفاده کن
+                                if (!originalStyle.includes('fontSize') && !originalStyle.includes('font-size')) {
+                                    const computedStyle = window.getComputedStyle(cellEl);
+                                    if (computedStyle.fontSize && computedStyle.fontSize !== '0px') {
+                                        cellEl.style.fontSize = computedStyle.fontSize;
+                                    }
+                                }
+                                
+                                // حفظ رنگ فونت - اگر در inline style تعریف شده، override نکن
+                                if (!originalStyle.includes('color:')) {
+                                    const computedColor = window.getComputedStyle(cellEl).color;
+                                    if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)') {
+                                        cellEl.style.color = computedColor;
+                                    }
+                                }
+                                
+                                // برای سلول "مبلغ کل" - رنگ مشکی (override کن)
+                                const computedBg = window.getComputedStyle(cellEl).backgroundColor;
+                                const isTotalAmount = (computedBg === 'rgb(241, 245, 249)' || computedBg === 'rgb(226, 232, 240)') &&
+                                                      cellEl.style.fontWeight === 'bold' &&
+                                                      (cellEl.textContent || '').trim() !== '';
+                                if (isTotalAmount) {
+                                    cellEl.style.color = '#1e293b'; // مشکی
+                                }
+                                
+                                // حفظ backgroundColor اگر در inline style تعریف شده
+                                if (!originalStyle.includes('background-color:') && !originalStyle.includes('backgroundColor')) {
+                                    if (computedBg && computedBg !== 'rgba(0, 0, 0, 0)' && computedBg !== 'transparent') {
+                                        cellEl.style.backgroundColor = computedBg;
+                                    }
+                                }
+                                
+                                // حفظ padding اگر در inline style تعریف شده
+                                if (!originalStyle.includes('padding:')) {
+                                    const computedPadding = window.getComputedStyle(cellEl).padding;
+                                    if (computedPadding && computedPadding !== '0px') {
+                                        cellEl.style.padding = computedPadding;
+                                    }
+                                }
+                                
+                                // حفظ textAlign اگر در inline style تعریف شده
+                                if (!originalStyle.includes('text-align:') && !originalStyle.includes('textAlign')) {
+                                    const computedTextAlign = window.getComputedStyle(cellEl).textAlign;
+                                    if (computedTextAlign) {
+                                        cellEl.style.textAlign = computedTextAlign;
+                                    }
+                                }
+                            }
                             
-                            // box-sizing برای همه سلول‌ها
-                            cellEl.style.boxSizing = 'border-box';
-                            
-                            // border
-                            if (!cellEl.style.border || cellEl.style.border === 'none') {
+                            // border - فقط اگر تعریف نشده باشد
+                            if (!cellEl.style.border || cellEl.style.border === 'none' || cellEl.style.border === '') {
                                 if (cellEl.tagName === 'TH') {
                                     cellEl.style.border = '1px solid #475569';
                                 } else {
@@ -3280,33 +3346,18 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 }
                             }
                             
-                            // font-size - حفظ استایل‌های inline موجود
-                            if (!cellEl.style.fontSize || cellEl.style.fontSize === '') {
-                                // فقط اگر fontSize تعریف نشده باشد، یک مقدار پیش‌فرض بگذار
-                                const computedStyle = window.getComputedStyle(cellEl);
-                                if (computedStyle.fontSize === '0px' || !computedStyle.fontSize) {
-                                    cellEl.style.fontSize = '18px'; // مقدار پیش‌فرض برای جدول جدید
-                                }
+                            // box-sizing
+                            cellEl.style.boxSizing = 'border-box';
+                            
+                            // vertical-align - حفظ استایل موجود
+                            if (!cellEl.style.verticalAlign) {
+                                cellEl.style.verticalAlign = 'middle';
                             }
                             
-                            // برای headerها - حفظ استایل‌های inline
-                            if (cellEl.tagName === 'TH') {
-                                if (!cellEl.style.fontWeight) {
-                                cellEl.style.fontWeight = 'bold';
-                                }
-                                if (!cellEl.style.backgroundColor || cellEl.style.backgroundColor === 'transparent') {
-                                    cellEl.style.backgroundColor = '#1e40af'; // آبی تیره برای هدر
-                                }
-                                if (!cellEl.style.color) {
-                                cellEl.style.color = '#ffffff';
-                                }
-                            }
-                            
-                            // برای footer
-                            const parentRow = cellEl.parentElement;
-                            if (parentRow && parentRow.tagName === 'TR' && parentRow.parentElement?.tagName === 'TFOOT') {
-                                cellEl.style.backgroundColor = '#f1f5f9';
-                                cellEl.style.fontWeight = 'bold';
+                            // برای سلول‌های merge شده (rowSpan) - مطمئن شو که display درست است
+                            if (rowSpan && parseInt(rowSpan) > 1) {
+                                cellEl.style.display = 'table-cell';
+                                cellEl.style.verticalAlign = 'middle';
                             }
                         });
                     }
