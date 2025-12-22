@@ -3198,6 +3198,51 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             }
                         });
                         
+                        // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مشکی تنظیم کن
+                        const allCells = clonedInvoice.querySelectorAll('td');
+                        allCells.forEach((cell) => {
+                            const cellEl = cell as HTMLElement;
+                            const cellStyle = cellEl.getAttribute('style') || '';
+                            const computedStyle = window.getComputedStyle(cellEl);
+                            
+                            // بررسی backgroundColor از computed style و inline style
+                            const cellBg = computedStyle.backgroundColor || cellEl.style.backgroundColor || '';
+                            const cellBgStr = cellBg.toString().toLowerCase();
+                            
+                            // بررسی fontWeight از computed style و inline style
+                            const cellFontWeight = computedStyle.fontWeight || cellEl.style.fontWeight || '';
+                            const cellFontWeightStr = cellFontWeight.toString().toLowerCase();
+                            
+                            const cellText = (cellEl.textContent || '').trim();
+                            
+                            // تشخیص سلول "مبلغ کل" بر اساس backgroundColor و fontWeight
+                            const hasTotalBg = (
+                                cellBgStr.includes('rgb(241, 245, 249)') || 
+                                cellBgStr.includes('rgb(226, 232, 240)') ||
+                                cellStyle.toLowerCase().includes('background-color: #f1f5f9') || 
+                                cellStyle.toLowerCase().includes('background-color: #e2e8f0') ||
+                                cellStyle.toLowerCase().includes('backgroundcolor: #f1f5f9') || 
+                                cellStyle.toLowerCase().includes('backgroundcolor: #e2e8f0') ||
+                                cellStyle.toLowerCase().includes('background-color: rgb(241, 245, 249)') ||
+                                cellStyle.toLowerCase().includes('background-color: rgb(226, 232, 240)')
+                            );
+                            
+                            const hasBoldFont = (
+                                cellFontWeightStr === 'bold' || 
+                                cellFontWeightStr === '700' ||
+                                cellStyle.toLowerCase().includes('font-weight: bold') || 
+                                cellStyle.toLowerCase().includes('fontweight: bold')
+                            );
+                            
+                            const isTotalAmountCell = hasTotalBg && hasBoldFont && cellText !== '' && cellText !== '-';
+                            
+                            if (isTotalAmountCell) {
+                                // همیشه رنگ مشکی - override کن
+                                cellEl.style.color = '#1e293b';
+                                cellEl.style.setProperty('color', '#1e293b', 'important');
+                            }
+                        });
+                        
                         // اعمال استایل‌های thead و tbody
                         const clonedTheads = clonedInvoice.querySelectorAll('thead');
                         clonedTheads.forEach((thead) => {
@@ -3343,10 +3388,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 const computedBg = window.getComputedStyle(cellEl).backgroundColor;
                                 const computedFontWeight = window.getComputedStyle(cellEl).fontWeight;
                                 const cellText = (cellEl.textContent || '').trim();
-                                const isTotalAmount = (computedBg === 'rgb(241, 245, 249)' || computedBg === 'rgb(226, 232, 240)') &&
-                                                      (computedFontWeight === 'bold' || computedFontWeight === '700' || cellEl.style.fontWeight === 'bold') &&
-                                                      cellText !== '' &&
-                                                      cellText !== '-';
+                                // بررسی دقیق‌تر برای تشخیص سلول "مبلغ کل"
+                                const bgColorStr = computedBg || cellEl.style.backgroundColor || '';
+                                const isTotalAmount = (
+                                    (bgColorStr.includes('241, 245, 249') || bgColorStr.includes('#f1f5f9') || 
+                                     bgColorStr.includes('226, 232, 240') || bgColorStr.includes('#e2e8f0') ||
+                                     computedBg === 'rgb(241, 245, 249)' || computedBg === 'rgb(226, 232, 240)') &&
+                                    (computedFontWeight === 'bold' || computedFontWeight === '700' || 
+                                     cellEl.style.fontWeight === 'bold' || originalStyle.includes('font-weight: bold')) &&
+                                    cellText !== '' &&
+                                    cellText !== '-'
+                                );
                                 if (isTotalAmount) {
                                     // همیشه رنگ مشکی - override کن حتی اگر در inline style تعریف شده باشد
                                     cellEl.style.color = '#1e293b';
