@@ -105,8 +105,8 @@ const renderInvoiceLayout1 = (
         }
     });
 
-    // تابع برای ساخت جدول راننده اصلی (روش 1)
-    const renderMainDriverTableLayout1 = (calculations: any[], title: string) => {
+    // تابع برای ساخت جدول راننده اصلی (روش 1 - استاندارد حسابداری)
+    const renderMainDriverTableLayout1 = (calculations: any[], title: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
         return (
@@ -863,8 +863,8 @@ const renderInvoiceLayout1 = (
         );
     };
 
-    // تابع برای ساخت جدول راننده کمکی (روش 1) - نگه داشته شده برای سازگاری
-    const renderHelperDriverTableLayout1 = (calculations: any[], helperEmployeeId: string, helperName: string) => {
+    // تابع برای ساخت جدول راننده کمکی (روش 1 - استاندارد حسابداری)
+    const renderHelperDriverTableLayout1 = (calculations: any[], helperEmployeeId: string, helperName: string, invoiceAnnouncements: Map<string, any>) => {
         if (calculations.length === 0) return null;
 
         return (
@@ -1017,7 +1017,7 @@ const renderInvoiceLayout1 = (
                     <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2" style={{ fontSize: '22px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                         تورهای بدون راننده کمکی
                     </h2>
-                    {renderMainDriverTableLayoutVertical(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
+                    {renderMainDriverTableLayout1(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                 </div>
             )}
             
@@ -1029,7 +1029,7 @@ const renderInvoiceLayout1 = (
                     </h2>
                     
                     {/* راننده اصلی برای تورهای با راننده کمکی */}
-                    {renderMainDriverTableLayoutVertical(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
+                    {renderMainDriverTableLayout1(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                     
                     {/* راننده‌های کمکی تفکیک شده بر اساس کد پرسنلی */}
                     {Array.from(helperCalculationsByEmployeeId.entries()).map(([employeeId, calcs]) => {
@@ -1037,7 +1037,7 @@ const renderInvoiceLayout1 = (
                         const helperName = firstCalc.helper_driver_name || firstCalc.helperDriverName || '-';
                         return (
                             <div key={employeeId}>
-                                {renderHelperDriverTableLayoutVertical(calcs, employeeId, helperName, invoiceAnnouncements)}
+                                {renderHelperDriverTableLayout1(calcs, employeeId, helperName, invoiceAnnouncements)}
                             </div>
                         );
                     })}
