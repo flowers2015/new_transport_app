@@ -3952,17 +3952,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             {invoiceDialogOpen && selectedInvoiceRecord && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-full max-h-[95vh] overflow-hidden flex flex-col">
-                        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-10">
-                            <h2 className="text-xl font-bold text-slate-800">
+                        <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-white">
                                 صورتحساب {selectedInvoiceRecord.driverName}
                             </h2>
                             <div className="flex gap-2 items-center">
                                 <div className="flex items-center gap-2">
-                                    <label className="text-sm text-slate-700">نوع صورتحساب:</label>
+                                    <label className="text-sm text-white">نوع صورتحساب:</label>
                                     <select
                                         value={invoiceLayout}
                                         onChange={(e) => setInvoiceLayout(e.target.value as InvoiceLayoutType)}
-                                        className="px-3 py-1 border border-slate-300 rounded-md text-sm"
+                                        className="px-3 py-1 border border-slate-300 rounded-md text-sm bg-white text-slate-800"
                                     >
                                         <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 1: استاندارد حسابداری</option>
                                         <option value={InvoiceLayoutType.COMPACT}>روش 2: فشرده</option>
@@ -3970,7 +3970,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     </select>
                                 </div>
                                 <button
-                                    onClick={handlePrintInvoiceDirect}
+                                    onClick={exportInvoiceToImage}
                                     className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700"
                                 >
                                     دانلود عکس
