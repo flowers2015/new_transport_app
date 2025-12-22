@@ -1071,7 +1071,7 @@ const renderInvoiceLayout1 = (
                     <h2 className="text-xl font-bold text-blue-900 mb-4 border-b-2 border-blue-600 pb-2" style={{ fontSize: '22px', fontFamily: 'Vazirmatn, Arial, sans-serif' }}>
                         تورهای بدون راننده کمکی
                     </h2>
-                    {renderMainDriverTableLayoutVertical(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
+                    {renderMainDriverTableLayout1(calculationsWithoutHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                 </div>
             )}
             
@@ -1083,7 +1083,7 @@ const renderInvoiceLayout1 = (
                     </h2>
                     
                     {/* راننده اصلی برای تورهای با راننده کمکی */}
-                    {renderMainDriverTableLayoutVertical(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
+                    {renderMainDriverTableLayout1(calculationsWithHelper, 'هزینه‌های راننده اصلی', invoiceAnnouncements)}
                     
                     {/* راننده‌های کمکی تفکیک شده بر اساس کد پرسنلی */}
                     {Array.from(helperCalculationsByEmployeeId.entries()).map(([employeeId, calcs]) => {
@@ -1091,7 +1091,7 @@ const renderInvoiceLayout1 = (
                         const helperName = firstCalc.helper_driver_name || firstCalc.helperDriverName || '-';
                         return (
                             <div key={employeeId}>
-                                {renderHelperDriverTableLayoutVertical(calcs, employeeId, helperName, invoiceAnnouncements)}
+                                {renderHelperDriverTableLayout1(calcs, employeeId, helperName, invoiceAnnouncements)}
                             </div>
                         );
                     })}
@@ -2723,7 +2723,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 tableEl.style.borderCollapse = 'collapse';
                 // حفظ fontSize و padding از JSX - override نکن
             });
-            
+
             // اطمینان از اینکه فونت‌ها و padding‌ها حفظ می‌شوند
             const allCells = tempDiv.querySelectorAll('td, th');
             allCells.forEach((cell) => {
@@ -2733,7 +2733,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     const computedStyle = window.getComputedStyle(cellEl);
                     if (computedStyle.padding === '0px') {
                         cellEl.style.padding = '10px 8px'; // مقدار پیش‌فرض برای PDF
-                    }
+                }
                 }
                 // textAlign و verticalAlign را فقط اگر تعریف نشده باشد تنظیم کن
                 if (!cellEl.style.textAlign || cellEl.style.textAlign === '') {
@@ -3150,7 +3150,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 tableEl.style.fontSize = '18px';
                             }
                             if (!tableEl.style.fontFamily) {
-                                tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                            tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
                             }
                         });
                         
@@ -3248,13 +3248,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             // برای headerها - حفظ استایل‌های inline
                             if (cellEl.tagName === 'TH') {
                                 if (!cellEl.style.fontWeight) {
-                                    cellEl.style.fontWeight = 'bold';
+                                cellEl.style.fontWeight = 'bold';
                                 }
                                 if (!cellEl.style.backgroundColor || cellEl.style.backgroundColor === 'transparent') {
                                     cellEl.style.backgroundColor = '#1e40af'; // آبی تیره برای هدر
                                 }
                                 if (!cellEl.style.color) {
-                                    cellEl.style.color = '#ffffff';
+                                cellEl.style.color = '#ffffff';
                                 }
                             }
                             
