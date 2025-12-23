@@ -562,12 +562,28 @@ const renderInvoiceLayout1 = (
                                     // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
+                                    // استخراج فیلدهای اضافی از محاسبات و اعلام بار
+                                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                                    const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                                    const approvedKm = (calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR');
+                                    const excessKm = (calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR');
+                                    const approvedMissionDays = (calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR');
+                                    const excessMissionDays = (calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR');
+                                    const totalKm = ((calc.approved_kilometers || calc.approvedKilometers || 0) + (calc.excess_kilometers || calc.excessKilometers || 0)).toLocaleString('fa-IR');
+                                    
                                     // تعریف ردیف‌های اطلاعات اولیه
                                     const initialInfoRows = [
                                         { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
+                                        { key: 'origin', label: 'مبدأ', value: origin },
                                         { key: 'destinations', label: 'مقاصد', value: destinations },
+                                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
                                         { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
-                                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate }
+                                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate },
+                                        { key: 'approved_km', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm },
+                                        { key: 'excess_km', label: 'پیمایش مازاد (کیلومتر)', value: excessKm },
+                                        { key: 'total_km', label: 'پیمایش کل (کیلومتر)', value: totalKm },
+                                        { key: 'approved_mission', label: 'ماموریت مصوب (روز)', value: approvedMissionDays },
+                                        { key: 'excess_mission', label: 'ماموریت مازاد (روز)', value: excessMissionDays }
                                     ];
                                     
                                     // محاسبه تعداد کل ردیف‌ها (اطلاعات اولیه + هزینه‌ها)
@@ -976,14 +992,30 @@ const renderInvoiceLayout1 = (
                                     // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
+                                    // استخراج فیلدهای اضافی از محاسبات و اعلام بار
+                                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                                    const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                                    const approvedKm = (calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR');
+                                    const excessKm = (calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR');
+                                    const totalKm = ((calc.approved_kilometers || calc.approvedKilometers || 0) + (calc.excess_kilometers || calc.excessKilometers || 0)).toLocaleString('fa-IR');
+                                    const approvedMissionDays = (calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR');
+                                    const excessMissionDays = (calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR');
+                                    
                                     // تعریف ردیف‌های اطلاعات اولیه برای راننده کمکی
                                     const initialInfoRows = [
                                         { key: 'employee_id', label: 'کد پرسنلی', value: helperEmployeeId },
                                         { key: 'name', label: 'نام', value: helperName },
-                                        { key: 'destinations', label: 'مقاصد', value: destinations },
                                         { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
+                                        { key: 'origin', label: 'مبدأ', value: origin },
+                                        { key: 'destinations', label: 'مقاصد', value: destinations },
+                                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
                                         { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
-                                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate }
+                                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate },
+                                        { key: 'approved_km', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm },
+                                        { key: 'excess_km', label: 'پیمایش مازاد (کیلومتر)', value: excessKm },
+                                        { key: 'total_km', label: 'پیمایش کل (کیلومتر)', value: totalKm },
+                                        { key: 'approved_mission', label: 'ماموریت مصوب (روز)', value: approvedMissionDays },
+                                        { key: 'excess_mission', label: 'ماموریت مازاد (روز)', value: excessMissionDays }
                                     ];
                                     
                                     const rows = [];
@@ -3717,15 +3749,22 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     const cellText = (firstCell.textContent || '').trim();
                                     const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
                                     const isTotalRow = cellText.includes('جمع کل') || rowBg.includes('rgb(59, 130, 246)') || rowBg.includes('#3b82f6');
-                                    if (!isTotalRow) {
+                                    if (!isTotalRow && cellText.length > 0) {
                                         // تنظیم رنگ مشکی برای ستون دسته‌بندی با !important
                                         firstCell.style.color = '#000000';
                                         firstCell.style.setProperty('color', '#000000', 'important');
                                         firstCell.style.setProperty('background-color', firstCell.style.backgroundColor || '#ffffff', 'important');
-                                        const currentStyle = firstCell.getAttribute('style') || '';
+                                        
                                         // حذف هر رنگ دیگری و اضافه کردن رنگ مشکی
-                                        let newStyle = currentStyle.replace(/color:\s*[^;]+;?/gi, '').replace(/color\s*:\s*[^;]+;?/gi, '');
-                                        newStyle += '; color: #000000 !important;';
+                                        const currentStyle = firstCell.getAttribute('style') || '';
+                                        let newStyle = currentStyle
+                                            .replace(/color:\s*[^;!]+;?/gi, '')
+                                            .replace(/color\s*:\s*[^;!]+;?/gi, '')
+                                            .replace(/color:\s*#[^;!]+;?/gi, '')
+                                            .replace(/color:\s*rgb\([^)]+\);?/gi, '');
+                                        if (!newStyle.includes('color: #000000') && !newStyle.includes('color:#000000')) {
+                                            newStyle += '; color: #000000 !important;';
+                                        }
                                         firstCell.setAttribute('style', newStyle);
                                         
                                         // همچنین برای div های داخل آن
@@ -3735,22 +3774,24 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                             divEl.style.color = '#000000';
                                             divEl.style.setProperty('color', '#000000', 'important');
                                             const divStyle = divEl.getAttribute('style') || '';
-                                            let newDivStyle = divStyle.replace(/color:\s*[^;]+;?/gi, '').replace(/color\s*:\s*[^;]+;?/gi, '');
-                                            newDivStyle += '; color: #000000 !important;';
+                                            let newDivStyle = divStyle
+                                                .replace(/color:\s*[^;!]+;?/gi, '')
+                                                .replace(/color\s*:\s*[^;!]+;?/gi, '')
+                                                .replace(/color:\s*#[^;!]+;?/gi, '')
+                                                .replace(/color:\s*rgb\([^)]+\);?/gi, '');
+                                            if (!newDivStyle.includes('color: #000000') && !newDivStyle.includes('color:#000000')) {
+                                                newDivStyle += '; color: #000000 !important;';
+                                            }
                                             divEl.setAttribute('style', newDivStyle);
                                         });
                                         
-                                        // همچنین برای همه text nodes
-                                        const textNodes: Node[] = [];
-                                        const walker = document.createTreeWalker(
-                                            firstCell,
-                                            NodeFilter.SHOW_TEXT,
-                                            null
-                                        );
-                                        let node;
-                                        while (node = walker.nextNode()) {
-                                            textNodes.push(node);
-                                        }
+                                        // همچنین برای همه text nodes و span ها
+                                        const allTextElements = firstCell.querySelectorAll('span, p, strong, b');
+                                        allTextElements.forEach((el) => {
+                                            const elEl = el as HTMLElement;
+                                            elEl.style.color = '#000000';
+                                            elEl.style.setProperty('color', '#000000', 'important');
+                                        });
                                     }
                                 }
                             });
