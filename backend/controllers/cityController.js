@@ -5,13 +5,21 @@ const pool = require('../db');
  */
 async function getCities(req, res) {
   try {
+    // اطمینان از اینکه expected_days می‌تواند string هم باشد
+    await pool.query(`
+      ALTER TABLE dispatch_routes 
+      ALTER COLUMN expected_days TYPE VARCHAR(255)
+    `).catch(() => {
+      // اگر ستون وجود ندارد یا خطا داد، نادیده بگیر
+    });
+    
     const result = await pool.query(`
       SELECT 
         id,
         city,
         province,
         round_trip_km::NUMERIC as "roundTripKm",
-        expected_days::INTEGER as "expectedDays",
+        expected_days::TEXT as "expectedDays",
         approved_allowance::NUMERIC as "approvedAllowance",
         route_category as "routeCategory",
         distance_category as "distanceCategory",
@@ -25,7 +33,7 @@ async function getCities(req, res) {
       city: row.city || '',
       province: row.province || '',
       roundTripKm: row.roundTripKm !== null ? parseFloat(row.roundTripKm) : null,
-      expectedDays: row.expectedDays !== null ? parseInt(row.expectedDays) : null,
+      expectedDays: row.expectedDays || null, // نگه داشتن به صورت string
       approvedAllowance: row.approvedAllowance !== null ? parseFloat(row.approvedAllowance) : null,
       routeCategory: row.routeCategory || null,
       distanceCategory: row.distanceCategory || null,
@@ -52,7 +60,7 @@ async function getCityById(req, res) {
         city,
         province,
         round_trip_km::NUMERIC as "roundTripKm",
-        expected_days::INTEGER as "expectedDays",
+        expected_days::TEXT as "expectedDays",
         approved_allowance::NUMERIC as "approvedAllowance",
         route_category as "routeCategory",
         distance_category as "distanceCategory",
@@ -71,7 +79,7 @@ async function getCityById(req, res) {
       city: route.city || '',
       province: route.province || '',
       roundTripKm: route.roundTripKm !== null ? parseFloat(route.roundTripKm) : null,
-      expectedDays: route.expectedDays !== null ? parseInt(route.expectedDays) : null,
+      expectedDays: route.expectedDays || null, // نگه داشتن به صورت string
       approvedAllowance: route.approvedAllowance !== null ? parseFloat(route.approvedAllowance) : null,
       routeCategory: route.routeCategory || null,
       distanceCategory: route.distanceCategory || null,
@@ -98,7 +106,27 @@ async function createCity(req, res) {
       return res.status(400).json({ message: 'شهر و استان الزامی است' });
     }
     
+    // اطمینان از اینکه expected_days می‌تواند string هم باشد
+    await client.query(`
+      ALTER TABLE dispatch_routes 
+      ALTER COLUMN expected_days TYPE VARCHAR(255)
+    `).catch(() => {
+      // اگر خطا داد، نادیده بگیر
+    });
+    
     const id = require('crypto').randomUUID();
+    
+    // تبدیل expectedDays: اگر عدد است به string، اگر string است همانطور نگه دار
+    let expectedDaysValue = null;
+    if (expectedDays !== null && expectedDays !== undefined && expectedDays !== '') {
+      if (typeof expectedDays === 'number') {
+        expectedDaysValue = expectedDays.toString();
+      } else if (typeof expectedDays === 'string') {
+        // اگر عدد است، به string تبدیل کن، وگرنه همان string را نگه دار
+        const numValue = parseFloat(expectedDays);
+        expectedDaysValue = isNaN(numValue) ? expectedDays : numValue.toString();
+      }
+    }
     
     const insertQuery = await client.query(`
       INSERT INTO dispatch_routes (
@@ -111,7 +139,7 @@ async function createCity(req, res) {
         city,
         province,
         round_trip_km::NUMERIC as "roundTripKm",
-        expected_days::INTEGER as "expectedDays",
+        expected_days::TEXT as "expectedDays",
         approved_allowance::NUMERIC as "approvedAllowance",
         route_category as "routeCategory",
         distance_category as "distanceCategory",
@@ -121,7 +149,7 @@ async function createCity(req, res) {
       city,
       province,
       roundTripKm ? parseFloat(roundTripKm) : null,
-      expectedDays ? parseInt(expectedDays) : null,
+      expectedDaysValue,
       approvedAllowance ? parseFloat(approvedAllowance) : null,
       routeCategory || null,
       distanceCategory || null,
@@ -136,7 +164,7 @@ async function createCity(req, res) {
       city: newRoute.city || '',
       province: newRoute.province || '',
       roundTripKm: newRoute.roundTripKm !== null ? parseFloat(newRoute.roundTripKm) : null,
-      expectedDays: newRoute.expectedDays !== null ? parseInt(newRoute.expectedDays) : null,
+      expectedDays: newRoute.expectedDays || null, // نگه داشتن به صورت string
       approvedAllowance: newRoute.approvedAllowance !== null ? parseFloat(newRoute.approvedAllowance) : null,
       routeCategory: newRoute.routeCategory || null,
       distanceCategory: newRoute.distanceCategory || null,
@@ -167,6 +195,26 @@ async function updateCity(req, res) {
       return res.status(400).json({ message: 'شهر و استان الزامی است' });
     }
     
+    // اطمینان از اینکه expected_days می‌تواند string هم باشد
+    await client.query(`
+      ALTER TABLE dispatch_routes 
+      ALTER COLUMN expected_days TYPE VARCHAR(255)
+    `).catch(() => {
+      // اگر خطا داد، نادیده بگیر
+    });
+    
+    // تبدیل expectedDays: اگر عدد است به string، اگر string است همانطور نگه دار
+    let expectedDaysValue = null;
+    if (expectedDays !== null && expectedDays !== undefined && expectedDays !== '') {
+      if (typeof expectedDays === 'number') {
+        expectedDaysValue = expectedDays.toString();
+      } else if (typeof expectedDays === 'string') {
+        // اگر عدد است، به string تبدیل کن، وگرنه همان string را نگه دار
+        const numValue = parseFloat(expectedDays);
+        expectedDaysValue = isNaN(numValue) ? expectedDays : numValue.toString();
+      }
+    }
+    
     const updateQuery = await client.query(`
       UPDATE dispatch_routes
       SET 
@@ -184,7 +232,7 @@ async function updateCity(req, res) {
         city,
         province,
         round_trip_km::NUMERIC as "roundTripKm",
-        expected_days::INTEGER as "expectedDays",
+        expected_days::TEXT as "expectedDays",
         approved_allowance::NUMERIC as "approvedAllowance",
         route_category as "routeCategory",
         distance_category as "distanceCategory",
@@ -193,7 +241,7 @@ async function updateCity(req, res) {
       city,
       province,
       roundTripKm ? parseFloat(roundTripKm) : null,
-      expectedDays ? parseInt(expectedDays) : null,
+      expectedDaysValue,
       approvedAllowance ? parseFloat(approvedAllowance) : null,
       routeCategory || null,
       distanceCategory || null,
@@ -214,7 +262,7 @@ async function updateCity(req, res) {
       city: updatedRoute.city || '',
       province: updatedRoute.province || '',
       roundTripKm: updatedRoute.roundTripKm !== null ? parseFloat(updatedRoute.roundTripKm) : null,
-      expectedDays: updatedRoute.expectedDays !== null ? parseInt(updatedRoute.expectedDays) : null,
+      expectedDays: updatedRoute.expectedDays || null, // نگه داشتن به صورت string
       approvedAllowance: updatedRoute.approvedAllowance !== null ? parseFloat(updatedRoute.approvedAllowance) : null,
       routeCategory: updatedRoute.routeCategory || null,
       distanceCategory: updatedRoute.distanceCategory || null,
@@ -269,6 +317,14 @@ async function importCitiesFromExcel(req, res) {
   try {
     await client.query('BEGIN');
     
+    // اطمینان از اینکه expected_days می‌تواند string هم باشد
+    await client.query(`
+      ALTER TABLE dispatch_routes 
+      ALTER COLUMN expected_days TYPE VARCHAR(255)
+    `).catch(() => {
+      // اگر خطا داد، نادیده بگیر
+    });
+    
     if (!req.file) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'فایل Excel ارسال نشده است' });
@@ -305,9 +361,17 @@ async function importCitiesFromExcel(req, res) {
         const roundTripKm = roundTripKmRaw !== null && roundTripKmRaw !== '' && roundTripKmRaw !== undefined
           ? (typeof roundTripKmRaw === 'number' ? roundTripKmRaw : (isNaN(parseFloat(roundTripKmRaw)) ? null : parseFloat(roundTripKmRaw)))
           : null;
-        const expectedDays = expectedDaysRaw !== null && expectedDaysRaw !== '' && expectedDaysRaw !== undefined
-          ? (typeof expectedDaysRaw === 'number' ? expectedDaysRaw : (isNaN(parseFloat(expectedDaysRaw)) ? null : parseInt(expectedDaysRaw)))
-          : null;
+        // تبدیل expectedDays: اگر عدد است به string، اگر string است (مثل "مصوب ترابری نیست") همانطور نگه دار
+        let expectedDays = null;
+        if (expectedDaysRaw !== null && expectedDaysRaw !== '' && expectedDaysRaw !== undefined) {
+          if (typeof expectedDaysRaw === 'number') {
+            expectedDays = expectedDaysRaw.toString();
+          } else if (typeof expectedDaysRaw === 'string') {
+            // اگر عدد است، به string تبدیل کن، وگرنه همان string را نگه دار
+            const numValue = parseFloat(expectedDaysRaw);
+            expectedDays = isNaN(numValue) ? expectedDaysRaw : numValue.toString();
+          }
+        }
         const approvedAllowance = approvedAllowanceRaw !== null && approvedAllowanceRaw !== '' && approvedAllowanceRaw !== undefined
           ? (typeof approvedAllowanceRaw === 'number' ? approvedAllowanceRaw : (isNaN(parseFloat(approvedAllowanceRaw)) ? null : parseFloat(approvedAllowanceRaw)))
           : null;
@@ -432,9 +496,17 @@ async function importCitiesFromJson(req, res) {
         const roundTripKm = roundTripKmRaw !== null && roundTripKmRaw !== '' && roundTripKmRaw !== undefined
           ? (typeof roundTripKmRaw === 'number' ? roundTripKmRaw : (isNaN(parseFloat(roundTripKmRaw)) ? null : parseFloat(roundTripKmRaw)))
           : null;
-        const expectedDays = expectedDaysRaw !== null && expectedDaysRaw !== '' && expectedDaysRaw !== undefined
-          ? (typeof expectedDaysRaw === 'number' ? expectedDaysRaw : (isNaN(parseFloat(expectedDaysRaw)) ? null : parseInt(expectedDaysRaw)))
-          : null;
+        // تبدیل expectedDays: اگر عدد است به string، اگر string است (مثل "مصوب ترابری نیست") همانطور نگه دار
+        let expectedDays = null;
+        if (expectedDaysRaw !== null && expectedDaysRaw !== '' && expectedDaysRaw !== undefined) {
+          if (typeof expectedDaysRaw === 'number') {
+            expectedDays = expectedDaysRaw.toString();
+          } else if (typeof expectedDaysRaw === 'string') {
+            // اگر عدد است، به string تبدیل کن، وگرنه همان string را نگه دار
+            const numValue = parseFloat(expectedDaysRaw);
+            expectedDays = isNaN(numValue) ? expectedDaysRaw : numValue.toString();
+          }
+        }
         const approvedAllowance = approvedAllowanceRaw !== null && approvedAllowanceRaw !== '' && approvedAllowanceRaw !== undefined
           ? (typeof approvedAllowanceRaw === 'number' ? approvedAllowanceRaw : (isNaN(parseFloat(approvedAllowanceRaw)) ? null : parseFloat(approvedAllowanceRaw)))
           : null;
@@ -529,7 +601,7 @@ async function exportCitiesToJson(req, res) {
         city,
         province,
         round_trip_km::NUMERIC as "roundTripKm",
-        expected_days::INTEGER as "expectedDays",
+        expected_days::TEXT as "expectedDays",
         approved_allowance::NUMERIC as "approvedAllowance",
         route_category as "routeCategory",
         distance_category as "distanceCategory",
@@ -542,7 +614,7 @@ async function exportCitiesToJson(req, res) {
       city: row.city || '',
       province: row.province || '',
       roundTripKm: row.roundTripKm !== null ? parseFloat(row.roundTripKm) : null,
-      expectedDays: row.expectedDays !== null ? parseInt(row.expectedDays) : null,
+      expectedDays: row.expectedDays || null, // نگه داشتن به صورت string
       approvedAllowance: row.approvedAllowance !== null ? parseFloat(row.approvedAllowance) : null,
       routeCategory: row.routeCategory || null,
       distanceCategory: row.distanceCategory || null,
@@ -583,7 +655,7 @@ async function exportCitiesToExcel(req, res) {
       'شهر': row.city || '',
       'استان': row.province || '',
       'کیلومتر رفت و برگشت': row.roundTripKm !== null ? parseFloat(row.roundTripKm) : '',
-      'روزهای مورد انتظار': row.expectedDays !== null ? parseInt(row.expectedDays) : '',
+      'روزهای مورد انتظار': row.expectedDays || '',
       'حق ماموریت مصوب': row.approvedAllowance !== null ? parseFloat(row.approvedAllowance) : '',
       'دسته‌بندی مسیر': row.routeCategory || '',
       'دسته‌بندی فاصله': row.distanceCategory || '',

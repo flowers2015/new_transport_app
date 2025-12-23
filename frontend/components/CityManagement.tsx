@@ -9,7 +9,7 @@ interface DispatchRoute {
     city: string;
     province: string;
     roundTripKm?: number | null;
-    expectedDays?: number | null;
+    expectedDays?: string | number | null; // می‌تواند string (مثل "مصوب ترابری نیست") یا number باشد
     approvedAllowance?: number | null;
     routeCategory?: string | null;
     distanceCategory?: string | null;
@@ -371,7 +371,13 @@ const CityManagement: React.FC = () => {
                                                 <td className="px-2 py-2 font-medium">{route.city || '-'}</td>
                                                 <td className="px-2 py-2">{route.province || '-'}</td>
                                                 <td className="px-2 py-2">{route.roundTripKm?.toLocaleString('fa-IR') || '-'}</td>
-                                                <td className="px-2 py-2">{route.expectedDays?.toLocaleString('fa-IR') || '-'}</td>
+                                                <td className="px-2 py-2">
+                                                    {route.expectedDays !== null && route.expectedDays !== undefined 
+                                                        ? (typeof route.expectedDays === 'number' 
+                                                            ? route.expectedDays.toLocaleString('fa-IR') 
+                                                            : route.expectedDays)
+                                                        : '-'}
+                                                </td>
                                                 <td className="px-2 py-2">{route.approvedAllowance?.toLocaleString('fa-IR') || '-'}</td>
                                                 <td className="px-2 py-2">{route.routeCategory || '-'}</td>
                                                 <td className="px-2 py-2">{route.distanceCategory || '-'}</td>
@@ -553,14 +559,13 @@ const RouteFormModal: React.FC<{
                             />
                         </div>
                         <div>
-                            <label className={labelClass}>روزهای مورد انتظار</label>
+                            <label className={labelClass}>روزهای مورد انتظار (می‌تواند عدد یا متن باشد، مثل: "مصوب ترابری نیست")</label>
                             <input
-                                type="number"
+                                type="text"
                                 value={form.expectedDays}
                                 onChange={e => setForm({...form, expectedDays: e.target.value})}
                                 className={inputClass}
-                                min="0"
-                                step="1"
+                                placeholder="مثال: 5 یا 'مصوب ترابری نیست'"
                             />
                         </div>
                     </div>
