@@ -544,7 +544,7 @@ const renderInvoiceLayout1 = (
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* ردیف‌های اطلاعات بارنامه برای راننده اصلی */}
+                                {/* برای هر محاسبه، ردیف‌های هزینه مربوط به آن */}
                                 {calculations.map((calc, calcIdx) => {
                                     const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
                                     const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
@@ -558,76 +558,141 @@ const renderInvoiceLayout1 = (
                                             ? (calc.calculation_date || calc.calculationDate)
                                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                                     
-                                    return (
-                                        <tr key={`bill-info-${calcIdx}`} style={{ 
-                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                                            height: '50px'
-                                        }}>
-                                            <td colSpan={4} style={{ 
-                                                fontSize: '16px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: '600',
-                                                color: '#334155',
-                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
-                                            }}>
-                                                <strong>شماره بارنامه:</strong> {billOfLadingNumber} | <strong>مقاصد:</strong> {destinations} | <strong>تاریخ صدور بارنامه:</strong> {billOfLadingDate} | <strong>تاریخ محاسبه:</strong> {calculationDate}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {costRows.map((row, rowIdx) => {
-                                    const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
-                                    const count = row.getCount();
-                                    const avgUnitPrice = count > 0 ? total / count : 0;
-                                    const isEven = rowIdx % 2 === 0;
+                                    // اطلاعات بارنامه برای نمایش در ستون دسته‌بندی
+                                    const billInfo = `شماره بارنامه: ${billOfLadingNumber} | مقاصد: ${destinations} | تاریخ صدور: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
                                     
-                                    // محاسبه rowSpan برای merge کردن دسته‌بندی‌های یکسان
-                                    let categoryRowSpan = 1;
-                                    let isFirstInCategory = true;
+                                    // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
+                                    const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
-                                    if (!row.isTotal) {
-                                        // تعداد ردیف‌های متوالی با همین دسته‌بندی
-                                        let sameCategoryCount = 1;
-                                        for (let i = rowIdx + 1; i < costRows.length; i++) {
-                                            if (costRows[i].isTotal) break;
-                                            if (costRows[i].category === row.category) {
-                                                sameCategoryCount++;
-                                            } else {
-                                                break;
+                                    return relevantCostRows.map((row, rowIdx) => {
+                                        const value = row.getValue(calc);
+                                        const unitPrice = row.getUnitPrice(calc);
+                                        const isEven = (calcIdx + rowIdx) % 2 === 0;
+                                        
+                                        // بررسی اینکه آیا این اولین ردیف در این دسته‌بندی برای این محاسبه است
+                                        const isFirstInCategory = rowIdx === 0 || relevantCostRows[rowIdx - 1].category !== row.category;
+                                        
+                                        // محاسبه rowSpan برای merge کردن دسته‌بندی‌های یکسان
+                                        let categoryRowSpan = 1;
+                                        if (isFirstInCategory) {
+                                            for (let i = rowIdx + 1; i < relevantCostRows.length; i++) {
+                                                if (relevantCostRows[i].category === row.category) {
+                                                    categoryRowSpan++;
+                                                } else {
+                                                    break;
+                                                }
                                             }
                                         }
-                                        categoryRowSpan = sameCategoryCount;
                                         
-                                        // بررسی اینکه آیا این اولین ردیف در این دسته‌بندی است
-                                        if (rowIdx > 0 && !costRows[rowIdx - 1].isTotal && costRows[rowIdx - 1].category === row.category) {
-                                            isFirstInCategory = false;
-                                        }
-                                    }
-                                    
-                                    return (
-                                        <tr key={row.key} style={{ 
-                                            backgroundColor: row.isTotal ? '#3b82f6' : (isEven ? '#ffffff' : '#f8fafc'),
-                                            height: '50px'
-                                        }}>
-                                            {isFirstInCategory && !row.isTotal ? (
-                                                <td rowSpan={categoryRowSpan} style={{ 
+                                        return (
+                                            <tr key={`calc-${calcIdx}-${row.key}`} style={{ 
+                                                backgroundColor: isEven ? '#ffffff' : '#f8fafc',
+                                                height: '50px'
+                                            }}>
+                                                {isFirstInCategory ? (
+                                                    <td rowSpan={categoryRowSpan} style={{ 
+                                                        fontSize: '14px', 
+                                                        padding: '10px 12px', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        textAlign: 'right', 
+                                                        verticalAlign: 'top',
+                                                        fontWeight: '600',
+                                                        color: '#000000',
+                                                        backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                    }}>
+                                                        <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#1e293b' }}>{row.category}</div>
+                                                        <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#334155' }}>{billInfo}</div>
+                                                    </td>
+                                                ) : null}
+                                                <td style={{ 
                                                     fontSize: '18px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #cbd5e1', 
                                                     textAlign: 'center', 
                                                     verticalAlign: 'middle',
                                                     fontWeight: '600',
-                                                    color: '#64748b',
-                                                    backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
                                                 }}>
-                                                    {row.category}
+                                                    {row.label}
                                                 </td>
-                                            ) : row.isTotal ? (
                                                 <td style={{ 
-                                                    fontSize: '20px', 
+                                                    fontSize: '18px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'normal',
+                                                    color: '#334155'
+                                                }}>
+                                                    {unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}
+                                                </td>
+                                                <td 
+                                                    data-total-amount="true"
+                                                    style={{ 
+                                                        fontSize: '20px', 
+                                                        padding: '10px 12px', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        textAlign: 'center', 
+                                                        verticalAlign: 'middle',
+                                                        fontWeight: 'bold',
+                                                        backgroundColor: '#f1f5f9',
+                                                        color: '#1e293b'
+                                                    }}>
+                                                    {value > 0 ? value.toLocaleString('fa-IR') : '-'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
+                                }).flat()}
+                                {/* ردیف جمع کل */}
+                                {(() => {
+                                    const total = calculations.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
+                                    return (
+                                        <tr style={{ 
+                                            backgroundColor: '#3b82f6',
+                                            height: '50px'
+                                        }}>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #3b82f6', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#3b82f6',
+                                                color: '#ffffff'
+                                            }}>
+                                                جمع کل
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #3b82f6', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#3b82f6',
+                                                color: '#ffffff'
+                                            }}>
+                                                -
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #3b82f6', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#3b82f6',
+                                                color: '#ffffff'
+                                            }}>
+                                                -
+                                            </td>
+                                            <td 
+                                                data-total-amount="true"
+                                                style={{ 
+                                                    fontSize: '24px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #3b82f6', 
                                                     textAlign: 'center', 
@@ -636,50 +701,11 @@ const renderInvoiceLayout1 = (
                                                     backgroundColor: '#3b82f6',
                                                     color: '#ffffff'
                                                 }}>
-                                                    {/* برای جمع کل، سلول خالی */}
-                                                </td>
-                                            ) : null}
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '20px' : '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#ffffff' : '#334155',
-                                                backgroundColor: row.isTotal ? '#3b82f6' : 'transparent'
-                                            }}>
-                                                {row.label}
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '20px' : '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal',
-                                                backgroundColor: row.isTotal ? '#3b82f6' : 'transparent',
-                                                color: row.isTotal ? '#ffffff' : '#334155'
-                                            }}>
-                                                {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
-                                            </td>
-                                            <td 
-                                                data-total-amount="true"
-                                                style={{ 
-                                                    fontSize: row.isTotal ? '24px' : '20px', 
-                                                    padding: '10px 12px', 
-                                                    border: '1px solid #cbd5e1', 
-                                                    textAlign: 'center', 
-                                                    verticalAlign: 'middle',
-                                                    fontWeight: 'bold',
-                                                    backgroundColor: row.isTotal ? '#3b82f6' : '#f1f5f9',
-                                                    color: row.isTotal ? '#ffffff' : '#1e293b'
-                                                }}>
-                                                {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
+                                                {total.toLocaleString('fa-IR')}
                                             </td>
                                         </tr>
                                     );
-                                })}
+                                })()}
                             </tbody>
                         </table>
                     </div>
@@ -854,7 +880,7 @@ const renderInvoiceLayout1 = (
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* ردیف‌های اطلاعات بارنامه برای راننده کمکی */}
+                                {/* برای هر محاسبه، ردیف‌های هزینه مربوط به آن */}
                                 {calculations.map((calc, calcIdx) => {
                                     const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
                                     const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
@@ -870,124 +896,154 @@ const renderInvoiceLayout1 = (
                                             ? (calc.calculation_date || calc.calculationDate)
                                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                                     
-                                    return (
-                                        <tr key={`helper-bill-info-${calcIdx}`} style={{ 
-                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                                            height: '50px'
-                                        }}>
-                                            <td colSpan={4} style={{ 
-                                                fontSize: '16px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: '600',
-                                                color: '#334155',
-                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
-                                            }}>
-                                                <strong>کد پرسنلی:</strong> {helperEmployeeId} | <strong>نام:</strong> {helperName} | <strong>مقاصد:</strong> {destinations} | <strong>شماره بارنامه:</strong> {billOfLadingNumber} | <strong>تاریخ صدور بارنامه:</strong> {billOfLadingDate} | <strong>تاریخ محاسبه:</strong> {calculationDate}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {costRows.map((row, rowIdx) => {
-                                    const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
-                                    const count = row.getCount();
-                                    const avgUnitPrice = count > 0 ? total / count : 0;
-                                    const isEven = rowIdx % 2 === 0;
+                                    // اطلاعات بارنامه برای نمایش در ستون دسته‌بندی
+                                    const billInfo = `کد پرسنلی: ${helperEmployeeId} | نام: ${helperName} | مقاصد: ${destinations} | شماره بارنامه: ${billOfLadingNumber} | تاریخ صدور: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
                                     
-                                    // محاسبه rowSpan برای merge کردن دسته‌بندی‌های یکسان
-                                    let categoryRowSpan = 1;
-                                    let isFirstInCategory = true;
+                                    // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
+                                    const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
-                                    if (!row.isTotal) {
-                                        // تعداد ردیف‌های متوالی با همین دسته‌بندی
-                                        let sameCategoryCount = 1;
-                                        for (let i = rowIdx + 1; i < costRows.length; i++) {
-                                            if (costRows[i].isTotal) break;
-                                            if (costRows[i].category === row.category) {
-                                                sameCategoryCount++;
-                                            } else {
-                                                break;
+                                    return relevantCostRows.map((row, rowIdx) => {
+                                        const value = row.getValue(calc);
+                                        const unitPrice = row.getUnitPrice(calc);
+                                        const isEven = (calcIdx + rowIdx) % 2 === 0;
+                                        
+                                        // بررسی اینکه آیا این اولین ردیف در این دسته‌بندی برای این محاسبه است
+                                        const isFirstInCategory = rowIdx === 0 || relevantCostRows[rowIdx - 1].category !== row.category;
+                                        
+                                        // محاسبه rowSpan برای merge کردن دسته‌بندی‌های یکسان
+                                        let categoryRowSpan = 1;
+                                        if (isFirstInCategory) {
+                                            for (let i = rowIdx + 1; i < relevantCostRows.length; i++) {
+                                                if (relevantCostRows[i].category === row.category) {
+                                                    categoryRowSpan++;
+                                                } else {
+                                                    break;
+                                                }
                                             }
                                         }
-                                        categoryRowSpan = sameCategoryCount;
                                         
-                                        // بررسی اینکه آیا این اولین ردیف در این دسته‌بندی است
-                                        if (rowIdx > 0 && !costRows[rowIdx - 1].isTotal && costRows[rowIdx - 1].category === row.category) {
-                                            isFirstInCategory = false;
-                                        }
-                                    }
-                                    
-                                    return (
-                                        <tr key={row.key} style={{ 
-                                            backgroundColor: row.isTotal ? '#f1f5f9' : (isEven ? '#ffffff' : '#f8fafc'),
-                                            height: '50px'
-                                        }}>
-                                            {isFirstInCategory && !row.isTotal ? (
-                                                <td rowSpan={categoryRowSpan} style={{ 
+                                        return (
+                                            <tr key={`helper-calc-${calcIdx}-${row.key}`} style={{ 
+                                                backgroundColor: isEven ? '#ffffff' : '#f8fafc',
+                                                height: '50px'
+                                            }}>
+                                                {isFirstInCategory ? (
+                                                    <td rowSpan={categoryRowSpan} style={{ 
+                                                        fontSize: '14px', 
+                                                        padding: '10px 12px', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        textAlign: 'right', 
+                                                        verticalAlign: 'top',
+                                                        fontWeight: '600',
+                                                        color: '#000000',
+                                                        backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                    }}>
+                                                        <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#1e293b' }}>{row.category}</div>
+                                                        <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#334155' }}>{billInfo}</div>
+                                                    </td>
+                                                ) : null}
+                                                <td style={{ 
+                                                    fontSize: '18px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {row.label}
+                                                </td>
+                                                <td style={{ 
                                                     fontSize: '18px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #cbd5e1', 
                                                     textAlign: 'center', 
                                                     verticalAlign: 'middle',
-                                                    fontWeight: '600',
-                                                    color: '#64748b',
-                                                    backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                    fontWeight: 'normal',
+                                                    color: '#334155'
                                                 }}>
-                                                    {row.category}
+                                                    {unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}
                                                 </td>
-                                            ) : row.isTotal ? (
-                                                <td style={{ 
-                                                    fontSize: '20px', 
-                                                    padding: '10px 12px', 
-                                                    border: '1px solid #cbd5e1', 
-                                                    textAlign: 'right', 
-                                                    verticalAlign: 'middle',
-                                                    fontWeight: 'bold',
-                                                    color: '#1e293b'
-                                                }}>
-                                                    {/* برای جمع کل، سلول خالی */}
+                                                <td 
+                                                    data-total-amount="true"
+                                                    style={{ 
+                                                        fontSize: '20px', 
+                                                        padding: '10px 12px', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        textAlign: 'center', 
+                                                        verticalAlign: 'middle',
+                                                        fontWeight: 'bold',
+                                                        backgroundColor: '#f1f5f9',
+                                                        color: '#1e293b'
+                                                    }}>
+                                                    {value > 0 ? value.toLocaleString('fa-IR') : '-'}
                                                 </td>
-                                            ) : null}
+                                            </tr>
+                                        );
+                                    });
+                                }).flat()}
+                                {/* ردیف جمع کل */}
+                                {(() => {
+                                    const total = calculations.reduce((sum, calc) => sum + calculateHelperDriverCostGlobal(calc), 0);
+                                    return (
+                                        <tr style={{ 
+                                            backgroundColor: '#3b82f6',
+                                            height: '50px'
+                                        }}>
                                             <td style={{ 
-                                                fontSize: row.isTotal ? '20px' : '18px', 
+                                                fontSize: '20px', 
                                                 padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : '600',
-                                                color: row.isTotal ? '#1e293b' : '#334155'
-                                            }}>
-                                                {row.label}
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: row.isTotal ? '20px' : '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
+                                                border: '1px solid #3b82f6', 
                                                 textAlign: 'center', 
                                                 verticalAlign: 'middle',
-                                                fontWeight: row.isTotal ? 'bold' : 'normal'
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#3b82f6',
+                                                color: '#ffffff'
                                             }}>
-                                                {row.isTotal ? '-' : (avgUnitPrice > 0 ? avgUnitPrice.toLocaleString('fa-IR') : '-')}
+                                                جمع کل
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #3b82f6', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#3b82f6',
+                                                color: '#ffffff'
+                                            }}>
+                                                -
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #3b82f6', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#3b82f6',
+                                                color: '#ffffff'
+                                            }}>
+                                                -
                                             </td>
                                             <td 
                                                 data-total-amount="true"
                                                 style={{ 
-                                                    fontSize: row.isTotal ? '24px' : '20px', 
+                                                    fontSize: '24px', 
                                                     padding: '10px 12px', 
-                                                    border: '1px solid #cbd5e1', 
+                                                    border: '1px solid #3b82f6', 
                                                     textAlign: 'center', 
                                                     verticalAlign: 'middle',
                                                     fontWeight: 'bold',
-                                                    backgroundColor: row.isTotal ? '#e2e8f0' : '#f1f5f9',
-                                                    color: '#1e293b'
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff'
                                                 }}>
-                                                {total > 0 || row.isTotal ? total.toLocaleString('fa-IR') : '-'}
+                                                {total.toLocaleString('fa-IR')}
                                             </td>
                                         </tr>
                                     );
-                                })}
+                                })()}
                             </tbody>
                         </table>
                     </div>
