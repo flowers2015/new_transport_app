@@ -25,15 +25,19 @@ async function getCities(req, res) {
           id,
           city_name as "cityName",
           province,
-          approved_mission_days as "approvedMissionDays",
-          city_kilometers as "cityKilometers",
+          approved_mission_days::INTEGER as "approvedMissionDays",
+          city_kilometers::NUMERIC as "cityKilometers",
           created_at as "createdAt",
           updated_at as "updatedAt"
         FROM cities
         ORDER BY province, city_name
       `);
       
-      cities = result.rows;
+      cities = result.rows.map(row => ({
+        ...row,
+        approvedMissionDays: row.approvedMissionDays !== null ? parseInt(row.approvedMissionDays) : null,
+        cityKilometers: row.cityKilometers !== null ? parseFloat(row.cityKilometers) : null
+      }));
     } else {
       // استفاده از dispatch_routes به عنوان fallback
       const result = await pool.query(`
@@ -82,8 +86,8 @@ async function getCityById(req, res) {
         id,
         city_name as "cityName",
         province,
-        approved_mission_days as "approvedMissionDays",
-        city_kilometers as "cityKilometers",
+        approved_mission_days::INTEGER as "approvedMissionDays",
+        city_kilometers::NUMERIC as "cityKilometers",
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM cities
@@ -94,7 +98,12 @@ async function getCityById(req, res) {
       return res.status(404).json({ message: 'شهر یافت نشد' });
     }
     
-    res.json(result.rows[0]);
+    const city = result.rows[0];
+    res.json({
+      ...city,
+      approvedMissionDays: city.approvedMissionDays !== null ? parseInt(city.approvedMissionDays) : null,
+      cityKilometers: city.cityKilometers !== null ? parseFloat(city.cityKilometers) : null
+    });
   } catch (error) {
     console.error('❌ [getCityById] Error:', error);
     res.status(500).json({ message: 'خطا در دریافت شهر', error: error.message });
@@ -140,21 +149,26 @@ async function createCity(req, res) {
         id,
         city_name as "cityName",
         province,
-        approved_mission_days as "approvedMissionDays",
-        city_kilometers as "cityKilometers",
+        approved_mission_days::INTEGER as "approvedMissionDays",
+        city_kilometers::NUMERIC as "cityKilometers",
         created_at as "createdAt",
         updated_at as "updatedAt"
     `, [
       id,
       cityName,
       province,
-      approvedMissionDays || null,
-      cityKilometers || null
+      approvedMissionDays ? parseInt(approvedMissionDays) : null,
+      cityKilometers ? parseFloat(cityKilometers) : null
     ]);
     
     await client.query('COMMIT');
     
-    res.status(201).json(insertQuery.rows[0]);
+    const newCity = insertQuery.rows[0];
+    res.status(201).json({
+      ...newCity,
+      approvedMissionDays: newCity.approvedMissionDays !== null ? parseInt(newCity.approvedMissionDays) : null,
+      cityKilometers: newCity.cityKilometers !== null ? parseFloat(newCity.cityKilometers) : null
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [createCity] Error:', error);
@@ -243,21 +257,26 @@ async function updateCity(req, res) {
         id,
         city_name as "cityName",
         province,
-        approved_mission_days as "approvedMissionDays",
-        city_kilometers as "cityKilometers",
+        approved_mission_days::INTEGER as "approvedMissionDays",
+        city_kilometers::NUMERIC as "cityKilometers",
         created_at as "createdAt",
         updated_at as "updatedAt"
     `, [
       cityName,
       province,
-      approvedMissionDays || null,
-      cityKilometers || null,
+      approvedMissionDays ? parseInt(approvedMissionDays) : null,
+      cityKilometers ? parseFloat(cityKilometers) : null,
       id
     ]);
     
     await client.query('COMMIT');
     
-    res.json(updateQuery.rows[0]);
+    const updatedCity = updateQuery.rows[0];
+    res.json({
+      ...updatedCity,
+      approvedMissionDays: updatedCity.approvedMissionDays !== null ? parseInt(updatedCity.approvedMissionDays) : null,
+      cityKilometers: updatedCity.cityKilometers !== null ? parseFloat(updatedCity.cityKilometers) : null
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [updateCity] Error:', error);
@@ -347,8 +366,16 @@ async function importCitiesFromExcel(req, res) {
         // استخراج داده‌ها با نام‌های مختلف ستون
         const cityName = row['اسم شهر'] || row['شهر'] || row['cityName'] || row['city_name'] || row['cityName'] || '';
         const province = row['استان'] || row['province'] || '';
-        const approvedMissionDays = row['ماموریت مصوب'] || row['approvedMissionDays'] || row['approved_mission_days'] || null;
-        const cityKilometers = row['کیلومتر شهر'] || row['cityKilometers'] || row['city_kilometers'] || null;
+        const approvedMissionDaysRaw = row['ماموریت مصوب'] || row['approvedMissionDays'] || row['approved_mission_days'] || null;
+        const cityKilometersRaw = row['کیلومتر شهر'] || row['cityKilometers'] || row['city_kilometers'] || null;
+        
+        // تبدیل به عدد (اگر string است یا خالی نیست)
+        const approvedMissionDays = approvedMissionDaysRaw !== null && approvedMissionDaysRaw !== '' && approvedMissionDaysRaw !== undefined
+          ? (typeof approvedMissionDaysRaw === 'number' ? approvedMissionDaysRaw : (isNaN(parseFloat(approvedMissionDaysRaw)) ? null : parseFloat(approvedMissionDaysRaw)))
+          : null;
+        const cityKilometers = cityKilometersRaw !== null && cityKilometersRaw !== '' && cityKilometersRaw !== undefined
+          ? (typeof cityKilometersRaw === 'number' ? cityKilometersRaw : (isNaN(parseFloat(cityKilometersRaw)) ? null : parseFloat(cityKilometersRaw)))
+          : null;
         
         if (!cityName || !province) {
           results.skipped++;
@@ -372,8 +399,8 @@ async function importCitiesFromExcel(req, res) {
               updated_at = NOW()
             WHERE id = $3
           `, [
-            approvedMissionDays ? parseFloat(approvedMissionDays) : null,
-            cityKilometers ? parseFloat(cityKilometers) : null,
+            approvedMissionDays,
+            cityKilometers,
             checkQuery.rows[0].id
           ]);
           results.updated++;
@@ -387,8 +414,8 @@ async function importCitiesFromExcel(req, res) {
             id,
             cityName,
             province,
-            approvedMissionDays ? parseFloat(approvedMissionDays) : null,
-            cityKilometers ? parseFloat(cityKilometers) : null
+            approvedMissionDays,
+            cityKilometers
           ]);
           results.success++;
         }
@@ -456,8 +483,16 @@ async function importCitiesFromJson(req, res) {
         // پشتیبانی از camelCase و snake_case
         const cityName = city.cityName || city.city_name || '';
         const province = city.province || '';
-        const approvedMissionDays = city.approvedMissionDays || city.approved_mission_days || null;
-        const cityKilometers = city.cityKilometers || city.city_kilometers || null;
+        const approvedMissionDaysRaw = city.approvedMissionDays || city.approved_mission_days || null;
+        const cityKilometersRaw = city.cityKilometers || city.city_kilometers || null;
+        
+        // تبدیل به عدد (اگر string است یا خالی نیست)
+        const approvedMissionDays = approvedMissionDaysRaw !== null && approvedMissionDaysRaw !== '' && approvedMissionDaysRaw !== undefined
+          ? (typeof approvedMissionDaysRaw === 'number' ? approvedMissionDaysRaw : (isNaN(parseFloat(approvedMissionDaysRaw)) ? null : parseFloat(approvedMissionDaysRaw)))
+          : null;
+        const cityKilometers = cityKilometersRaw !== null && cityKilometersRaw !== '' && cityKilometersRaw !== undefined
+          ? (typeof cityKilometersRaw === 'number' ? cityKilometersRaw : (isNaN(parseFloat(cityKilometersRaw)) ? null : parseFloat(cityKilometersRaw)))
+          : null;
         
         if (!cityName || !province) {
           results.skipped++;
@@ -481,8 +516,8 @@ async function importCitiesFromJson(req, res) {
               updated_at = NOW()
             WHERE id = $3
           `, [
-            approvedMissionDays ? parseFloat(approvedMissionDays) : null,
-            cityKilometers ? parseFloat(cityKilometers) : null,
+            approvedMissionDays,
+            cityKilometers,
             checkQuery.rows[0].id
           ]);
           results.updated++;
@@ -496,8 +531,8 @@ async function importCitiesFromJson(req, res) {
             id,
             cityName,
             province,
-            approvedMissionDays ? parseFloat(approvedMissionDays) : null,
-            cityKilometers ? parseFloat(cityKilometers) : null
+            approvedMissionDays,
+            cityKilometers
           ]);
           results.success++;
         }
@@ -522,6 +557,169 @@ async function importCitiesFromJson(req, res) {
   }
 }
 
+/**
+ * Export شهرها به JSON
+ */
+async function exportCitiesToJson(req, res) {
+  try {
+    // بررسی وجود جدول cities
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'cities'
+      )
+    `);
+    
+    const citiesTableExists = tableCheck.rows[0].exists;
+    
+    let cities = [];
+    
+    if (citiesTableExists) {
+      const result = await pool.query(`
+        SELECT 
+          city_name as "cityName",
+          province,
+          approved_mission_days::INTEGER as "approvedMissionDays",
+          city_kilometers::NUMERIC as "cityKilometers"
+        FROM cities
+        ORDER BY province, city_name
+      `);
+      
+      cities = result.rows.map(row => ({
+        cityName: row.cityName || '',
+        province: row.province || '',
+        approvedMissionDays: row.approvedMissionDays !== null ? parseInt(row.approvedMissionDays) : null,
+        cityKilometers: row.cityKilometers !== null ? parseFloat(row.cityKilometers) : null
+      }));
+    } else {
+      // استفاده از dispatch_routes به عنوان fallback
+      const result = await pool.query(`
+        SELECT DISTINCT
+          city as "cityName",
+          province,
+          NULL::INTEGER as "approvedMissionDays",
+          CASE 
+            WHEN round_trip_km IS NOT NULL THEN (round_trip_km / 2)::NUMERIC
+            ELSE NULL 
+          END as "cityKilometers"
+        FROM dispatch_routes
+        WHERE is_active = TRUE 
+          AND city IS NOT NULL 
+          AND city != ''
+          AND province IS NOT NULL 
+          AND province != ''
+        ORDER BY province, city
+      `);
+      
+      cities = result.rows.map(row => ({
+        cityName: row.cityName || '',
+        province: row.province || '',
+        approvedMissionDays: null,
+        cityKilometers: row.cityKilometers !== null ? parseFloat(row.cityKilometers) : null
+      }));
+    }
+    
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="cities_export.json"');
+    res.json(cities);
+  } catch (error) {
+    console.error('❌ [exportCitiesToJson] Error:', error);
+    res.status(500).json({ message: 'خطا در export JSON', error: error.message });
+  }
+}
+
+/**
+ * Export شهرها به Excel
+ */
+async function exportCitiesToExcel(req, res) {
+  try {
+    const XLSX = require('xlsx');
+    
+    // بررسی وجود جدول cities
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'cities'
+      )
+    `);
+    
+    const citiesTableExists = tableCheck.rows[0].exists;
+    
+    let cities = [];
+    
+    if (citiesTableExists) {
+      const result = await pool.query(`
+        SELECT 
+          city_name as "cityName",
+          province,
+          approved_mission_days::INTEGER as "approvedMissionDays",
+          city_kilometers::NUMERIC as "cityKilometers"
+        FROM cities
+        ORDER BY province, city_name
+      `);
+      
+      cities = result.rows.map(row => ({
+        'اسم شهر': row.cityName || '',
+        'استان': row.province || '',
+        'ماموریت مصوب': row.approvedMissionDays !== null ? parseInt(row.approvedMissionDays) : '',
+        'کیلومتر شهر': row.cityKilometers !== null ? parseFloat(row.cityKilometers) : ''
+      }));
+    } else {
+      // استفاده از dispatch_routes به عنوان fallback
+      const result = await pool.query(`
+        SELECT DISTINCT
+          city as "cityName",
+          province,
+          NULL::INTEGER as "approvedMissionDays",
+          CASE 
+            WHEN round_trip_km IS NOT NULL THEN (round_trip_km / 2)::NUMERIC
+            ELSE NULL 
+          END as "cityKilometers"
+        FROM dispatch_routes
+        WHERE is_active = TRUE 
+          AND city IS NOT NULL 
+          AND city != ''
+          AND province IS NOT NULL 
+          AND province != ''
+        ORDER BY province, city
+      `);
+      
+      cities = result.rows.map(row => ({
+        'اسم شهر': row.cityName || '',
+        'استان': row.province || '',
+        'ماموریت مصوب': '',
+        'کیلومتر شهر': row.cityKilometers !== null ? parseFloat(row.cityKilometers) : ''
+      }));
+    }
+    
+    // ایجاد workbook
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(cities);
+    
+    // تنظیم عرض ستون‌ها
+    worksheet['!cols'] = [
+      { wch: 20 }, // اسم شهر
+      { wch: 20 }, // استان
+      { wch: 15 }, // ماموریت مصوب
+      { wch: 15 }  // کیلومتر شهر
+    ];
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'شهرها');
+    
+    // تولید buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="cities_export.xlsx"');
+    res.send(buffer);
+  } catch (error) {
+    console.error('❌ [exportCitiesToExcel] Error:', error);
+    res.status(500).json({ message: 'خطا در export Excel', error: error.message });
+  }
+}
+
 module.exports = {
   getCities,
   getCityById,
@@ -529,6 +727,8 @@ module.exports = {
   updateCity,
   deleteCity,
   importCitiesFromExcel,
-  importCitiesFromJson
+  importCitiesFromJson,
+  exportCitiesToJson,
+  exportCitiesToExcel
 };
 

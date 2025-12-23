@@ -9,7 +9,9 @@ const {
   updateCity,
   deleteCity,
   importCitiesFromExcel,
-  importCitiesFromJson
+  importCitiesFromJson,
+  exportCitiesToJson,
+  exportCitiesToExcel
 } = require('../controllers/cityController');
 
 // تنظیم multer برای آپلود فایل Excel
@@ -43,6 +45,10 @@ router.delete('/:id', deleteCity);
 // Import routes
 router.post('/import-excel', upload.single('file'), importCitiesFromExcel);
 router.post('/import-json', importCitiesFromJson);
+
+// Export routes
+router.get('/export/json', exportCitiesToJson);
+router.get('/export/excel', exportCitiesToExcel);
 
 module.exports = router;
 

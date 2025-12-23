@@ -283,6 +283,56 @@ const CityManagement: React.FC = () => {
                             📥 Import از JSON
                         </button>
                         <button
+                            onClick={async () => {
+                                try {
+                                    const token = localStorage.getItem('token');
+                                    const res = await fetch(getApiUrl('cities/export/json'), {
+                                        headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (!res.ok) throw new Error('خطا در export');
+                                    const blob = await res.blob();
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = 'cities_export.json';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    window.URL.revokeObjectURL(url);
+                                } catch (err: any) {
+                                    alert(`❌ خطا: ${err.message}`);
+                                }
+                            }}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                        >
+                            📤 Export به JSON
+                        </button>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const token = localStorage.getItem('token');
+                                    const res = await fetch(getApiUrl('cities/export/excel'), {
+                                        headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (!res.ok) throw new Error('خطا در export');
+                                    const blob = await res.blob();
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = 'cities_export.xlsx';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    window.URL.revokeObjectURL(url);
+                                } catch (err: any) {
+                                    alert(`❌ خطا: ${err.message}`);
+                                }
+                            }}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                        >
+                            📤 Export به Excel
+                        </button>
+                        <button
                             onClick={fetchCities}
                             disabled={loading}
                             className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
