@@ -26,6 +26,10 @@ const CityManagement: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 15;
+    
+    // Sort states
+    const [sortColumn, setSortColumn] = useState<keyof DispatchRoute | null>(null);
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
     // Modal states
     const [showModal, setShowModal] = useState(false);
@@ -47,13 +51,21 @@ const CityManagement: React.FC = () => {
     // ============================================
     // Data Fetching
     // ============================================
-    const fetchRoutes = async () => {
+    const fetchRoutes = async (forceRefresh = false) => {
         setLoading(true);
         setError(null);
         try {
-            const { cachedFetch } = await import('../utils/apiCache');
-            const data = await cachedFetch(getApiUrl('cities'), { headers }, 5 * 60 * 1000); // 5 min cache
-            setRoutes(Array.isArray(data) ? data : []);
+            if (forceRefresh) {
+                // پاک کردن cache و fetch مستقیم
+                const res = await fetch(getApiUrl('cities'), { headers });
+                if (!res.ok) throw new Error('خطا در دریافت داده‌ها');
+                const data = await res.json();
+                setRoutes(Array.isArray(data) ? data : []);
+            } else {
+                const { cachedFetch } = await import('../utils/apiCache');
+                const data = await cachedFetch(getApiUrl('cities'), { headers }, 5 * 60 * 1000); // 5 min cache
+                setRoutes(Array.isArray(data) ? data : []);
+            }
         } catch (err: any) {
             setError(err.message || 'خطا در بارگذاری داده‌ها');
         } finally {
@@ -87,7 +99,7 @@ const CityManagement: React.FC = () => {
             }
 
             alert('با موفقیت حذف شد');
-            fetchRoutes();
+            fetchRoutes(true); // بروزرسانی با پاک کردن cache
         } catch (err: any) {
             alert(err.message);
         }
@@ -115,7 +127,7 @@ const CityManagement: React.FC = () => {
             alert(modalMode === 'add' ? 'با موفقیت ایجاد شد' : 'با موفقیت ویرایش شد');
             setShowModal(false);
             setSelectedRoute(null);
-            fetchRoutes();
+            fetchRoutes(true); // بروزرسانی با پاک کردن cache
         } catch (err: any) {
             alert(err.message);
         }
@@ -159,7 +171,7 @@ const CityManagement: React.FC = () => {
             
             setImportFile(null);
             setShowImportDialog(false);
-            fetchRoutes();
+            fetchRoutes(true); // بروزرسانی با پاک کردن cache
         } catch (err: any) {
             alert(`❌ خطا: ${err.message}`);
         } finally {
@@ -207,7 +219,7 @@ const CityManagement: React.FC = () => {
             
             setJsonData('');
             setShowImportDialog(false);
-            fetchRoutes();
+            fetchRoutes(true); // بروزرسانی با پاک کردن cache
         } catch (err: any) {
             alert(`❌ خطا: ${err.message}`);
         } finally {
@@ -216,20 +228,63 @@ const CityManagement: React.FC = () => {
     };
 
     // ============================================
-    // Filtering & Pagination
+    // Sorting
     // ============================================
-    const filteredRoutes = useMemo(() => {
+    const handleSort = (column: keyof DispatchRoute) => {
+        if (sortColumn === column) {
+            // اگر همان ستون است، جهت را تغییر بده
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            // ستون جدید، جهت را asc کن
+            setSortColumn(column);
+            setSortDirection('asc');
+        }
+    };
+
+    // ============================================
+    // Filtering, Sorting & Pagination
+    // ============================================
+    const filteredAndSortedRoutes = useMemo(() => {
         const query = searchQuery.toLowerCase();
-        return routes.filter(route => 
+        let filtered = routes.filter(route => 
             route.city?.toLowerCase().includes(query) ||
             route.province?.toLowerCase().includes(query) ||
             route.routeCategory?.toLowerCase().includes(query) ||
             route.distanceCategory?.toLowerCase().includes(query)
         );
-    }, [routes, searchQuery]);
 
-    const totalPages = Math.ceil(filteredRoutes.length / itemsPerPage);
-    const paginatedRoutes = filteredRoutes.slice(
+        // Sort
+        if (sortColumn) {
+            filtered = [...filtered].sort((a, b) => {
+                let aVal = a[sortColumn];
+                let bVal = b[sortColumn];
+
+                // Handle null/undefined
+                if (aVal === null || aVal === undefined) aVal = '';
+                if (bVal === null || bVal === undefined) bVal = '';
+
+                // Handle numbers
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+
+                // Handle strings (including "مصوب ترابری نیست")
+                const aStr = String(aVal);
+                const bStr = String(bVal);
+
+                if (sortDirection === 'asc') {
+                    return aStr.localeCompare(bStr, 'fa');
+                } else {
+                    return bStr.localeCompare(aStr, 'fa');
+                }
+            });
+        }
+
+        return filtered;
+    }, [routes, searchQuery, sortColumn, sortDirection]);
+
+    const totalPages = Math.ceil(filteredAndSortedRoutes.length / itemsPerPage);
+    const paginatedRoutes = filteredAndSortedRoutes.slice(
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
     );
@@ -324,11 +379,12 @@ const CityManagement: React.FC = () => {
                             📤 Export به Excel
                         </button>
                         <button
-                            onClick={fetchRoutes}
+                            onClick={() => fetchRoutes(true)}
                             disabled={loading}
-                            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 font-medium"
+                            title="بروزرسانی جدول (پاک کردن cache و دریافت مجدد)"
                         >
-                            {loading ? 'در حال بارگذاری...' : '🔄 بازخوانی'}
+                            {loading ? 'در حال بروزرسانی...' : '🔄 بروزرسانی'}
                         </button>
                     </div>
                 </div>
@@ -344,7 +400,7 @@ const CityManagement: React.FC = () => {
                 <div className="p-4 overflow-x-auto">
                     {loading ? (
                         <div className="text-center py-10 text-gray-500">در حال بارگذاری...</div>
-                    ) : filteredRoutes.length === 0 ? (
+                    ) : filteredAndSortedRoutes.length === 0 ? (
                         <div className="text-center py-10 text-gray-500">هیچ رکوردی یافت نشد</div>
                     ) : (
                         <>
@@ -353,14 +409,102 @@ const CityManagement: React.FC = () => {
                                     <thead className="bg-gray-50">
                                         <tr>
                                             <th className="px-2 py-2 text-right font-medium text-gray-500">ردیف</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">شهر</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">استان</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">کیلومتر رفت و برگشت</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">روزهای مورد انتظار</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">حق ماموریت مصوب</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">دسته‌بندی مسیر</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">دسته‌بندی فاصله</th>
-                                            <th className="px-2 py-2 text-right font-medium text-gray-500">فعال</th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('city')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    شهر
+                                                    {sortColumn === 'city' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'city' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('province')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    استان
+                                                    {sortColumn === 'province' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'province' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('roundTripKm')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    کیلومتر رفت و برگشت
+                                                    {sortColumn === 'roundTripKm' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'roundTripKm' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('expectedDays')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    روزهای مورد انتظار
+                                                    {sortColumn === 'expectedDays' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'expectedDays' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('approvedAllowance')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    حق ماموریت مصوب
+                                                    {sortColumn === 'approvedAllowance' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'approvedAllowance' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('routeCategory')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    دسته‌بندی مسیر
+                                                    {sortColumn === 'routeCategory' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'routeCategory' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('distanceCategory')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    دسته‌بندی فاصله
+                                                    {sortColumn === 'distanceCategory' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'distanceCategory' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
+                                            <th 
+                                                className="px-2 py-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                                                onClick={() => handleSort('isActive')}
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    فعال
+                                                    {sortColumn === 'isActive' && (
+                                                        <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                    )}
+                                                    {sortColumn !== 'isActive' && <span className="text-gray-400">⇅</span>}
+                                                </div>
+                                            </th>
                                             <th className="px-2 py-2 text-right font-medium text-gray-500">عملیات</th>
                                         </tr>
                                     </thead>
@@ -419,7 +563,7 @@ const CityManagement: React.FC = () => {
                                         قبلی
                                     </button>
                                     <span className="px-4 py-1 text-sm text-gray-600">
-                                        صفحه {currentPage} از {totalPages} (کل: {filteredRoutes.length})
+                                        صفحه {currentPage} از {totalPages} (کل: {filteredAndSortedRoutes.length})
                                     </span>
                                     <button
                                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
