@@ -479,13 +479,14 @@ const renderInvoiceLayout1 = (
                     {title}
                 </h3>
                 {/* Desktop Table View */}
-                <div className="hidden md:block" style={{ maxWidth: '90%', margin: '0 auto' }}>
+                <div className="hidden md:block" style={{ maxWidth: '90%', margin: '0 auto', display: 'flex', justifyContent: 'center' }}>
                     <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
-                        <table className="w-full border-collapse mb-3" style={{ 
+                        <table className="border-collapse mb-3" style={{ 
                             fontSize: '18px', 
                             fontFamily: 'Vazirmatn, Arial, sans-serif', 
                             tableLayout: 'auto', 
-                            width: '100%', 
+                            width: 'auto', 
+                            margin: '0 auto',
                             borderCollapse: 'collapse', 
                             border: '2px solid #1e40af',
                             backgroundColor: 'white',
@@ -498,7 +499,7 @@ const renderInvoiceLayout1 = (
                                         fontWeight: 'bold', 
                                         padding: '12px 10px', 
                                         border: '1px solid #1e3a8a', 
-                                        textAlign: 'right', 
+                                        textAlign: 'center', 
                                         verticalAlign: 'middle',
                                         width: '25%',
                                         color: '#ffffff'
@@ -611,6 +612,18 @@ const renderInvoiceLayout1 = (
                                                     {infoRow.label}
                                                 </td>
                                                 <td style={{ 
+                                                    fontSize: '16px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {infoRow.value}
+                                                </td>
+                                                <td style={{ 
                                                     fontSize: '18px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #cbd5e1', 
@@ -620,18 +633,6 @@ const renderInvoiceLayout1 = (
                                                     color: '#334155'
                                                 }}>
                                                     -
-                                                </td>
-                                                <td style={{ 
-                                                    fontSize: '16px', 
-                                                    padding: '10px 12px', 
-                                                    border: '1px solid #cbd5e1', 
-                                                    textAlign: 'right', 
-                                                    verticalAlign: 'middle',
-                                                    fontWeight: '600',
-                                                    color: '#334155',
-                                                    backgroundColor: 'transparent'
-                                                }}>
-                                                    {infoRow.value}
                                                 </td>
                                             </tr>
                                         );
@@ -890,13 +891,14 @@ const renderInvoiceLayout1 = (
                     راننده کمکی - کد پرسنلی: {helperEmployeeId} - {helperName}
                 </h3>
                 {/* Desktop Table View */}
-                <div className="hidden md:block" style={{ maxWidth: '90%', margin: '0 auto' }}>
+                <div className="hidden md:block" style={{ maxWidth: '90%', margin: '0 auto', display: 'flex', justifyContent: 'center' }}>
                     <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
-                        <table className="w-full border-collapse mb-3" style={{ 
+                        <table className="border-collapse mb-3" style={{ 
                             fontSize: '18px', 
                             fontFamily: 'Vazirmatn, Arial, sans-serif', 
                             tableLayout: 'auto', 
-                            width: '100%', 
+                            width: 'auto', 
+                            margin: '0 auto',
                             borderCollapse: 'collapse', 
                             border: '2px solid #1e40af',
                             backgroundColor: 'white',
@@ -909,7 +911,7 @@ const renderInvoiceLayout1 = (
                                         fontWeight: 'bold', 
                                         padding: '12px 10px', 
                                         border: '1px solid #1e3a8a', 
-                                        textAlign: 'right', 
+                                        textAlign: 'center', 
                                         verticalAlign: 'middle',
                                         width: '25%',
                                         color: '#ffffff'
@@ -1023,6 +1025,18 @@ const renderInvoiceLayout1 = (
                                                     {infoRow.label}
                                                 </td>
                                                 <td style={{ 
+                                                    fontSize: '16px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {infoRow.value}
+                                                </td>
+                                                <td style={{ 
                                                     fontSize: '18px', 
                                                     padding: '10px 12px', 
                                                     border: '1px solid #cbd5e1', 
@@ -1032,18 +1046,6 @@ const renderInvoiceLayout1 = (
                                                     color: '#334155'
                                                 }}>
                                                     -
-                                                </td>
-                                                <td style={{ 
-                                                    fontSize: '16px', 
-                                                    padding: '10px 12px', 
-                                                    border: '1px solid #cbd5e1', 
-                                                    textAlign: 'right', 
-                                                    verticalAlign: 'middle',
-                                                    fontWeight: '600',
-                                                    color: '#334155',
-                                                    backgroundColor: 'transparent'
-                                                }}>
-                                                    {infoRow.value}
                                                 </td>
                                             </tr>
                                         );
@@ -3426,13 +3428,19 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     }
                                 }
                                 
-                                // font-size
-                                cellEl.style.fontSize = '8px';
+                                // font-size - حفظ اندازه فونت اصلی
+                                const originalFontSize = cellEl.style.fontSize || window.getComputedStyle(cellEl).fontSize;
+                                if (originalFontSize && originalFontSize !== '8px' && parseFloat(originalFontSize) > 8) {
+                                    cellEl.style.fontSize = originalFontSize;
+                                } else {
+                                    // حداقل اندازه برای خوانایی
+                                    cellEl.style.fontSize = '14px';
+                                }
                                 
                                 // برای headerها
                                 if (cellEl.tagName === 'TH') {
                                     cellEl.style.fontWeight = 'bold';
-                                    cellEl.style.backgroundColor = '#1e293b';
+                                    cellEl.style.backgroundColor = '#1e40af';
                                     cellEl.style.color = '#ffffff';
                                 }
                                 
@@ -3442,6 +3450,35 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     cellEl.style.backgroundColor = '#f1f5f9';
                                     cellEl.style.fontWeight = 'bold';
                                 }
+                                
+                                // برای ستون دسته‌بندی (اولین ستون در tbody) - اطمینان از رنگ مشکی
+                                if (cellEl.tagName === 'TD' && parentRow && parentRow.parentElement?.tagName === 'TBODY') {
+                                    const isFirstCell = cellEl === parentRow.querySelector('td:first-child');
+                                    if (isFirstCell) {
+                                        const cellText = (cellEl.textContent || '').trim();
+                                        const rowBg = parentRow.style.backgroundColor || window.getComputedStyle(parentRow).backgroundColor;
+                                        const isTotalRow = cellText.includes('جمع کل') || rowBg.includes('rgb(59, 130, 246)') || rowBg.includes('#3b82f6');
+                                        if (!isTotalRow) {
+                                            // تنظیم رنگ مشکی برای ستون دسته‌بندی
+                                            cellEl.style.color = '#000000';
+                                            cellEl.style.setProperty('color', '#000000', 'important');
+                                            // همچنین برای div های داخل آن
+                                            const innerDivs = cellEl.querySelectorAll('div');
+                                            innerDivs.forEach((div) => {
+                                                const divEl = div as HTMLElement;
+                                                divEl.style.color = '#000000';
+                                                divEl.style.setProperty('color', '#000000', 'important');
+                                            });
+                                        }
+                                    }
+                                }
+                            });
+                            
+                            // اطمینان از وسط چین بودن جدول
+                            clonedTables.forEach((table) => {
+                                const tableEl = table as HTMLElement;
+                                tableEl.style.margin = '0 auto';
+                                tableEl.style.display = 'table';
                             });
                             
                             console.log('✅ Cloned div styled, content length:', clonedDiv.innerHTML.length);
@@ -3670,7 +3707,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 }
                             });
                             
-                            // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند
+                            // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند و قابل مشاهده هستند
                             const tbodyRows = tableEl.querySelectorAll('tbody tr');
                             tbodyRows.forEach((row) => {
                                 const rowEl = row as HTMLElement;
@@ -3678,25 +3715,49 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 if (firstCell) {
                                     // بررسی اینکه آیا این سلول دسته‌بندی است (نه ردیف جمع کل)
                                     const cellText = (firstCell.textContent || '').trim();
-                                    const isTotalRow = cellText.includes('جمع کل') || rowEl.style.backgroundColor.includes('#3b82f6');
+                                    const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
+                                    const isTotalRow = cellText.includes('جمع کل') || rowBg.includes('rgb(59, 130, 246)') || rowBg.includes('#3b82f6');
                                     if (!isTotalRow) {
-                                        // تنظیم رنگ مشکی برای ستون دسته‌بندی
+                                        // تنظیم رنگ مشکی برای ستون دسته‌بندی با !important
                                         firstCell.style.color = '#000000';
                                         firstCell.style.setProperty('color', '#000000', 'important');
+                                        firstCell.style.setProperty('background-color', firstCell.style.backgroundColor || '#ffffff', 'important');
                                         const currentStyle = firstCell.getAttribute('style') || '';
-                                        if (!currentStyle.includes('color: #000000') && !currentStyle.includes('color:#000000') && !currentStyle.includes('color: rgb(0, 0, 0)')) {
-                                            firstCell.setAttribute('style', currentStyle + '; color: #000000 !important;');
-                                        }
+                                        // حذف هر رنگ دیگری و اضافه کردن رنگ مشکی
+                                        let newStyle = currentStyle.replace(/color:\s*[^;]+;?/gi, '').replace(/color\s*:\s*[^;]+;?/gi, '');
+                                        newStyle += '; color: #000000 !important;';
+                                        firstCell.setAttribute('style', newStyle);
+                                        
                                         // همچنین برای div های داخل آن
                                         const innerDivs = firstCell.querySelectorAll('div');
                                         innerDivs.forEach((div) => {
                                             const divEl = div as HTMLElement;
                                             divEl.style.color = '#000000';
                                             divEl.style.setProperty('color', '#000000', 'important');
+                                            const divStyle = divEl.getAttribute('style') || '';
+                                            let newDivStyle = divStyle.replace(/color:\s*[^;]+;?/gi, '').replace(/color\s*:\s*[^;]+;?/gi, '');
+                                            newDivStyle += '; color: #000000 !important;';
+                                            divEl.setAttribute('style', newDivStyle);
                                         });
+                                        
+                                        // همچنین برای همه text nodes
+                                        const textNodes: Node[] = [];
+                                        const walker = document.createTreeWalker(
+                                            firstCell,
+                                            NodeFilter.SHOW_TEXT,
+                                            null
+                                        );
+                                        let node;
+                                        while (node = walker.nextNode()) {
+                                            textNodes.push(node);
+                                        }
                                     }
                                 }
                             });
+                            
+                            // اطمینان از وسط چین بودن جدول
+                            tableEl.style.margin = '0 auto';
+                            tableEl.style.display = 'table';
                         });
                         
                         // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مناسب تنظیم کن
