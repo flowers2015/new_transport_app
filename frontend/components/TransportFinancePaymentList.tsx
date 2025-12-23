@@ -515,7 +515,7 @@ const renderInvoiceLayout1 = (
                                         width: '30%',
                                         color: '#ffffff'
                                     }}>
-                                        شرح هزینه
+                                        شرح هزینه / (ریال)
                                     </th>
                                     <th style={{ 
                                         fontSize: '18px', 
@@ -527,7 +527,7 @@ const renderInvoiceLayout1 = (
                                         width: '22%',
                                         color: '#ffffff'
                                     }}>
-                                        مبلغ واحد
+                                        مبلغ واحد / (ریال)
                                     </th>
                                     <th style={{ 
                                         fontSize: '20px', 
@@ -539,12 +539,12 @@ const renderInvoiceLayout1 = (
                                         width: '23%',
                                         color: '#ffffff'
                                     }}>
-                                        مبلغ کل
+                                        مبلغ کل / (ریال)
                                     </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* برای هر محاسبه، ردیف‌های هزینه مربوط به آن */}
+                                {/* برای هر محاسبه، ابتدا ردیف اطلاعات اولیه، سپس ردیف‌های هزینه */}
                                 {calculations.map((calc, calcIdx) => {
                                     const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
                                     const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
@@ -558,13 +558,75 @@ const renderInvoiceLayout1 = (
                                             ? (calc.calculation_date || calc.calculationDate)
                                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                                     
-                                    // اطلاعات بارنامه برای نمایش در ستون دسته‌بندی
-                                    const billInfo = `شماره بارنامه: ${billOfLadingNumber} | مقاصد: ${destinations} | تاریخ صدور: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
+                                    // اطلاعات بارنامه برای نمایش در ستون شرح هزینه
+                                    const billInfo = `شماره بارنامه: ${billOfLadingNumber} | مقاصد: ${destinations} | تاریخ صدور بارنامه: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
                                     
                                     // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
-                                    return relevantCostRows.map((row, rowIdx) => {
+                                    // محاسبه تعداد ردیف‌های هزینه برای این محاسبه
+                                    const costRowsCount = relevantCostRows.length;
+                                    
+                                    const rows = [];
+                                    
+                                    // ردیف اطلاعات اولیه
+                                    rows.push(
+                                        <tr key={`info-${calcIdx}`} style={{ 
+                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                            height: '50px'
+                                        }}>
+                                            <td rowSpan={costRowsCount + 1} style={{ 
+                                                fontSize: '16px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'top',
+                                                fontWeight: 'bold',
+                                                color: '#000000',
+                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                            }}>
+                                                اطلاعات اولیه
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '16px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: '600',
+                                                color: '#334155',
+                                                backgroundColor: 'transparent'
+                                            }}>
+                                                {billInfo}
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'normal',
+                                                color: '#334155'
+                                            }}>
+                                                -
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#f1f5f9',
+                                                color: '#1e293b'
+                                            }}>
+                                                -
+                                            </td>
+                                        </tr>
+                                    );
+                                    
+                                    // ردیف‌های هزینه
+                                    relevantCostRows.forEach((row, rowIdx) => {
                                         const value = row.getValue(calc);
                                         const unitPrice = row.getUnitPrice(calc);
                                         const isEven = (calcIdx + rowIdx) % 2 === 0;
@@ -584,24 +646,23 @@ const renderInvoiceLayout1 = (
                                             }
                                         }
                                         
-                                        return (
+                                        rows.push(
                                             <tr key={`calc-${calcIdx}-${row.key}`} style={{ 
                                                 backgroundColor: isEven ? '#ffffff' : '#f8fafc',
                                                 height: '50px'
                                             }}>
                                                 {isFirstInCategory ? (
                                                     <td rowSpan={categoryRowSpan} style={{ 
-                                                        fontSize: '14px', 
+                                                        fontSize: '16px', 
                                                         padding: '10px 12px', 
                                                         border: '1px solid #cbd5e1', 
                                                         textAlign: 'right', 
                                                         verticalAlign: 'top',
-                                                        fontWeight: '600',
+                                                        fontWeight: 'bold',
                                                         color: '#000000',
                                                         backgroundColor: isEven ? '#ffffff' : '#f8fafc'
                                                     }}>
-                                                        <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#1e293b' }}>{row.category}</div>
-                                                        <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#334155' }}>{billInfo}</div>
+                                                        {row.category}
                                                     </td>
                                                 ) : null}
                                                 <td style={{ 
@@ -644,6 +705,8 @@ const renderInvoiceLayout1 = (
                                             </tr>
                                         );
                                     });
+                                    
+                                    return rows;
                                 }).flat()}
                                 {/* ردیف جمع کل */}
                                 {(() => {
@@ -851,7 +914,7 @@ const renderInvoiceLayout1 = (
                                         width: '30%',
                                         color: '#ffffff'
                                     }}>
-                                        شرح هزینه
+                                        شرح هزینه / (ریال)
                                     </th>
                                     <th style={{ 
                                         fontSize: '18px', 
@@ -863,7 +926,7 @@ const renderInvoiceLayout1 = (
                                         width: '22%',
                                         color: '#ffffff'
                                     }}>
-                                        مبلغ واحد
+                                        مبلغ واحد / (ریال)
                                     </th>
                                     <th style={{ 
                                         fontSize: '20px', 
@@ -875,12 +938,12 @@ const renderInvoiceLayout1 = (
                                         width: '23%',
                                         color: '#ffffff'
                                     }}>
-                                        مبلغ کل
+                                        مبلغ کل / (ریال)
                                     </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* برای هر محاسبه، ردیف‌های هزینه مربوط به آن */}
+                                {/* برای هر محاسبه، ابتدا ردیف اطلاعات اولیه، سپس ردیف‌های هزینه */}
                                 {calculations.map((calc, calcIdx) => {
                                     const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
                                     const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
@@ -896,13 +959,75 @@ const renderInvoiceLayout1 = (
                                             ? (calc.calculation_date || calc.calculationDate)
                                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                                     
-                                    // اطلاعات بارنامه برای نمایش در ستون دسته‌بندی
-                                    const billInfo = `کد پرسنلی: ${helperEmployeeId} | نام: ${helperName} | مقاصد: ${destinations} | شماره بارنامه: ${billOfLadingNumber} | تاریخ صدور: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
+                                    // اطلاعات بارنامه برای نمایش در ستون شرح هزینه
+                                    const billInfo = `کد پرسنلی: ${helperEmployeeId} | نام: ${helperName} | مقاصد: ${destinations} | شماره بارنامه: ${billOfLadingNumber} | تاریخ صدور بارنامه: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
                                     
                                     // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
-                                    return relevantCostRows.map((row, rowIdx) => {
+                                    // محاسبه تعداد ردیف‌های هزینه برای این محاسبه
+                                    const costRowsCount = relevantCostRows.length;
+                                    
+                                    const rows = [];
+                                    
+                                    // ردیف اطلاعات اولیه
+                                    rows.push(
+                                        <tr key={`helper-info-${calcIdx}`} style={{ 
+                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                            height: '50px'
+                                        }}>
+                                            <td rowSpan={costRowsCount + 1} style={{ 
+                                                fontSize: '16px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'top',
+                                                fontWeight: 'bold',
+                                                color: '#000000',
+                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                            }}>
+                                                اطلاعات اولیه
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '16px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: '600',
+                                                color: '#334155',
+                                                backgroundColor: 'transparent'
+                                            }}>
+                                                {billInfo}
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '18px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'normal',
+                                                color: '#334155'
+                                            }}>
+                                                -
+                                            </td>
+                                            <td style={{ 
+                                                fontSize: '20px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'center', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: 'bold',
+                                                backgroundColor: '#f1f5f9',
+                                                color: '#1e293b'
+                                            }}>
+                                                -
+                                            </td>
+                                        </tr>
+                                    );
+                                    
+                                    // ردیف‌های هزینه
+                                    relevantCostRows.forEach((row, rowIdx) => {
                                         const value = row.getValue(calc);
                                         const unitPrice = row.getUnitPrice(calc);
                                         const isEven = (calcIdx + rowIdx) % 2 === 0;
@@ -922,24 +1047,23 @@ const renderInvoiceLayout1 = (
                                             }
                                         }
                                         
-                                        return (
+                                        rows.push(
                                             <tr key={`helper-calc-${calcIdx}-${row.key}`} style={{ 
                                                 backgroundColor: isEven ? '#ffffff' : '#f8fafc',
                                                 height: '50px'
                                             }}>
                                                 {isFirstInCategory ? (
                                                     <td rowSpan={categoryRowSpan} style={{ 
-                                                        fontSize: '14px', 
+                                                        fontSize: '16px', 
                                                         padding: '10px 12px', 
                                                         border: '1px solid #cbd5e1', 
                                                         textAlign: 'right', 
                                                         verticalAlign: 'top',
-                                                        fontWeight: '600',
+                                                        fontWeight: 'bold',
                                                         color: '#000000',
                                                         backgroundColor: isEven ? '#ffffff' : '#f8fafc'
                                                     }}>
-                                                        <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#1e293b' }}>{row.category}</div>
-                                                        <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#334155' }}>{billInfo}</div>
+                                                        {row.category}
                                                     </td>
                                                 ) : null}
                                                 <td style={{ 
@@ -982,6 +1106,8 @@ const renderInvoiceLayout1 = (
                                             </tr>
                                         );
                                     });
+                                    
+                                    return rows;
                                 }).flat()}
                                 {/* ردیف جمع کل */}
                                 {(() => {
@@ -3518,6 +3644,34 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                             thEl.setAttribute('style', currentStyle.replace(/backgroundColor:\s*[^;]+;?/gi, '') + '; color: #ffffff !important;');
                                         }
                                     });
+                                }
+                            });
+                            
+                            // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند
+                            const tbodyRows = tableEl.querySelectorAll('tbody tr');
+                            tbodyRows.forEach((row) => {
+                                const rowEl = row as HTMLElement;
+                                const firstCell = rowEl.querySelector('td:first-child') as HTMLElement;
+                                if (firstCell) {
+                                    // بررسی اینکه آیا این سلول دسته‌بندی است (نه ردیف جمع کل)
+                                    const cellText = (firstCell.textContent || '').trim();
+                                    const isTotalRow = cellText.includes('جمع کل') || rowEl.style.backgroundColor.includes('#3b82f6');
+                                    if (!isTotalRow) {
+                                        // تنظیم رنگ مشکی برای ستون دسته‌بندی
+                                        firstCell.style.color = '#000000';
+                                        firstCell.style.setProperty('color', '#000000', 'important');
+                                        const currentStyle = firstCell.getAttribute('style') || '';
+                                        if (!currentStyle.includes('color: #000000') && !currentStyle.includes('color:#000000') && !currentStyle.includes('color: rgb(0, 0, 0)')) {
+                                            firstCell.setAttribute('style', currentStyle + '; color: #000000 !important;');
+                                        }
+                                        // همچنین برای div های داخل آن
+                                        const innerDivs = firstCell.querySelectorAll('div');
+                                        innerDivs.forEach((div) => {
+                                            const divEl = div as HTMLElement;
+                                            divEl.style.color = '#000000';
+                                            divEl.style.setProperty('color', '#000000', 'important');
+                                        });
+                                    }
                                 }
                             });
                         });
