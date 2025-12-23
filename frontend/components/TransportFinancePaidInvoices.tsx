@@ -264,16 +264,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 tempDiv.style.position = 'fixed';
                 tempDiv.style.top = '0';
                 tempDiv.style.left = '0';
-                tempDiv.style.width = '2000px';
+                tempDiv.style.width = '210mm'; // A4 width
+                tempDiv.style.maxWidth = '210mm';
                 tempDiv.style.height = 'auto';
                 tempDiv.style.backgroundColor = '#ffffff';
-                tempDiv.style.padding = '20px';
+                tempDiv.style.padding = '10mm';
                 tempDiv.style.boxSizing = 'border-box';
-                tempDiv.style.overflow = 'visible';
+                tempDiv.style.overflow = 'hidden';
                 tempDiv.style.zIndex = '999999';
                 tempDiv.style.visibility = 'visible';
                 tempDiv.style.opacity = '0'; // مخفی اما در viewport
                 tempDiv.style.pointerEvents = 'none'; // جلوگیری از تداخل با کاربر
+                tempDiv.style.margin = '0 auto';
+                tempDiv.style.display = 'flex';
+                tempDiv.style.flexDirection = 'column';
+                tempDiv.style.alignItems = 'center';
                 document.body.appendChild(tempDiv);
 
                 // تولید HTML صورتحساب بر اساس روش انتخابی
@@ -345,15 +350,27 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             clonedDoc.head.appendChild(styleTag);
                             
                             // اعمال استایل‌های نهایی در cloned document - دقیقاً مثل exportInvoiceToImage
+                            const clonedTempDiv = clonedDoc.querySelector(`#temp-invoice-${i}`) as HTMLElement;
+                            if (clonedTempDiv) {
+                                clonedTempDiv.style.width = '210mm';
+                                clonedTempDiv.style.maxWidth = '210mm';
+                                clonedTempDiv.style.overflow = 'hidden';
+                                clonedTempDiv.style.margin = '0 auto';
+                                clonedTempDiv.style.display = 'flex';
+                                clonedTempDiv.style.flexDirection = 'column';
+                                clonedTempDiv.style.alignItems = 'center';
+                            }
+                            
                             const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-${i} [data-invoice-ref="true"]`) as HTMLElement || 
                                                  clonedDoc.querySelector(`#temp-invoice-${i} div[dir="rtl"]`) as HTMLElement;
                             if (clonedInvoice) {
-                                clonedInvoice.style.width = 'auto';
-                                clonedInvoice.style.maxWidth = '90%';
+                                clonedInvoice.style.width = '100%';
+                                clonedInvoice.style.maxWidth = '100%';
                                 clonedInvoice.style.margin = '0 auto';
-                                clonedInvoice.style.overflow = 'visible';
+                                clonedInvoice.style.overflow = 'hidden';
                                 clonedInvoice.style.visibility = 'visible';
                                 clonedInvoice.style.opacity = '1';
+                                clonedInvoice.style.boxSizing = 'border-box';
                                 
                                 // اعمال استایل‌های جدول - حفظ استایل‌های inline
                                 const clonedTables = clonedInvoice.querySelectorAll('table');
@@ -435,6 +452,40 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     // اطمینان از وسط چین بودن جدول
                                     tableEl.style.margin = '0 auto';
                                     tableEl.style.display = 'table';
+                                    tableEl.style.maxWidth = '100%';
+                                    tableEl.style.boxSizing = 'border-box';
+                                });
+                                
+                                // محدود کردن footer (کسورات) - مطمئن شو که از کادر خارج نمی‌شود
+                                const footerDivs = clonedInvoice.querySelectorAll('div[style*="background-color: #e2e8f0"]');
+                                footerDivs.forEach((footerDiv) => {
+                                    const footerEl = footerDiv as HTMLElement;
+                                    footerEl.style.width = '100%';
+                                    footerEl.style.maxWidth = '100%';
+                                    footerEl.style.boxSizing = 'border-box';
+                                    footerEl.style.overflow = 'hidden';
+                                    footerEl.style.margin = '0 auto';
+                                    
+                                    // محدود کردن div های داخلی footer
+                                    const innerDivs = footerEl.querySelectorAll('div');
+                                    innerDivs.forEach((innerDiv) => {
+                                        const innerEl = innerDiv as HTMLElement;
+                                        innerEl.style.width = '100%';
+                                        innerEl.style.maxWidth = '100%';
+                                        innerEl.style.boxSizing = 'border-box';
+                                        innerEl.style.overflow = 'hidden';
+                                    });
+                                    
+                                    // محدود کردن span های داخل footer
+                                    const footerSpans = footerEl.querySelectorAll('span');
+                                    footerSpans.forEach((span) => {
+                                        const spanEl = span as HTMLElement;
+                                        spanEl.style.overflow = 'hidden';
+                                        spanEl.style.textOverflow = 'ellipsis';
+                                        spanEl.style.whiteSpace = 'nowrap';
+                                        spanEl.style.maxWidth = '50%';
+                                        spanEl.style.boxSizing = 'border-box';
+                                    });
                                 });
                                 
                                 // اول از همه، برای همه سلول‌های "مبلغ کل" رنگ مناسب تنظیم کن
@@ -536,11 +587,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         cellEl.style.verticalAlign = 'middle';
                                     }
                                 });
+                                
+                                // محدود کردن همه div های اصلی - مطمئن شو که از کادر خارج نمی‌شوند
+                                const allDivs = clonedInvoice.querySelectorAll('div');
+                                allDivs.forEach((div) => {
+                                    const divEl = div as HTMLElement;
+                                    // فقط برای div هایی که مستقیماً داخل clonedInvoice هستند
+                                    if (divEl.parentElement === clonedInvoice || divEl.closest('[data-invoice-ref="true"]') === clonedInvoice) {
+                                        divEl.style.maxWidth = '100%';
+                                        divEl.style.boxSizing = 'border-box';
+                                        divEl.style.overflow = 'hidden';
+                                    }
+                                });
                             }
                         },
                         removeContainer: false,
-                        windowWidth: 2000,
-                        windowHeight: invoiceDiv.scrollHeight || 2000
+                        windowWidth: 794, // 210mm in pixels (210mm * 3.7795 pixels/mm ≈ 794px)
+                        windowHeight: invoiceDiv.scrollHeight || 1123 // 297mm in pixels (297mm * 3.7795 pixels/mm ≈ 1123px)
                     });
                     
                     console.log(`📄 [PDF_AFTER] Canvas created: ${canvas?.width}x${canvas?.height}`);
@@ -676,7 +739,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const payableAmount = mainDriverPayable + totalHelper;
 
         // ساخت HTML - فقط محتوای div (بدون DOCTYPE و head برای استفاده در innerHTML)
-        let html = `<div dir="rtl" data-invoice-ref="true" style="width: 100%; min-height: 100%; font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box; direction: rtl; text-align: right;">
+        let html = `<div dir="rtl" data-invoice-ref="true" style="width: 100%; max-width: 100%; min-height: 100%; font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box; direction: rtl; text-align: right; overflow: hidden;">
         `;
 
         // جدا کردن محاسبات با و بدون راننده کمکی
@@ -717,12 +780,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         // جدول راننده اصلی با فرمت عمودی - دقیقاً مثل renderMainDriverTableLayoutVertical
         if (calculationsWithoutHelper.length > 0 || calculationsWithHelper.length > 0) {
             html += `
-                <div style="margin-bottom: 24px;">
-                    <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif;">
+                <div style="margin-bottom: 24px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden;">
+                    <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif; width: 100%; box-sizing: border-box;">
                         هزینه‌های راننده اصلی
                     </h3>
-                    <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center;">
-                        <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center; width: 100%; box-sizing: border-box; overflow: hidden;">
+                        <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; max-width: 100%; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); box-sizing: border-box;">
                             <thead>
                                 <tr style="background-color: #1e40af; color: #ffffff;">
                                     <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 25%; color: #ffffff;">دسته‌بندی</th>
@@ -867,12 +930,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 const helperTotal = helperData.calculations.reduce((sum, calc) => sum + calculateHelperDriverCostGlobal(calc), 0);
                 
                 html += `
-                    <div style="margin-bottom: 24px;">
-                        <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif;">
+                    <div style="margin-bottom: 24px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden;">
+                        <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif; width: 100%; box-sizing: border-box;">
                             راننده کمکی - کد پرسنلی: ${helperEmployeeId} - ${helperData.name}
                         </h3>
-                        <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center;">
-                            <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center; width: 100%; box-sizing: border-box; overflow: hidden;">
+                            <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; max-width: 100%; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); box-sizing: border-box;">
                                 <thead>
                                     <tr style="background-color: #1e40af; color: #ffffff;">
                                         <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 25%; color: #ffffff;">دسته‌بندی</th>
@@ -984,22 +1047,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             }
         });
 
-        // جمع کل نهایی (فقط یک بار در footer)
+        // جمع کل نهایی (فقط یک بار در footer) - محدود شده و وسط چین
         html += `
-                <div style="margin-top: 16px; padding: 16px; background-color: #e2e8f0; border-radius: 8px; border: 2px solid #475569;">
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 16px; font-weight: bold; color: #1e293b;">جمع کل هزینه سفر:</span>
-                            <span style="font-size: 18px; font-weight: bold; color: #059669;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
+                <div style="margin-top: 16px; padding: 16px; background-color: #e2e8f0; border-radius: 8px; border: 2px solid #475569; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden;">
+                    <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box;">
+                            <span style="font-size: 16px; font-weight: bold; color: #1e293b; flex-shrink: 0;">جمع کل هزینه سفر:</span>
+                            <span style="font-size: 18px; font-weight: bold; color: #059669; flex-shrink: 0; direction: rtl; text-align: right;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
                         </div>
                         ${totalAdvancePayment > 0 ? `
-                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #94a3b8; padding-top: 8px; margin-top: 8px;">
-                                <span style="font-size: 14px; font-weight: 600; color: #1e293b;">کسور (پیش پرداخت):</span>
-                                <span style="font-size: 16px; font-weight: bold; color: #ea580c;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #94a3b8; padding-top: 8px; margin-top: 8px; width: 100%; box-sizing: border-box;">
+                                <span style="font-size: 14px; font-weight: 600; color: #1e293b; flex-shrink: 0;">کسور (پیش پرداخت):</span>
+                                <span style="font-size: 16px; font-weight: bold; color: #ea580c; flex-shrink: 0; direction: rtl; text-align: right;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
                             </div>
-                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 8px; margin-top: 8px;">
-                                <span style="font-size: 16px; font-weight: bold; color: #1e293b;">مبلغ قابل پرداخت:</span>
-                                <span style="font-size: 18px; font-weight: bold; color: #0284c7;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 8px; margin-top: 8px; width: 100%; box-sizing: border-box;">
+                                <span style="font-size: 16px; font-weight: bold; color: #1e293b; flex-shrink: 0;">مبلغ قابل پرداخت:</span>
+                                <span style="font-size: 18px; font-weight: bold; color: #0284c7; flex-shrink: 0; direction: rtl; text-align: right;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
                             </div>
                         ` : ''}
                     </div>
