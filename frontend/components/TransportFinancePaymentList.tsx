@@ -544,6 +544,40 @@ const renderInvoiceLayout1 = (
                                 </tr>
                             </thead>
                             <tbody>
+                                {/* ردیف‌های اطلاعات بارنامه برای راننده اصلی */}
+                                {calculations.map((calc, calcIdx) => {
+                                    const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
+                                    const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                    const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                                    const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                                        (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                                            ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                                            : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+                                    const calculationDate = calc.calculation_date || calc.calculationDate ? 
+                                        (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                                            ? (calc.calculation_date || calc.calculationDate)
+                                            : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
+                                    
+                                    return (
+                                        <tr key={`bill-info-${calcIdx}`} style={{ 
+                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                            height: '50px'
+                                        }}>
+                                            <td colSpan={4} style={{ 
+                                                fontSize: '16px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: '600',
+                                                color: '#334155',
+                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                            }}>
+                                                <strong>شماره بارنامه:</strong> {billOfLadingNumber} | <strong>مقاصد:</strong> {destinations} | <strong>تاریخ صدور بارنامه:</strong> {billOfLadingDate} | <strong>تاریخ محاسبه:</strong> {calculationDate}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                                 {costRows.map((row, rowIdx) => {
                                     const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
                                     const count = row.getCount();
@@ -820,6 +854,42 @@ const renderInvoiceLayout1 = (
                                 </tr>
                             </thead>
                             <tbody>
+                                {/* ردیف‌های اطلاعات بارنامه برای راننده کمکی */}
+                                {calculations.map((calc, calcIdx) => {
+                                    const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
+                                    const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                    const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '-';
+                                    const helperName = calc.helper_driver_name || calc.helperDriverName || '-';
+                                    const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                                    const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                                        (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                                            ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                                            : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+                                    const calculationDate = calc.calculation_date || calc.calculationDate ? 
+                                        (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                                            ? (calc.calculation_date || calc.calculationDate)
+                                            : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
+                                    
+                                    return (
+                                        <tr key={`helper-bill-info-${calcIdx}`} style={{ 
+                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                            height: '50px'
+                                        }}>
+                                            <td colSpan={4} style={{ 
+                                                fontSize: '16px', 
+                                                padding: '10px 12px', 
+                                                border: '1px solid #cbd5e1', 
+                                                textAlign: 'right', 
+                                                verticalAlign: 'middle',
+                                                fontWeight: '600',
+                                                color: '#334155',
+                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                            }}>
+                                                <strong>کد پرسنلی:</strong> {helperEmployeeId} | <strong>نام:</strong> {helperName} | <strong>مقاصد:</strong> {destinations} | <strong>شماره بارنامه:</strong> {billOfLadingNumber} | <strong>تاریخ صدور بارنامه:</strong> {billOfLadingDate} | <strong>تاریخ محاسبه:</strong> {calculationDate}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                                 {costRows.map((row, rowIdx) => {
                                     const total = calculations.reduce((sum, calc) => sum + row.getValue(calc), 0);
                                     const count = row.getCount();
