@@ -199,10 +199,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 'Content-Type': 'application/json',
             };
 
-            // ایجاد PDF
-            const pdf = new jsPDF('l', 'mm', 'a4'); // landscape orientation
-            const pageWidth = 297; // A4 landscape width in mm
-            const pageHeight = 210; // A4 landscape height in mm
+            // ایجاد PDF - ابتدا portrait، بعداً اگر نیاز بود به landscape تغییر می‌دهیم
+            const pdf = new jsPDF('p', 'mm', 'a4'); // portrait orientation
+            const pageWidth = 210; // A4 portrait width in mm
+            const pageHeight = 297; // A4 portrait height in mm
+            const margin = 10; // 1cm = 10mm margins
+            const contentWidth = pageWidth - (2 * margin);
+            const contentHeight = pageHeight - (2 * margin);
             console.log('📄 [PDF_BEFORE] PDF object created');
 
             // برای هر رکورد پرداخت شده
@@ -340,6 +343,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedDiv.style.width = '100%';
                                 clonedDiv.style.maxWidth = '100%';
                                 clonedDiv.style.overflow = 'hidden';
+                                clonedDiv.style.direction = 'rtl';
+                                clonedDiv.style.textAlign = 'right';
                                 
                                 // اعمال استایل‌های جدول
                                 const clonedTables = clonedDiv.querySelectorAll('table');
@@ -347,11 +352,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     const tableEl = table as HTMLElement;
                                     tableEl.style.width = '100%';
                                     tableEl.style.minWidth = '100%';
-                                    tableEl.style.tableLayout = 'auto';
+                                    tableEl.style.tableLayout = 'fixed';
                                     tableEl.style.borderCollapse = 'collapse';
-                                    tableEl.style.fontSize = '11px';
-                                    tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                                    tableEl.style.fontSize = '12px';
+                                    tableEl.style.fontFamily = "'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif";
                                     tableEl.style.boxSizing = 'border-box';
+                                    tableEl.style.direction = 'rtl';
                                 });
                                 
                                 // اعمال استایل‌های thead و tbody
@@ -363,6 +369,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         const rowEl = row as HTMLElement;
                                         rowEl.style.backgroundColor = '#1e293b';
                                         rowEl.style.color = '#ffffff';
+                                        rowEl.style.direction = 'rtl';
                                     });
                                 });
                                 
@@ -374,6 +381,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         const rowEl = row as HTMLElement;
                                         rowEl.style.backgroundColor = '#f1f5f9';
                                         rowEl.style.fontWeight = 'bold';
+                                        rowEl.style.direction = 'rtl';
                                     });
                                 });
                                 
@@ -382,65 +390,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedCells.forEach((cell) => {
                                     const cellEl = cell as HTMLElement;
                                     
-                                    // padding - داینامیک بر اساس نوع سلول
-                                    const rowSpan = cellEl.getAttribute('rowspan');
-                                    if (cellEl.tagName === 'TH' && rowSpan === '2') {
-                                        // برای headerهای rowspan=2، padding بیشتر و height ثابت
-                                        cellEl.style.padding = '0';
-                                        cellEl.style.paddingTop = '15px';
-                                        cellEl.style.paddingBottom = '5px';
-                                        cellEl.style.paddingLeft = '6px';
-                                        // برای ستون‌های آخر paddingRight بیشتر
-                                        const cellText = cellEl.textContent || '';
-                                        const isLastColumn = cellText.includes('پیمایش کل') || cellText.includes('اجرت کل تور') || cellText.includes('جمع کل هزینه') || cellText.includes('جمع کل') || cellText.includes('پیمایش مازاد');
-                                        cellEl.style.paddingRight = isLastColumn ? '12px' : '6px';
-                                        cellEl.style.height = '70px';
-                                        cellEl.style.fontSize = '11px';
-                                        cellEl.style.lineHeight = '1.8';
-                                        cellEl.style.verticalAlign = 'top';
-                                        cellEl.style.display = 'table-cell';
-                                        cellEl.style.boxSizing = 'border-box';
-                                    } else if (cellEl.tagName === 'TH') {
-                                        // برای headerهای عادی
-                                        cellEl.style.padding = '8px 4px';
-                                        cellEl.style.fontSize = '10px';
-                                        cellEl.style.verticalAlign = 'middle';
-                                        cellEl.style.boxSizing = 'border-box';
-                                    } else {
-                                        // برای سلول‌های داده
-                                        // برای ستون‌های آخر paddingRight بیشتر
-                                        const cellIndex = Array.from(cellEl.parentElement?.children || []).indexOf(cellEl);
-                                        const totalCells = cellEl.parentElement?.children.length || 0;
-                                        const isLastColumn = cellIndex >= totalCells - 3; // 3 ستون آخر
-                                        cellEl.style.padding = isLastColumn ? '12px 18px 12px 12px' : '12px 12px';
-                                        cellEl.style.lineHeight = '1.6';
-                                        cellEl.style.verticalAlign = 'middle';
-                                        cellEl.style.boxSizing = 'border-box';
-                                        cellEl.style.overflow = 'hidden';
-                                        
-                                        // برای همه سلول‌ها: font-size ثابت 11px و nowrap برای اعداد و تاریخ
-                                        const cellText = cellEl.textContent || '';
-                                        // تشخیص تاریخ (فرمت 1404/09/21 یا 1404/9/21)
-                                        const isDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cellText.trim()) || /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(cellText.replace(/\s/g, ''));
-                                        const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim()) || /^[\d\s،,.-]+$/.test(cellText.trim());
-                                        
-                                        // font-size ثابت برای همه
-                                        cellEl.style.fontSize = '11px';
-                                        
-                                        if (isDate || isNumber) {
-                                            // برای تاریخ و اعداد: nowrap
-                                            cellEl.style.whiteSpace = 'nowrap';
-                                            cellEl.style.textOverflow = 'ellipsis';
-                                        } else {
-                                            // برای متن: normal با word-break
-                                            cellEl.style.whiteSpace = 'normal';
-                                            cellEl.style.wordBreak = 'break-word';
-                                            cellEl.style.overflowWrap = 'break-word';
-                                        }
-                                    }
+                                    // direction و text-align برای RTL
+                                    cellEl.style.direction = 'rtl';
                                     
-                                    // text-align
-                                    cellEl.style.textAlign = 'center';
+                                    // padding
+                                    if (cellEl.tagName === 'TH') {
+                                        cellEl.style.padding = '10px 8px';
+                                        cellEl.style.fontSize = '12px';
+                                        cellEl.style.verticalAlign = 'middle';
+                                    } else {
+                                        cellEl.style.padding = '8px 6px';
+                                        cellEl.style.fontSize = '11px';
+                                        cellEl.style.verticalAlign = 'middle';
+                                    }
                                     
                                     // box-sizing برای همه سلول‌ها
                                     cellEl.style.boxSizing = 'border-box';
@@ -459,6 +421,26 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         cellEl.style.fontWeight = 'bold';
                                         cellEl.style.backgroundColor = '#1e293b';
                                         cellEl.style.color = '#ffffff';
+                                        cellEl.style.textAlign = 'right';
+                                    } else {
+                                        // برای سلول‌های داده
+                                        const cellText = cellEl.textContent || '';
+                                        // تشخیص عدد (با کاما یا بدون کاما)
+                                        const isNumber = /^[\d،,\s]+$/.test(cellText.trim()) || /^[\d,.\s]+$/.test(cellText.trim()) || /^[\d\s،,.-]+$/.test(cellText.trim());
+                                        
+                                        if (isNumber) {
+                                            // برای اعداد: center-align و nowrap
+                                            cellEl.style.textAlign = 'center';
+                                            cellEl.style.whiteSpace = 'nowrap';
+                                        } else {
+                                            // برای متن: right-align
+                                            cellEl.style.textAlign = 'right';
+                                            cellEl.style.whiteSpace = 'normal';
+                                            cellEl.style.wordBreak = 'break-word';
+                                        }
+                                        
+                                        // font-family
+                                        cellEl.style.fontFamily = "'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif";
                                     }
                                     
                                     // برای footer
@@ -466,6 +448,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     if (parentRow && parentRow.tagName === 'TR' && parentRow.parentElement?.tagName === 'TFOOT') {
                                         cellEl.style.backgroundColor = '#f1f5f9';
                                         cellEl.style.fontWeight = 'bold';
+                                    }
+                                    
+                                    // برای category cells
+                                    if (cellEl.classList.contains('category-cell')) {
+                                        cellEl.style.color = '#000000';
+                                        cellEl.style.fontWeight = 'bold';
+                                        cellEl.style.textAlign = 'right';
                                     }
                                 });
                             }
@@ -494,25 +483,34 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
                 // تبدیل به JPEG با کیفیت 0.85 برای کاهش حجم (به جای PNG)
                 const imgData = canvas.toDataURL('image/jpeg', 0.85);
-                const imgWidth = pageWidth;
+                
+                // بررسی اینکه آیا جدول عریض است (عرض بیشتر از ارتفاع)
+                const isWide = canvas.width > canvas.height;
+                const currentOrientation = isWide ? 'l' : 'p';
+                const currentPageWidth = isWide ? 297 : 210; // A4 landscape vs portrait
+                const currentPageHeight = isWide ? 210 : 297;
+                
+                // اگر جهت صفحه تغییر کرده، صفحه جدید با جهت جدید اضافه کن
+                if (i > 0 || (i === 0 && currentOrientation === 'l')) {
+                    pdf.addPage(currentOrientation);
+                }
+                
+                // محاسبه ابعاد تصویر با در نظر گیری حاشیه‌ها
+                const imgWidth = currentPageWidth - (2 * margin);
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                 let heightLeft = imgHeight;
+                let currentY = margin;
 
-                // اضافه کردن به PDF
-                if (i > 0) {
-                    pdf.addPage('l'); // اضافه کردن صفحه جدید برای هر صورتحساب
-                }
-
-                let position = 0;
-                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
+                // اضافه کردن تصویر به PDF با حاشیه‌ها
+                pdf.addImage(imgData, 'JPEG', margin, currentY, imgWidth, imgHeight);
+                heightLeft -= (currentPageHeight - (2 * margin));
 
                 // اگر محتوا بیشتر از یک صفحه است، صفحات اضافی اضافه کن
-                while (heightLeft >= 0) {
-                    position = heightLeft - imgHeight;
-                    pdf.addPage('l');
-                    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-                    heightLeft -= pageHeight;
+                while (heightLeft > 0) {
+                    currentY = margin - (imgHeight - heightLeft);
+                    pdf.addPage(currentOrientation);
+                    pdf.addImage(imgData, 'JPEG', margin, currentY, imgWidth, imgHeight);
+                    heightLeft -= (currentPageHeight - (2 * margin));
                 }
             }
 
@@ -599,21 +597,32 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const payableAmount = mainDriverPayable + totalHelper;
 
         // ساخت HTML - فقط محتوای div (بدون DOCTYPE و head برای استفاده در innerHTML)
-        let html = `<div dir="rtl" style="width: 100%; min-height: 100%; font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif; padding: 24px; background-color: #ffffff; box-sizing: border-box; direction: rtl; text-align: right;">
-                <div style="margin-bottom: 16px; border-bottom: 2px solid #1e293b; padding-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div>
-                            <h1 style="font-size: 24px; font-weight: bold; color: #1e293b; margin-bottom: 8px;">صورتحساب هزینه</h1>
-                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">کد پرسنلی: ${record.employeeId}</p>
-                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">نام: ${record.driverName}</p>
-                            <p style="font-size: 14px; color: #475569;">شماره حساب: ${record.accountNumber || '-'}</p>
+        const currentDate = formatJalali(new Date());
+        const pageCode = `INV-${record.employeeId}-${Date.now().toString().slice(-6)}`;
+        
+        let html = `<div dir="rtl" style="width: 100%; min-height: 100%; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', 'Tahoma', Arial, sans-serif; padding: 10mm; background-color: #ffffff; box-sizing: border-box; direction: rtl; text-align: right;">
+                <!-- سربرگ -->
+                <div style="margin-bottom: 16px; border-bottom: 3px solid #1e40af; padding-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="text-align: right;">
+                            <p style="font-size: 14px; color: #475569; margin: 0; margin-bottom: 4px;">تاریخ: ${currentDate}</p>
+                        </div>
+                        <div style="text-align: center; flex: 1;">
+                            <h1 style="font-size: 22px; font-weight: bold; color: #1e293b; margin: 0;">صورتحساب‌های پرداخت‌شده</h1>
                         </div>
                         <div style="text-align: left;">
-                            <p style="font-size: 14px; color: #475569; margin-bottom: 4px;">تاریخ تهیه لیست: ${formatJalali(new Date())}</p>
-                            ${calcDateFrom && calcDateTo ? `<p style="font-size: 14px; color: #475569; margin-bottom: 4px;">بازه زمانی: ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
-                            <p style="font-size: 14px; color: #475569;">تاریخ پرداخت: ${record.paymentDate}</p>
+                            <p style="font-size: 14px; color: #475569; margin: 0;">کد: ${pageCode}</p>
                         </div>
                     </div>
+                </div>
+                
+                <!-- اطلاعات راننده -->
+                <div style="margin-bottom: 16px; padding: 12px; background-color: #f8fafc; border-radius: 4px;">
+                    <p style="font-size: 14px; color: #475569; margin: 4px 0;"><strong>کد پرسنلی:</strong> ${record.employeeId}</p>
+                    <p style="font-size: 14px; color: #475569; margin: 4px 0;"><strong>نام:</strong> ${record.driverName}</p>
+                    <p style="font-size: 14px; color: #475569; margin: 4px 0;"><strong>شماره حساب:</strong> ${record.accountNumber || '-'}</p>
+                    <p style="font-size: 14px; color: #475569; margin: 4px 0;"><strong>تاریخ پرداخت:</strong> ${record.paymentDate}</p>
+                    ${calcDateFrom && calcDateTo ? `<p style="font-size: 14px; color: #475569; margin: 4px 0;"><strong>بازه محاسبه:</strong> ${calcDateFrom} تا ${calcDateTo}</p>` : ''}
                 </div>
         `;
 
@@ -656,17 +665,17 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         if (calculationsWithoutHelper.length > 0 || calculationsWithHelper.length > 0) {
             html += `
                 <div style="margin-bottom: 24px;">
-                    <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif;">
+                    <h3 style="font-size: 18px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', 'IranSans', Arial, sans-serif; text-align: right;">
                         هزینه‌های راننده اصلی
                     </h3>
-                    <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center;">
-                        <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="width: 100%; overflow-x: auto;">
+                        <table style="font-size: 12px; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; table-layout: fixed; width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; direction: rtl;">
                             <thead>
-                                <tr style="background-color: #1e40af; color: #ffffff;">
-                                    <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 25%; color: #ffffff;">دسته‌بندی</th>
-                                    <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; width: 30%; color: #ffffff;">شرح هزینه / (ریال)</th>
-                                    <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 22%; color: #ffffff;">مبلغ واحد / (ریال)</th>
-                                    <th style="font-size: 20px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 23%; color: #ffffff;">مبلغ کل / (ریال)</th>
+                                <tr style="background-color: #1e293b; color: #ffffff;">
+                                    <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: right; vertical-align: middle; width: 10%; color: #ffffff;">دسته‌بندی</th>
+                                    <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: right; vertical-align: middle; width: 50%; color: #ffffff;">شرح هزینه</th>
+                                    <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: center; vertical-align: middle; width: 20%; color: #ffffff;">میزان (ریال)</th>
+                                    <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: center; vertical-align: middle; width: 20%; color: #ffffff;">میزان کل (ریال)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -716,11 +725,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const isFirstInCategory = infoIdx === 0;
                     
                     html += `
-                        <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
-                            ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">اطلاعات اولیه</td>` : ''}
-                            <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.label}</td>
-                            <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.value}</td>
-                            <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">-</td>
+                        <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
+                            ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;" class="category-cell">اطلاعات اولیه</td>` : ''}
+                            <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">${infoRow.label}</td>
+                            <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${infoRow.value}</td>
+                            <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">-</td>
                         </tr>
                     `;
                 });
@@ -744,11 +753,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                     
                     html += `
-                        <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
-                            ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">${row.category}</td>` : ''}
-                            <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${row.label}</td>
-                            <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
-                            <td data-total-amount="true" style="font-size: 20px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
+                        <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
+                            ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;" class="category-cell">${row.category}</td>` : ''}
+                            <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">${row.label}</td>
+                            <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
+                            <td data-total-amount="true" style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
                         </tr>
                     `;
                 });
@@ -756,11 +765,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
             // ردیف جمع کل
             html += `
-                                <tr style="background-color: #3b82f6; height: 50px;">
-                                    <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">جمع کل</td>
-                                    <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
-                                    <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
-                                    <td data-total-amount="true" style="font-size: 24px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">${totalMainAll.toLocaleString('fa-IR')}</td>
+                                <tr style="background-color: #1e40af;">
+                                    <td style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">جمع کل</td>
+                                    <td style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">-</td>
+                                    <td style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">-</td>
+                                    <td data-total-amount="true" style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${totalMainAll.toLocaleString('fa-IR')}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -806,17 +815,17 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 
                 html += `
                     <div style="margin-bottom: 24px;">
-                        <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif;">
+                        <h3 style="font-size: 18px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', 'IranSans', Arial, sans-serif; text-align: right;">
                             راننده کمکی - کد پرسنلی: ${helperEmployeeId} - ${helperData.name}
                         </h3>
-                        <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center;">
-                            <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="width: 100%; overflow-x: auto;">
+                            <table style="font-size: 12px; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; table-layout: fixed; width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; direction: rtl;">
                                 <thead>
-                                    <tr style="background-color: #1e40af; color: #ffffff;">
-                                        <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 25%; color: #ffffff;">دسته‌بندی</th>
-                                        <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; width: 30%; color: #ffffff;">شرح هزینه / (ریال)</th>
-                                        <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 22%; color: #ffffff;">مبلغ واحد / (ریال)</th>
-                                        <th style="font-size: 20px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 23%; color: #ffffff;">مبلغ کل / (ریال)</th>
+                                    <tr style="background-color: #1e293b; color: #ffffff;">
+                                        <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: right; vertical-align: middle; width: 10%; color: #ffffff;">دسته‌بندی</th>
+                                        <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: right; vertical-align: middle; width: 50%; color: #ffffff;">شرح هزینه</th>
+                                        <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: center; vertical-align: middle; width: 20%; color: #ffffff;">میزان (ریال)</th>
+                                        <th style="font-size: 12px; font-weight: bold; padding: 10px 8px; border: 1px solid #475569; text-align: center; vertical-align: middle; width: 20%; color: #ffffff;">میزان کل (ریال)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -868,11 +877,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         const isFirstInCategory = infoIdx === 0;
                         
                         html += `
-                            <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
-                                ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">اطلاعات اولیه</td>` : ''}
-                                <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.label}</td>
-                                <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.value}</td>
-                                <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">-</td>
+                            <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
+                                ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;" class="category-cell">اطلاعات اولیه</td>` : ''}
+                                <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">${infoRow.label}</td>
+                                <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${infoRow.value}</td>
+                                <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">-</td>
                             </tr>
                         `;
                     });
@@ -896,11 +905,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         }
                         
                         html += `
-                            <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
-                                ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">${row.category}</td>` : ''}
-                                <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${row.label}</td>
-                                <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
-                                <td data-total-amount="true" style="font-size: 20px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
+                            <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
+                                ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;" class="category-cell">${row.category}</td>` : ''}
+                                <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">${row.label}</td>
+                                <td style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
+                                <td data-total-amount="true" style="font-size: 11px; padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
                             </tr>
                         `;
                     });
@@ -908,11 +917,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
                 // ردیف جمع کل
                 html += `
-                                    <tr style="background-color: #3b82f6; height: 50px;">
-                                        <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">جمع کل</td>
-                                        <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
-                                        <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
-                                        <td data-total-amount="true" style="font-size: 24px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">${helperTotal.toLocaleString('fa-IR')}</td>
+                                    <tr style="background-color: #1e40af;">
+                                        <td style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">جمع کل</td>
+                                        <td style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">-</td>
+                                        <td style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">-</td>
+                                        <td data-total-amount="true" style="font-size: 12px; padding: 10px 8px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; font-weight: bold; background-color: #1e40af; color: #ffffff; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${helperTotal.toLocaleString('fa-IR')}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -922,22 +931,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             }
         });
 
-        // جمع کل نهایی
+        // جمع کل نهایی (فقط یک بار در footer)
         html += `
-                <div style="margin-top: 16px; padding: 16px; background-color: #e2e8f0; border-radius: 8px; border: 2px solid #475569;">
+                <div style="margin-top: 16px; padding: 12px; background-color: #e2e8f0; border-radius: 4px; border: 1px solid #475569; direction: rtl;">
                     <div style="display: flex; flex-direction: column; gap: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 16px; font-weight: bold; color: #1e293b;">جمع کل هزینه سفر:</span>
-                            <span style="font-size: 18px; font-weight: bold; color: #059669;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
+                            <span style="font-size: 13px; font-weight: bold; color: #1e293b; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">جمع کل هزینه سفر:</span>
+                            <span style="font-size: 13px; font-weight: bold; color: #059669; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
                         </div>
                         ${totalAdvancePayment > 0 ? `
                             <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #94a3b8; padding-top: 8px; margin-top: 8px;">
-                                <span style="font-size: 14px; font-weight: 600; color: #1e293b;">کسور (پیش پرداخت):</span>
-                                <span style="font-size: 16px; font-weight: bold; color: #ea580c;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
+                                <span style="font-size: 12px; font-weight: 600; color: #1e293b; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">کسور (پیش پرداخت):</span>
+                                <span style="font-size: 12px; font-weight: bold; color: #ea580c; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 8px; margin-top: 8px;">
-                                <span style="font-size: 16px; font-weight: bold; color: #1e293b;">مبلغ قابل پرداخت:</span>
-                                <span style="font-size: 18px; font-weight: bold; color: #0284c7;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
+                                <span style="font-size: 13px; font-weight: bold; color: #1e293b; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif;">مبلغ قابل پرداخت:</span>
+                                <span style="font-size: 13px; font-weight: bold; color: #0284c7; font-family: 'Vazirmatn', 'IranSans', 'B Nazanin', Arial, sans-serif; direction: rtl;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
                             </div>
                         ` : ''}
                     </div>
