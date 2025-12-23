@@ -1,81 +1,46 @@
 const pool = require('../db');
 
 /**
- * دریافت لیست همه شهرها
+ * دریافت لیست همه مسیرها از dispatch_routes
  */
 async function getCities(req, res) {
   try {
-    // بررسی وجود جدول cities
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'cities'
-      )
+    const result = await pool.query(`
+      SELECT 
+        id,
+        city,
+        province,
+        round_trip_km::NUMERIC as "roundTripKm",
+        expected_days::INTEGER as "expectedDays",
+        approved_allowance::NUMERIC as "approvedAllowance",
+        route_category as "routeCategory",
+        distance_category as "distanceCategory",
+        is_active as "isActive"
+      FROM dispatch_routes
+      ORDER BY province, city
     `);
     
-    const citiesTableExists = tableCheck.rows[0].exists;
+    const routes = result.rows.map(row => ({
+      id: row.id,
+      city: row.city || '',
+      province: row.province || '',
+      roundTripKm: row.roundTripKm !== null ? parseFloat(row.roundTripKm) : null,
+      expectedDays: row.expectedDays !== null ? parseInt(row.expectedDays) : null,
+      approvedAllowance: row.approvedAllowance !== null ? parseFloat(row.approvedAllowance) : null,
+      routeCategory: row.routeCategory || null,
+      distanceCategory: row.distanceCategory || null,
+      isActive: row.isActive !== null ? row.isActive : true
+    }));
     
-    let cities = [];
-    
-    if (citiesTableExists) {
-      // استفاده از جدول cities
-      const result = await pool.query(`
-        SELECT 
-          id,
-          city_name as "cityName",
-          province,
-          approved_mission_days::INTEGER as "approvedMissionDays",
-          city_kilometers::NUMERIC as "cityKilometers",
-          created_at as "createdAt",
-          updated_at as "updatedAt"
-        FROM cities
-        ORDER BY province, city_name
-      `);
-      
-      cities = result.rows.map(row => ({
-        ...row,
-        approvedMissionDays: row.approvedMissionDays !== null ? parseInt(row.approvedMissionDays) : null,
-        cityKilometers: row.cityKilometers !== null ? parseFloat(row.cityKilometers) : null
-      }));
-    } else {
-      // استفاده از dispatch_routes به عنوان fallback
-      const result = await pool.query(`
-        SELECT DISTINCT
-          city as "cityName",
-          province,
-          NULL as "approvedMissionDays",
-          CASE 
-            WHEN round_trip_km IS NOT NULL THEN round_trip_km / 2 
-            ELSE NULL 
-          END as "cityKilometers"
-        FROM dispatch_routes
-        WHERE is_active = TRUE 
-          AND city IS NOT NULL 
-          AND city != ''
-          AND province IS NOT NULL 
-          AND province != ''
-        ORDER BY province, city
-      `);
-      
-      // ساخت id موقت برای هر شهر
-      cities = result.rows.map((row, index) => ({
-        id: `temp-${index}`,
-        ...row,
-        createdAt: null,
-        updatedAt: null
-      }));
-    }
-    
-    res.json(cities);
+    res.json(routes);
   } catch (error) {
     console.error('❌ [getCities] Error:', error);
-    res.status(500).json({ message: 'خطا در دریافت لیست شهرها', error: error.message });
+    res.status(500).json({ message: 'خطا در دریافت لیست مسیرها', error: error.message });
   }
 }
 
 /**
- * دریافت یک شهر با ID
+ * دریافت یک مسیر با ID
  */
 async function getCityById(req, res) {
   try {
@@ -84,130 +49,110 @@ async function getCityById(req, res) {
     const result = await pool.query(`
       SELECT 
         id,
-        city_name as "cityName",
+        city,
         province,
-        approved_mission_days::INTEGER as "approvedMissionDays",
-        city_kilometers::NUMERIC as "cityKilometers",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      FROM cities
+        round_trip_km::NUMERIC as "roundTripKm",
+        expected_days::INTEGER as "expectedDays",
+        approved_allowance::NUMERIC as "approvedAllowance",
+        route_category as "routeCategory",
+        distance_category as "distanceCategory",
+        is_active as "isActive"
+      FROM dispatch_routes
       WHERE id = $1
     `, [id]);
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'شهر یافت نشد' });
+      return res.status(404).json({ message: 'مسیر یافت نشد' });
     }
     
-    const city = result.rows[0];
+    const route = result.rows[0];
     res.json({
-      ...city,
-      approvedMissionDays: city.approvedMissionDays !== null ? parseInt(city.approvedMissionDays) : null,
-      cityKilometers: city.cityKilometers !== null ? parseFloat(city.cityKilometers) : null
+      id: route.id,
+      city: route.city || '',
+      province: route.province || '',
+      roundTripKm: route.roundTripKm !== null ? parseFloat(route.roundTripKm) : null,
+      expectedDays: route.expectedDays !== null ? parseInt(route.expectedDays) : null,
+      approvedAllowance: route.approvedAllowance !== null ? parseFloat(route.approvedAllowance) : null,
+      routeCategory: route.routeCategory || null,
+      distanceCategory: route.distanceCategory || null,
+      isActive: route.isActive !== null ? route.isActive : true
     });
   } catch (error) {
     console.error('❌ [getCityById] Error:', error);
-    res.status(500).json({ message: 'خطا در دریافت شهر', error: error.message });
+    res.status(500).json({ message: 'خطا در دریافت مسیر', error: error.message });
   }
 }
 
 /**
- * ایجاد شهر جدید
+ * ایجاد مسیر جدید
  */
 async function createCity(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    const { cityName, province, approvedMissionDays, cityKilometers } = req.body;
+    const { city, province, roundTripKm, expectedDays, approvedAllowance, routeCategory, distanceCategory, isActive } = req.body;
     
-    // اعتبارسنجی
-    if (!cityName || !province) {
+    if (!city || !province) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'اسم شهر و استان الزامی است' });
+      return res.status(400).json({ message: 'شهر و استان الزامی است' });
     }
     
-    // بررسی تکراری بودن
-    const checkQuery = await client.query(`
-      SELECT id FROM cities 
-      WHERE LOWER(city_name) = LOWER($1) AND LOWER(province) = LOWER($2)
-    `, [cityName, province]);
-    
-    if (checkQuery.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'این شهر با این استان قبلاً ثبت شده است' });
-    }
-    
-    // ایجاد ID
     const id = require('crypto').randomUUID();
     
-    // درج در دیتابیس
     const insertQuery = await client.query(`
-      INSERT INTO cities (
-        id, city_name, province, approved_mission_days, city_kilometers, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO dispatch_routes (
+        id, city, province, round_trip_km, expected_days, 
+        approved_allowance, route_category, distance_category, is_active
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING 
         id,
-        city_name as "cityName",
+        city,
         province,
-        approved_mission_days::INTEGER as "approvedMissionDays",
-        city_kilometers::NUMERIC as "cityKilometers",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
+        round_trip_km::NUMERIC as "roundTripKm",
+        expected_days::INTEGER as "expectedDays",
+        approved_allowance::NUMERIC as "approvedAllowance",
+        route_category as "routeCategory",
+        distance_category as "distanceCategory",
+        is_active as "isActive"
     `, [
       id,
-      cityName,
+      city,
       province,
-      approvedMissionDays ? parseInt(approvedMissionDays) : null,
-      cityKilometers ? parseFloat(cityKilometers) : null
+      roundTripKm ? parseFloat(roundTripKm) : null,
+      expectedDays ? parseInt(expectedDays) : null,
+      approvedAllowance ? parseFloat(approvedAllowance) : null,
+      routeCategory || null,
+      distanceCategory || null,
+      isActive !== undefined ? isActive : true
     ]);
     
     await client.query('COMMIT');
     
-    const newCity = insertQuery.rows[0];
+    const newRoute = insertQuery.rows[0];
     res.status(201).json({
-      ...newCity,
-      approvedMissionDays: newCity.approvedMissionDays !== null ? parseInt(newCity.approvedMissionDays) : null,
-      cityKilometers: newCity.cityKilometers !== null ? parseFloat(newCity.cityKilometers) : null
+      id: newRoute.id,
+      city: newRoute.city || '',
+      province: newRoute.province || '',
+      roundTripKm: newRoute.roundTripKm !== null ? parseFloat(newRoute.roundTripKm) : null,
+      expectedDays: newRoute.expectedDays !== null ? parseInt(newRoute.expectedDays) : null,
+      approvedAllowance: newRoute.approvedAllowance !== null ? parseFloat(newRoute.approvedAllowance) : null,
+      routeCategory: newRoute.routeCategory || null,
+      distanceCategory: newRoute.distanceCategory || null,
+      isActive: newRoute.isActive !== null ? newRoute.isActive : true
     });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [createCity] Error:', error);
-    
-    // اگر جدول cities وجود ندارد، آن را ایجاد کن
-    if (error.message.includes('does not exist') || error.message.includes('relation "cities"')) {
-      try {
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS cities (
-            id VARCHAR(255) PRIMARY KEY,
-            city_name VARCHAR(255) NOT NULL,
-            province VARCHAR(255) NOT NULL,
-            approved_mission_days INTEGER,
-            city_kilometers NUMERIC(10, 2),
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(city_name, province)
-          )
-        `);
-        await client.query('COMMIT');
-        // دوباره تلاش کن
-        return createCity(req, res);
-      } catch (createError) {
-        await client.query('ROLLBACK');
-        return res.status(500).json({ 
-          message: 'خطا در ایجاد جدول cities', 
-          error: createError.message 
-        });
-      }
-    }
-    
-    res.status(500).json({ message: 'خطا در ایجاد شهر', error: error.message });
+    res.status(500).json({ message: 'خطا در ایجاد مسیر', error: error.message });
   } finally {
     client.release();
   }
 }
 
 /**
- * به‌روزرسانی شهر
+ * به‌روزرسانی مسیر
  */
 async function updateCity(req, res) {
   const client = await pool.connect();
@@ -215,79 +160,77 @@ async function updateCity(req, res) {
     await client.query('BEGIN');
     
     const { id } = req.params;
-    const { cityName, province, approvedMissionDays, cityKilometers } = req.body;
+    const { city, province, roundTripKm, expectedDays, approvedAllowance, routeCategory, distanceCategory, isActive } = req.body;
     
-    // اعتبارسنجی
-    if (!cityName || !province) {
+    if (!city || !province) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'اسم شهر و استان الزامی است' });
+      return res.status(400).json({ message: 'شهر و استان الزامی است' });
     }
     
-    // بررسی وجود شهر
-    const checkQuery = await client.query('SELECT id FROM cities WHERE id = $1', [id]);
-    if (checkQuery.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'شهر یافت نشد' });
-    }
-    
-    // بررسی تکراری بودن (به جز خودش)
-    const duplicateQuery = await client.query(`
-      SELECT id FROM cities 
-      WHERE LOWER(city_name) = LOWER($1) 
-        AND LOWER(province) = LOWER($2)
-        AND id != $3
-    `, [cityName, province, id]);
-    
-    if (duplicateQuery.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'این شهر با این استان قبلاً ثبت شده است' });
-    }
-    
-    // به‌روزرسانی
     const updateQuery = await client.query(`
-      UPDATE cities
+      UPDATE dispatch_routes
       SET 
-        city_name = $1,
+        city = $1,
         province = $2,
-        approved_mission_days = $3,
-        city_kilometers = $4,
-        updated_at = NOW()
-      WHERE id = $5
+        round_trip_km = $3,
+        expected_days = $4,
+        approved_allowance = $5,
+        route_category = $6,
+        distance_category = $7,
+        is_active = $8
+      WHERE id = $9
       RETURNING 
         id,
-        city_name as "cityName",
+        city,
         province,
-        approved_mission_days::INTEGER as "approvedMissionDays",
-        city_kilometers::NUMERIC as "cityKilometers",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
+        round_trip_km::NUMERIC as "roundTripKm",
+        expected_days::INTEGER as "expectedDays",
+        approved_allowance::NUMERIC as "approvedAllowance",
+        route_category as "routeCategory",
+        distance_category as "distanceCategory",
+        is_active as "isActive"
     `, [
-      cityName,
+      city,
       province,
-      approvedMissionDays ? parseInt(approvedMissionDays) : null,
-      cityKilometers ? parseFloat(cityKilometers) : null,
+      roundTripKm ? parseFloat(roundTripKm) : null,
+      expectedDays ? parseInt(expectedDays) : null,
+      approvedAllowance ? parseFloat(approvedAllowance) : null,
+      routeCategory || null,
+      distanceCategory || null,
+      isActive !== undefined ? isActive : true,
       id
     ]);
     
+    if (updateQuery.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'مسیر یافت نشد' });
+    }
+    
     await client.query('COMMIT');
     
-    const updatedCity = updateQuery.rows[0];
+    const updatedRoute = updateQuery.rows[0];
     res.json({
-      ...updatedCity,
-      approvedMissionDays: updatedCity.approvedMissionDays !== null ? parseInt(updatedCity.approvedMissionDays) : null,
-      cityKilometers: updatedCity.cityKilometers !== null ? parseFloat(updatedCity.cityKilometers) : null
+      id: updatedRoute.id,
+      city: updatedRoute.city || '',
+      province: updatedRoute.province || '',
+      roundTripKm: updatedRoute.roundTripKm !== null ? parseFloat(updatedRoute.roundTripKm) : null,
+      expectedDays: updatedRoute.expectedDays !== null ? parseInt(updatedRoute.expectedDays) : null,
+      approvedAllowance: updatedRoute.approvedAllowance !== null ? parseFloat(updatedRoute.approvedAllowance) : null,
+      routeCategory: updatedRoute.routeCategory || null,
+      distanceCategory: updatedRoute.distanceCategory || null,
+      isActive: updatedRoute.isActive !== null ? updatedRoute.isActive : true
     });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [updateCity] Error:', error);
-    res.status(500).json({ message: 'خطا در به‌روزرسانی شهر', error: error.message });
+    res.status(500).json({ message: 'خطا در به‌روزرسانی مسیر', error: error.message });
   } finally {
     client.release();
   }
 }
 
 /**
- * حذف شهر
+ * حذف مسیر
  */
 async function deleteCity(req, res) {
   const client = await pool.connect();
@@ -296,23 +239,23 @@ async function deleteCity(req, res) {
     
     const { id } = req.params;
     
-    // بررسی وجود شهر
-    const checkQuery = await client.query('SELECT id FROM cities WHERE id = $1', [id]);
-    if (checkQuery.rows.length === 0) {
+    const deleteQuery = await client.query(`
+      DELETE FROM dispatch_routes
+      WHERE id = $1
+      RETURNING id
+    `, [id]);
+    
+    if (deleteQuery.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'شهر یافت نشد' });
+      return res.status(404).json({ message: 'مسیر یافت نشد' });
     }
     
-    // حذف
-    await client.query('DELETE FROM cities WHERE id = $1', [id]);
-    
     await client.query('COMMIT');
-    
-    res.json({ message: 'شهر با موفقیت حذف شد' });
+    res.json({ message: 'مسیر با موفقیت حذف شد' });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [deleteCity] Error:', error);
-    res.status(500).json({ message: 'خطا در حذف شهر', error: error.message });
+    res.status(500).json({ message: 'خطا در حذف مسیر', error: error.message });
   } finally {
     client.release();
   }
@@ -331,7 +274,6 @@ async function importCitiesFromExcel(req, res) {
       return res.status(400).json({ message: 'فایل Excel ارسال نشده است' });
     }
     
-    // استفاده از کتابخانه xlsx برای خواندن فایل
     const XLSX = require('xlsx');
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -346,61 +288,64 @@ async function importCitiesFromExcel(req, res) {
       errors: []
     };
     
-    // اطمینان از وجود جدول cities
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS cities (
-        id VARCHAR(255) PRIMARY KEY,
-        city_name VARCHAR(255) NOT NULL,
-        province VARCHAR(255) NOT NULL,
-        approved_mission_days INTEGER,
-        city_kilometers NUMERIC(10, 2),
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(city_name, province)
-      )
-    `);
-    
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       try {
         // استخراج داده‌ها با نام‌های مختلف ستون
-        const cityName = row['اسم شهر'] || row['شهر'] || row['cityName'] || row['city_name'] || row['cityName'] || '';
+        const city = row['شهر'] || row['city'] || row['cityName'] || row['اسم شهر'] || '';
         const province = row['استان'] || row['province'] || '';
-        const approvedMissionDaysRaw = row['ماموریت مصوب'] || row['approvedMissionDays'] || row['approved_mission_days'] || null;
-        const cityKilometersRaw = row['کیلومتر شهر'] || row['cityKilometers'] || row['city_kilometers'] || null;
+        const roundTripKmRaw = row['کیلومتر رفت و برگشت'] || row['roundTripKm'] || row['round_trip_km'] || row['کیلومتر'] || null;
+        const expectedDaysRaw = row['روزهای مورد انتظار'] || row['expectedDays'] || row['expected_days'] || row['ماموریت مصوب'] || row['approvedMissionDays'] || null;
+        const approvedAllowanceRaw = row['حق ماموریت مصوب'] || row['approvedAllowance'] || row['approved_allowance'] || null;
+        const routeCategory = row['دسته‌بندی مسیر'] || row['routeCategory'] || row['route_category'] || null;
+        const distanceCategory = row['دسته‌بندی فاصله'] || row['distanceCategory'] || row['distance_category'] || null;
+        const isActiveRaw = row['فعال'] || row['isActive'] || row['is_active'] !== undefined ? row['is_active'] : true;
         
-        // تبدیل به عدد (اگر string است یا خالی نیست)
-        const approvedMissionDays = approvedMissionDaysRaw !== null && approvedMissionDaysRaw !== '' && approvedMissionDaysRaw !== undefined
-          ? (typeof approvedMissionDaysRaw === 'number' ? approvedMissionDaysRaw : (isNaN(parseFloat(approvedMissionDaysRaw)) ? null : parseFloat(approvedMissionDaysRaw)))
+        // تبدیل به عدد
+        const roundTripKm = roundTripKmRaw !== null && roundTripKmRaw !== '' && roundTripKmRaw !== undefined
+          ? (typeof roundTripKmRaw === 'number' ? roundTripKmRaw : (isNaN(parseFloat(roundTripKmRaw)) ? null : parseFloat(roundTripKmRaw)))
           : null;
-        const cityKilometers = cityKilometersRaw !== null && cityKilometersRaw !== '' && cityKilometersRaw !== undefined
-          ? (typeof cityKilometersRaw === 'number' ? cityKilometersRaw : (isNaN(parseFloat(cityKilometersRaw)) ? null : parseFloat(cityKilometersRaw)))
+        const expectedDays = expectedDaysRaw !== null && expectedDaysRaw !== '' && expectedDaysRaw !== undefined
+          ? (typeof expectedDaysRaw === 'number' ? expectedDaysRaw : (isNaN(parseFloat(expectedDaysRaw)) ? null : parseInt(expectedDaysRaw)))
           : null;
+        const approvedAllowance = approvedAllowanceRaw !== null && approvedAllowanceRaw !== '' && approvedAllowanceRaw !== undefined
+          ? (typeof approvedAllowanceRaw === 'number' ? approvedAllowanceRaw : (isNaN(parseFloat(approvedAllowanceRaw)) ? null : parseFloat(approvedAllowanceRaw)))
+          : null;
+        const isActive = isActiveRaw !== null && isActiveRaw !== '' && isActiveRaw !== undefined
+          ? (typeof isActiveRaw === 'boolean' ? isActiveRaw : (String(isActiveRaw).toLowerCase() === 'true' || String(isActiveRaw) === '1'))
+          : true;
         
-        if (!cityName || !province) {
+        if (!city || !province) {
           results.skipped++;
-          results.errors.push({ row: i + 2, error: 'اسم شهر یا استان خالی است' });
+          results.errors.push({ row: i + 2, error: 'شهر یا استان خالی است' });
           continue;
         }
         
-        // بررسی وجود شهر
+        // بررسی وجود مسیر (بر اساس شهر و استان)
         const checkQuery = await client.query(`
-          SELECT id FROM cities 
-          WHERE LOWER(city_name) = LOWER($1) AND LOWER(province) = LOWER($2)
-        `, [cityName, province]);
+          SELECT id FROM dispatch_routes 
+          WHERE LOWER(city) = LOWER($1) AND LOWER(province) = LOWER($2)
+        `, [city, province]);
         
         if (checkQuery.rows.length > 0) {
           // به‌روزرسانی
           await client.query(`
-            UPDATE cities
+            UPDATE dispatch_routes
             SET 
-              approved_mission_days = $1,
-              city_kilometers = $2,
-              updated_at = NOW()
-            WHERE id = $3
+              round_trip_km = $1,
+              expected_days = $2,
+              approved_allowance = $3,
+              route_category = $4,
+              distance_category = $5,
+              is_active = $6
+            WHERE id = $7
           `, [
-            approvedMissionDays,
-            cityKilometers,
+            roundTripKm,
+            expectedDays,
+            approvedAllowance,
+            routeCategory,
+            distanceCategory,
+            isActive,
             checkQuery.rows[0].id
           ]);
           results.updated++;
@@ -408,14 +353,21 @@ async function importCitiesFromExcel(req, res) {
           // ایجاد جدید
           const id = require('crypto').randomUUID();
           await client.query(`
-            INSERT INTO cities (id, city_name, province, approved_mission_days, city_kilometers, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            INSERT INTO dispatch_routes (
+              id, city, province, round_trip_km, expected_days, 
+              approved_allowance, route_category, distance_category, is_active
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           `, [
             id,
-            cityName,
+            city,
             province,
-            approvedMissionDays,
-            cityKilometers
+            roundTripKm,
+            expectedDays,
+            approvedAllowance,
+            routeCategory,
+            distanceCategory,
+            isActive
           ]);
           results.success++;
         }
@@ -463,61 +415,64 @@ async function importCitiesFromJson(req, res) {
       errors: []
     };
     
-    // اطمینان از وجود جدول cities
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS cities (
-        id VARCHAR(255) PRIMARY KEY,
-        city_name VARCHAR(255) NOT NULL,
-        province VARCHAR(255) NOT NULL,
-        approved_mission_days INTEGER,
-        city_kilometers NUMERIC(10, 2),
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(city_name, province)
-      )
-    `);
-    
     for (let i = 0; i < cities.length; i++) {
       const city = cities[i];
       try {
         // پشتیبانی از camelCase و snake_case
-        const cityName = city.cityName || city.city_name || '';
+        const cityName = city.city || city.cityName || city.city_name || '';
         const province = city.province || '';
-        const approvedMissionDaysRaw = city.approvedMissionDays || city.approved_mission_days || null;
-        const cityKilometersRaw = city.cityKilometers || city.city_kilometers || null;
+        const roundTripKmRaw = city.roundTripKm || city.round_trip_km || null;
+        const expectedDaysRaw = city.expectedDays || city.expected_days || city.approvedMissionDays || city.approved_mission_days || null;
+        const approvedAllowanceRaw = city.approvedAllowance || city.approved_allowance || null;
+        const routeCategory = city.routeCategory || city.route_category || null;
+        const distanceCategory = city.distanceCategory || city.distance_category || null;
+        const isActiveRaw = city.isActive !== undefined ? city.isActive : (city.is_active !== undefined ? city.is_active : true);
         
-        // تبدیل به عدد (اگر string است یا خالی نیست)
-        const approvedMissionDays = approvedMissionDaysRaw !== null && approvedMissionDaysRaw !== '' && approvedMissionDaysRaw !== undefined
-          ? (typeof approvedMissionDaysRaw === 'number' ? approvedMissionDaysRaw : (isNaN(parseFloat(approvedMissionDaysRaw)) ? null : parseFloat(approvedMissionDaysRaw)))
+        // تبدیل به عدد
+        const roundTripKm = roundTripKmRaw !== null && roundTripKmRaw !== '' && roundTripKmRaw !== undefined
+          ? (typeof roundTripKmRaw === 'number' ? roundTripKmRaw : (isNaN(parseFloat(roundTripKmRaw)) ? null : parseFloat(roundTripKmRaw)))
           : null;
-        const cityKilometers = cityKilometersRaw !== null && cityKilometersRaw !== '' && cityKilometersRaw !== undefined
-          ? (typeof cityKilometersRaw === 'number' ? cityKilometersRaw : (isNaN(parseFloat(cityKilometersRaw)) ? null : parseFloat(cityKilometersRaw)))
+        const expectedDays = expectedDaysRaw !== null && expectedDaysRaw !== '' && expectedDaysRaw !== undefined
+          ? (typeof expectedDaysRaw === 'number' ? expectedDaysRaw : (isNaN(parseFloat(expectedDaysRaw)) ? null : parseInt(expectedDaysRaw)))
           : null;
+        const approvedAllowance = approvedAllowanceRaw !== null && approvedAllowanceRaw !== '' && approvedAllowanceRaw !== undefined
+          ? (typeof approvedAllowanceRaw === 'number' ? approvedAllowanceRaw : (isNaN(parseFloat(approvedAllowanceRaw)) ? null : parseFloat(approvedAllowanceRaw)))
+          : null;
+        const isActive = isActiveRaw !== null && isActiveRaw !== '' && isActiveRaw !== undefined
+          ? (typeof isActiveRaw === 'boolean' ? isActiveRaw : (String(isActiveRaw).toLowerCase() === 'true' || String(isActiveRaw) === '1'))
+          : true;
         
         if (!cityName || !province) {
           results.skipped++;
-          results.errors.push({ row: i + 1, error: 'cityName و province الزامی است' });
+          results.errors.push({ row: i + 1, error: 'city و province الزامی است' });
           continue;
         }
         
-        // بررسی وجود شهر
+        // بررسی وجود مسیر
         const checkQuery = await client.query(`
-          SELECT id FROM cities 
-          WHERE LOWER(city_name) = LOWER($1) AND LOWER(province) = LOWER($2)
+          SELECT id FROM dispatch_routes 
+          WHERE LOWER(city) = LOWER($1) AND LOWER(province) = LOWER($2)
         `, [cityName, province]);
         
         if (checkQuery.rows.length > 0) {
           // به‌روزرسانی
           await client.query(`
-            UPDATE cities
+            UPDATE dispatch_routes
             SET 
-              approved_mission_days = $1,
-              city_kilometers = $2,
-              updated_at = NOW()
-            WHERE id = $3
+              round_trip_km = $1,
+              expected_days = $2,
+              approved_allowance = $3,
+              route_category = $4,
+              distance_category = $5,
+              is_active = $6
+            WHERE id = $7
           `, [
-            approvedMissionDays,
-            cityKilometers,
+            roundTripKm,
+            expectedDays,
+            approvedAllowance,
+            routeCategory,
+            distanceCategory,
+            isActive,
             checkQuery.rows[0].id
           ]);
           results.updated++;
@@ -525,14 +480,21 @@ async function importCitiesFromJson(req, res) {
           // ایجاد جدید
           const id = require('crypto').randomUUID();
           await client.query(`
-            INSERT INTO cities (id, city_name, province, approved_mission_days, city_kilometers, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            INSERT INTO dispatch_routes (
+              id, city, province, round_trip_km, expected_days, 
+              approved_allowance, route_category, distance_category, is_active
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           `, [
             id,
             cityName,
             province,
-            approvedMissionDays,
-            cityKilometers
+            roundTripKm,
+            expectedDays,
+            approvedAllowance,
+            routeCategory,
+            distanceCategory,
+            isActive
           ]);
           results.success++;
         }
@@ -562,67 +524,34 @@ async function importCitiesFromJson(req, res) {
  */
 async function exportCitiesToJson(req, res) {
   try {
-    // بررسی وجود جدول cities
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'cities'
-      )
+    const result = await pool.query(`
+      SELECT 
+        city,
+        province,
+        round_trip_km::NUMERIC as "roundTripKm",
+        expected_days::INTEGER as "expectedDays",
+        approved_allowance::NUMERIC as "approvedAllowance",
+        route_category as "routeCategory",
+        distance_category as "distanceCategory",
+        is_active as "isActive"
+      FROM dispatch_routes
+      ORDER BY province, city
     `);
     
-    const citiesTableExists = tableCheck.rows[0].exists;
-    
-    let cities = [];
-    
-    if (citiesTableExists) {
-      const result = await pool.query(`
-        SELECT 
-          city_name as "cityName",
-          province,
-          approved_mission_days::INTEGER as "approvedMissionDays",
-          city_kilometers::NUMERIC as "cityKilometers"
-        FROM cities
-        ORDER BY province, city_name
-      `);
-      
-      cities = result.rows.map(row => ({
-        cityName: row.cityName || '',
-        province: row.province || '',
-        approvedMissionDays: row.approvedMissionDays !== null ? parseInt(row.approvedMissionDays) : null,
-        cityKilometers: row.cityKilometers !== null ? parseFloat(row.cityKilometers) : null
-      }));
-    } else {
-      // استفاده از dispatch_routes به عنوان fallback
-      const result = await pool.query(`
-        SELECT DISTINCT
-          city as "cityName",
-          province,
-          NULL::INTEGER as "approvedMissionDays",
-          CASE 
-            WHEN round_trip_km IS NOT NULL THEN (round_trip_km / 2)::NUMERIC
-            ELSE NULL 
-          END as "cityKilometers"
-        FROM dispatch_routes
-        WHERE is_active = TRUE 
-          AND city IS NOT NULL 
-          AND city != ''
-          AND province IS NOT NULL 
-          AND province != ''
-        ORDER BY province, city
-      `);
-      
-      cities = result.rows.map(row => ({
-        cityName: row.cityName || '',
-        province: row.province || '',
-        approvedMissionDays: null,
-        cityKilometers: row.cityKilometers !== null ? parseFloat(row.cityKilometers) : null
-      }));
-    }
+    const routes = result.rows.map(row => ({
+      city: row.city || '',
+      province: row.province || '',
+      roundTripKm: row.roundTripKm !== null ? parseFloat(row.roundTripKm) : null,
+      expectedDays: row.expectedDays !== null ? parseInt(row.expectedDays) : null,
+      approvedAllowance: row.approvedAllowance !== null ? parseFloat(row.approvedAllowance) : null,
+      routeCategory: row.routeCategory || null,
+      distanceCategory: row.distanceCategory || null,
+      isActive: row.isActive !== null ? row.isActive : true
+    }));
     
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="cities_export.json"');
-    res.json(cities);
+    res.setHeader('Content-Disposition', 'attachment; filename="dispatch_routes_export.json"');
+    res.json(routes);
   } catch (error) {
     console.error('❌ [exportCitiesToJson] Error:', error);
     res.status(500).json({ message: 'خطا در export JSON', error: error.message });
@@ -636,83 +565,54 @@ async function exportCitiesToExcel(req, res) {
   try {
     const XLSX = require('xlsx');
     
-    // بررسی وجود جدول cities
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'cities'
-      )
+    const result = await pool.query(`
+      SELECT 
+        city,
+        province,
+        round_trip_km::NUMERIC as "roundTripKm",
+        expected_days::INTEGER as "expectedDays",
+        approved_allowance::NUMERIC as "approvedAllowance",
+        route_category as "routeCategory",
+        distance_category as "distanceCategory",
+        is_active as "isActive"
+      FROM dispatch_routes
+      ORDER BY province, city
     `);
     
-    const citiesTableExists = tableCheck.rows[0].exists;
-    
-    let cities = [];
-    
-    if (citiesTableExists) {
-      const result = await pool.query(`
-        SELECT 
-          city_name as "cityName",
-          province,
-          approved_mission_days::INTEGER as "approvedMissionDays",
-          city_kilometers::NUMERIC as "cityKilometers"
-        FROM cities
-        ORDER BY province, city_name
-      `);
-      
-      cities = result.rows.map(row => ({
-        'اسم شهر': row.cityName || '',
-        'استان': row.province || '',
-        'ماموریت مصوب': row.approvedMissionDays !== null ? parseInt(row.approvedMissionDays) : '',
-        'کیلومتر شهر': row.cityKilometers !== null ? parseFloat(row.cityKilometers) : ''
-      }));
-    } else {
-      // استفاده از dispatch_routes به عنوان fallback
-      const result = await pool.query(`
-        SELECT DISTINCT
-          city as "cityName",
-          province,
-          NULL::INTEGER as "approvedMissionDays",
-          CASE 
-            WHEN round_trip_km IS NOT NULL THEN (round_trip_km / 2)::NUMERIC
-            ELSE NULL 
-          END as "cityKilometers"
-        FROM dispatch_routes
-        WHERE is_active = TRUE 
-          AND city IS NOT NULL 
-          AND city != ''
-          AND province IS NOT NULL 
-          AND province != ''
-        ORDER BY province, city
-      `);
-      
-      cities = result.rows.map(row => ({
-        'اسم شهر': row.cityName || '',
-        'استان': row.province || '',
-        'ماموریت مصوب': '',
-        'کیلومتر شهر': row.cityKilometers !== null ? parseFloat(row.cityKilometers) : ''
-      }));
-    }
+    const routes = result.rows.map(row => ({
+      'شهر': row.city || '',
+      'استان': row.province || '',
+      'کیلومتر رفت و برگشت': row.roundTripKm !== null ? parseFloat(row.roundTripKm) : '',
+      'روزهای مورد انتظار': row.expectedDays !== null ? parseInt(row.expectedDays) : '',
+      'حق ماموریت مصوب': row.approvedAllowance !== null ? parseFloat(row.approvedAllowance) : '',
+      'دسته‌بندی مسیر': row.routeCategory || '',
+      'دسته‌بندی فاصله': row.distanceCategory || '',
+      'فعال': row.isActive !== null ? row.isActive : true
+    }));
     
     // ایجاد workbook
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(cities);
+    const worksheet = XLSX.utils.json_to_sheet(routes);
     
     // تنظیم عرض ستون‌ها
     worksheet['!cols'] = [
-      { wch: 20 }, // اسم شهر
+      { wch: 20 }, // شهر
       { wch: 20 }, // استان
-      { wch: 15 }, // ماموریت مصوب
-      { wch: 15 }  // کیلومتر شهر
+      { wch: 18 }, // کیلومتر رفت و برگشت
+      { wch: 15 }, // روزهای مورد انتظار
+      { wch: 18 }, // حق ماموریت مصوب
+      { wch: 15 }, // دسته‌بندی مسیر
+      { wch: 15 }, // دسته‌بندی فاصله
+      { wch: 10 }  // فعال
     ];
     
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'شهرها');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'مسیرها');
     
     // تولید buffer
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="cities_export.xlsx"');
+    res.setHeader('Content-Disposition', 'attachment; filename="dispatch_routes_export.xlsx"');
     res.send(buffer);
   } catch (error) {
     console.error('❌ [exportCitiesToExcel] Error:', error);
@@ -731,4 +631,3 @@ module.exports = {
   exportCitiesToJson,
   exportCitiesToExcel
 };
-

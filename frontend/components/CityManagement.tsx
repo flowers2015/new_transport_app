@@ -4,21 +4,23 @@ import { getApiUrl } from '../utils/apiConfig';
 // ============================================
 // Types
 // ============================================
-interface City {
+interface DispatchRoute {
     id: string;
-    cityName: string; // اسم شهر
-    province: string; // استان
-    approvedMissionDays?: number | null; // ماموریت مصوب
-    cityKilometers?: number | null; // کیلومتر شهر
-    createdAt?: string;
-    updatedAt?: string;
+    city: string;
+    province: string;
+    roundTripKm?: number | null;
+    expectedDays?: number | null;
+    approvedAllowance?: number | null;
+    routeCategory?: string | null;
+    distanceCategory?: string | null;
+    isActive?: boolean;
 }
 
 // ============================================
 // Main Component
 // ============================================
 const CityManagement: React.FC = () => {
-    const [cities, setCities] = useState<City[]>([]);
+    const [routes, setRoutes] = useState<DispatchRoute[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -28,7 +30,7 @@ const CityManagement: React.FC = () => {
     // Modal states
     const [showModal, setShowModal] = useState(false);
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
-    const [selectedCity, setSelectedCity] = useState<City | null>(null);
+    const [selectedRoute, setSelectedRoute] = useState<DispatchRoute | null>(null);
 
     // Import states
     const [showImportDialog, setShowImportDialog] = useState(false);
@@ -45,13 +47,13 @@ const CityManagement: React.FC = () => {
     // ============================================
     // Data Fetching
     // ============================================
-    const fetchCities = async () => {
+    const fetchRoutes = async () => {
         setLoading(true);
         setError(null);
         try {
             const { cachedFetch } = await import('../utils/apiCache');
             const data = await cachedFetch(getApiUrl('cities'), { headers }, 5 * 60 * 1000); // 5 min cache
-            setCities(Array.isArray(data) ? data : []);
+            setRoutes(Array.isArray(data) ? data : []);
         } catch (err: any) {
             setError(err.message || 'خطا در بارگذاری داده‌ها');
         } finally {
@@ -60,7 +62,7 @@ const CityManagement: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchCities();
+        fetchRoutes();
     }, []);
 
     useEffect(() => {
@@ -71,7 +73,7 @@ const CityManagement: React.FC = () => {
     // CRUD Operations
     // ============================================
     const handleDelete = async (id: string) => {
-        if (!confirm('آیا از حذف این شهر اطمینان دارید؟')) return;
+        if (!confirm('آیا از حذف این مسیر اطمینان دارید؟')) return;
 
         try {
             const res = await fetch(getApiUrl(`cities/${id}`), {
@@ -85,7 +87,7 @@ const CityManagement: React.FC = () => {
             }
 
             alert('با موفقیت حذف شد');
-            fetchCities();
+            fetchRoutes();
         } catch (err: any) {
             alert(err.message);
         }
@@ -95,7 +97,7 @@ const CityManagement: React.FC = () => {
         try {
             const url = modalMode === 'add' 
                 ? getApiUrl('cities') 
-                : getApiUrl(`cities/${selectedCity?.id}`);
+                : getApiUrl(`cities/${selectedRoute?.id}`);
             
             const method = modalMode === 'add' ? 'POST' : 'PUT';
 
@@ -112,8 +114,8 @@ const CityManagement: React.FC = () => {
 
             alert(modalMode === 'add' ? 'با موفقیت ایجاد شد' : 'با موفقیت ویرایش شد');
             setShowModal(false);
-            setSelectedCity(null);
-            fetchCities();
+            setSelectedRoute(null);
+            fetchRoutes();
         } catch (err: any) {
             alert(err.message);
         }
@@ -148,16 +150,16 @@ const CityManagement: React.FC = () => {
             }
 
             const result = await res.json();
-            const successCount = result.success || 0;
-            const updatedCount = result.updated || 0;
-            const errorCount = result.errors?.length || 0;
-            const totalCount = result.total || 0;
+            const successCount = result.results?.success || 0;
+            const updatedCount = result.results?.updated || 0;
+            const errorCount = result.results?.errors?.length || 0;
+            const totalCount = result.results?.total || 0;
 
             alert(`✅ Import موفق!\n\nکل: ${totalCount}\nموفق: ${successCount}\nبه‌روزرسانی شده: ${updatedCount}\nخطا: ${errorCount}`);
             
             setImportFile(null);
             setShowImportDialog(false);
-            fetchCities();
+            fetchRoutes();
         } catch (err: any) {
             alert(`❌ خطا: ${err.message}`);
         } finally {
@@ -184,23 +186,10 @@ const CityManagement: React.FC = () => {
                 throw new Error('داده باید یک آرایه باشد');
             }
 
-            // اعتبارسنجی داده‌ها
-            const validatedData = parsedData.map((item, index) => {
-                if (!item.cityName || !item.province) {
-                    throw new Error(`ردیف ${index + 1}: شهر و استان الزامی است`);
-                }
-                return {
-                    cityName: item.cityName,
-                    province: item.province,
-                    approvedMissionDays: item.approvedMissionDays || item.approved_mission_days || null,
-                    cityKilometers: item.cityKilometers || item.city_kilometers || null,
-                };
-            });
-
             const res = await fetch(getApiUrl('cities/import-json'), {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ cities: validatedData }),
+                body: JSON.stringify({ cities: parsedData }),
             });
 
             if (!res.ok) {
@@ -209,16 +198,16 @@ const CityManagement: React.FC = () => {
             }
 
             const result = await res.json();
-            const successCount = result.success || 0;
-            const updatedCount = result.updated || 0;
-            const errorCount = result.errors?.length || 0;
-            const totalCount = result.total || 0;
+            const successCount = result.results?.success || 0;
+            const updatedCount = result.results?.updated || 0;
+            const errorCount = result.results?.errors?.length || 0;
+            const totalCount = result.results?.total || 0;
 
             alert(`✅ Import موفق!\n\nکل: ${totalCount}\nموفق: ${successCount}\nبه‌روزرسانی شده: ${updatedCount}\nخطا: ${errorCount}`);
             
             setJsonData('');
             setShowImportDialog(false);
-            fetchCities();
+            fetchRoutes();
         } catch (err: any) {
             alert(`❌ خطا: ${err.message}`);
         } finally {
@@ -229,16 +218,18 @@ const CityManagement: React.FC = () => {
     // ============================================
     // Filtering & Pagination
     // ============================================
-    const filteredCities = useMemo(() => {
+    const filteredRoutes = useMemo(() => {
         const query = searchQuery.toLowerCase();
-        return cities.filter(city => 
-            city.cityName?.toLowerCase().includes(query) ||
-            city.province?.toLowerCase().includes(query)
+        return routes.filter(route => 
+            route.city?.toLowerCase().includes(query) ||
+            route.province?.toLowerCase().includes(query) ||
+            route.routeCategory?.toLowerCase().includes(query) ||
+            route.distanceCategory?.toLowerCase().includes(query)
         );
-    }, [cities, searchQuery]);
+    }, [routes, searchQuery]);
 
-    const totalPages = Math.ceil(filteredCities.length / itemsPerPage);
-    const paginatedCities = filteredCities.slice(
+    const totalPages = Math.ceil(filteredRoutes.length / itemsPerPage);
+    const paginatedRoutes = filteredRoutes.slice(
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
     );
@@ -251,24 +242,24 @@ const CityManagement: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm">
                 {/* Header */}
                 <div className="p-4 border-b">
-                    <h1 className="text-2xl font-bold text-gray-800 mb-4">مدیریت شهرها</h1>
+                    <h1 className="text-2xl font-bold text-gray-800 mb-4">مدیریت مسیرها (dispatch_routes)</h1>
                     
                     {/* Search & Actions */}
                     <div className="flex flex-wrap gap-4 items-center">
                         <div className="flex-1 min-w-[200px]">
                             <input
                                 type="text"
-                                placeholder="جستجو (شهر یا استان)..."
+                                placeholder="جستجو (شهر، استان، دسته‌بندی)..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
                         <button
-                            onClick={() => { setModalMode('add'); setSelectedCity(null); setShowModal(true); }}
+                            onClick={() => { setModalMode('add'); setSelectedRoute(null); setShowModal(true); }}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                         >
-                            + افزودن شهر جدید
+                            + افزودن مسیر جدید
                         </button>
                         <button
                             onClick={() => { setImportType('excel'); setShowImportDialog(true); }}
@@ -294,7 +285,7 @@ const CityManagement: React.FC = () => {
                                     const url = window.URL.createObjectURL(blob);
                                     const a = document.createElement('a');
                                     a.href = url;
-                                    a.download = 'cities_export.json';
+                                    a.download = 'dispatch_routes_export.json';
                                     document.body.appendChild(a);
                                     a.click();
                                     document.body.removeChild(a);
@@ -319,7 +310,7 @@ const CityManagement: React.FC = () => {
                                     const url = window.URL.createObjectURL(blob);
                                     const a = document.createElement('a');
                                     a.href = url;
-                                    a.download = 'cities_export.xlsx';
+                                    a.download = 'dispatch_routes_export.xlsx';
                                     document.body.appendChild(a);
                                     a.click();
                                     document.body.removeChild(a);
@@ -333,7 +324,7 @@ const CityManagement: React.FC = () => {
                             📤 Export به Excel
                         </button>
                         <button
-                            onClick={fetchCities}
+                            onClick={fetchRoutes}
                             disabled={loading}
                             className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
                         >
@@ -350,43 +341,55 @@ const CityManagement: React.FC = () => {
                 )}
 
                 {/* Table */}
-                <div className="p-4">
+                <div className="p-4 overflow-x-auto">
                     {loading ? (
                         <div className="text-center py-10 text-gray-500">در حال بارگذاری...</div>
-                    ) : filteredCities.length === 0 ? (
+                    ) : filteredRoutes.length === 0 ? (
                         <div className="text-center py-10 text-gray-500">هیچ رکوردی یافت نشد</div>
                     ) : (
                         <>
                             <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                <table className="min-w-full divide-y divide-gray-200 text-xs">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-3 py-2 text-right font-medium text-gray-500">ردیف</th>
-                                            <th className="px-3 py-2 text-right font-medium text-gray-500">اسم شهر</th>
-                                            <th className="px-3 py-2 text-right font-medium text-gray-500">استان</th>
-                                            <th className="px-3 py-2 text-right font-medium text-gray-500">ماموریت مصوب (روز)</th>
-                                            <th className="px-3 py-2 text-right font-medium text-gray-500">کیلومتر شهر</th>
-                                            <th className="px-3 py-2 text-right font-medium text-gray-500">عملیات</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">ردیف</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">شهر</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">استان</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">کیلومتر رفت و برگشت</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">روزهای مورد انتظار</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">حق ماموریت مصوب</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">دسته‌بندی مسیر</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">دسته‌بندی فاصله</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">فعال</th>
+                                            <th className="px-2 py-2 text-right font-medium text-gray-500">عملیات</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {paginatedCities.map((city, idx) => (
-                                            <tr key={city.id} className="hover:bg-gray-50">
-                                                <td className="px-3 py-2">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                                                <td className="px-3 py-2 font-medium">{city.cityName || '-'}</td>
-                                                <td className="px-3 py-2">{city.province || '-'}</td>
-                                                <td className="px-3 py-2">{city.approvedMissionDays?.toLocaleString('fa-IR') || '-'}</td>
-                                                <td className="px-3 py-2">{city.cityKilometers?.toLocaleString('fa-IR') || '-'}</td>
-                                                <td className="px-3 py-2">
+                                        {paginatedRoutes.map((route, idx) => (
+                                            <tr key={route.id} className="hover:bg-gray-50">
+                                                <td className="px-2 py-2">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                                                <td className="px-2 py-2 font-medium">{route.city || '-'}</td>
+                                                <td className="px-2 py-2">{route.province || '-'}</td>
+                                                <td className="px-2 py-2">{route.roundTripKm?.toLocaleString('fa-IR') || '-'}</td>
+                                                <td className="px-2 py-2">{route.expectedDays?.toLocaleString('fa-IR') || '-'}</td>
+                                                <td className="px-2 py-2">{route.approvedAllowance?.toLocaleString('fa-IR') || '-'}</td>
+                                                <td className="px-2 py-2">{route.routeCategory || '-'}</td>
+                                                <td className="px-2 py-2">{route.distanceCategory || '-'}</td>
+                                                <td className="px-2 py-2">
+                                                    <span className={`px-2 py-1 rounded text-xs ${route.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                        {route.isActive ? 'فعال' : 'غیرفعال'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-2 py-2">
                                                     <div className="flex gap-1">
                                                         <button
-                                                            onClick={() => { setSelectedCity(city); setModalMode('edit'); setShowModal(true); }}
+                                                            onClick={() => { setSelectedRoute(route); setModalMode('edit'); setShowModal(true); }}
                                                             className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                                                         >
                                                             ویرایش
                                                         </button>
                                                         <button
-                                                            onClick={() => handleDelete(city.id)}
+                                                            onClick={() => handleDelete(route.id)}
                                                             className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
                                                         >
                                                             حذف
@@ -410,7 +413,7 @@ const CityManagement: React.FC = () => {
                                         قبلی
                                     </button>
                                     <span className="px-4 py-1 text-sm text-gray-600">
-                                        صفحه {currentPage} از {totalPages} (کل: {filteredCities.length})
+                                        صفحه {currentPage} از {totalPages} (کل: {filteredRoutes.length})
                                     </span>
                                     <button
                                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
@@ -428,11 +431,11 @@ const CityManagement: React.FC = () => {
 
             {/* Add/Edit Modal */}
             {showModal && (
-                <CityFormModal
+                <RouteFormModal
                     mode={modalMode}
-                    city={selectedCity}
+                    route={selectedRoute}
                     onSave={handleSave}
-                    onCancel={() => { setShowModal(false); setSelectedCity(null); }}
+                    onCancel={() => { setShowModal(false); setSelectedRoute(null); }}
                 />
             )}
 
@@ -458,33 +461,41 @@ const CityManagement: React.FC = () => {
 };
 
 // ============================================
-// City Form Modal
+// Route Form Modal
 // ============================================
-const CityFormModal: React.FC<{
+const RouteFormModal: React.FC<{
     mode: 'add' | 'edit';
-    city: City | null;
+    route: DispatchRoute | null;
     onSave: (data: any) => void;
     onCancel: () => void;
-}> = ({ mode, city, onSave, onCancel }) => {
+}> = ({ mode, route, onSave, onCancel }) => {
     const [form, setForm] = useState({
-        cityName: city?.cityName || '',
-        province: city?.province || '',
-        approvedMissionDays: city?.approvedMissionDays?.toString() || '',
-        cityKilometers: city?.cityKilometers?.toString() || '',
+        city: route?.city || '',
+        province: route?.province || '',
+        roundTripKm: route?.roundTripKm?.toString() || '',
+        expectedDays: route?.expectedDays?.toString() || '',
+        approvedAllowance: route?.approvedAllowance?.toString() || '',
+        routeCategory: route?.routeCategory || '',
+        distanceCategory: route?.distanceCategory || '',
+        isActive: route?.isActive !== undefined ? route.isActive : true,
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.cityName || !form.province) {
-            alert('اسم شهر و استان الزامی است');
+        if (!form.city || !form.province) {
+            alert('شهر و استان الزامی است');
             return;
         }
 
         onSave({
-            cityName: form.cityName,
+            city: form.city,
             province: form.province,
-            approvedMissionDays: form.approvedMissionDays ? parseFloat(form.approvedMissionDays) : null,
-            cityKilometers: form.cityKilometers ? parseFloat(form.cityKilometers) : null,
+            roundTripKm: form.roundTripKm ? parseFloat(form.roundTripKm) : null,
+            expectedDays: form.expectedDays ? parseInt(form.expectedDays) : null,
+            approvedAllowance: form.approvedAllowance ? parseFloat(form.approvedAllowance) : null,
+            routeCategory: form.routeCategory || null,
+            distanceCategory: form.distanceCategory || null,
+            isActive: form.isActive,
         });
     };
 
@@ -493,10 +504,10 @@ const CityFormModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-auto">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold">
-                        {mode === 'add' ? 'افزودن شهر جدید' : 'ویرایش شهر'}
+                        {mode === 'add' ? 'افزودن مسیر جدید' : 'ویرایش مسیر'}
                     </h2>
                     <button
                         onClick={onCancel}
@@ -507,47 +518,95 @@ const CityFormModal: React.FC<{
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className={labelClass}>اسم شهر *</label>
-                        <input
-                            type="text"
-                            value={form.cityName}
-                            onChange={e => setForm({...form, cityName: e.target.value})}
-                            className={inputClass}
-                            required
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className={labelClass}>شهر *</label>
+                            <input
+                                type="text"
+                                value={form.city}
+                                onChange={e => setForm({...form, city: e.target.value})}
+                                className={inputClass}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className={labelClass}>استان *</label>
+                            <input
+                                type="text"
+                                value={form.province}
+                                onChange={e => setForm({...form, province: e.target.value})}
+                                className={inputClass}
+                                required
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label className={labelClass}>استان *</label>
-                        <input
-                            type="text"
-                            value={form.province}
-                            onChange={e => setForm({...form, province: e.target.value})}
-                            className={inputClass}
-                            required
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className={labelClass}>کیلومتر رفت و برگشت</label>
+                            <input
+                                type="number"
+                                value={form.roundTripKm}
+                                onChange={e => setForm({...form, roundTripKm: e.target.value})}
+                                className={inputClass}
+                                min="0"
+                                step="0.1"
+                            />
+                        </div>
+                        <div>
+                            <label className={labelClass}>روزهای مورد انتظار</label>
+                            <input
+                                type="number"
+                                value={form.expectedDays}
+                                onChange={e => setForm({...form, expectedDays: e.target.value})}
+                                className={inputClass}
+                                min="0"
+                                step="1"
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label className={labelClass}>ماموریت مصوب (روز)</label>
-                        <input
-                            type="number"
-                            value={form.approvedMissionDays}
-                            onChange={e => setForm({...form, approvedMissionDays: e.target.value})}
-                            className={inputClass}
-                            min="0"
-                            step="0.1"
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className={labelClass}>حق ماموریت مصوب</label>
+                            <input
+                                type="number"
+                                value={form.approvedAllowance}
+                                onChange={e => setForm({...form, approvedAllowance: e.target.value})}
+                                className={inputClass}
+                                min="0"
+                                step="0.01"
+                            />
+                        </div>
+                        <div>
+                            <label className={labelClass}>دسته‌بندی مسیر</label>
+                            <input
+                                type="text"
+                                value={form.routeCategory}
+                                onChange={e => setForm({...form, routeCategory: e.target.value})}
+                                className={inputClass}
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label className={labelClass}>کیلومتر شهر</label>
-                        <input
-                            type="number"
-                            value={form.cityKilometers}
-                            onChange={e => setForm({...form, cityKilometers: e.target.value})}
-                            className={inputClass}
-                            min="0"
-                            step="0.1"
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className={labelClass}>دسته‌بندی فاصله</label>
+                            <input
+                                type="text"
+                                value={form.distanceCategory}
+                                onChange={e => setForm({...form, distanceCategory: e.target.value})}
+                                className={inputClass}
+                            />
+                        </div>
+                        <div>
+                            <label className={labelClass}>وضعیت</label>
+                            <select
+                                value={form.isActive ? 'true' : 'false'}
+                                onChange={e => setForm({...form, isActive: e.target.value === 'true'})}
+                                className={inputClass}
+                            >
+                                <option value="true">فعال</option>
+                                <option value="false">غیرفعال</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t mt-4">
@@ -623,13 +682,17 @@ const ImportDialog: React.FC<{
                         <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
                             <strong>ستون‌های مورد نیاز:</strong>
                             <ul className="list-disc list-inside mt-2 space-y-1">
-                                <li><strong>اسم شهر</strong> (اجباری) - نام‌های قابل قبول: "اسم شهر", "شهر", "cityName", "city_name"</li>
+                                <li><strong>شهر</strong> (اجباری) - نام‌های قابل قبول: "شهر", "city", "cityName"</li>
                                 <li><strong>استان</strong> (اجباری) - نام‌های قابل قبول: "استان", "province"</li>
-                                <li><strong>ماموریت مصوب</strong> (اختیاری) - نام‌های قابل قبول: "ماموریت مصوب", "approvedMissionDays", "approved_mission_days"</li>
-                                <li><strong>کیلومتر شهر</strong> (اختیاری) - نام‌های قابل قبول: "کیلومتر شهر", "cityKilometers", "city_kilometers"</li>
+                                <li><strong>کیلومتر رفت و برگشت</strong> (اختیاری) - نام‌های قابل قبول: "کیلومتر رفت و برگشت", "roundTripKm", "round_trip_km"</li>
+                                <li><strong>روزهای مورد انتظار</strong> (اختیاری) - نام‌های قابل قبول: "روزهای مورد انتظار", "expectedDays", "expected_days", "ماموریت مصوب"</li>
+                                <li><strong>حق ماموریت مصوب</strong> (اختیاری) - نام‌های قابل قبول: "حق ماموریت مصوب", "approvedAllowance", "approved_allowance"</li>
+                                <li><strong>دسته‌بندی مسیر</strong> (اختیاری) - نام‌های قابل قبول: "دسته‌بندی مسیر", "routeCategory", "route_category"</li>
+                                <li><strong>دسته‌بندی فاصله</strong> (اختیاری) - نام‌های قابل قبول: "دسته‌بندی فاصله", "distanceCategory", "distance_category"</li>
+                                <li><strong>فعال</strong> (اختیاری) - نام‌های قابل قبول: "فعال", "isActive", "is_active"</li>
                             </ul>
                             <p className="mt-2 text-xs text-blue-700">
-                                ⚠️ توجه: اگر شهر با اسم شهر و استان موجود باشد، اطلاعات به‌روزرسانی می‌شود
+                                ⚠️ توجه: اگر مسیر با شهر و استان موجود باشد، اطلاعات به‌روزرسانی می‌شود
                             </p>
                         </div>
                     </div>
@@ -644,7 +707,7 @@ const ImportDialog: React.FC<{
                                 onChange={(e) => onJsonChange(e.target.value)}
                                 className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
                                 rows={10}
-                                placeholder='[{"cityName": "تهران", "province": "تهران", "approvedMissionDays": 5, "cityKilometers": 100}]'
+                                placeholder='[{"city": "تهران", "province": "تهران", "roundTripKm": 200, "expectedDays": 5}]'
                                 disabled={importing}
                             />
                         </div>
@@ -654,16 +717,14 @@ const ImportDialog: React.FC<{
                             <pre className="mt-2 bg-white p-2 rounded text-xs overflow-x-auto">
 {`[
   {
-    "cityName": "تهران",
+    "city": "تهران",
     "province": "تهران",
-    "approvedMissionDays": 5,
-    "cityKilometers": 100
-  },
-  {
-    "cityName": "اصفهان",
-    "province": "اصفهان",
-    "approvedMissionDays": 3,
-    "cityKilometers": 80
+    "roundTripKm": 200,
+    "expectedDays": 5,
+    "approvedAllowance": 1000000,
+    "routeCategory": "اصلی",
+    "distanceCategory": "دور",
+    "isActive": true
   }
 ]`}
                             </pre>
@@ -671,10 +732,9 @@ const ImportDialog: React.FC<{
                                 <strong>نکات:</strong>
                             </p>
                             <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
-                                <li><strong>cityName</strong> و <strong>province</strong> اجباری هستند</li>
-                                <li><strong>approvedMissionDays</strong> و <strong>cityKilometers</strong> اختیاری هستند</li>
-                                <li>اگر شهر با cityName و province موجود باشد، اطلاعات به‌روزرسانی می‌شود</li>
-                                <li>می‌توانید از نام‌های snake_case هم استفاده کنید: city_name, province, approved_mission_days, city_kilometers</li>
+                                <li><strong>city</strong> و <strong>province</strong> اجباری هستند</li>
+                                <li>سایر فیلدها اختیاری هستند</li>
+                                <li>اگر مسیر با city و province موجود باشد، اطلاعات به‌روزرسانی می‌شود</li>
                             </ul>
                         </div>
                     </div>
@@ -702,4 +762,3 @@ const ImportDialog: React.FC<{
 };
 
 export default CityManagement;
-
