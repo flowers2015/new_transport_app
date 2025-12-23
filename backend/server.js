@@ -34,6 +34,7 @@ const financialPeriodRoutes = require('./routes/financialPeriodRoutes');
 const finalizePermissionRoutes = require('./routes/finalizePermissionRoutes');
 const planningManagerApprovalPermissionRoutes = require('./routes/planningManagerApprovalPermissionRoutes');
 const realtimeRoutes = require('./routes/realtimeRoutes');
+const cityRoutes = require('./routes/cityRoutes');
 
 const app = express();
 
@@ -139,6 +140,7 @@ app.use('/api/v1/financial', financialPeriodRoutes);
 app.use('/api/v1/finalize-permissions', finalizePermissionRoutes);
 app.use('/api/v1/planning-manager-approval-permissions', planningManagerApprovalPermissionRoutes);
 app.use('/api/v1/realtime', realtimeRoutes);
+app.use('/api/v1/cities', cityRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));

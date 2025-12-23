@@ -469,6 +469,7 @@ async function getFreightAnnouncementById(req, res) {
  */
 async function updateFreightAnnouncement(req, res) {
   const { id } = req.params;
+  const userId = req.user?.id || req.user?.userId; // استخراج userId در ابتدای تابع
   try {
     const {
       loadingDate,
@@ -660,7 +661,7 @@ async function updateFreightAnnouncement(req, res) {
       if (allChanges && Object.keys(allChanges).length > 0) {
         // ساخت userName به فرمت "username - name - role"
         // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
-        const userId = req.user?.userId || req.user?.id;
+        // userId قبلاً در ابتدای تابع تعریف شده (خط 472)
         let userFullName = '';
         if (userId) {
           try {
@@ -909,7 +910,7 @@ async function createFreightAnnouncement(req, res) {
       ? destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0)
       : 0;
 
-    // userId already extracted from req.user above (line 863)
+    // userId already extracted from req.user above (line 472)
     
     const insertAnnouncementQuery = `
       INSERT INTO freight_announcements (
