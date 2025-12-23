@@ -634,153 +634,135 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             return helperId && (helperAllowance + helperFoodCost + helperExcessMissionCost > 0);
         });
 
-        // جدول راننده اصلی
+        // تعریف ردیف‌های هزینه برای راننده اصلی (مثل renderMainDriverTableLayoutVertical)
+        const mainDriverCostRows = [
+            { key: 'bill_of_lading', category: 'هزینه‌های مستقیم', label: 'بارنامه', getValue: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0) },
+            { key: 'food', category: 'هزینه‌های مستقیم', label: 'غذا', getValue: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0) },
+            { key: 'fuel', category: 'هزینه‌های مستقیم', label: 'سوخت', getValue: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0) },
+            { key: 'toll', category: 'هزینه‌های مستقیم', label: 'عوارض', getValue: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0) },
+            { key: 'return_cargo', category: 'هزینه‌های مستقیم', label: 'بار برگشتی', getValue: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0) },
+            { key: 'multi_unload', category: 'هزینه‌های مستقیم', label: 'چندجا تخلیه', getValue: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0) },
+            { key: 'excess_mission', category: 'هزینه‌های مستقیم', label: 'ماموریت مازاد', getValue: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0) },
+            { key: 'depot_shipment_count', category: 'هزینه‌های دپو', label: 'تعداد بار دپو', getValue: (calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0) },
+            { key: 'depot_mission_days', category: 'هزینه‌های دپو', label: 'ماموریت دپو (روز)', getValue: (calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0) },
+            { key: 'depot_total_mileage', category: 'هزینه‌های دپو', label: 'پیمایش دپو (کیلومتر)', getValue: (calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0) },
+            { key: 'depot_cargo_handling', category: 'هزینه‌های دپو', label: 'جابجایی بار دپو', getValue: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0) },
+            { key: 'depot_mission', category: 'هزینه‌های دپو', label: 'حق ماموریت دپو', getValue: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0) },
+            { key: 'depot_allowance', category: 'هزینه‌های دپو', label: 'اجرت دپو', getValue: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0) },
+            { key: 'fixed_allowance', category: 'اجرت ثابت', label: 'اجرت ثابت', getValue: (calc: any) => { const queueType = calc.queue_type || calc.queueType || 'porsant'; return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0; }, getUnitPrice: (calc: any) => { const queueType = calc.queue_type || calc.queueType || 'porsant'; return queueType === 'fixed_allowance' ? parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0) : 0; } }
+        ];
+
+        // جدول راننده اصلی با فرمت عمودی
         if (calculationsWithoutHelper.length > 0 || calculationsWithHelper.length > 0) {
             html += `
                 <div style="margin-bottom: 24px;">
-                    <h3 style="font-size: 16px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #475569; padding-bottom: 8px;">
+                    <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif;">
                         هزینه‌های راننده اصلی
                     </h3>
-                    <div style="overflow: hidden; width: 100%;">
-                        <table style="width: 100%; font-size: 11px; border-collapse: collapse; border: 2px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; box-sizing: border-box; min-width: 100%;">
+                    <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center;">
+                        <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                             <thead>
-                                <tr style="background-color: #1e293b; color: white;">
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 3%; height: 70px; display: table-cell; box-sizing: border-box;">ردیف</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 5%; height: 70px; display: table-cell; box-sizing: border-box;">شماره<br/>بارنامه</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 7%; height: 70px; display: table-cell; box-sizing: border-box;">مقاصد</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 5%; height: 70px; display: table-cell; box-sizing: border-box;">تاریخ<br/>صدور</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 5%; height: 70px; display: table-cell; box-sizing: border-box;">تاریخ<br/>محاسبه</th>
-                                    <th colspan="2" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; box-sizing: border-box;">پیمایش<br/>(کیلومتر)</th>
-                                    <th colspan="2" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; box-sizing: border-box;">ماموریت<br/>(روز)</th>
-                                    <th colspan="7" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 30%; box-sizing: border-box;">هزینه‌های<br/>مستقیم<br/>(ریال)</th>
-                                    <th colspan="5" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 18%; box-sizing: border-box;">هزینه‌های<br/>دپو</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 8px; padding-right: 12px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; height: 70px; display: table-cell; box-sizing: border-box;">پیمایش<br/>کل<br/>(کیلومتر)</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 8px; padding-right: 12px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 7%; height: 70px; display: table-cell; box-sizing: border-box;">اجرت<br/>کل تور<br/>(ریال)</th>
-                                    <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 8px; padding-right: 12px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 8%; height: 70px; display: table-cell; box-sizing: border-box;">جمع کل<br/>هزینه<br/>(ریال)</th>
-                                </tr>
-                                <tr style="background-color: #1e293b; color: white;">
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مصوب</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مازاد</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مصوب</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مازاد</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">بارنامه</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">غذا</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">سوخت</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">عوارض</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">بار<br/>برگشتی</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">چندجا<br/>تخلیه</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">ماموریت<br/>مازاد</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">تعداد</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">ماموریت<br/>(روز)</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">پیمایش<br/>(کیلومتر)</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">جابجایی<br/>بار<br/>(ریال)</th>
-                                    <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">حق<br/>ماموریت<br/>(ریال)</th>
+                                <tr style="background-color: #1e40af; color: #ffffff;">
+                                    <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 25%; color: #ffffff;">دسته‌بندی</th>
+                                    <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; width: 30%; color: #ffffff;">شرح هزینه / (ریال)</th>
+                                    <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 22%; color: #ffffff;">مبلغ واحد / (ریال)</th>
+                                    <th style="font-size: 20px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 23%; color: #ffffff;">مبلغ کل / (ریال)</th>
                                 </tr>
                             </thead>
                             <tbody>
             `;
 
-            [...calculationsWithoutHelper, ...calculationsWithHelper].forEach((calc, idx) => {
+            [...calculationsWithoutHelper, ...calculationsWithHelper].forEach((calc, calcIdx) => {
                 const announcementId = calc.announcement_id || calc.announcementId;
                 const announcement = announcementsMap.get(announcementId);
                 const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
-                const mainCost = calculateMainDriverCostGlobal(calc);
+                const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                    (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                        ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                        : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+                const calculationDate = calc.calculation_date || calc.calculationDate ? 
+                    (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                        ? (calc.calculation_date || calc.calculationDate)
+                        : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                 
-                // بررسی نوع اجرت (پورسانت یا اجرت ثابت)
-                const queueType = calc.queue_type || calc.queueType || 'porsant';
-                const isFixedAllowance = queueType === 'fixed_allowance';
-                const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
+                const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                const approvedKm = (calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR');
+                const excessKm = (calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR');
+                const approvedMissionDays = (calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR');
+                const excessMissionDays = (calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR');
+                const totalKm = ((calc.approved_kilometers || calc.approvedKilometers || 0) + (calc.excess_kilometers || calc.excessKilometers || 0)).toLocaleString('fa-IR');
                 
-                // هزینه‌های دپو
-                const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
-                const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
-                const depotTotalMileage = parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0);
-                const depotShipmentCount = parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0);
-                const depotMissionDays = parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0);
-                
-                // محاسبه پیمایش کل (مصوب + مازاد + دپو)
-                const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
-                const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
-                const totalMileage = approvedKm + excessKm + depotTotalMileage;
-                
-                html += `
-                    <tr style="border-bottom: 1px solid #cbd5e1;">
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 40px;">${(idx + 1).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 80px;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${destinations}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.calculation_date || calc.calculationDate || '-'}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${approvedKm}">${approvedKm.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${excessKm}">${excessKm.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.approved_mission_days || calc.approvedMissionDays || 0)}">${(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.excess_mission_days || calc.excessMissionDays || 0)}">${(calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)}">${(calc.bill_of_lading_cost || calc.billOfLadingCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.food_cost || calc.foodCost || 0)}">${(calc.food_cost || calc.foodCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.fuel_cost || calc.fuelCost || 0)}">${(calc.fuel_cost || calc.fuelCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.toll_cost || calc.tollCost || 0)}">${(calc.toll_cost || calc.tollCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.return_cargo_cost || calc.returnCargoCost || 0)}">${(calc.return_cargo_cost || calc.returnCargoCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.multi_unload_cost || calc.multiUnloadCost || 0)}">${(calc.multi_unload_cost || calc.multiUnloadCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${(calc.excess_mission_cost || calc.excessMissionCost || 0)}">${(calc.excess_mission_cost || calc.excessMissionCost || 0).toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${depotShipmentCount.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${depotMissionDays.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${depotTotalMileage.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" class="number-cell" data-value="${depotCargoHandling}">${depotCargoHandling.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" class="number-cell" data-value="${depotMissionCost}">${depotMissionCost.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${totalMileage}">${totalMileage.toLocaleString('fa-IR')}</td>
-                        <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${isFixedAllowance ? fixedAllowance : 0}">${isFixedAllowance ? fixedAllowance.toLocaleString('fa-IR') : '-'}</td>
-                        <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;" data-value="${mainCost}">${mainCost.toLocaleString('fa-IR')}</td>
-                    </tr>
-                `;
+                const initialInfoRows = [
+                    { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
+                    { key: 'origin', label: 'مبدأ', value: origin },
+                    { key: 'destinations', label: 'مقاصد', value: destinations },
+                    { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
+                    { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                    { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate },
+                    { key: 'approved_km', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm },
+                    { key: 'excess_km', label: 'پیمایش مازاد (کیلومتر)', value: excessKm },
+                    { key: 'total_km', label: 'پیمایش کل (کیلومتر)', value: totalKm },
+                    { key: 'approved_mission', label: 'ماموریت مصوب (روز)', value: approvedMissionDays },
+                    { key: 'excess_mission', label: 'ماموریت مازاد (روز)', value: excessMissionDays }
+                ];
+
+                const relevantCostRows = mainDriverCostRows.filter(row => row.getValue(calc) > 0);
+
+                // ردیف‌های اطلاعات اولیه
+                initialInfoRows.forEach((infoRow, infoIdx) => {
+                    const isEven = (calcIdx * 100 + infoIdx) % 2 === 0;
+                    const isFirstInCategory = infoIdx === 0;
+                    
+                    html += `
+                        <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
+                            ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">اطلاعات اولیه</td>` : ''}
+                            <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.label}</td>
+                            <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.value}</td>
+                            <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">-</td>
+                        </tr>
+                    `;
+                });
+
+                // ردیف‌های هزینه
+                relevantCostRows.forEach((row, rowIdx) => {
+                    const value = row.getValue(calc);
+                    const unitPrice = row.getUnitPrice(calc);
+                    const isEven = (calcIdx + rowIdx) % 2 === 0;
+                    const isFirstInCategory = rowIdx === 0 || relevantCostRows[rowIdx - 1].category !== row.category;
+                    
+                    let categoryRowSpan = 1;
+                    if (isFirstInCategory) {
+                        for (let i = rowIdx + 1; i < relevantCostRows.length; i++) {
+                            if (relevantCostRows[i].category === row.category) {
+                                categoryRowSpan++;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    html += `
+                        <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
+                            ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">${row.category}</td>` : ''}
+                            <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${row.label}</td>
+                            <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
+                            <td data-total-amount="true" style="font-size: 20px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
+                        </tr>
+                    `;
+                });
             });
 
+            // ردیف جمع کل
             html += `
-                            </tbody>
-                            <tfoot>
-                                <tr style="background-color: #f1f5f9; font-weight: bold;">
-                                    <td colspan="5" style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; background-color: #f1f5f9; font-weight: bold; box-sizing: border-box; overflow: hidden;">جمع کل سراسری:</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_kilometers || calc.excessKilometers || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_kilometers || calc.excessKilometers || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.food_cost || calc.foodCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.food_cost || calc.foodCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.fuel_cost || calc.fuelCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.fuel_cost || calc.fuelCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.toll_cost || calc.tollCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.toll_cost || calc.tollCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)), 0)}">${calculations.reduce((sum, calc) => sum + (parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0)), 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => {
-                                        const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
-                                        const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
-                                        const depotKm = parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0);
-                                        return sum + approvedKm + excessKm + depotKm;
-                                    }, 0)}">${calculations.reduce((sum, calc) => {
-                                        const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
-                                        const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
-                                        const depotKm = parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0);
-                                        return sum + approvedKm + excessKm + depotKm;
-                                    }, 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${calculations.reduce((sum, calc) => {
-                                        const queueType = calc.queue_type || calc.queueType || 'porsant';
-                                        if (queueType === 'fixed_allowance') {
-                                            return sum + (parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0));
-                                        }
-                                        return sum;
-                                    }, 0)}">${calculations.reduce((sum, calc) => {
-                                        const queueType = calc.queue_type || calc.queueType || 'porsant';
-                                        if (queueType === 'fixed_allowance') {
-                                            return sum + (parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0));
-                                        }
-                                        return sum;
-                                    }, 0).toLocaleString('fa-IR')}</td>
-                                    <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${totalMainAll}">${totalMainAll.toLocaleString('fa-IR')} ریال</td>
+                                <tr style="background-color: #3b82f6; height: 50px;">
+                                    <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">جمع کل</td>
+                                    <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
+                                    <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
+                                    <td data-total-amount="true" style="font-size: 24px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">${totalMainAll.toLocaleString('fa-IR')}</td>
                                 </tr>
-                            </tfoot>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -810,85 +792,129 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             }
         });
 
-        // نمایش جداول راننده کمکی
+        // تعریف ردیف‌های هزینه برای راننده کمکی
+        const helperDriverCostRows = [
+            { key: 'helper_allowance', category: 'هزینه‌های مستقیم', label: 'اجرت راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0), getUnitPrice: (calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0) },
+            { key: 'helper_food', category: 'هزینه‌های مستقیم', label: 'غذای راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0) },
+            { key: 'helper_excess_mission', category: 'هزینه‌های مستقیم', label: 'ماموریت مازاد راننده کمکی', getValue: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0) }
+        ];
+
+        // نمایش جداول راننده کمکی با فرمت عمودی
         helperDriversMap.forEach((helperData, helperEmployeeId) => {
             if (helperData.calculations.length > 0) {
+                const helperTotal = helperData.calculations.reduce((sum, calc) => sum + calculateHelperDriverCostGlobal(calc), 0);
+                
                 html += `
                     <div style="margin-bottom: 24px;">
-                        <h3 style="font-size: 16px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #475569; padding-bottom: 8px;">
+                        <h3 style="font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; font-family: 'Vazirmatn', Arial, sans-serif;">
                             راننده کمکی - کد پرسنلی: ${helperEmployeeId} - ${helperData.name}
                         </h3>
-                        <div style="overflow: hidden; width: 100%;">
-                            <table style="width: 100%; font-size: 11px; border-collapse: collapse; border: 2px solid #1e293b; margin-bottom: 12px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; box-sizing: border-box; min-width: 100%;">
+                        <div style="max-width: 90%; margin: 0 auto; display: flex; justify-content: center;">
+                            <table style="font-size: 18px; font-family: 'Vazirmatn', Arial, sans-serif; table-layout: auto; width: auto; margin: 0 auto; border-collapse: collapse; border: 2px solid #1e40af; background-color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                                 <thead>
-                                    <tr style="background-color: #1e293b; color: white;">
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 3%; height: 70px; display: table-cell; box-sizing: border-box;">ردیف</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 5%; height: 70px; display: table-cell; box-sizing: border-box;">کد<br/>پرسنلی</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 8%; height: 70px; display: table-cell; box-sizing: border-box;">نام و نام<br/>خانوادگی</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; height: 70px; display: table-cell; box-sizing: border-box;">شماره<br/>بارنامه</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 8%; height: 70px; display: table-cell; box-sizing: border-box;">مقاصد</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; height: 70px; display: table-cell; box-sizing: border-box;">تاریخ<br/>صدور</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 6px; padding-right: 6px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; height: 70px; display: table-cell; box-sizing: border-box;">تاریخ<br/>محاسبه</th>
-                                        <th colspan="2" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; box-sizing: border-box;">پیمایش<br/>(کیلومتر)</th>
-                                        <th colspan="2" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 6%; box-sizing: border-box;">ماموریت<br/>(روز)</th>
-                                        <th colspan="3" style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 20%; box-sizing: border-box;">هزینه‌های<br/>راننده کمکی<br/>(ریال)</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 8px; padding-right: 12px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 8%; height: 70px; display: table-cell; box-sizing: border-box;">پیمایش<br/>مازاد<br/>راننده کمکی</th>
-                                        <th rowspan="2" style="padding: 0; padding-top: 15px; padding-bottom: 5px; padding-left: 8px; padding-right: 12px; border: 1px solid #475569; text-align: center; vertical-align: top; font-size: 11px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.8; width: 8%; height: 70px; display: table-cell; box-sizing: border-box;">جمع کل<br/>(ریال)</th>
-                                    </tr>
-                                    <tr style="background-color: #1e293b; color: white;">
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مصوب</th>
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مازاد</th>
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مصوب</th>
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">مازاد</th>
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">ماموریت<br/>مازاد</th>
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">غذا</th>
-                                        <th style="padding: 8px 4px; border: 1px solid #475569; text-align: center; vertical-align: middle; font-size: 10px; font-weight: bold; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box;">اجرت</th>
+                                    <tr style="background-color: #1e40af; color: #ffffff;">
+                                        <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 25%; color: #ffffff;">دسته‌بندی</th>
+                                        <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; width: 30%; color: #ffffff;">شرح هزینه / (ریال)</th>
+                                        <th style="font-size: 18px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 22%; color: #ffffff;">مبلغ واحد / (ریال)</th>
+                                        <th style="font-size: 20px; font-weight: bold; padding: 12px 10px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 23%; color: #ffffff;">مبلغ کل / (ریال)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                 `;
 
-                helperData.calculations.forEach((calc, idx) => {
+                helperData.calculations.forEach((calc, calcIdx) => {
                     const announcementId = calc.announcement_id || calc.announcementId;
                     const announcement = announcementsMap.get(announcementId);
                     const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
-                    const helperCost = calculateHelperDriverCostGlobal(calc);
-                    const helperExcessKm = parseFloat(calc.helper_driver_excess_kilometers || calc.helperDriverExcessKilometers || 0);
+                    const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                    const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                        (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                            ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                            : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+                    const calculationDate = calc.calculation_date || calc.calculationDate ? 
+                        (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                            ? (calc.calculation_date || calc.calculationDate)
+                            : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                     
-                    html += `
-                        <tr style="border-bottom: 1px solid #cbd5e1;">
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${(idx + 1).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${helperEmployeeId}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${helperData.name}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${calc.bill_of_lading_number || calc.billOfLadingNumber || '-'}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; box-sizing: border-box; overflow: hidden;">${destinations}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.bill_of_lading_date || calc.billOfLadingDate || '-'}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 90px;">${calc.calculation_date || calc.calculationDate || '-'}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 50px;">${(calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 50px;">${helperExcessKm.toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 40px;">${(calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 40px;">${(calc.helper_driver_excess_mission_days || calc.helperDriverExcessMissionDays || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 100px;">${(calc.helper_driver_allowance || calc.helperDriverAllowance || 0).toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 80px;">${helperExcessKm.toLocaleString('fa-IR')}</td>
-                            <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; font-weight: bold; white-space: nowrap; line-height: 1.6; box-sizing: border-box; overflow: hidden; min-width: 120px;">${helperCost.toLocaleString('fa-IR')}</td>
-                        </tr>
-                    `;
+                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                    const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                    const approvedKm = (calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR');
+                    const excessKm = (calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR');
+                    const approvedMissionDays = (calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR');
+                    const excessMissionDays = (calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR');
+                    const totalKm = ((calc.approved_kilometers || calc.approvedKilometers || 0) + (calc.excess_kilometers || calc.excessKilometers || 0)).toLocaleString('fa-IR');
+                    
+                    const initialInfoRows = [
+                        { key: 'employee_id', label: 'کد پرسنلی', value: helperEmployeeId },
+                        { key: 'name', label: 'نام', value: helperData.name },
+                        { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
+                        { key: 'origin', label: 'مبدأ', value: origin },
+                        { key: 'destinations', label: 'مقاصد', value: destinations },
+                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
+                        { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate },
+                        { key: 'approved_km', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm },
+                        { key: 'excess_km', label: 'پیمایش مازاد (کیلومتر)', value: excessKm },
+                        { key: 'total_km', label: 'پیمایش کل (کیلومتر)', value: totalKm },
+                        { key: 'approved_mission', label: 'ماموریت مصوب (روز)', value: approvedMissionDays },
+                        { key: 'excess_mission', label: 'ماموریت مازاد (روز)', value: excessMissionDays }
+                    ];
+
+                    const relevantCostRows = helperDriverCostRows.filter(row => row.getValue(calc) > 0);
+
+                    // ردیف‌های اطلاعات اولیه
+                    initialInfoRows.forEach((infoRow, infoIdx) => {
+                        const isEven = (calcIdx * 100 + infoIdx) % 2 === 0;
+                        const isFirstInCategory = infoIdx === 0;
+                        
+                        html += `
+                            <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
+                                ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">اطلاعات اولیه</td>` : ''}
+                                <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.label}</td>
+                                <td style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${infoRow.value}</td>
+                                <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">-</td>
+                            </tr>
+                        `;
+                    });
+
+                    // ردیف‌های هزینه
+                    relevantCostRows.forEach((row, rowIdx) => {
+                        const value = row.getValue(calc);
+                        const unitPrice = row.getUnitPrice(calc);
+                        const isEven = (calcIdx + rowIdx) % 2 === 0;
+                        const isFirstInCategory = rowIdx === 0 || relevantCostRows[rowIdx - 1].category !== row.category;
+                        
+                        let categoryRowSpan = 1;
+                        if (isFirstInCategory) {
+                            for (let i = rowIdx + 1; i < relevantCostRows.length; i++) {
+                                if (relevantCostRows[i].category === row.category) {
+                                    categoryRowSpan++;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        html += `
+                            <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'}; height: 50px;">
+                                ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'};" class="category-cell">${row.category}</td>` : ''}
+                                <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent;">${row.label}</td>
+                                <td style="font-size: 18px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
+                                <td data-total-amount="true" style="font-size: 20px; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
+                            </tr>
+                        `;
+                    });
                 });
 
-                const helperTotal = helperData.calculations.reduce((sum, calc) => sum + calculateHelperDriverCostGlobal(calc), 0);
-                const helperTotalExcessKm = helperData.calculations.reduce((sum, calc) => sum + (parseFloat(calc.helper_driver_excess_kilometers || calc.helperDriverExcessKilometers || 0)), 0);
-
+                // ردیف جمع کل
                 html += `
-                                </tbody>
-                                <tfoot>
-                                    <tr style="background-color: #f1f5f9; font-weight: bold;">
-                                        <td colspan="14" style="padding: 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-size: 11px; white-space: normal; word-break: break-word; overflow-wrap: break-word; line-height: 1.6; background-color: #f1f5f9; font-weight: bold; box-sizing: border-box; overflow: hidden;">جمع کل:</td>
-                                        <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${helperTotalExcessKm}">${helperTotalExcessKm.toLocaleString('fa-IR')}</td>
-                                        <td style="padding: 12px 18px 12px 12px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; white-space: nowrap; line-height: 1.6; background-color: #f1f5f9; box-sizing: border-box; overflow: hidden;" data-value="${helperTotal}">${helperTotal.toLocaleString('fa-IR')} ریال</td>
+                                    <tr style="background-color: #3b82f6; height: 50px;">
+                                        <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">جمع کل</td>
+                                        <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
+                                        <td style="font-size: 20px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">-</td>
+                                        <td data-total-amount="true" style="font-size: 24px; padding: 10px 12px; border: 1px solid #3b82f6; text-align: center; vertical-align: middle; font-weight: bold; background-color: #3b82f6; color: #ffffff;">${helperTotal.toLocaleString('fa-IR')}</td>
                                     </tr>
-                                </tfoot>
+                                </tbody>
                             </table>
                         </div>
                     </div>
