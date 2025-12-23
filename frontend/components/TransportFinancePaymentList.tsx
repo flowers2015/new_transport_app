@@ -558,72 +558,84 @@ const renderInvoiceLayout1 = (
                                             ? (calc.calculation_date || calc.calculationDate)
                                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                                     
-                                    // اطلاعات بارنامه برای نمایش در ستون شرح هزینه
-                                    const billInfo = `شماره بارنامه: ${billOfLadingNumber} | مقاصد: ${destinations} | تاریخ صدور بارنامه: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
-                                    
                                     // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
-                                    // محاسبه تعداد ردیف‌های هزینه برای این محاسبه
-                                    const costRowsCount = relevantCostRows.length;
+                                    // تعریف ردیف‌های اطلاعات اولیه
+                                    const initialInfoRows = [
+                                        { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
+                                        { key: 'destinations', label: 'مقاصد', value: destinations },
+                                        { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate }
+                                    ];
+                                    
+                                    // محاسبه تعداد کل ردیف‌ها (اطلاعات اولیه + هزینه‌ها)
+                                    const totalRowsCount = initialInfoRows.length + relevantCostRows.length;
                                     
                                     const rows = [];
                                     
-                                    // ردیف اطلاعات اولیه
-                                    rows.push(
-                                        <tr key={`info-${calcIdx}`} style={{ 
-                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                                            height: '50px'
-                                        }}>
-                                            <td rowSpan={costRowsCount + 1} style={{ 
-                                                fontSize: '16px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'top',
-                                                fontWeight: 'bold',
-                                                color: '#000000',
-                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                    // ردیف‌های اطلاعات اولیه
+                                    initialInfoRows.forEach((infoRow, infoIdx) => {
+                                        const isEven = (calcIdx * 100 + infoIdx) % 2 === 0;
+                                        const isFirstInCategory = infoIdx === 0;
+                                        
+                                        rows.push(
+                                            <tr key={`info-${calcIdx}-${infoRow.key}`} style={{ 
+                                                backgroundColor: isEven ? '#ffffff' : '#f8fafc',
+                                                height: '50px'
                                             }}>
-                                                اطلاعات اولیه
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: '16px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: '600',
-                                                color: '#334155',
-                                                backgroundColor: 'transparent'
-                                            }}>
-                                                {billInfo}
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: 'normal',
-                                                color: '#334155'
-                                            }}>
-                                                -
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: '20px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: 'bold',
-                                                backgroundColor: '#f1f5f9',
-                                                color: '#1e293b'
-                                            }}>
-                                                -
-                                            </td>
-                                        </tr>
-                                    );
+                                                {isFirstInCategory ? (
+                                                    <td rowSpan={initialInfoRows.length} style={{ 
+                                                        fontSize: '16px', 
+                                                        padding: '10px 12px', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        textAlign: 'right', 
+                                                        verticalAlign: 'top',
+                                                        fontWeight: 'bold',
+                                                        color: '#000000',
+                                                        backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                    }}>
+                                                        اطلاعات اولیه
+                                                    </td>
+                                                ) : null}
+                                                <td style={{ 
+                                                    fontSize: '16px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {infoRow.label}
+                                                </td>
+                                                <td style={{ 
+                                                    fontSize: '18px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'normal',
+                                                    color: '#334155'
+                                                }}>
+                                                    -
+                                                </td>
+                                                <td style={{ 
+                                                    fontSize: '16px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {infoRow.value}
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
                                     
                                     // ردیف‌های هزینه
                                     relevantCostRows.forEach((row, rowIdx) => {
@@ -959,72 +971,83 @@ const renderInvoiceLayout1 = (
                                             ? (calc.calculation_date || calc.calculationDate)
                                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                                     
-                                    // اطلاعات بارنامه برای نمایش در ستون شرح هزینه
-                                    const billInfo = `کد پرسنلی: ${helperEmployeeId} | نام: ${helperName} | مقاصد: ${destinations} | شماره بارنامه: ${billOfLadingNumber} | تاریخ صدور بارنامه: ${billOfLadingDate} | تاریخ محاسبه: ${calculationDate}`;
-                                    
                                     // فیلتر کردن ردیف‌های هزینه که برای این محاسبه مقدار دارند
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
-                                    // محاسبه تعداد ردیف‌های هزینه برای این محاسبه
-                                    const costRowsCount = relevantCostRows.length;
+                                    // تعریف ردیف‌های اطلاعات اولیه برای راننده کمکی
+                                    const initialInfoRows = [
+                                        { key: 'employee_id', label: 'کد پرسنلی', value: helperEmployeeId },
+                                        { key: 'name', label: 'نام', value: helperName },
+                                        { key: 'destinations', label: 'مقاصد', value: destinations },
+                                        { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
+                                        { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                                        { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate }
+                                    ];
                                     
                                     const rows = [];
                                     
-                                    // ردیف اطلاعات اولیه
-                                    rows.push(
-                                        <tr key={`helper-info-${calcIdx}`} style={{ 
-                                            backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                                            height: '50px'
-                                        }}>
-                                            <td rowSpan={costRowsCount + 1} style={{ 
-                                                fontSize: '16px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'top',
-                                                fontWeight: 'bold',
-                                                color: '#000000',
-                                                backgroundColor: calcIdx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                    // ردیف‌های اطلاعات اولیه
+                                    initialInfoRows.forEach((infoRow, infoIdx) => {
+                                        const isEven = (calcIdx * 100 + infoIdx) % 2 === 0;
+                                        const isFirstInCategory = infoIdx === 0;
+                                        
+                                        rows.push(
+                                            <tr key={`helper-info-${calcIdx}-${infoRow.key}`} style={{ 
+                                                backgroundColor: isEven ? '#ffffff' : '#f8fafc',
+                                                height: '50px'
                                             }}>
-                                                اطلاعات اولیه
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: '16px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'right', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: '600',
-                                                color: '#334155',
-                                                backgroundColor: 'transparent'
-                                            }}>
-                                                {billInfo}
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: '18px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: 'normal',
-                                                color: '#334155'
-                                            }}>
-                                                -
-                                            </td>
-                                            <td style={{ 
-                                                fontSize: '20px', 
-                                                padding: '10px 12px', 
-                                                border: '1px solid #cbd5e1', 
-                                                textAlign: 'center', 
-                                                verticalAlign: 'middle',
-                                                fontWeight: 'bold',
-                                                backgroundColor: '#f1f5f9',
-                                                color: '#1e293b'
-                                            }}>
-                                                -
-                                            </td>
-                                        </tr>
-                                    );
+                                                {isFirstInCategory ? (
+                                                    <td rowSpan={initialInfoRows.length} style={{ 
+                                                        fontSize: '16px', 
+                                                        padding: '10px 12px', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        textAlign: 'right', 
+                                                        verticalAlign: 'top',
+                                                        fontWeight: 'bold',
+                                                        color: '#000000',
+                                                        backgroundColor: isEven ? '#ffffff' : '#f8fafc'
+                                                    }}>
+                                                        اطلاعات اولیه
+                                                    </td>
+                                                ) : null}
+                                                <td style={{ 
+                                                    fontSize: '16px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {infoRow.label}
+                                                </td>
+                                                <td style={{ 
+                                                    fontSize: '18px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'center', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: 'normal',
+                                                    color: '#334155'
+                                                }}>
+                                                    -
+                                                </td>
+                                                <td style={{ 
+                                                    fontSize: '16px', 
+                                                    padding: '10px 12px', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    textAlign: 'right', 
+                                                    verticalAlign: 'middle',
+                                                    fontWeight: '600',
+                                                    color: '#334155',
+                                                    backgroundColor: 'transparent'
+                                                }}>
+                                                    {infoRow.value}
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
                                     
                                     // ردیف‌های هزینه
                                     relevantCostRows.forEach((row, rowIdx) => {
