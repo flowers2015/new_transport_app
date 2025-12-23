@@ -416,6 +416,30 @@ const renderInvoiceLayout1 = (
             },
             // هزینه‌های دپو
             { 
+                key: 'depot_shipment_count', 
+                category: 'هزینه‌های دپو',
+                label: 'تعداد بار دپو', 
+                getValue: (calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.depot_shipment_count || c.depotShipmentCount || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0)
+            },
+            { 
+                key: 'depot_mission_days', 
+                category: 'هزینه‌های دپو',
+                label: 'ماموریت دپو (روز)', 
+                getValue: (calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.depot_mission_days || c.depotMissionDays || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0)
+            },
+            { 
+                key: 'depot_total_mileage', 
+                category: 'هزینه‌های دپو',
+                label: 'پیمایش دپو (کیلومتر)', 
+                getValue: (calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.depot_total_mileage || c.depotTotalMileage || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0)
+            },
+            { 
                 key: 'depot_cargo_handling', 
                 category: 'هزینه‌های دپو',
                 label: 'جابجایی بار دپو', 
@@ -3337,6 +3361,22 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     windowWidth: invoiceDiv.scrollWidth,
                     windowHeight: invoiceDiv.scrollHeight,
                     onclone: (clonedDoc) => {
+                        // اضافه کردن style tag برای اطمینان از رنگ مشکی ستون دسته‌بندی
+                        const styleTag = clonedDoc.createElement('style');
+                        styleTag.textContent = `
+                            tbody tr td:first-child {
+                                color: #000000 !important;
+                            }
+                            tbody tr td:first-child * {
+                                color: #000000 !important;
+                            }
+                            tbody tr[style*="background-color: rgb(59, 130, 246)"] td:first-child,
+                            tbody tr[style*="background-color: #3b82f6"] td:first-child {
+                                color: #ffffff !important;
+                            }
+                        `;
+                        clonedDoc.head.appendChild(styleTag);
+                        
                         // اعمال استایل‌های نهایی در cloned document
                         const clonedTempDiv = clonedDoc.querySelector('#temp-invoice-pdf') as HTMLElement;
                         if (clonedTempDiv) {
@@ -3490,16 +3530,48 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         const cellText = (cellEl.textContent || '').trim();
                                         const rowBg = parentRow.style.backgroundColor || window.getComputedStyle(parentRow).backgroundColor;
                                         const isTotalRow = cellText.includes('جمع کل') || rowBg.includes('rgb(59, 130, 246)') || rowBg.includes('#3b82f6');
-                                        if (!isTotalRow) {
-                                            // تنظیم رنگ مشکی برای ستون دسته‌بندی
+                                        if (!isTotalRow && cellText.length > 0) {
+                                            // تنظیم رنگ مشکی برای ستون دسته‌بندی با !important
                                             cellEl.style.color = '#000000';
                                             cellEl.style.setProperty('color', '#000000', 'important');
+                                            cellEl.style.setProperty('background-color', cellEl.style.backgroundColor || '#ffffff', 'important');
+                                            
+                                            // حذف هر رنگ دیگری و اضافه کردن رنگ مشکی
+                                            const currentStyle = cellEl.getAttribute('style') || '';
+                                            let newStyle = currentStyle
+                                                .replace(/color:\s*[^;!]+;?/gi, '')
+                                                .replace(/color\s*:\s*[^;!]+;?/gi, '')
+                                                .replace(/color:\s*#[^;!]+;?/gi, '')
+                                                .replace(/color:\s*rgb\([^)]+\);?/gi, '');
+                                            if (!newStyle.includes('color: #000000') && !newStyle.includes('color:#000000')) {
+                                                newStyle += '; color: #000000 !important;';
+                                            }
+                                            cellEl.setAttribute('style', newStyle);
+                                            
                                             // همچنین برای div های داخل آن
                                             const innerDivs = cellEl.querySelectorAll('div');
                                             innerDivs.forEach((div) => {
                                                 const divEl = div as HTMLElement;
                                                 divEl.style.color = '#000000';
                                                 divEl.style.setProperty('color', '#000000', 'important');
+                                                const divStyle = divEl.getAttribute('style') || '';
+                                                let newDivStyle = divStyle
+                                                    .replace(/color:\s*[^;!]+;?/gi, '')
+                                                    .replace(/color\s*:\s*[^;!]+;?/gi, '')
+                                                    .replace(/color:\s*#[^;!]+;?/gi, '')
+                                                    .replace(/color:\s*rgb\([^)]+\);?/gi, '');
+                                                if (!newDivStyle.includes('color: #000000') && !newDivStyle.includes('color:#000000')) {
+                                                    newDivStyle += '; color: #000000 !important;';
+                                                }
+                                                divEl.setAttribute('style', newDivStyle);
+                                            });
+                                            
+                                            // همچنین برای همه text nodes و span ها
+                                            const allTextElements = cellEl.querySelectorAll('span, p, strong, b');
+                                            allTextElements.forEach((el) => {
+                                                const elEl = el as HTMLElement;
+                                                elEl.style.color = '#000000';
+                                                elEl.style.setProperty('color', '#000000', 'important');
                                             });
                                         }
                                     }
@@ -3682,6 +3754,22 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 windowWidth: invoiceRef.current.scrollWidth,
                 windowHeight: invoiceRef.current.scrollHeight,
                 onclone: (clonedDoc) => {
+                    // اضافه کردن style tag برای اطمینان از رنگ مشکی ستون دسته‌بندی
+                    const styleTag = clonedDoc.createElement('style');
+                    styleTag.textContent = `
+                        tbody tr td:first-child {
+                            color: #000000 !important;
+                        }
+                        tbody tr td:first-child * {
+                            color: #000000 !important;
+                        }
+                        tbody tr[style*="background-color: rgb(59, 130, 246)"] td:first-child,
+                        tbody tr[style*="background-color: #3b82f6"] td:first-child {
+                            color: #ffffff !important;
+                        }
+                    `;
+                    clonedDoc.head.appendChild(styleTag);
+                    
                     // اعمال استایل‌های نهایی در cloned document
                     const clonedInvoice = clonedDoc.querySelector('[data-invoice-ref="true"]') as HTMLElement || 
                                          clonedDoc.querySelector('[dir="rtl"]') as HTMLElement;

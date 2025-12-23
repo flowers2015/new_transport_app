@@ -1,0 +1,33 @@
+[
+  {
+    "cityName": "تهران",
+    "province": "تهران",
+    "approvedMissionDays": null,
+    "cityKilometers": 50
+  },
+  {
+    "cityName": "اصفهان",
+    "province": "اصفهان",
+    "approvedMissionDays": null,
+    "cityKilometers": 40
+  },
+  {
+    "cityName": "شیراز",
+    "province": "فارس",
+    "approvedMissionDays": null,
+    "cityKilometers": 60
+  },
+  {
+    "cityName": "مشهد",
+    "province": "خراسان رضوی",
+    "approvedMissionDays": null,
+    "cityKilometers": 70
+  },
+  {
+    "cityName": "تبریز",
+    "province": "آذربایجان شرقی",
+    "approvedMissionDays": null,
+    "cityKilometers": 55
+  }
+]
+

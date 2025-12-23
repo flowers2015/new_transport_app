@@ -111,6 +111,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
       { view: View.UserManagement, label: 'مدیریت کاربران', icon: '👥' },
       { view: View.FreightManagement, label: 'مدیریت اعلام بار', icon: '📦' },
       { view: View.AdminResourceManagement, label: 'مدیریت منابع', icon: '🚛' },
+      { view: View.CityManagement, label: 'مدیریت شهرها', icon: '🏙️' },
       { view: View.FinalizePermissionManagement, label: 'مدیریت دسترسی اتمام تخصیص', icon: '🔐' },
       { view: View.PlanningManagerApprovalPermissionManagement, label: 'مجوز تاییدیه مدیران برنامه‌ریزی', icon: '✅' },
       { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', icon: '📋' },

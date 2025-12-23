@@ -57,6 +57,7 @@ const CustomerManagement = React.lazy(() => import('./components/CustomerManagem
 const UserManagement = React.lazy(() => import('./components/UserManagement'));
 const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
 const AdminResourceManagement = React.lazy(() => import('./components/AdminResourceManagement'));
+const CityManagement = React.lazy(() => import('./components/CityManagement'));
 const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
 const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
 
@@ -634,6 +635,10 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.AdminResourceManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <AdminResourceManagement />;
+            case View.CityManagement:
+                console.log('[App] Render view:', View.CityManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <CityManagement />;
             
             case View.FinalizePermissionManagement:
                 console.log('[App] Render view:', View.FinalizePermissionManagement);
