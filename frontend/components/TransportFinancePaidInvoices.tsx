@@ -813,7 +813,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     tempDiv.style.height = 'auto'; // ارتفاع دینامیک
                     tempDiv.style.minHeight = 'auto';
                     tempDiv.style.backgroundColor = '#ffffff';
-                    tempDiv.style.padding = '40px'; // padding ثابت
+                    tempDiv.style.padding = '30px 40px 20px 40px'; // padding کمتر در پایین برای کاهش فاصله
                     tempDiv.style.margin = '0';
                     tempDiv.style.boxSizing = 'border-box';
                     tempDiv.style.overflow = 'visible'; // مهم: visible برای render کامل
@@ -937,9 +937,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         scrollWidth = invoiceElement.scrollWidth || invoiceElement.offsetWidth || 1200;
                     }
                     
-                    // استفاده از بیشترین مقدار برای اطمینان از render کامل + margin بیشتر
-                    const finalHeight = Math.max(scrollHeight, totalHeight) * 1.2 + 300; // اضافه کردن 20% + 300px margin
-                    const finalWidth = Math.max(scrollWidth, totalWidth, 1200) + 100; // اضافه کردن 100px margin
+                    // استفاده از ارتفاع واقعی + فقط کمی margin برای اطمینان از render کامل
+                    const finalHeight = Math.max(scrollHeight, totalHeight) + 50; // فقط 50px margin اضافی
+                    const finalWidth = Math.max(scrollWidth, totalWidth, 1200);
                     
                     console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${finalWidth}x${finalHeight} (scroll: ${scrollWidth}x${scrollHeight}, calculated: ${totalWidth}x${totalHeight})`);
                     console.log(`🖼️ [ZIP_IMAGES] Tables count: ${tables.length}, Footer count: ${footerDivs.length}`);
@@ -1007,8 +1007,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     padding: 14px 16px !important;
                                     vertical-align: middle !important;
                                     word-wrap: break-word !important;
-                                    line-height: 1.6 !important;
+                                    line-height: 1.5 !important;
                                     font-size: 18px !important;
+                                    white-space: normal !important;
+                                }
+                                table {
+                                    margin: 0 auto 15px auto !important;
+                                }
+                                h3 {
+                                    margin: 10px auto 8px auto !important;
+                                    text-align: center !important;
+                                }
+                                div[style*="background-color"] {
+                                    margin: 10px auto 10px auto !important;
                                 }
                             `;
                             clonedDoc.head.appendChild(styleTag);
@@ -1018,7 +1029,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             if (clonedTempDiv) {
                                 clonedTempDiv.style.width = 'auto';
                                 clonedTempDiv.style.maxWidth = 'none';
-                                clonedTempDiv.style.padding = '40px';
+                                clonedTempDiv.style.padding = '30px 40px 20px 40px'; // padding کمتر در پایین
                                 clonedTempDiv.style.margin = '0';
                                 clonedTempDiv.style.display = 'block';
                                 clonedTempDiv.style.visibility = 'visible';
@@ -1056,9 +1067,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     }
                                 });
                                 
-                                // اعمال استایل‌های جدول - حفظ استایل‌های inline مثل exportInvoiceToImage
+                                // اعمال استایل‌های جدول - وسط چین و spacing درست
                                 const clonedTables = clonedInvoice.querySelectorAll('table');
-                                clonedTables.forEach((table) => {
+                                clonedTables.forEach((table, tableIdx) => {
                                     const tableEl = table as HTMLElement;
                                     // حفظ استایل‌های inline موجود - override نکن
                                     if (!tableEl.style.width || tableEl.style.width === '100%') {
@@ -1067,7 +1078,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     if (!tableEl.style.maxWidth) {
                                         tableEl.style.maxWidth = '90%';
                                     }
-                                    tableEl.style.margin = '0 auto';
+                                    tableEl.style.margin = '0 auto 15px auto'; // وسط چین + فاصله کم بین جداول
+                                    tableEl.style.setProperty('margin', '0 auto 15px auto', 'important');
                                     tableEl.style.tableLayout = 'auto';
                                     tableEl.style.borderCollapse = 'collapse';
                                     // حفظ fontSize و fontFamily از JSX
@@ -1081,6 +1093,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     tableEl.style.boxSizing = 'border-box';
                                     tableEl.style.display = 'table'; // اطمینان از نمایش کامل
                                     
+                                    // حذف margin-bottom برای آخرین جدول
+                                    const isLastTable = tableIdx === clonedTables.length - 1;
+                                    if (isLastTable) {
+                                        tableEl.style.marginBottom = '10px'; // فقط 10px margin برای آخرین جدول
+                                        tableEl.style.setProperty('margin-bottom', '10px', 'important');
+                                    }
+                                    
                                     // اعمال استایل‌های سلول‌ها برای منظم بودن - padding بیشتر
                                     const allCells = tableEl.querySelectorAll('td, th');
                                     allCells.forEach((cell) => {
@@ -1090,8 +1109,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         cellEl.style.setProperty('padding', '14px 16px', 'important');
                                         cellEl.style.verticalAlign = 'middle';
                                         cellEl.style.wordWrap = 'break-word';
-                                        cellEl.style.overflow = 'hidden';
-                                        cellEl.style.lineHeight = '1.6'; // فاصله خطوط
+                                        cellEl.style.overflow = 'visible'; // visible برای نمایش کامل
+                                        cellEl.style.lineHeight = '1.5'; // فاصله خطوط کمتر برای جلوگیری از تو رفتن
+                                        cellEl.style.whiteSpace = 'normal'; // اجازه wrap شدن
                                         
                                         // تنظیم text-align بر اساس نوع محتوا - فونت بزرگتر
                                         if (cellEl.tagName === 'TH') {
@@ -1201,7 +1221,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     tableEl.style.overflow = 'visible';
                                 });
                                 
-                                // اطمینان از اینکه همه footer ها کامل render می‌شوند
+                                // اطمینان از اینکه همه footer ها کامل render می‌شوند و وسط چین هستند
                                 const footerElements = clonedInvoice.querySelectorAll('div[style*="background-color"]');
                                 footerElements.forEach((footer) => {
                                     const footerEl = footer as HTMLElement;
@@ -1210,6 +1230,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     footerEl.style.opacity = '1';
                                     footerEl.style.height = 'auto';
                                     footerEl.style.overflow = 'visible';
+                                    footerEl.style.margin = '10px auto 10px auto'; // وسط چین + margin کم
+                                    footerEl.style.setProperty('margin', '10px auto 10px auto', 'important');
+                                    footerEl.style.width = 'auto';
+                                    footerEl.style.maxWidth = '90%';
+                                });
+                                
+                                // تنظیم spacing برای h3 ها (عنوان جداول)
+                                const h3Elements = clonedInvoice.querySelectorAll('h3');
+                                h3Elements.forEach((h3) => {
+                                    const h3El = h3 as HTMLElement;
+                                    h3El.style.margin = '10px auto 8px auto'; // وسط چین + margin کم
+                                    h3El.style.setProperty('margin', '10px auto 8px auto', 'important');
+                                    h3El.style.textAlign = 'center';
+                                    h3El.style.setProperty('text-align', 'center', 'important');
+                                    h3El.style.width = 'auto';
+                                    h3El.style.maxWidth = '90%';
                                 });
                                 
                                 // تنظیم رنگ برای سلول‌های "مبلغ کل"
