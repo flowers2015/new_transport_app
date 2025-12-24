@@ -802,32 +802,26 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const invoiceLayout = InvoiceLayoutType.STANDARD_ACCOUNTING;
                     const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo, invoiceLayout);
                     
-                    // ایجاد div موقت برای render کردن HTML - با margin و padding ثابت برای همه
+                    // ایجاد div موقت برای render کردن HTML - با ارتفاع دینامیک
                     const tempDiv = document.createElement('div');
                     tempDiv.id = `temp-invoice-image-${i}`;
                     tempDiv.style.position = 'fixed';
                     tempDiv.style.top = '0';
-                    tempDiv.style.left = '0';
-                    tempDiv.style.width = '1200px'; // عرض ثابت برای همه
-                    tempDiv.style.maxWidth = '1200px';
-                    tempDiv.style.height = 'auto';
-                    tempDiv.style.minHeight = '800px';
+                    tempDiv.style.left = '-9999px'; // خارج از viewport اما قابل مشاهده
+                    tempDiv.style.width = 'auto'; // عرض دینامیک
+                    tempDiv.style.maxWidth = 'none'; // بدون محدودیت
+                    tempDiv.style.height = 'auto'; // ارتفاع دینامیک
+                    tempDiv.style.minHeight = 'auto';
                     tempDiv.style.backgroundColor = '#ffffff';
-                    tempDiv.style.padding = '40px'; // padding ثابت برای همه
-                    tempDiv.style.margin = '0'; // margin ثابت
+                    tempDiv.style.padding = '40px'; // padding ثابت
+                    tempDiv.style.margin = '0';
                     tempDiv.style.boxSizing = 'border-box';
-                    tempDiv.style.overflow = 'visible';
+                    tempDiv.style.overflow = 'visible'; // مهم: visible برای render کامل
                     tempDiv.style.zIndex = '999999';
                     tempDiv.style.visibility = 'visible';
-                    tempDiv.style.opacity = '1'; // باید 1 باشد تا html2canvas بتواند ببیند
+                    tempDiv.style.opacity = '1';
                     tempDiv.style.pointerEvents = 'none';
-                    tempDiv.style.display = 'flex';
-                    tempDiv.style.flexDirection = 'column';
-                    tempDiv.style.alignItems = 'center';
-                    tempDiv.style.justifyContent = 'flex-start';
-                    // قرار دادن خارج از viewport اما قابل مشاهده برای html2canvas
-                    tempDiv.style.left = '-9999px';
-                    tempDiv.style.top = '0';
+                    tempDiv.style.display = 'block'; // تغییر از flex به block برای محاسبه دقیق‌تر
                     document.body.appendChild(tempDiv);
                     
                     tempDiv.innerHTML = htmlContent;
@@ -876,58 +870,65 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     console.log(`✅ [ZIP_IMAGES] Content rendered: ${hasContent}, Tables: ${hasTables}, All complete: ${allTablesComplete}`);
                     
-                    // اعمال استایل‌های ثابت برای همه تصاویر
+                    // اعمال استایل‌های موقت - دقیقاً مثل exportInvoiceToImage
                     const invoiceElement = invoiceDiv as HTMLElement;
                     const originalMaxWidth = invoiceElement.style.maxWidth;
                     const originalWidth = invoiceElement.style.width;
-                    invoiceElement.style.width = '100%';
-                    invoiceElement.style.maxWidth = '1120px'; // 1200px - 80px padding
+                    const originalMargin = invoiceElement.style.margin;
+                    
+                    // اعمال محدودیت عرض موقت - مثل exportInvoiceToImage
+                    invoiceElement.style.maxWidth = '90%';
+                    invoiceElement.style.width = 'auto';
                     invoiceElement.style.margin = '0 auto';
-                    invoiceElement.style.padding = '0';
-                    invoiceElement.style.boxSizing = 'border-box';
+                    invoiceElement.style.overflow = 'visible';
+                    invoiceElement.style.visibility = 'visible';
+                    invoiceElement.style.opacity = '1';
                     
                     // صبر برای اعمال استایل‌ها
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise(resolve => setTimeout(resolve, 200));
                     
-                    // بررسی ابعاد واقعی عنصر - برای اطمینان از render کامل
+                    // محاسبه ابعاد واقعی - دقیقاً مثل exportInvoiceToImage در لیست پرداخت
                     // Force reflow برای اطمینان از محاسبه صحیح ابعاد
                     tempDiv.offsetHeight;
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    invoiceElement.offsetHeight;
+                    await new Promise(resolve => setTimeout(resolve, 200));
                     
-                    const actualWidth = tempDiv.scrollWidth || tempDiv.offsetWidth || 1200;
-                    let actualHeight = tempDiv.scrollHeight || tempDiv.offsetHeight || 1000;
+                    // استفاده از scrollWidth و scrollHeight برای محاسبه دقیق - مثل exportInvoiceToImage
+                    const actualWidth = invoiceElement.scrollWidth || tempDiv.scrollWidth || 1200;
+                    const actualHeight = invoiceElement.scrollHeight || tempDiv.scrollHeight || 1000;
                     
-                    // بررسی ارتفاع همه جداول
+                    // بررسی ارتفاع همه جداول برای اطمینان از render کامل
+                    let maxTableHeight = 0;
                     tables.forEach((table) => {
                         const tableEl = table as HTMLElement;
                         const tableHeight = tableEl.scrollHeight || tableEl.offsetHeight;
-                        if (tableHeight > 0) {
-                            actualHeight = Math.max(actualHeight, tableHeight + 100);
+                        if (tableHeight > maxTableHeight) {
+                            maxTableHeight = tableHeight;
                         }
                     });
                     
-                    // اضافه کردن margin برای اطمینان از render کامل
-                    const elementWidth = Math.max(actualWidth, 1200);
-                    const elementHeight = Math.max(actualHeight + 200, 1200); // اضافه کردن 200px برای اطمینان از render کامل
+                    // استفاده از بیشترین ارتفاع برای اطمینان از render کامل
+                    const finalHeight = Math.max(actualHeight, maxTableHeight + 100);
+                    const finalWidth = Math.max(actualWidth, 1200);
                     
-                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${elementWidth}x${elementHeight} (actual: ${actualWidth}x${actualHeight})`);
+                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${finalWidth}x${finalHeight} (scroll: ${actualWidth}x${actualHeight}, maxTable: ${maxTableHeight})`);
                     
-                    if (elementHeight === 0 || actualHeight === 0) {
+                    if (finalHeight === 0 || actualHeight === 0) {
                         console.error(`❌ [ZIP_IMAGES] Element has zero height for ${record.driverName}`);
                         document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    // تبدیل به canvas با تنظیمات برای render کامل
-                    const canvas = await html2canvas(tempDiv as HTMLElement, {
-                        scale: 2,
+                    // تبدیل به canvas - دقیقاً مثل exportInvoiceToImage با تنظیمات بهینه
+                    const canvas = await html2canvas(invoiceElement as HTMLElement, {
+                        scale: 2, // scale بالاتر برای کیفیت بهتر عکس
                         useCORS: true,
                         logging: false,
                         backgroundColor: '#ffffff',
-                        width: elementWidth,
-                        height: elementHeight,
-                        windowWidth: elementWidth,
-                        windowHeight: elementHeight,
+                        width: finalWidth,
+                        height: finalHeight,
+                        windowWidth: finalWidth,
+                        windowHeight: finalHeight,
                         allowTaint: true,
                         removeContainer: false,
                         onclone: (clonedDoc) => {
@@ -977,31 +978,29 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             `;
                             clonedDoc.head.appendChild(styleTag);
                             
-                            // اعمال استایل‌های نهایی در cloned document - فرمت یکسان برای همه
+                            // اعمال استایل‌های نهایی در cloned document
                             const clonedTempDiv = clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
                             if (clonedTempDiv) {
-                                clonedTempDiv.style.width = '1200px';
-                                clonedTempDiv.style.maxWidth = '1200px';
+                                clonedTempDiv.style.width = 'auto';
+                                clonedTempDiv.style.maxWidth = 'none';
                                 clonedTempDiv.style.padding = '40px';
                                 clonedTempDiv.style.margin = '0';
-                                clonedTempDiv.style.display = 'flex';
-                                clonedTempDiv.style.flexDirection = 'column';
-                                clonedTempDiv.style.alignItems = 'center';
-                                clonedTempDiv.style.justifyContent = 'flex-start';
+                                clonedTempDiv.style.display = 'block';
                                 clonedTempDiv.style.visibility = 'visible';
                                 clonedTempDiv.style.opacity = '1';
                                 clonedTempDiv.style.position = 'relative';
                                 clonedTempDiv.style.left = '0';
                                 clonedTempDiv.style.top = '0';
+                                clonedTempDiv.style.overflow = 'visible';
                             }
                             
                             const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
                                                  clonedDoc.querySelector(`#temp-invoice-image-${i} div[dir="rtl"]`) as HTMLElement;
                             if (clonedInvoice) {
-                                clonedInvoice.style.width = '100%';
-                                clonedInvoice.style.maxWidth = '1120px';
+                                // دقیقاً مثل exportInvoiceToImage
+                                clonedInvoice.style.width = 'auto';
+                                clonedInvoice.style.maxWidth = '90%';
                                 clonedInvoice.style.margin = '0 auto';
-                                clonedInvoice.style.padding = '0';
                                 clonedInvoice.style.overflow = 'visible';
                                 clonedInvoice.style.visibility = 'visible';
                                 clonedInvoice.style.opacity = '1';
@@ -1020,18 +1019,28 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     }
                                 });
                                 
-                                // اعمال استایل‌های جدول - فرمت یکسان و منظم
+                                // اعمال استایل‌های جدول - حفظ استایل‌های inline مثل exportInvoiceToImage
                                 const clonedTables = clonedInvoice.querySelectorAll('table');
                                 clonedTables.forEach((table) => {
                                     const tableEl = table as HTMLElement;
-                                    tableEl.style.width = '100%';
-                                    tableEl.style.maxWidth = '100%';
-                                    tableEl.style.margin = '0 auto 20px auto';
-                                    tableEl.style.tableLayout = 'fixed';
+                                    // حفظ استایل‌های inline موجود - override نکن
+                                    if (!tableEl.style.width || tableEl.style.width === '100%') {
+                                        tableEl.style.width = 'auto';
+                                    }
+                                    if (!tableEl.style.maxWidth) {
+                                        tableEl.style.maxWidth = '90%';
+                                    }
+                                    tableEl.style.margin = '0 auto';
+                                    tableEl.style.tableLayout = 'auto';
                                     tableEl.style.borderCollapse = 'collapse';
-                                    tableEl.style.fontSize = '20px'; // فونت بزرگتر
+                                    // حفظ fontSize و fontFamily از JSX
+                                    if (!tableEl.style.fontSize) {
+                                        tableEl.style.fontSize = '20px'; // فونت بزرگتر
+                                    }
                                     tableEl.style.setProperty('font-size', '20px', 'important');
-                                    tableEl.style.fontFamily = 'Vazirmatn, Tahoma, Arial, sans-serif';
+                                    if (!tableEl.style.fontFamily) {
+                                        tableEl.style.fontFamily = 'Vazirmatn, Tahoma, Arial, sans-serif';
+                                    }
                                     tableEl.style.boxSizing = 'border-box';
                                     tableEl.style.display = 'table'; // اطمینان از نمایش کامل
                                     
@@ -1180,7 +1189,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     console.log(`🖼️ [ZIP_IMAGES] Canvas size: ${canvas.width}x${canvas.height}`);
                     
-                    // تبدیل به PNG
+                    // تبدیل به PNG با کیفیت بالا
                     const imgData = canvas.toDataURL('image/png', 1.0);
                     
                     if (!imgData || imgData.length < 100) {
@@ -1189,10 +1198,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
                     
-                    // بازگرداندن استایل‌های اصلی
+                    // بازگرداندن استایل‌های اصلی - مثل exportInvoiceToImage
                     invoiceElement.style.maxWidth = originalMaxWidth;
                     invoiceElement.style.width = originalWidth;
-                    invoiceElement.style.margin = '';
+                    invoiceElement.style.margin = originalMargin;
                     
                     // حذف div موقت
                     document.body.removeChild(tempDiv);
