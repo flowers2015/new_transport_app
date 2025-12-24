@@ -893,35 +893,74 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     invoiceElement.offsetHeight;
                     await new Promise(resolve => setTimeout(resolve, 300));
                     
-                    // محاسبه ارتفاع کامل - شامل همه جداول و footer
+                    // محاسبه ارتفاع کامل - شامل همه جداول و footer با دقت بیشتر
                     let totalHeight = 0;
                     let totalWidth = 0;
                     
-                    // ارتفاع همه جداول
-                    tables.forEach((table) => {
+                    // ارتفاع همه جداول - با بررسی دقیق‌تر
+                    tables.forEach((table, idx) => {
                         const tableEl = table as HTMLElement;
-                        const tableHeight = tableEl.scrollHeight || tableEl.offsetHeight || tableEl.clientHeight;
-                        const tableWidth = tableEl.scrollWidth || tableEl.offsetWidth || tableEl.clientWidth;
-                        totalHeight += tableHeight;
+                        // محاسبه ارتفاع از scrollHeight و offsetHeight
+                        const tableHeight = Math.max(
+                            tableEl.scrollHeight || 0,
+                            tableEl.offsetHeight || 0,
+                            tableEl.clientHeight || 0,
+                            tableEl.getBoundingClientRect().height || 0
+                        );
+                        const tableWidth = Math.max(
+                            tableEl.scrollWidth || 0,
+                            tableEl.offsetWidth || 0,
+                            tableEl.clientWidth || 0
+                        );
+                        
+                        // محاسبه ارتفاع واقعی ردیف‌ها
+                        const rows = tableEl.querySelectorAll('tr');
+                        let rowsHeight = 0;
+                        rows.forEach((row) => {
+                            const rowEl = row as HTMLElement;
+                            rowsHeight += Math.max(
+                                rowEl.scrollHeight || 0,
+                                rowEl.offsetHeight || 0,
+                                rowEl.getBoundingClientRect().height || 0
+                            );
+                        });
+                        
+                        // استفاده از بیشترین مقدار
+                        const finalTableHeight = Math.max(tableHeight, rowsHeight);
+                        totalHeight += finalTableHeight;
                         if (tableWidth > totalWidth) {
                             totalWidth = tableWidth;
                         }
+                        
+                        console.log(`🖼️ [ZIP_IMAGES] Table ${idx + 1} height: ${finalTableHeight} (scroll: ${tableHeight}, rows: ${rowsHeight})`);
                     });
                     
                     // ارتفاع footer و سایر عناصر
                     const footerDivs = invoiceElement.querySelectorAll('div[style*="background-color"]');
-                    footerDivs.forEach((footer) => {
+                    footerDivs.forEach((footer, idx) => {
                         const footerEl = footer as HTMLElement;
-                        const footerHeight = footerEl.scrollHeight || footerEl.offsetHeight || footerEl.clientHeight;
+                        const footerHeight = Math.max(
+                            footerEl.scrollHeight || 0,
+                            footerEl.offsetHeight || 0,
+                            footerEl.clientHeight || 0,
+                            footerEl.getBoundingClientRect().height || 0
+                        );
                         totalHeight += footerHeight;
+                        console.log(`🖼️ [ZIP_IMAGES] Footer ${idx + 1} height: ${footerHeight}`);
                     });
                     
-                    // ارتفاع سایر عناصر (h3, div و غیره)
-                    const otherElements = invoiceElement.querySelectorAll('h3, div:not(table):not([style*="background-color"])');
-                    otherElements.forEach((el) => {
-                        const elEl = el as HTMLElement;
-                        if (elEl.scrollHeight > 0) {
-                            totalHeight += elEl.scrollHeight || elEl.offsetHeight || elEl.clientHeight;
+                    // ارتفاع سایر عناصر (h3, div و غیره) - فقط عناصری که واقعاً محتوا دارند
+                    const otherElements = invoiceElement.querySelectorAll('h3');
+                    otherElements.forEach((h3, idx) => {
+                        const h3El = h3 as HTMLElement;
+                        const h3Height = Math.max(
+                            h3El.scrollHeight || 0,
+                            h3El.offsetHeight || 0,
+                            h3El.getBoundingClientRect().height || 0
+                        );
+                        if (h3Height > 0) {
+                            totalHeight += h3Height;
+                            console.log(`🖼️ [ZIP_IMAGES] H3 ${idx + 1} height: ${h3Height}`);
                         }
                     });
                     
@@ -937,11 +976,25 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         scrollWidth = invoiceElement.scrollWidth || invoiceElement.offsetWidth || 1200;
                     }
                     
-                    // استفاده از scrollWidth و scrollHeight دقیق - مثل exportInvoiceToImage
-                    const finalWidth = invoiceElement.scrollWidth || scrollWidth || 1200;
-                    const finalHeight = invoiceElement.scrollHeight || scrollHeight || totalHeight;
+                    // استفاده از scrollWidth و scrollHeight دقیق - از tempDiv برای محاسبه کامل
+                    // اضافه کردن padding و margin بین عناصر
+                    const paddingTop = 30;
+                    const paddingBottom = 20;
+                    const paddingSides = 40;
+                    const marginBetweenTables = 15 * (tables.length > 1 ? tables.length - 1 : 0); // فاصله بین جداول
+                    const marginForH3 = 23 * otherElements.length; // margin برای h3 ها (15 + 8)
+                    const marginForFooter = 10 * footerDivs.length;
                     
-                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${finalWidth}x${finalHeight} (scroll: ${scrollWidth}x${scrollHeight}, calculated: ${totalWidth}x${totalHeight})`);
+                    // محاسبه ارتفاع نهایی شامل همه margin ها
+                    const calculatedHeight = totalHeight + paddingTop + paddingBottom + marginBetweenTables + marginForH3 + marginForFooter;
+                    
+                    const finalWidth = Math.max(tempDiv.scrollWidth, scrollWidth, totalWidth + (paddingSides * 2), 1200);
+                    const finalHeight = Math.max(tempDiv.scrollHeight, scrollHeight, calculatedHeight, invoiceElement.scrollHeight + paddingTop + paddingBottom);
+                    
+                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${finalWidth}x${finalHeight}`);
+                    console.log(`🖼️ [ZIP_IMAGES] tempDiv scroll: ${tempDiv.scrollWidth}x${tempDiv.scrollHeight}`);
+                    console.log(`🖼️ [ZIP_IMAGES] invoice scroll: ${invoiceElement.scrollWidth}x${invoiceElement.scrollHeight}`);
+                    console.log(`🖼️ [ZIP_IMAGES] calculated: ${totalWidth}x${totalHeight}`);
                     console.log(`🖼️ [ZIP_IMAGES] Tables count: ${tables.length}, Footer count: ${footerDivs.length}`);
                     
                     if (finalHeight === 0 || finalWidth === 0) {
@@ -950,8 +1003,16 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
                     
-                    // تبدیل به canvas - استفاده از invoiceElement مستقیماً مثل exportInvoiceToImage
-                    const canvas = await html2canvas(invoiceElement as HTMLElement, {
+                    // تنظیم ارتفاع tempDiv برای render کامل - باید ارتفاع کافی باشد
+                    tempDiv.style.height = `${finalHeight}px`;
+                    tempDiv.style.minHeight = `${finalHeight}px`;
+                    tempDiv.style.maxHeight = 'none';
+                    
+                    // صبر برای اعمال ارتفاع
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // تبدیل به canvas - استفاده از tempDiv برای render کامل همه محتوا
+                    const canvas = await html2canvas(tempDiv as HTMLElement, {
                         scale: 2, // scale بالاتر برای کیفیت بهتر عکس
                         useCORS: true,
                         logging: false,
@@ -963,6 +1024,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         allowTaint: true,
                         removeContainer: false,
                         onclone: (clonedDoc) => {
+                            // محاسبه ابعاد در cloned document
+                            const clonedTempDivQuery = clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
+                            let clonedFinalWidth = finalWidth;
+                            let clonedFinalHeight = finalHeight;
+                            
+                            if (clonedTempDivQuery) {
+                                // محاسبه ارتفاع واقعی در cloned document
+                                const clonedScrollHeight = clonedTempDivQuery.scrollHeight || clonedTempDivQuery.offsetHeight || finalHeight;
+                                const clonedScrollWidth = clonedTempDivQuery.scrollWidth || clonedTempDivQuery.offsetWidth || finalWidth;
+                                clonedFinalHeight = Math.max(clonedScrollHeight, finalHeight);
+                                clonedFinalWidth = Math.max(clonedScrollWidth, finalWidth);
+                            }
+                            
                             // اضافه کردن style tag برای اطمینان از فرمت یکسان و منظم
                             const styleTag = clonedDoc.createElement('style');
                             styleTag.textContent = `
@@ -1021,9 +1095,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             clonedDoc.head.appendChild(styleTag);
                             
                             // اعمال استایل‌های نهایی در cloned document - با ارتفاع کامل
-                            const clonedTempDiv = clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
+                            const clonedTempDiv = clonedTempDivQuery || clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
                             if (clonedTempDiv) {
-                                clonedTempDiv.style.width = 'auto';
+                                clonedTempDiv.style.width = `${clonedFinalWidth}px`;
                                 clonedTempDiv.style.maxWidth = 'none';
                                 clonedTempDiv.style.padding = '30px 40px 20px 40px'; // padding کمتر در پایین
                                 clonedTempDiv.style.margin = '0';
@@ -1034,8 +1108,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedTempDiv.style.left = '0';
                                 clonedTempDiv.style.top = '0';
                                 clonedTempDiv.style.overflow = 'visible';
-                                clonedTempDiv.style.height = 'auto'; // ارتفاع دینامیک
-                                clonedTempDiv.style.minHeight = 'auto';
+                                clonedTempDiv.style.height = `${clonedFinalHeight}px`; // ارتفاع ثابت برای render کامل
+                                clonedTempDiv.style.minHeight = `${clonedFinalHeight}px`;
+                                clonedTempDiv.style.maxHeight = 'none';
                             }
                             
                                 const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
