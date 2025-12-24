@@ -1435,6 +1435,132 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     };
 
     // تابع helper برای render کردن HTML صورتحساب
+    // ============================================================================
+    // تابع جدید برای ساخت HTML صورتحساب با فرمت استاندارد (سازگار با html2canvas)
+    // ============================================================================
+    const renderInvoiceHTMLStandard = (invoiceData: {
+        meta: {
+            invoiceNumber: string;
+            origin: string;
+            destination: string;
+            vehiclePlate: string;
+            issueDate: string;
+            calcDate: string;
+            baseDistance: number;
+            extraDistance: number;
+            totalDistance: number;
+            baseDays: number;
+            extraDays: number;
+        };
+        rows: Array<{
+            category: string;
+            description: string;
+            unitAmount: number;
+            totalAmount: number;
+        }>;
+    }): string => {
+        const { meta, rows } = invoiceData;
+
+        // ساخت بخش متادیتا
+        const metaHTML = `
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">شماره بارنامه:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">${meta.invoiceNumber}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">مبدا:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">${meta.origin}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">مقصد:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">${meta.destination}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">پلاک خودرو:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">${meta.vehiclePlate}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">تاریخ صدور:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">${meta.issueDate}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">تاریخ محاسبه:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">${meta.calcDate}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">پیمایش:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">مصوب: ${meta.baseDistance.toLocaleString('fa-IR')} / مازاد: ${meta.extraDistance.toLocaleString('fa-IR')} / کل: ${meta.totalDistance.toLocaleString('fa-IR')}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; direction: rtl; unicode-bidi: isolate; font-size: 14px; line-height: 1.8;">
+                    <span style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">ماموریت:</span>
+                    <span style="direction: rtl; unicode-bidi: isolate;">مصوب: ${meta.baseDays} / مازاد: ${meta.extraDays}</span>
+                </div>
+            </div>
+        `;
+
+        // ساخت ردیف‌های جدول
+        const tableRowsHTML = rows.map(row => {
+            return `
+                <tr style="direction: rtl; unicode-bidi: isolate;">
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right;">${row.category}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right;">${row.description}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center;">${row.unitAmount.toLocaleString('fa-IR')}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center;">${row.totalAmount.toLocaleString('fa-IR')}</td>
+                </tr>
+            `;
+        }).join('');
+
+        // محاسبه جمع کل
+        const totalAmount = rows.reduce((sum, row) => sum + row.totalAmount, 0);
+
+        // ساخت HTML کامل
+        const html = `
+            <div id="invoice-root" style="
+                direction: rtl;
+                unicode-bidi: isolate;
+                font-family: 'Vazir', 'Tahoma', sans-serif;
+                width: fit-content;
+                margin: 0 auto;
+                text-align: right;
+                padding: 20px;
+                border: 1px solid #ccc;
+                background: white;
+                position: relative;
+            ">
+                ${metaHTML}
+                
+                <table style="
+                    border-collapse: collapse;
+                    width: 100%;
+                    table-layout: fixed;
+                    text-align: right;
+                    direction: rtl;
+                    unicode-bidi: isolate;
+                    margin-top: 20px;
+                ">
+                    <thead>
+                        <tr style="direction: rtl; unicode-bidi: isolate; background-color: #1e293b;">
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; color: white; font-weight: bold;">دسته‌بندی</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; color: white; font-weight: bold;">شرح هزینه</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center; color: white; font-weight: bold;">مبلغ واحد (ریال)</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center; color: white; font-weight: bold;">مبلغ کل (ریال)</th>
+                        </tr>
+                    </thead>
+                    <tbody style="direction: rtl; unicode-bidi: isolate;">
+                        ${tableRowsHTML}
+                        <tr style="direction: rtl; unicode-bidi: isolate; background-color: #3b82f6; color: white;">
+                            <td colspan="3" style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; font-weight: bold;">جمع کل</td>
+                            <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center; font-weight: bold;">${totalAmount.toLocaleString('fa-IR')}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        return html;
+    };
+
     const renderInvoiceHTML = (
         record: PaidInvoiceRecord,
         calculations: any[],
