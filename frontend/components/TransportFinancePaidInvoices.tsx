@@ -1458,8 +1458,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             unitAmount: number;
             totalAmount: number;
         }>;
+        summary?: {
+            totalCost: number;
+            deductions: number;
+            payableAmount: number;
+            notes?: string;
+        };
     }): string => {
-        const { meta, rows } = invoiceData;
+        const { meta, rows, summary } = invoiceData;
 
         // ساخت بخش متادیتا
         const metaHTML = `
@@ -1499,20 +1505,42 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             </div>
         `;
 
-        // ساخت ردیف‌های جدول
+        // ساخت ردیف‌های جدول - با تشخیص ردیف‌های دسته‌بندی
         const tableRowsHTML = rows.map(row => {
+            // اگر description خالی است، این یک ردیف دسته‌بندی است
+            if (!row.description || row.description.trim() === '') {
+                return `
+                    <tr style="direction: rtl; unicode-bidi: isolate;">
+                        <td colspan="4" style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; font-weight: bold; background-color: #eee;">${row.category}</td>
+                    </tr>
+                `;
+            }
+            
+            // ردیف عادی با 4 ستون
             return `
                 <tr style="direction: rtl; unicode-bidi: isolate;">
-                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right;">${row.category}</td>
-                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right;">${row.description}</td>
-                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center;">${row.unitAmount.toLocaleString('fa-IR')}</td>
-                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center;">${row.totalAmount.toLocaleString('fa-IR')}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap;">${row.category}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap;">${row.description}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap;">${row.unitAmount.toLocaleString('fa-IR')}</td>
+                    <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap;">${row.totalAmount.toLocaleString('fa-IR')}</td>
                 </tr>
             `;
         }).join('');
 
-        // محاسبه جمع کل
-        const totalAmount = rows.reduce((sum, row) => sum + row.totalAmount, 0);
+        // محاسبه جمع کل از ردیف‌های عادی (نه ردیف‌های دسته‌بندی)
+        const totalAmount = rows
+            .filter(row => row.description && row.description.trim() !== '')
+            .reduce((sum, row) => sum + row.totalAmount, 0);
+
+        // ساخت بخش پایانی (جمع کل، کسورات، مبلغ قابل پرداخت، توضیحات)
+        const summaryHTML = summary ? `
+            <div style="margin-top: 20px; font-size: 14px; line-height: 2; direction: rtl; unicode-bidi: isolate; text-align: right;">
+                <div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 8px;">جمع کل هزینه سفر: <span style="direction: ltr; unicode-bidi: embed;">${summary.totalCost.toLocaleString('fa-IR')}</span> ریال</div>
+                ${summary.deductions > 0 ? `<div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 8px;">کسورات غیرقابل پرداخت: <span style="direction: ltr; unicode-bidi: embed;">${summary.deductions.toLocaleString('fa-IR')}</span> ریال</div>` : ''}
+                <div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 8px; font-weight: bold;">مبلغ قابل پرداخت: <span style="direction: ltr; unicode-bidi: embed;">${summary.payableAmount.toLocaleString('fa-IR')}</span> ریال</div>
+                ${summary.notes ? `<div style="direction: rtl; unicode-bidi: isolate; margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">توضیحات: ${summary.notes}</div>` : ''}
+            </div>
+        ` : '';
 
         // ساخت HTML کامل
         const html = `
@@ -1541,20 +1569,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 ">
                     <thead>
                         <tr style="direction: rtl; unicode-bidi: isolate; background-color: #1e293b;">
-                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; color: white; font-weight: bold;">دسته‌بندی</th>
-                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; color: white; font-weight: bold;">شرح هزینه</th>
-                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center; color: white; font-weight: bold;">مبلغ واحد (ریال)</th>
-                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center; color: white; font-weight: bold;">مبلغ کل (ریال)</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap; color: white; font-weight: bold;">دسته‌بندی</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap; color: white; font-weight: bold;">شرح هزینه</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap; color: white; font-weight: bold;">مبلغ واحد (ریال)</th>
+                            <th style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap; color: white; font-weight: bold;">مبلغ کل (ریال)</th>
                         </tr>
                     </thead>
                     <tbody style="direction: rtl; unicode-bidi: isolate;">
                         ${tableRowsHTML}
                         <tr style="direction: rtl; unicode-bidi: isolate; background-color: #3b82f6; color: white;">
-                            <td colspan="3" style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; font-weight: bold;">جمع کل</td>
-                            <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: center; font-weight: bold;">${totalAmount.toLocaleString('fa-IR')}</td>
+                            <td colspan="3" style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap; font-weight: bold;">جمع کل</td>
+                            <td style="padding: 8px; border: 1px solid #444; font-size: 14px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; text-align: right; white-space: nowrap; font-weight: bold;">${totalAmount.toLocaleString('fa-IR')}</td>
                         </tr>
                     </tbody>
                 </table>
+                
+                ${summaryHTML}
             </div>
         `;
 
