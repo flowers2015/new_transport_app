@@ -6,6 +6,7 @@ import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import JSZip from 'jszip';
 
 // انواع ساختار صورتحساب
 enum InvoiceLayoutType {
@@ -394,7 +395,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         tableEl.style.fontSize = '14px';
                                     }
                                     if (!tableEl.style.fontFamily) {
-                                        tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                                    tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
                                     }
                                     
                                     // اطمینان از اینکه هدر جدول (thead th) رنگ سفید دارد
@@ -560,7 +561,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         if (!cellEl.style.fontWeight) {
                                             cellEl.style.fontWeight = 'bold';
                                         }
-                                    } else {
+                                        } else {
                                         // برای سلول‌های داده (td)
                                         // حفظ استایل‌های inline موجود - override نکن
                                         if (!cellEl.style.fontSize) {
@@ -689,6 +690,255 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         } catch (err: any) {
             console.error('❌ [exportAllInvoicesToPDF] Error:', err);
             alert(`خطا در تولید PDF: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    // تولید ZIP از تصاویر صورتحساب‌های پرداخت شده (تک به تک)
+    const exportAllInvoicesToImagesZip = async () => {
+        console.log('🖼️ [ZIP_IMAGES] ========== شروع تولید ZIP تصاویر ==========');
+        console.log('🖼️ [ZIP_IMAGES] filteredRecords.length:', filteredRecords.length);
+        
+        if (filteredRecords.length === 0) {
+            alert('هیچ صورتحساب پرداخت شده‌ای برای تولید تصاویر وجود ندارد.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            // ایجاد ZIP
+            const zip = new JSZip();
+
+            // برای هر رکورد پرداخت شده
+            for (let i = 0; i < filteredRecords.length; i++) {
+                const record = filteredRecords[i];
+                
+                console.log(`🖼️ [ZIP_IMAGES] ========== پردازش رکورد ${i + 1}/${filteredRecords.length} ==========`);
+                console.log(`🖼️ [ZIP_IMAGES] Driver: ${record.driverName}, Employee ID: ${record.employeeId}`);
+                
+                try {
+                    // دریافت محاسبات
+                    const calcDateFrom = record.calculationDateFrom || '';
+                    const calcDateTo = record.calculationDateTo || '';
+                    
+                    const calculationsResponse = await fetch(
+                        getApiUrl(`calculations?driverId=${record.driverId}&dateFrom=${calcDateFrom}&dateTo=${calcDateTo}`),
+                        { headers }
+                    );
+                    if (!calculationsResponse.ok) {
+                        console.error(`❌ [ZIP_IMAGES] Failed to fetch calculations for ${record.driverName}`);
+                        continue;
+                    }
+                    const calculationsArray = await calculationsResponse.json();
+                    
+                    // دریافت اعلان‌ها
+                    const announcementsMap = new Map<string, any>();
+                    for (const calc of calculationsArray) {
+                        const annId = calc.announcement_id || calc.announcementId;
+                        if (annId && !announcementsMap.has(annId)) {
+                            const annResponse = await fetch(getApiUrl(`announcements/${annId}`), { headers });
+                            if (annResponse.ok) {
+                                const ann = await annResponse.json();
+                                announcementsMap.set(annId, ann);
+                            }
+                        }
+                    }
+
+                    // تولید HTML صورتحساب
+                    const invoiceLayout = InvoiceLayoutType.STANDARD_ACCOUNTING;
+                    const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo, invoiceLayout);
+                    
+                    // ایجاد div موقت برای render کردن HTML
+                    const tempDiv = document.createElement('div');
+                    tempDiv.id = `temp-invoice-image-${i}`;
+                    tempDiv.style.position = 'fixed';
+                    tempDiv.style.top = '0';
+                    tempDiv.style.left = '0';
+                    tempDiv.style.width = 'auto';
+                    tempDiv.style.maxWidth = '90%';
+                    tempDiv.style.height = 'auto';
+                    tempDiv.style.backgroundColor = '#ffffff';
+                    tempDiv.style.padding = '24px';
+                    tempDiv.style.boxSizing = 'border-box';
+                    tempDiv.style.overflow = 'visible';
+                    tempDiv.style.zIndex = '999999';
+                    tempDiv.style.visibility = 'visible';
+                    tempDiv.style.opacity = '0';
+                    tempDiv.style.pointerEvents = 'none';
+                    tempDiv.style.margin = '0 auto';
+                    document.body.appendChild(tempDiv);
+                    
+                    tempDiv.innerHTML = htmlContent;
+                    
+                    // صبر برای render شدن محتوا
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    // پیدا کردن div اصلی صورتحساب
+                    const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.querySelector('[data-invoice-ref="true"]') || tempDiv.firstElementChild;
+                    
+                    if (!invoiceDiv || invoiceDiv === tempDiv) {
+                        console.error(`❌ [ZIP_IMAGES] Cannot find invoice div for ${record.driverName}`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
+                    
+                    // اعمال محدودیت عرض موقت (مثل exportInvoiceToImage)
+                    const invoiceElement = invoiceDiv as HTMLElement;
+                    const originalMaxWidth = invoiceElement.style.maxWidth;
+                    const originalWidth = invoiceElement.style.width;
+                    invoiceElement.style.maxWidth = '90%';
+                    invoiceElement.style.width = 'auto';
+                    invoiceElement.style.margin = '0 auto';
+                    
+                    // تبدیل به canvas با تنظیمات دقیقاً مثل exportInvoiceToImage
+                    const canvas = await html2canvas(invoiceElement as HTMLElement, {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                        width: invoiceElement.scrollWidth,
+                        height: invoiceElement.scrollHeight,
+                        windowWidth: invoiceElement.scrollWidth,
+                        windowHeight: invoiceElement.scrollHeight,
+                        onclone: (clonedDoc) => {
+                            // اضافه کردن style tag برای اطمینان از رنگ مشکی ستون دسته‌بندی
+                            const styleTag = clonedDoc.createElement('style');
+                            styleTag.textContent = `
+                                tbody tr td:first-child {
+                                    color: #000000 !important;
+                                }
+                                tbody tr td:first-child * {
+                                    color: #000000 !important;
+                                }
+                                tbody tr[style*="background-color: rgb(59, 130, 246)"] td:first-child,
+                                tbody tr[style*="background-color: #3b82f6"] td:first-child {
+                                    color: #ffffff !important;
+                                }
+                            `;
+                            clonedDoc.head.appendChild(styleTag);
+                            
+                            // اعمال استایل‌های نهایی در cloned document
+                            const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
+                                                 clonedDoc.querySelector(`#temp-invoice-image-${i} div[dir="rtl"]`) as HTMLElement;
+                            if (clonedInvoice) {
+                                clonedInvoice.style.width = 'auto';
+                                clonedInvoice.style.maxWidth = '90%';
+                                clonedInvoice.style.margin = '0 auto';
+                                clonedInvoice.style.overflow = 'visible';
+                                clonedInvoice.style.visibility = 'visible';
+                                clonedInvoice.style.opacity = '1';
+                                
+                                // اعمال استایل‌های جدول - حفظ استایل‌های inline
+                                const clonedTables = clonedInvoice.querySelectorAll('table');
+                                clonedTables.forEach((table) => {
+                                    const tableEl = table as HTMLElement;
+                                    if (!tableEl.style.width || tableEl.style.width === '100%') {
+                                        tableEl.style.width = 'auto';
+                                    }
+                                    if (!tableEl.style.maxWidth) {
+                                        tableEl.style.maxWidth = '90%';
+                                    }
+                                    tableEl.style.margin = '0 auto';
+                                    tableEl.style.tableLayout = 'auto';
+                                    tableEl.style.borderCollapse = 'collapse';
+                                    if (!tableEl.style.fontSize) {
+                                        tableEl.style.fontSize = '18px';
+                                    }
+                                    if (!tableEl.style.fontFamily) {
+                                        tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
+                                    }
+                                    
+                                    // اطمینان از اینکه هدر جدول رنگ سفید دارد
+                                    const theadRows = tableEl.querySelectorAll('thead tr');
+                                    theadRows.forEach((row) => {
+                                        const rowEl = row as HTMLElement;
+                                        const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
+                                        if (rowBg.includes('rgb(30, 64, 175)') || rowBg.includes('#1e40af')) {
+                                            const headerCells = rowEl.querySelectorAll('th');
+                                            headerCells.forEach((th) => {
+                                                const thEl = th as HTMLElement;
+                                                thEl.style.color = '#ffffff';
+                                                thEl.style.setProperty('color', '#ffffff', 'important');
+                                            });
+                                        }
+                                    });
+                                    
+                                    // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند
+                                    const tbodyRows = tableEl.querySelectorAll('tbody tr');
+                                    tbodyRows.forEach((row) => {
+                                        const rowEl = row as HTMLElement;
+                                        const firstCell = rowEl.querySelector('td:first-child') as HTMLElement;
+                                        if (firstCell) {
+                                            const cellText = (firstCell.textContent || '').trim();
+                                            const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
+                                            const isTotalRow = cellText.includes('جمع کل') || rowBg.includes('rgb(59, 130, 246)') || rowBg.includes('#3b82f6');
+                                            if (!isTotalRow && cellText.length > 0) {
+                                                firstCell.style.color = '#000000';
+                                                firstCell.style.setProperty('color', '#000000', 'important');
+                                            }
+                                        }
+                                    });
+                                });
+                                
+                                // تنظیم رنگ برای سلول‌های "مبلغ کل"
+                                const totalAmountCells = clonedInvoice.querySelectorAll('td[data-total-amount="true"]');
+                                totalAmountCells.forEach((cell) => {
+                                    const cellEl = cell as HTMLElement;
+                                    const cellBg = cellEl.style.backgroundColor || window.getComputedStyle(cellEl).backgroundColor;
+                                    const isTotalRow = cellBg.includes('rgb(59, 130, 246)') || cellBg.includes('#3b82f6');
+                                    if (isTotalRow) {
+                                        cellEl.style.color = '#ffffff';
+                                        cellEl.style.setProperty('color', '#ffffff', 'important');
+                                    } else {
+                                        cellEl.style.color = '#1e293b';
+                                        cellEl.style.setProperty('color', '#1e293b', 'important');
+                                    }
+                                });
+                            }
+                        }
+                    });
+                    
+                    // تبدیل به PNG
+                    const imgData = canvas.toDataURL('image/png', 1.0);
+                    
+                    // بازگرداندن استایل‌های اصلی
+                    invoiceElement.style.maxWidth = originalMaxWidth;
+                    invoiceElement.style.width = originalWidth;
+                    invoiceElement.style.margin = '';
+                    
+                    // حذف div موقت
+                    document.body.removeChild(tempDiv);
+                    
+                    // اضافه کردن تصویر به ZIP
+                    const base64Data = imgData.split(',')[1];
+                    const fileName = `صورتحساب_${record.driverName}_${record.employeeId}_${record.paymentDate.replace(/\//g, '-')}.png`;
+                    zip.file(fileName, base64Data, { base64: true });
+                    
+                    console.log(`✅ [ZIP_IMAGES] تصویر ${i + 1} اضافه شد: ${fileName}`);
+                } catch (err: any) {
+                    console.error(`❌ [ZIP_IMAGES] Error processing record ${i + 1}:`, err);
+                    // ادامه به رکورد بعدی
+                }
+            }
+            
+            // تولید و دانلود فایل ZIP
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const zipUrl = URL.createObjectURL(zipBlob);
+            const zipLink = document.createElement('a');
+            zipLink.download = `صورتحساب_های_پرداخت_شده_${new Date().toISOString().split('T')[0]}.zip`;
+            zipLink.href = zipUrl;
+            zipLink.click();
+            URL.revokeObjectURL(zipUrl);
+            
+            console.log('✅ [ZIP_IMAGES] ZIP file generated and downloaded');
+            alert(`فایل ZIP با ${filteredRecords.length} تصویر با موفقیت تولید شد.`);
+        } catch (err: any) {
+            console.error('❌ [ZIP_IMAGES] Error:', err);
+            alert(`خطا در تولید ZIP تصاویر: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
         }
     };
 
@@ -858,16 +1108,16 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 initialInfoRows.forEach((infoRow, infoIdx) => {
                     const isEven = (calcIdx * 100 + infoIdx) % 2 === 0;
                     const isFirstInCategory = infoIdx === 0;
-                    
-                    html += `
+                
+                html += `
                         <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                             ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">اطلاعات اولیه</td>` : ''}
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${infoRow.label}</td>
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word; white-space: nowrap;">${infoRow.value}</td>
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden;">-</td>
-                        </tr>
-                    `;
-                });
+                    </tr>
+                `;
+            });
 
                 // ردیف‌های هزینه - محدود شده برای A4
                 relevantCostRows.forEach((row, rowIdx) => {
@@ -893,7 +1143,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${row.label}</td>
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
                             <td data-total-amount="true" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
-                        </tr>
+                                </tr>
                     `;
                 });
             });
@@ -1008,16 +1258,16 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     initialInfoRows.forEach((infoRow, infoIdx) => {
                         const isEven = (calcIdx * 100 + infoIdx) % 2 === 0;
                         const isFirstInCategory = infoIdx === 0;
-                        
-                        html += `
+                    
+                    html += `
                             <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                                 ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">اطلاعات اولیه</td>` : ''}
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${infoRow.label}</td>
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word; white-space: nowrap;">${infoRow.value}</td>
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden;">-</td>
-                            </tr>
-                        `;
-                    });
+                        </tr>
+                    `;
+                });
 
                     // ردیف‌های هزینه - محدود شده برای A4
                     relevantCostRows.forEach((row, rowIdx) => {
@@ -1036,14 +1286,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 }
                             }
                         }
-                        
-                        html += `
+
+                html += `
                             <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                                 ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">${row.category}</td>` : ''}
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${row.label}</td>
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
                                 <td data-total-amount="true" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
-                            </tr>
+                                    </tr>
                         `;
                     });
                 });
@@ -1274,6 +1524,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 تولید PDF یکجا
+                            </button>
+                            <button
+                                onClick={exportAllInvoicesToImagesZip}
+                                disabled={filteredRecords.length === 0}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                دانلود ZIP تصاویر
                             </button>
                             <button
                                 onClick={exportToExcel}
