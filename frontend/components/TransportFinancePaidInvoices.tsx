@@ -937,25 +937,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         scrollWidth = invoiceElement.scrollWidth || invoiceElement.offsetWidth || 1200;
                     }
                     
-                    // استفاده از ارتفاع واقعی + فقط کمی margin برای اطمینان از render کامل
-                    const finalHeight = Math.max(scrollHeight, totalHeight) + 50; // فقط 50px margin اضافی
-                    const finalWidth = Math.max(scrollWidth, totalWidth, 1200);
+                    // استفاده از scrollWidth و scrollHeight دقیق - مثل exportInvoiceToImage
+                    const finalWidth = invoiceElement.scrollWidth || scrollWidth || 1200;
+                    const finalHeight = invoiceElement.scrollHeight || scrollHeight || totalHeight;
                     
                     console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${finalWidth}x${finalHeight} (scroll: ${scrollWidth}x${scrollHeight}, calculated: ${totalWidth}x${totalHeight})`);
                     console.log(`🖼️ [ZIP_IMAGES] Tables count: ${tables.length}, Footer count: ${footerDivs.length}`);
                     
-                    if (finalHeight === 0 || scrollHeight === 0) {
-                        console.error(`❌ [ZIP_IMAGES] Element has zero height for ${record.driverName}`);
+                    if (finalHeight === 0 || finalWidth === 0) {
+                        console.error(`❌ [ZIP_IMAGES] Element has zero dimensions for ${record.driverName}`);
                         document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    // تنظیم ارتفاع tempDiv برای render کامل
-                    tempDiv.style.height = `${finalHeight}px`;
-                    tempDiv.style.minHeight = `${finalHeight}px`;
-                    
-                    // تبدیل به canvas - استفاده از tempDiv برای render کامل
-                    const canvas = await html2canvas(tempDiv as HTMLElement, {
+                    // تبدیل به canvas - استفاده از invoiceElement مستقیماً مثل exportInvoiceToImage
+                    const canvas = await html2canvas(invoiceElement as HTMLElement, {
                         scale: 2, // scale بالاتر برای کیفیت بهتر عکس
                         useCORS: true,
                         logging: false,
@@ -1012,14 +1008,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     white-space: normal !important;
                                 }
                                 table {
-                                    margin: 0 auto 15px auto !important;
+                                    margin: 0 auto !important;
                                 }
                                 h3 {
-                                    margin: 10px auto 8px auto !important;
+                                    margin: 15px auto 8px auto !important;
                                     text-align: center !important;
                                 }
                                 div[style*="background-color"] {
-                                    margin: 10px auto 10px auto !important;
+                                    margin: 10px auto 0 auto !important;
                                 }
                             `;
                             clonedDoc.head.appendChild(styleTag);
@@ -1042,10 +1038,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedTempDiv.style.minHeight = 'auto';
                             }
                             
-                            const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
+                                const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
                                                  clonedDoc.querySelector(`#temp-invoice-image-${i} div[dir="rtl"]`) as HTMLElement;
                             if (clonedInvoice) {
-                                // دقیقاً مثل exportInvoiceToImage
+                                // دقیقاً مثل exportInvoiceToImage - بدون تغییر padding و margin
                                 clonedInvoice.style.width = 'auto';
                                 clonedInvoice.style.maxWidth = '90%';
                                 clonedInvoice.style.margin = '0 auto';
@@ -1054,6 +1050,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedInvoice.style.opacity = '1';
                                 clonedInvoice.style.setProperty('opacity', '1', 'important');
                                 clonedInvoice.style.boxSizing = 'border-box';
+                                clonedInvoice.style.padding = '0'; // بدون padding اضافی
                                 
                                 // اطمینان از اینکه همه عناصر داخل قابل مشاهده هستند
                                 const allElements = clonedInvoice.querySelectorAll('*');
@@ -1078,10 +1075,20 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     if (!tableEl.style.maxWidth) {
                                         tableEl.style.maxWidth = '90%';
                                     }
-                                    tableEl.style.margin = '0 auto 15px auto'; // وسط چین + فاصله کم بین جداول
-                                    tableEl.style.setProperty('margin', '0 auto 15px auto', 'important');
+                                    tableEl.style.margin = '0 auto'; // فقط وسط چین - بدون margin-bottom اضافی
+                                    tableEl.style.setProperty('margin', '0 auto', 'important');
                                     tableEl.style.tableLayout = 'auto';
                                     tableEl.style.borderCollapse = 'collapse';
+                                    
+                                    // فقط برای آخرین جدول margin-bottom کم
+                                    const isLastTable = tableIdx === clonedTables.length - 1;
+                                    if (!isLastTable) {
+                                        tableEl.style.marginBottom = '15px';
+                                        tableEl.style.setProperty('margin-bottom', '15px', 'important');
+                                    } else {
+                                        tableEl.style.marginBottom = '10px';
+                                        tableEl.style.setProperty('margin-bottom', '10px', 'important');
+                                    }
                                     // حفظ fontSize و fontFamily از JSX
                                     if (!tableEl.style.fontSize) {
                                         tableEl.style.fontSize = '20px'; // فونت بزرگتر
@@ -1093,12 +1100,6 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     tableEl.style.boxSizing = 'border-box';
                                     tableEl.style.display = 'table'; // اطمینان از نمایش کامل
                                     
-                                    // حذف margin-bottom برای آخرین جدول
-                                    const isLastTable = tableIdx === clonedTables.length - 1;
-                                    if (isLastTable) {
-                                        tableEl.style.marginBottom = '10px'; // فقط 10px margin برای آخرین جدول
-                                        tableEl.style.setProperty('margin-bottom', '10px', 'important');
-                                    }
                                     
                                     // اعمال استایل‌های سلول‌ها برای منظم بودن - padding بیشتر
                                     const allCells = tableEl.querySelectorAll('td, th');
@@ -1230,18 +1231,18 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     footerEl.style.opacity = '1';
                                     footerEl.style.height = 'auto';
                                     footerEl.style.overflow = 'visible';
-                                    footerEl.style.margin = '10px auto 10px auto'; // وسط چین + margin کم
-                                    footerEl.style.setProperty('margin', '10px auto 10px auto', 'important');
+                                    footerEl.style.margin = '10px auto 0 auto'; // وسط چین + بدون margin-bottom
+                                    footerEl.style.setProperty('margin', '10px auto 0 auto', 'important');
                                     footerEl.style.width = 'auto';
                                     footerEl.style.maxWidth = '90%';
                                 });
                                 
-                                // تنظیم spacing برای h3 ها (عنوان جداول)
+                                // تنظیم spacing برای h3 ها (عنوان جداول) - وسط چین
                                 const h3Elements = clonedInvoice.querySelectorAll('h3');
                                 h3Elements.forEach((h3) => {
                                     const h3El = h3 as HTMLElement;
-                                    h3El.style.margin = '10px auto 8px auto'; // وسط چین + margin کم
-                                    h3El.style.setProperty('margin', '10px auto 8px auto', 'important');
+                                    h3El.style.margin = '15px auto 8px auto'; // وسط چین + margin کم
+                                    h3El.style.setProperty('margin', '15px auto 8px auto', 'important');
                                     h3El.style.textAlign = 'center';
                                     h3El.style.setProperty('text-align', 'center', 'important');
                                     h3El.style.width = 'auto';
