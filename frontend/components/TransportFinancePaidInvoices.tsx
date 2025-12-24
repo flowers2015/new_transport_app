@@ -712,7 +712,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
             // ایجاد ZIP
             const zip = new JSZip();
-
+            let successCount = 0;
+            let failCount = 0;
+            
             // برای هر رکورد پرداخت شده
             for (let i = 0; i < filteredRecords.length; i++) {
                 const record = filteredRecords[i];
@@ -794,16 +796,31 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     invoiceElement.style.width = 'auto';
                     invoiceElement.style.margin = '0 auto';
                     
+                    // صبر برای اعمال استایل‌ها
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // بررسی ابعاد عنصر
+                    const elementWidth = invoiceElement.scrollWidth || invoiceElement.offsetWidth || 800;
+                    const elementHeight = invoiceElement.scrollHeight || invoiceElement.offsetHeight || 1000;
+                    
+                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${elementWidth}x${elementHeight}`);
+                    
+                    if (elementWidth === 0 || elementHeight === 0) {
+                        console.error(`❌ [ZIP_IMAGES] Element has zero dimensions for ${record.driverName}`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
+                    
                     // تبدیل به canvas با تنظیمات دقیقاً مثل exportInvoiceToImage
                     const canvas = await html2canvas(invoiceElement as HTMLElement, {
                         scale: 2,
                         useCORS: true,
                         logging: false,
                         backgroundColor: '#ffffff',
-                        width: invoiceElement.scrollWidth,
-                        height: invoiceElement.scrollHeight,
-                        windowWidth: invoiceElement.scrollWidth,
-                        windowHeight: invoiceElement.scrollHeight,
+                        width: elementWidth,
+                        height: elementHeight,
+                        windowWidth: elementWidth,
+                        windowHeight: elementHeight,
                         onclone: (clonedDoc) => {
                             // اضافه کردن style tag برای اطمینان از رنگ مشکی ستون دسته‌بندی
                             const styleTag = clonedDoc.createElement('style');
@@ -902,8 +919,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         }
                     });
                     
+                    // بررسی اینکه canvas خالی نیست
+                    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                        console.error(`❌ [ZIP_IMAGES] Canvas is empty for ${record.driverName}`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
+                    
+                    console.log(`🖼️ [ZIP_IMAGES] Canvas size: ${canvas.width}x${canvas.height}`);
+                    
                     // تبدیل به PNG
                     const imgData = canvas.toDataURL('image/png', 1.0);
+                    
+                    if (!imgData || imgData.length < 100) {
+                        console.error(`❌ [ZIP_IMAGES] Image data is too small for ${record.driverName}`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
                     
                     // بازگرداندن استایل‌های اصلی
                     invoiceElement.style.maxWidth = originalMaxWidth;
@@ -913,20 +945,50 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     // حذف div موقت
                     document.body.removeChild(tempDiv);
                     
-                    // اضافه کردن تصویر به ZIP
+                    // اضافه کردن تصویر به ZIP - استفاده از blob به جای base64
                     const base64Data = imgData.split(',')[1];
-                    const fileName = `صورتحساب_${record.driverName}_${record.employeeId}_${record.paymentDate.replace(/\//g, '-')}.png`;
-                    zip.file(fileName, base64Data, { base64: true });
+                    if (!base64Data || base64Data.length < 100) {
+                        console.error(`❌ [ZIP_IMAGES] Base64 data is invalid for ${record.driverName}`);
+                        continue;
+                    }
                     
-                    console.log(`✅ [ZIP_IMAGES] تصویر ${i + 1} اضافه شد: ${fileName}`);
+                    // تبدیل base64 به binary string برای JSZip
+                    const binaryString = atob(base64Data);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let j = 0; j < binaryString.length; j++) {
+                        bytes[j] = binaryString.charCodeAt(j);
+                    }
+                    
+                    const fileName = `صورتحساب_${record.driverName}_${record.employeeId}_${record.paymentDate.replace(/\//g, '-')}.png`;
+                    zip.file(fileName, bytes);
+                    successCount++;
+                    
+                    console.log(`✅ [ZIP_IMAGES] تصویر ${i + 1} اضافه شد: ${fileName} (${bytes.length} bytes)`);
                 } catch (err: any) {
+                    failCount++;
                     console.error(`❌ [ZIP_IMAGES] Error processing record ${i + 1}:`, err);
                     // ادامه به رکورد بعدی
                 }
             }
             
+            // بررسی اینکه آیا فایلی به ZIP اضافه شده است
+            const fileCount = Object.keys(zip.files).length;
+            console.log(`🖼️ [ZIP_IMAGES] Total files in ZIP: ${fileCount}, Success: ${successCount}, Failed: ${failCount}`);
+            
+            if (fileCount === 0) {
+                alert('هیچ تصویری تولید نشد. لطفاً مطمئن شوید که محاسبات و اعلان‌ها موجود هستند.');
+                return;
+            }
+            
             // تولید و دانلود فایل ZIP
             const zipBlob = await zip.generateAsync({ type: 'blob' });
+            console.log(`🖼️ [ZIP_IMAGES] ZIP blob size: ${zipBlob.size} bytes`);
+            
+            if (zipBlob.size === 0) {
+                alert('فایل ZIP خالی است. لطفاً دوباره تلاش کنید.');
+                return;
+            }
+            
             const zipUrl = URL.createObjectURL(zipBlob);
             const zipLink = document.createElement('a');
             zipLink.download = `صورتحساب_های_پرداخت_شده_${new Date().toISOString().split('T')[0]}.zip`;
@@ -935,7 +997,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             URL.revokeObjectURL(zipUrl);
             
             console.log('✅ [ZIP_IMAGES] ZIP file generated and downloaded');
-            alert(`فایل ZIP با ${filteredRecords.length} تصویر با موفقیت تولید شد.`);
+            alert(`فایل ZIP با ${fileCount} تصویر با موفقیت تولید شد.${failCount > 0 ? ` (${failCount} تصویر ناموفق)` : ''}`);
         } catch (err: any) {
             console.error('❌ [ZIP_IMAGES] Error:', err);
             alert(`خطا در تولید ZIP تصاویر: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
