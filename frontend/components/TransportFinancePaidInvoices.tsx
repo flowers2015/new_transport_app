@@ -723,18 +723,44 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 console.log(`🖼️ [ZIP_IMAGES] Driver: ${record.driverName}, Employee ID: ${record.employeeId}`);
                 
                 try {
-                    // دریافت محاسبات پرداخت شده مربوط به این راننده (مثل exportAllInvoicesToPDF)
+                    // دریافت محاسبات پرداخت شده مربوط به این راننده با retry logic
                     const calcDateFrom = record.calculationDateFrom || '';
                     const calcDateTo = record.calculationDateTo || '';
                     let calculationsUrl = `driver-calculations/paid?driverId=${record.driverId}`;
                     if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
                     if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
                     
-                    const calculationsResponse = await fetch(getApiUrl(calculationsUrl), { headers });
-                    if (!calculationsResponse.ok) {
-                        console.error(`❌ [ZIP_IMAGES] Failed to fetch calculations for ${record.driverName}: ${calculationsResponse.status}`);
+                    // Retry logic برای خطاهای شبکه
+                    let calculationsResponse;
+                    let retries = 3;
+                    let lastError: any = null;
+                    while (retries > 0) {
+                        try {
+                            calculationsResponse = await fetch(getApiUrl(calculationsUrl), { 
+                                headers,
+                                signal: AbortSignal.timeout(30000) // 30 second timeout
+                            });
+                            if (calculationsResponse && calculationsResponse.ok) {
+                                lastError = null;
+                                break;
+                            }
+                            lastError = new Error(`HTTP ${calculationsResponse?.status || 'unknown'}`);
+                        } catch (err: any) {
+                            lastError = err;
+                            console.warn(`⚠️ [ZIP_IMAGES] Retry ${4 - retries}/3 for ${record.driverName}:`, err.message);
+                        }
+                        retries--;
+                        if (retries > 0 && lastError) {
+                            await new Promise(resolve => setTimeout(resolve, 2000)); // صبر 2 ثانیه
+                        }
+                    }
+                    
+                    if (!calculationsResponse || !calculationsResponse.ok) {
+                        console.error(`❌ [ZIP_IMAGES] Failed to fetch calculations for ${record.driverName} after retries`);
+                        failCount++;
                         continue;
                     }
+                    
                     const paidCalculations = await calculationsResponse.json();
                     const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
                     
@@ -743,19 +769,31 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
                     
-                    // دریافت اطلاعات اعلام بار (مثل exportAllInvoicesToPDF)
+                    // دریافت اطلاعات اعلام بار با timeout و retry
                     const announcementsMap = new Map<string, any>();
                     await Promise.all(calculationsArray.map(async (calc: any) => {
                         const announcementId = calc.announcement_id || calc.announcementId;
                         if (announcementId && !announcementsMap.has(announcementId)) {
-                            try {
-                                const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
-                                if (annRes.ok) {
-                                    const annData = await annRes.json();
-                                    announcementsMap.set(announcementId, annData);
+                            let retries = 2;
+                            while (retries > 0) {
+                                try {
+                                    const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { 
+                                        headers,
+                                        signal: AbortSignal.timeout(15000) // 15 second timeout
+                                    });
+                                    if (annRes.ok) {
+                                        const annData = await annRes.json();
+                                        announcementsMap.set(announcementId, annData);
+                                        break;
+                                    }
+                                } catch (err) {
+                                    console.warn(`⚠️ [ZIP_IMAGES] خطا در دریافت اعلام بار ${announcementId}:`, err);
+                                    retries--;
+                                    if (retries > 0) {
+                                        await new Promise(resolve => setTimeout(resolve, 1000));
+                                    }
                                 }
-                            } catch (err) {
-                                console.warn('⚠️ [ZIP_IMAGES] خطا در دریافت اعلام بار:', err);
+                                retries--;
                             }
                         }
                     }));
@@ -791,8 +829,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     tempDiv.innerHTML = htmlContent;
                     
-                    // صبر برای render شدن محتوا
-                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    // صبر برای render شدن محتوا - کاهش زمان برای سرعت بیشتر
+                    await new Promise(resolve => setTimeout(resolve, 800));
                     
                     // پیدا کردن div اصلی صورتحساب
                     const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.querySelector('[data-invoice-ref="true"]') || tempDiv.firstElementChild;
@@ -873,9 +911,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     padding: 12px 10px !important;
                                 }
                                 td {
-                                    padding: 10px 12px !important;
+                                    padding: 14px 16px !important;
                                     vertical-align: middle !important;
                                     word-wrap: break-word !important;
+                                    line-height: 1.6 !important;
+                                }
+                                th {
+                                    padding: 14px 16px !important;
                                 }
                             `;
                             clonedDoc.head.appendChild(styleTag);
@@ -918,29 +960,36 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     tableEl.style.fontFamily = 'Vazirmatn, Tahoma, Arial, sans-serif';
                                     tableEl.style.boxSizing = 'border-box';
                                     
-                                    // اعمال استایل‌های سلول‌ها برای منظم بودن
+                                    // اعمال استایل‌های سلول‌ها برای منظم بودن - padding بیشتر
                                     const allCells = tableEl.querySelectorAll('td, th');
                                     allCells.forEach((cell) => {
                                         const cellEl = cell as HTMLElement;
                                         cellEl.style.boxSizing = 'border-box';
-                                        cellEl.style.padding = '10px 12px';
+                                        cellEl.style.padding = '14px 16px'; // padding بیشتر برای فاصله از border
+                                        cellEl.style.setProperty('padding', '14px 16px', 'important');
                                         cellEl.style.verticalAlign = 'middle';
                                         cellEl.style.wordWrap = 'break-word';
                                         cellEl.style.overflow = 'hidden';
+                                        cellEl.style.lineHeight = '1.6'; // فاصله خطوط
                                         
                                         // تنظیم text-align بر اساس نوع محتوا
                                         if (cellEl.tagName === 'TH') {
                                             cellEl.style.textAlign = 'center';
+                                            cellEl.style.setProperty('text-align', 'center', 'important');
                                             cellEl.style.fontWeight = 'bold';
                                             cellEl.style.fontSize = '16px';
+                                            cellEl.style.padding = '14px 16px';
+                                            cellEl.style.setProperty('padding', '14px 16px', 'important');
                                         } else {
                                             // برای td ها: اگر عدد است center، اگر متن است right
                                             const cellText = (cellEl.textContent || '').trim();
                                             const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
                                             if (isNumber || cellText === '-') {
                                                 cellEl.style.textAlign = 'center';
+                                                cellEl.style.setProperty('text-align', 'center', 'important');
                                             } else {
                                                 cellEl.style.textAlign = 'right';
+                                                cellEl.style.setProperty('text-align', 'right', 'important');
                                             }
                                         }
                                     });
@@ -957,9 +1006,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 thEl.style.color = '#ffffff';
                                                 thEl.style.setProperty('color', '#ffffff', 'important');
                                                 thEl.style.textAlign = 'center';
+                                                thEl.style.setProperty('text-align', 'center', 'important');
                                                 thEl.style.fontWeight = 'bold';
                                                 thEl.style.fontSize = '16px';
-                                                thEl.style.padding = '12px 10px';
+                                                thEl.style.padding = '14px 16px';
+                                                thEl.style.setProperty('padding', '14px 16px', 'important');
                                             });
                                         }
                                     });
@@ -991,15 +1042,25 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             // ستون اول (دسته‌بندی): right
                                             if (cellIdx === 0) {
                                                 cellEl.style.textAlign = 'right';
+                                                cellEl.style.setProperty('text-align', 'right', 'important');
                                             }
                                             // ستون آخر (مبلغ کل): center برای اعداد
                                             else if (cellIdx === cells.length - 1) {
-                                                cellEl.style.textAlign = isNumber || cellText === '-' ? 'center' : 'right';
+                                                const align = isNumber || cellText === '-' ? 'center' : 'right';
+                                                cellEl.style.textAlign = align;
+                                                cellEl.style.setProperty('text-align', align, 'important');
                                             }
                                             // ستون‌های میانی: center برای اعداد، right برای متن
                                             else {
-                                                cellEl.style.textAlign = isNumber || cellText === '-' ? 'center' : 'right';
+                                                const align = isNumber || cellText === '-' ? 'center' : 'right';
+                                                cellEl.style.textAlign = align;
+                                                cellEl.style.setProperty('text-align', align, 'important');
                                             }
+                                            
+                                            // اطمینان از padding
+                                            cellEl.style.padding = '14px 16px';
+                                            cellEl.style.setProperty('padding', '14px 16px', 'important');
+                                            cellEl.style.lineHeight = '1.6';
                                         });
                                     });
                                 });
