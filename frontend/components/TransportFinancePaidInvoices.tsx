@@ -819,18 +819,28 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     tempDiv.style.overflow = 'visible';
                     tempDiv.style.zIndex = '999999';
                     tempDiv.style.visibility = 'visible';
-                    tempDiv.style.opacity = '0';
+                    tempDiv.style.opacity = '1'; // باید 1 باشد تا html2canvas بتواند ببیند
                     tempDiv.style.pointerEvents = 'none';
                     tempDiv.style.display = 'flex';
                     tempDiv.style.flexDirection = 'column';
                     tempDiv.style.alignItems = 'center';
                     tempDiv.style.justifyContent = 'flex-start';
+                    // قرار دادن خارج از viewport اما قابل مشاهده برای html2canvas
+                    tempDiv.style.left = '-9999px';
+                    tempDiv.style.top = '0';
                     document.body.appendChild(tempDiv);
                     
                     tempDiv.innerHTML = htmlContent;
                     
-                    // صبر برای render شدن محتوا - کاهش زمان برای سرعت بیشتر
-                    await new Promise(resolve => setTimeout(resolve, 800));
+                    // بررسی اینکه محتوا اضافه شده است
+                    if (!tempDiv.innerHTML || tempDiv.innerHTML.length < 100) {
+                        console.error(`❌ [ZIP_IMAGES] HTML content is empty for ${record.driverName}`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
+                    
+                    // صبر برای render شدن محتوا و لود شدن فونت‌ها
+                    await new Promise(resolve => setTimeout(resolve, 1200));
                     
                     // پیدا کردن div اصلی صورتحساب
                     const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.querySelector('[data-invoice-ref="true"]') || tempDiv.firstElementChild;
@@ -840,6 +850,18 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         document.body.removeChild(tempDiv);
                         continue;
                     }
+                    
+                    // بررسی اینکه محتوا واقعاً render شده است
+                    const hasContent = invoiceDiv.textContent && invoiceDiv.textContent.trim().length > 0;
+                    const hasTables = tempDiv.querySelectorAll('table').length > 0;
+                    
+                    if (!hasContent || !hasTables) {
+                        console.error(`❌ [ZIP_IMAGES] Content not rendered properly for ${record.driverName}`);
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
+                    
+                    console.log(`✅ [ZIP_IMAGES] Content rendered: ${hasContent}, Tables: ${hasTables}`);
                     
                     // اعمال استایل‌های ثابت برای همه تصاویر
                     const invoiceElement = invoiceDiv as HTMLElement;
@@ -933,6 +955,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedTempDiv.style.flexDirection = 'column';
                                 clonedTempDiv.style.alignItems = 'center';
                                 clonedTempDiv.style.justifyContent = 'flex-start';
+                                clonedTempDiv.style.visibility = 'visible';
+                                clonedTempDiv.style.opacity = '1';
+                                clonedTempDiv.style.position = 'relative';
+                                clonedTempDiv.style.left = '0';
+                                clonedTempDiv.style.top = '0';
                             }
                             
                             const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
@@ -945,7 +972,20 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 clonedInvoice.style.overflow = 'visible';
                                 clonedInvoice.style.visibility = 'visible';
                                 clonedInvoice.style.opacity = '1';
+                                clonedInvoice.style.setProperty('opacity', '1', 'important');
                                 clonedInvoice.style.boxSizing = 'border-box';
+                                
+                                // اطمینان از اینکه همه عناصر داخل قابل مشاهده هستند
+                                const allElements = clonedInvoice.querySelectorAll('*');
+                                allElements.forEach((el) => {
+                                    const elEl = el as HTMLElement;
+                                    if (elEl.style.opacity === '0') {
+                                        elEl.style.opacity = '1';
+                                    }
+                                    if (elEl.style.visibility === 'hidden') {
+                                        elEl.style.visibility = 'visible';
+                                    }
+                                });
                                 
                                 // اعمال استایل‌های جدول - فرمت یکسان و منظم
                                 const clonedTables = clonedInvoice.querySelectorAll('table');
