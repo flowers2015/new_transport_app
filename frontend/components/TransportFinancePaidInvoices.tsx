@@ -1686,9 +1686,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 </tr>
             `;
 
-            // ساخت بخش خلاصه (summary) - با notes همیشه نمایش داده می‌شود و وسط چین
+            // ساخت بخش خلاصه (summary) - با notes همیشه نمایش داده می‌شود و عرض یکسان با جدول
             const summaryHTML = block.summary ? `
-                <div style="width: 100%; margin: 8px auto 0 auto; padding: 8px 10px; border: 2px solid #3b82f6; background-color: #dbeafe; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif; box-sizing: border-box;">
+                <div style="width: 100%; max-width: 100%; padding: 8px 10px; border: 2px solid #3b82f6; background-color: #dbeafe; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif; box-sizing: border-box;">
                     <div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 4px;">جمع کل هزینه سفر: <span style="direction: ltr; unicode-bidi: embed;">${block.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال</div>
                     ${block.summary.deductionsAmount !== undefined && block.summary.deductionsAmount !== null && block.summary.deductionsAmount > 0 ? `
                         <div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 4px;">${block.summary.deductionsTitle || 'کسور'}: <span style="direction: ltr; unicode-bidi: embed;">${block.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال</div>
@@ -1698,12 +1698,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 </div>
             ` : '';
 
-            // ساخت HTML کامل برای این بلوک - با مرکز چین کردن
+            // ساخت HTML کامل برای این بلوک - با مرکز چین کردن و عرض یکسان
             const blockHTML = `
-                <div style="width: 100%; display: block; direction: rtl; unicode-bidi: isolate;">
+                <div style="width: 100%; display: block; direction: rtl; unicode-bidi: isolate; text-align: center;">
                     ${titleHTML}
-                    <div style="width: 100%; margin: 0 auto; display: block; direction: rtl; unicode-bidi: isolate;">
-                        <table style="width: 100%; border-collapse: collapse; table-layout: fixed; direction: rtl; unicode-bidi: isolate; margin: 0 auto 12px auto; font-family: 'Vazir', 'Tahoma', sans-serif;">
+                    <div style="width: 100%; max-width: 100%; margin: 0 auto; display: block; direction: rtl; unicode-bidi: isolate; box-sizing: border-box;">
+                        <table style="width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; direction: rtl; unicode-bidi: isolate; margin: 0 auto 12px auto; font-family: 'Vazir', 'Tahoma', sans-serif; box-sizing: border-box;">
                             <thead>
                                 <tr style="direction: rtl; unicode-bidi: isolate;">
                                     <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">دسته‌بندی</th>
@@ -1717,7 +1717,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 ${totalRowHTML}
                             </tbody>
                         </table>
-                        ${summaryHTML}
+                        <div style="width: 100%; max-width: 100%; margin: 8px auto 0 auto; box-sizing: border-box;">
+                            ${summaryHTML}
+                        </div>
                     </div>
                     ${blockIdx < blocks.length - 1 ? '<div style="height: 24px; width: 100%; display: block;"></div>' : ''}
                 </div>
