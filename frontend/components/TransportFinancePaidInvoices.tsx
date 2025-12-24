@@ -723,32 +723,42 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 console.log(`🖼️ [ZIP_IMAGES] Driver: ${record.driverName}, Employee ID: ${record.employeeId}`);
                 
                 try {
-                    // دریافت محاسبات
+                    // دریافت محاسبات پرداخت شده مربوط به این راننده (مثل exportAllInvoicesToPDF)
                     const calcDateFrom = record.calculationDateFrom || '';
                     const calcDateTo = record.calculationDateTo || '';
+                    let calculationsUrl = `driver-calculations/paid?driverId=${record.driverId}`;
+                    if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
+                    if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
                     
-                    const calculationsResponse = await fetch(
-                        getApiUrl(`calculations?driverId=${record.driverId}&dateFrom=${calcDateFrom}&dateTo=${calcDateTo}`),
-                        { headers }
-                    );
+                    const calculationsResponse = await fetch(getApiUrl(calculationsUrl), { headers });
                     if (!calculationsResponse.ok) {
-                        console.error(`❌ [ZIP_IMAGES] Failed to fetch calculations for ${record.driverName}`);
+                        console.error(`❌ [ZIP_IMAGES] Failed to fetch calculations for ${record.driverName}: ${calculationsResponse.status}`);
                         continue;
                     }
-                    const calculationsArray = await calculationsResponse.json();
+                    const paidCalculations = await calculationsResponse.json();
+                    const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
                     
-                    // دریافت اعلان‌ها
+                    if (calculationsArray.length === 0) {
+                        console.warn(`⚠️ [ZIP_IMAGES] هیچ محاسبه پرداخت شده‌ای برای ${record.driverName} یافت نشد`);
+                        continue;
+                    }
+                    
+                    // دریافت اطلاعات اعلام بار (مثل exportAllInvoicesToPDF)
                     const announcementsMap = new Map<string, any>();
-                    for (const calc of calculationsArray) {
-                        const annId = calc.announcement_id || calc.announcementId;
-                        if (annId && !announcementsMap.has(annId)) {
-                            const annResponse = await fetch(getApiUrl(`announcements/${annId}`), { headers });
-                            if (annResponse.ok) {
-                                const ann = await annResponse.json();
-                                announcementsMap.set(annId, ann);
+                    await Promise.all(calculationsArray.map(async (calc: any) => {
+                        const announcementId = calc.announcement_id || calc.announcementId;
+                        if (announcementId && !announcementsMap.has(announcementId)) {
+                            try {
+                                const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
+                                if (annRes.ok) {
+                                    const annData = await annRes.json();
+                                    announcementsMap.set(announcementId, annData);
+                                }
+                            } catch (err) {
+                                console.warn('⚠️ [ZIP_IMAGES] خطا در دریافت اعلام بار:', err);
                             }
                         }
-                    }
+                    }));
 
                     // تولید HTML صورتحساب
                     const invoiceLayout = InvoiceLayoutType.STANDARD_ACCOUNTING;
