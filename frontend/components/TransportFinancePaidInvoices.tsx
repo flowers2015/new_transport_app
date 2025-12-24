@@ -1199,19 +1199,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             cellEl.style.padding = '16px 18px'; // padding بیشتر
                                             cellEl.style.setProperty('padding', '16px 18px', 'important');
                                         } else {
-                                            // برای td ها: اگر عدد است center، اگر متن است right
-                                            const cellText = (cellEl.textContent || '').trim();
-                                            const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
+                                            // برای td ها: همه center به جز ستون اول (دسته‌بندی)
+                                            const cellIdx = Array.from(cellEl.parentElement?.children || []).indexOf(cellEl);
                                             cellEl.style.fontSize = '18px'; // فونت بزرگتر
                                             cellEl.style.setProperty('font-size', '18px', 'important');
                                             cellEl.style.padding = '14px 16px';
                                             cellEl.style.setProperty('padding', '14px 16px', 'important');
-                                            if (isNumber || cellText === '-') {
-                                                cellEl.style.textAlign = 'center';
-                                                cellEl.style.setProperty('text-align', 'center', 'important');
-                                            } else {
+                                            
+                                            // ستون اول (دسته‌بندی): right، بقیه center
+                                            if (cellIdx === 0) {
                                                 cellEl.style.textAlign = 'right';
                                                 cellEl.style.setProperty('text-align', 'right', 'important');
+                                            } else {
+                                                // همه ستون‌های دیگر center
+                                                cellEl.style.textAlign = 'center';
+                                                cellEl.style.setProperty('text-align', 'center', 'important');
                                             }
                                         }
                                     });
@@ -1262,22 +1264,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             const cellText = (cellEl.textContent || '').trim();
                                             const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
                                             
-                                            // ستون اول (دسته‌بندی): right
+                                            // ستون اول (دسته‌بندی): right، بقیه center
                                             if (cellIdx === 0) {
                                                 cellEl.style.textAlign = 'right';
                                                 cellEl.style.setProperty('text-align', 'right', 'important');
-                                            }
-                                            // ستون آخر (مبلغ کل): center برای اعداد
-                                            else if (cellIdx === cells.length - 1) {
-                                                const align = isNumber || cellText === '-' ? 'center' : 'right';
-                                                cellEl.style.textAlign = align;
-                                                cellEl.style.setProperty('text-align', align, 'important');
-                                            }
-                                            // ستون‌های میانی: center برای اعداد، right برای متن
-                                            else {
-                                                const align = isNumber || cellText === '-' ? 'center' : 'right';
-                                                cellEl.style.textAlign = align;
-                                                cellEl.style.setProperty('text-align', align, 'important');
+                                            } else {
+                                                // همه ستون‌های دیگر center
+                                                cellEl.style.textAlign = 'center';
+                                                cellEl.style.setProperty('text-align', 'center', 'important');
                                             }
                                             
                                             // اطمینان از padding و font size
@@ -1285,7 +1279,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             cellEl.style.setProperty('padding', '14px 16px', 'important');
                                             cellEl.style.fontSize = '18px';
                                             cellEl.style.setProperty('font-size', '18px', 'important');
-                                            cellEl.style.lineHeight = '1.6';
+                                            cellEl.style.lineHeight = '1.5';
                                         });
                                     });
                                     
@@ -1306,10 +1300,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     footerEl.style.opacity = '1';
                                     footerEl.style.height = 'auto';
                                     footerEl.style.overflow = 'visible';
-                                    footerEl.style.margin = '10px auto 0 auto'; // وسط چین + بدون margin-bottom
-                                    footerEl.style.setProperty('margin', '10px auto 0 auto', 'important');
-                                    footerEl.style.width = 'auto';
+                                    footerEl.style.margin = '15px auto 0 auto'; // وسط چین + margin بیشتر
+                                    footerEl.style.setProperty('margin', '15px auto 0 auto', 'important');
+                                    footerEl.style.width = '90%';
                                     footerEl.style.maxWidth = '90%';
+                                    
+                                    // بهبود visibility متن‌های داخل footer
+                                    const footerSpans = footerEl.querySelectorAll('span');
+                                    footerSpans.forEach((span) => {
+                                        const spanEl = span as HTMLElement;
+                                        spanEl.style.opacity = '1';
+                                        spanEl.style.visibility = 'visible';
+                                        spanEl.style.color = spanEl.style.color || '#1e293b';
+                                        spanEl.style.fontSize = spanEl.style.fontSize || '16px';
+                                        spanEl.style.setProperty('color', spanEl.style.color || '#1e293b', 'important');
+                                        spanEl.style.setProperty('font-size', spanEl.style.fontSize || '16px', 'important');
+                                        spanEl.style.whiteSpace = 'nowrap';
+                                    });
                                 });
                                 
                                 // تنظیم spacing برای h3 ها (عنوان جداول) - وسط چین
@@ -1543,7 +1550,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             <thead>
                                 <tr style="background-color: #1e40af; color: #ffffff;">
                                     <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 15%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">دسته‌بندی</th>
-                                    <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; width: 40%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">شرح هزینه / (ریال)</th>
+                                    <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 40%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">شرح هزینه / (ریال)</th>
                                     <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 22%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">مبلغ واحد / (ریال)</th>
                                     <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 23%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">مبلغ کل / (ریال)</th>
                                 </tr>
@@ -1597,7 +1604,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 html += `
                         <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                             ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">اطلاعات اولیه</td>` : ''}
-                            <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${infoRow.label}</td>
+                            <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${infoRow.label}</td>
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word; white-space: nowrap;">${infoRow.value}</td>
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden;">-</td>
                     </tr>
@@ -1625,7 +1632,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     html += `
                         <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                             ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">${row.category}</td>` : ''}
-                            <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${row.label}</td>
+                            <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${row.label}</td>
                             <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
                             <td data-total-amount="true" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
                                 </tr>
@@ -1691,7 +1698,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 <thead>
                                     <tr style="background-color: #1e40af; color: #ffffff;">
                                         <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 15%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">دسته‌بندی</th>
-                                        <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: right; vertical-align: middle; width: 40%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">شرح هزینه / (ریال)</th>
+                                        <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 40%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">شرح هزینه / (ریال)</th>
                                         <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 22%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">مبلغ واحد / (ریال)</th>
                                         <th style="font-size: 12px; font-weight: bold; padding: 8px 6px; border: 1px solid #1e3a8a; text-align: center; vertical-align: middle; width: 23%; color: #ffffff; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">مبلغ کل / (ریال)</th>
                                     </tr>
@@ -1747,7 +1754,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     html += `
                             <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                                 ${isFirstInCategory ? `<td rowspan="${initialInfoRows.length}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">اطلاعات اولیه</td>` : ''}
-                                <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${infoRow.label}</td>
+                                <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${infoRow.label}</td>
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word; white-space: nowrap;">${infoRow.value}</td>
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden;">-</td>
                         </tr>
@@ -1775,7 +1782,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 html += `
                             <tr style="background-color: ${isEven ? '#ffffff' : '#f8fafc'};">
                                 ${isFirstInCategory ? `<td rowspan="${categoryRowSpan}" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: top; font-weight: bold; color: #000000; background-color: ${isEven ? '#ffffff' : '#f8fafc'}; box-sizing: border-box; overflow: hidden; word-wrap: break-word;" class="category-cell">${row.category}</td>` : ''}
-                                <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: right; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${row.label}</td>
+                                <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: 600; color: #334155; background-color: transparent; box-sizing: border-box; overflow: hidden; word-wrap: break-word;">${row.label}</td>
                                 <td style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: normal; color: #334155; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${unitPrice > 0 ? unitPrice.toLocaleString('fa-IR') : '-'}</td>
                                 <td data-total-amount="true" style="font-size: 11px; padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; font-weight: bold; background-color: #f1f5f9; color: #1e293b; box-sizing: border-box; overflow: hidden; white-space: nowrap;">${value > 0 ? value.toLocaleString('fa-IR') : '-'}</td>
                                     </tr>
@@ -1799,22 +1806,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             }
         });
 
-        // جمع کل نهایی (فقط یک بار در footer) - محدود شده برای A4
+        // جمع کل نهایی (فقط یک بار در footer) - بهبود شده با فونت بزرگتر و وسط چین
         html += `
-                <div style="margin-top: 12px; padding: 10px; background-color: #e2e8f0; border-radius: 4px; border: 1px solid #475569; width: 100%; max-width: ${CONTENT_WIDTH_PX}px; box-sizing: border-box; overflow: hidden; page-break-inside: avoid;">
-                    <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box; overflow: hidden;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; overflow: hidden;">
-                            <span style="font-size: 11px; font-weight: bold; color: #1e293b; flex: 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;">جمع کل هزینه سفر:</span>
-                            <span style="font-size: 11px; font-weight: bold; color: #059669; flex: 0 0 auto; direction: rtl; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
+                <div style="margin: 15px auto 0 auto; padding: 15px 20px; background-color: #e2e8f0; border-radius: 6px; border: 2px solid #475569; width: 90%; max-width: 90%; box-sizing: border-box; overflow: visible; page-break-inside: avoid; direction: rtl; text-align: center;">
+                    <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box; overflow: visible;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; overflow: visible; padding: 4px 8px;">
+                            <span style="font-size: 16px; font-weight: bold; color: #1e293b; direction: rtl; text-align: right; white-space: nowrap;">جمع کل هزینه سفر:</span>
+                            <span style="font-size: 16px; font-weight: bold; color: #059669; direction: rtl; text-align: left; white-space: nowrap;">${grandTotal.toLocaleString('fa-IR')} ریال</span>
                         </div>
                         ${totalAdvancePayment > 0 ? `
-                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #94a3b8; padding-top: 6px; margin-top: 6px; width: 100%; box-sizing: border-box; overflow: hidden;">
-                                <span style="font-size: 10px; font-weight: 600; color: #1e293b; flex: 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;">کسور (پیش پرداخت):</span>
-                                <span style="font-size: 10px; font-weight: bold; color: #ea580c; flex: 0 0 auto; direction: rtl; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #94a3b8; padding-top: 8px; margin-top: 4px; width: 100%; box-sizing: border-box; overflow: visible; padding-left: 8px; padding-right: 8px;">
+                                <span style="font-size: 15px; font-weight: bold; color: #1e293b; direction: rtl; text-align: right; white-space: nowrap;">کسور (پیش پرداخت):</span>
+                                <span style="font-size: 15px; font-weight: bold; color: #ea580c; direction: rtl; text-align: left; white-space: nowrap;">${totalAdvancePayment.toLocaleString('fa-IR')} ریال</span>
                             </div>
-                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 6px; margin-top: 6px; width: 100%; box-sizing: border-box; overflow: hidden;">
-                                <span style="font-size: 11px; font-weight: bold; color: #1e293b; flex: 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;">مبلغ قابل پرداخت:</span>
-                                <span style="font-size: 11px; font-weight: bold; color: #0284c7; flex: 0 0 auto; direction: rtl; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #475569; padding-top: 8px; margin-top: 4px; width: 100%; box-sizing: border-box; overflow: visible; padding-left: 8px; padding-right: 8px;">
+                                <span style="font-size: 17px; font-weight: bold; color: #1e293b; direction: rtl; text-align: right; white-space: nowrap;">مبلغ قابل پرداخت:</span>
+                                <span style="font-size: 17px; font-weight: bold; color: #0284c7; direction: rtl; text-align: left; white-space: nowrap;">${payableAmount.toLocaleString('fa-IR')} ریال</span>
                             </div>
                         ` : ''}
                     </div>
