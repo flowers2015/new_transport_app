@@ -1760,13 +1760,20 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         }>;
     }>) => {
         try {
-            // Dynamic import برای autoTable (اگر نصب نشده باشد خطا نمی‌دهد)
-            let autoTable: any;
+            // Dynamic import برای autoTable
+            let autoTable: any = null;
             try {
-                autoTable = (await import('jspdf-autotable')).default;
-            } catch (importError) {
-                console.error('❌ [PDF_AUTOTABLE] jspdf-autotable نصب نشده است. لطفاً اجرا کنید: npm install jspdf-autotable');
-                alert('کتابخانه jspdf-autotable نصب نشده است. لطفاً ابتدا آن را نصب کنید:\nnpm install jspdf-autotable');
+                // استفاده از dynamic import
+                const autoTableModule = await import('jspdf-autotable');
+                autoTable = autoTableModule.default || autoTableModule || (autoTableModule as any).autoTable;
+            } catch (importError: any) {
+                console.error('❌ [PDF_AUTOTABLE] jspdf-autotable نصب نشده است:', importError);
+                alert('کتابخانه jspdf-autotable نصب نشده است.\n\nلطفاً در terminal اجرا کنید:\ncd frontend\nnpm install jspdf-autotable\n\nسپس dev server را restart کنید.');
+                return;
+            }
+            
+            if (!autoTable || typeof autoTable !== 'function') {
+                alert('کتابخانه jspdf-autotable بارگذاری نشد. لطفاً مطمئن شوید که نصب شده است:\nnpm install jspdf-autotable');
                 return;
             }
 
