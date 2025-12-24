@@ -1599,7 +1599,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
     // ============================================================================
     // تابع جدید V2: پشتیبانی از چند جدول پشت سر هم (راننده اصلی + راننده کمکی)
-    // بازنویسی کامل بدون rowspan - با استایل‌های دقیق و فارسی‌پسند
+    // بازنویسی کامل با رعایت دقیق همه جزئیات برای html2canvas
     // ============================================================================
     const renderInvoiceHTMLStandardV2 = (invoiceData: {
         blocks: Array<{
@@ -1628,16 +1628,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const blocksHTML = blocks.map((block, blockIdx) => {
             // ساخت عنوان
             const titleHTML = block.title ? `
-                <div style="
-                    text-align: center;
-                    font-weight: bold;
-                    font-size: 18px;
-                    margin-bottom: 12px;
-                    border-bottom: 1px solid #000;
-                    padding-bottom: 4px;
-                    direction: rtl;
-                    unicode-bidi: isolate;
-                ">${block.title}</div>
+                <div style="text-align: center; font-weight: bold; font-size: 18px; margin-bottom: 12px; border-bottom: 1px solid #000; padding-bottom: 4px; direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif;">${block.title}</div>
             ` : '';
 
             // ساخت ردیف‌های جدول
@@ -1646,21 +1637,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     // ردیف متادیتا
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right;">${row.label || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right;">${row.value || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap;"></td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap;"></td>
+                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.label || ''}</td>
+                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.value || ''}</td>
+                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
+                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
                         </tr>
                     `;
                 } else if (row.kind === 'categoryHeader') {
-                    // ردیف دسته‌بندی با colspan=4
+                    // ردیف دسته‌بندی با colspan=4 - با استایل کامل
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <td colspan="4" style="font-weight: bold; background-color: #f3f4f6; text-align: right; padding: 6px 8px; border: 1px solid #000; font-size: 13px; direction: rtl; unicode-bidi: isolate;">${row.category || ''}</td>
+                            <td colspan="4" style="font-weight: bold; background-color: #f3f4f6; text-align: right; padding: 6px 8px; border: 1px solid #000; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.category || ''}</td>
                         </tr>
                     `;
                 } else if (row.kind === 'cost') {
-                    // ردیف هزینه
+                    // ردیف هزینه - با ترازبندی دقیق
                     const unitAmountStr = row.unitAmount !== null && row.unitAmount !== undefined 
                         ? (typeof row.unitAmount === 'number' ? row.unitAmount.toLocaleString('fa-IR') : '')
                         : '';
@@ -1670,8 +1661,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right;">${row.category || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center;">${row.description || ''}</td>
+                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.category || ''}</td>
+                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.description || ''}</td>
                             <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${unitAmountStr}</td>
                             <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmountStr}</td>
                         </tr>
@@ -1685,56 +1676,38 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 .filter(row => row.kind === 'cost' && row.totalAmount !== null && row.totalAmount !== undefined)
                 .reduce((sum, row) => sum + (typeof row.totalAmount === 'number' ? row.totalAmount : 0), 0);
 
-            // ساخت ردیف جمع کل
+            // ساخت ردیف جمع کل - با استایل کامل
             const totalRowHTML = `
-                <tr style="direction: rtl; unicode-bidi: isolate; background-color: #3b82f6; color: white;">
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: white;">جمع کل</td>
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: white;">-</td>
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: white;">-</td>
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-weight: bold; color: white; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmount.toLocaleString('fa-IR')}</td>
+                <tr style="direction: rtl; unicode-bidi: isolate; background-color: #3b82f6;">
+                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">جمع کل</td>
+                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
+                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
+                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmount.toLocaleString('fa-IR')}</td>
                 </tr>
             `;
 
-            // ساخت بخش خلاصه (summary)
+            // ساخت بخش خلاصه (summary) - با notes همیشه نمایش داده می‌شود
             const summaryHTML = block.summary ? `
-                <div style="
-                    margin-top: 8px;
-                    padding: 8px 10px;
-                    border: 2px solid #3b82f6;
-                    background-color: #dbeafe;
-                    font-size: 13px;
-                    line-height: 1.8;
-                    direction: rtl;
-                    unicode-bidi: isolate;
-                ">
+                <div style="margin-top: 8px; padding: 8px 10px; border: 2px solid #3b82f6; background-color: #dbeafe; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif;">
                     <div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 4px;">جمع کل هزینه سفر: <span style="direction: ltr; unicode-bidi: embed;">${block.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال</div>
-                    ${block.summary.deductionsAmount !== undefined && block.summary.deductionsAmount > 0 ? `
+                    ${block.summary.deductionsAmount !== undefined && block.summary.deductionsAmount !== null && block.summary.deductionsAmount > 0 ? `
                         <div style="direction: rtl; unicode-bidi: isolate; margin-bottom: 4px;">${block.summary.deductionsTitle || 'کسور'}: <span style="direction: ltr; unicode-bidi: embed;">${block.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال</div>
                     ` : ''}
-                    <div style="direction: rtl; unicode-bidi: isolate; font-weight: bold;">مبلغ قابل پرداخت: <span style="direction: ltr; unicode-bidi: embed;">${block.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال</div>
-                    ${block.summary.notes ? `
-                        <div style="margin-top: 4px; font-size: 12px; color: #111827; text-align: right; direction: rtl; unicode-bidi: isolate;">توضیحات: ${block.summary.notes}</div>
-                    ` : ''}
+                    <div style="direction: rtl; unicode-bidi: isolate; font-weight: bold; margin-bottom: 4px;">مبلغ قابل پرداخت: <span style="direction: ltr; unicode-bidi: embed;">${block.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #111827; text-align: right; direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif;">${block.summary.notes ? `توضیحات: ${block.summary.notes}` : '&nbsp;'}</div>
                 </div>
             ` : '';
 
             // ساخت HTML کامل برای این بلوک
             const blockHTML = `
                 ${titleHTML}
-                <table style="
-                    width: 100%;
-                    border-collapse: collapse;
-                    table-layout: fixed;
-                    direction: rtl;
-                    unicode-bidi: isolate;
-                    margin-bottom: 12px;
-                ">
+                <table style="width: 100%; border-collapse: collapse; table-layout: fixed; direction: rtl; unicode-bidi: isolate; margin-bottom: 12px; font-family: 'Vazir', 'Tahoma', sans-serif;">
                     <thead>
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate;">دسته‌بندی</th>
-                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate;">شرح هزینه / (ریال)</th>
-                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate;">مبلغ واحد / (ریال)</th>
-                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate;">مبلغ کل / (ریال)</th>
+                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">دسته‌بندی</th>
+                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">شرح هزینه / (ریال)</th>
+                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">مبلغ واحد / (ریال)</th>
+                            <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">مبلغ کل / (ریال)</th>
                         </tr>
                     </thead>
                     <tbody style="direction: rtl; unicode-bidi: isolate;">
@@ -1743,25 +1716,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     </tbody>
                 </table>
                 ${summaryHTML}
-                ${blockIdx < blocks.length - 1 ? '<div style="height: 24px;"></div>' : ''}
+                ${blockIdx < blocks.length - 1 ? '<div style="height: 24px; width: 100%; display: block;"></div>' : ''}
             `;
             return blockHTML;
         }).join('');
 
-        // ساخت HTML کامل
+        // ساخت HTML کامل - با همه استایل‌های دقیق
         return `
-            <div id="invoice-root" style="
-                direction: rtl;
-                unicode-bidi: isolate;
-                font-family: 'Vazir', 'Tahoma', sans-serif;
-                width: 900px;
-                margin: 0 auto;
-                background-color: #ffffff;
-                color: #000000;
-                padding: 16px;
-                box-sizing: border-box;
-                position: relative;
-            ">
+            <div id="invoice-root" style="direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif; width: 900px; margin: 0 auto; background-color: #ffffff; color: #000000; padding: 16px; box-sizing: border-box; position: relative;">
                 ${blocksHTML}
             </div>
         `;
