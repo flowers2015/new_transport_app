@@ -764,24 +764,29 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const invoiceLayout = InvoiceLayoutType.STANDARD_ACCOUNTING;
                     const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo, invoiceLayout);
                     
-                    // ایجاد div موقت برای render کردن HTML
+                    // ایجاد div موقت برای render کردن HTML - با margin و padding ثابت برای همه
                     const tempDiv = document.createElement('div');
                     tempDiv.id = `temp-invoice-image-${i}`;
                     tempDiv.style.position = 'fixed';
                     tempDiv.style.top = '0';
                     tempDiv.style.left = '0';
-                    tempDiv.style.width = 'auto';
-                    tempDiv.style.maxWidth = '90%';
+                    tempDiv.style.width = '1200px'; // عرض ثابت برای همه
+                    tempDiv.style.maxWidth = '1200px';
                     tempDiv.style.height = 'auto';
+                    tempDiv.style.minHeight = '800px';
                     tempDiv.style.backgroundColor = '#ffffff';
-                    tempDiv.style.padding = '24px';
+                    tempDiv.style.padding = '40px'; // padding ثابت برای همه
+                    tempDiv.style.margin = '0'; // margin ثابت
                     tempDiv.style.boxSizing = 'border-box';
                     tempDiv.style.overflow = 'visible';
                     tempDiv.style.zIndex = '999999';
                     tempDiv.style.visibility = 'visible';
                     tempDiv.style.opacity = '0';
                     tempDiv.style.pointerEvents = 'none';
-                    tempDiv.style.margin = '0 auto';
+                    tempDiv.style.display = 'flex';
+                    tempDiv.style.flexDirection = 'column';
+                    tempDiv.style.alignItems = 'center';
+                    tempDiv.style.justifyContent = 'flex-start';
                     document.body.appendChild(tempDiv);
                     
                     tempDiv.innerHTML = htmlContent;
@@ -798,31 +803,33 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
                     
-                    // اعمال محدودیت عرض موقت (مثل exportInvoiceToImage)
+                    // اعمال استایل‌های ثابت برای همه تصاویر
                     const invoiceElement = invoiceDiv as HTMLElement;
                     const originalMaxWidth = invoiceElement.style.maxWidth;
                     const originalWidth = invoiceElement.style.width;
-                    invoiceElement.style.maxWidth = '90%';
-                    invoiceElement.style.width = 'auto';
+                    invoiceElement.style.width = '100%';
+                    invoiceElement.style.maxWidth = '1120px'; // 1200px - 80px padding
                     invoiceElement.style.margin = '0 auto';
+                    invoiceElement.style.padding = '0';
+                    invoiceElement.style.boxSizing = 'border-box';
                     
                     // صبر برای اعمال استایل‌ها
                     await new Promise(resolve => setTimeout(resolve, 100));
                     
-                    // بررسی ابعاد عنصر
-                    const elementWidth = invoiceElement.scrollWidth || invoiceElement.offsetWidth || 800;
-                    const elementHeight = invoiceElement.scrollHeight || invoiceElement.offsetHeight || 1000;
+                    // بررسی ابعاد عنصر - استفاده از ابعاد ثابت
+                    const elementWidth = 1200; // عرض ثابت برای همه
+                    const elementHeight = Math.max(invoiceElement.scrollHeight || invoiceElement.offsetHeight || 1000, 800);
                     
                     console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${elementWidth}x${elementHeight}`);
                     
-                    if (elementWidth === 0 || elementHeight === 0) {
-                        console.error(`❌ [ZIP_IMAGES] Element has zero dimensions for ${record.driverName}`);
+                    if (elementHeight === 0) {
+                        console.error(`❌ [ZIP_IMAGES] Element has zero height for ${record.driverName}`);
                         document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    // تبدیل به canvas با تنظیمات دقیقاً مثل exportInvoiceToImage
-                    const canvas = await html2canvas(invoiceElement as HTMLElement, {
+                    // تبدیل به canvas با تنظیمات ثابت برای همه تصاویر
+                    const canvas = await html2canvas(tempDiv as HTMLElement, {
                         scale: 2,
                         useCORS: true,
                         logging: false,
@@ -832,11 +839,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         windowWidth: elementWidth,
                         windowHeight: elementHeight,
                         onclone: (clonedDoc) => {
-                            // اضافه کردن style tag برای اطمینان از رنگ مشکی ستون دسته‌بندی
+                            // اضافه کردن style tag برای اطمینان از فرمت یکسان و منظم
                             const styleTag = clonedDoc.createElement('style');
                             styleTag.textContent = `
+                                * {
+                                    box-sizing: border-box;
+                                }
+                                body {
+                                    margin: 0;
+                                    padding: 0;
+                                    font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif;
+                                }
                                 tbody tr td:first-child {
                                     color: #000000 !important;
+                                    text-align: right !important;
+                                    font-weight: bold !important;
                                 }
                                 tbody tr td:first-child * {
                                     color: #000000 !important;
@@ -845,41 +862,90 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 tbody tr[style*="background-color: #3b82f6"] td:first-child {
                                     color: #ffffff !important;
                                 }
+                                table {
+                                    font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif !important;
+                                    border-collapse: collapse !important;
+                                    table-layout: fixed !important;
+                                }
+                                th {
+                                    text-align: center !important;
+                                    font-weight: bold !important;
+                                    padding: 12px 10px !important;
+                                }
+                                td {
+                                    padding: 10px 12px !important;
+                                    vertical-align: middle !important;
+                                    word-wrap: break-word !important;
+                                }
                             `;
                             clonedDoc.head.appendChild(styleTag);
                             
-                            // اعمال استایل‌های نهایی در cloned document
+                            // اعمال استایل‌های نهایی در cloned document - فرمت یکسان برای همه
+                            const clonedTempDiv = clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
+                            if (clonedTempDiv) {
+                                clonedTempDiv.style.width = '1200px';
+                                clonedTempDiv.style.maxWidth = '1200px';
+                                clonedTempDiv.style.padding = '40px';
+                                clonedTempDiv.style.margin = '0';
+                                clonedTempDiv.style.display = 'flex';
+                                clonedTempDiv.style.flexDirection = 'column';
+                                clonedTempDiv.style.alignItems = 'center';
+                                clonedTempDiv.style.justifyContent = 'flex-start';
+                            }
+                            
                             const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
                                                  clonedDoc.querySelector(`#temp-invoice-image-${i} div[dir="rtl"]`) as HTMLElement;
                             if (clonedInvoice) {
-                                clonedInvoice.style.width = 'auto';
-                                clonedInvoice.style.maxWidth = '90%';
+                                clonedInvoice.style.width = '100%';
+                                clonedInvoice.style.maxWidth = '1120px';
                                 clonedInvoice.style.margin = '0 auto';
+                                clonedInvoice.style.padding = '0';
                                 clonedInvoice.style.overflow = 'visible';
                                 clonedInvoice.style.visibility = 'visible';
                                 clonedInvoice.style.opacity = '1';
+                                clonedInvoice.style.boxSizing = 'border-box';
                                 
-                                // اعمال استایل‌های جدول - حفظ استایل‌های inline
+                                // اعمال استایل‌های جدول - فرمت یکسان و منظم
                                 const clonedTables = clonedInvoice.querySelectorAll('table');
                                 clonedTables.forEach((table) => {
                                     const tableEl = table as HTMLElement;
-                                    if (!tableEl.style.width || tableEl.style.width === '100%') {
-                                        tableEl.style.width = 'auto';
-                                    }
-                                    if (!tableEl.style.maxWidth) {
-                                        tableEl.style.maxWidth = '90%';
-                                    }
-                                    tableEl.style.margin = '0 auto';
-                                    tableEl.style.tableLayout = 'auto';
+                                    tableEl.style.width = '100%';
+                                    tableEl.style.maxWidth = '100%';
+                                    tableEl.style.margin = '0 auto 20px auto';
+                                    tableEl.style.tableLayout = 'fixed';
                                     tableEl.style.borderCollapse = 'collapse';
-                                    if (!tableEl.style.fontSize) {
-                                        tableEl.style.fontSize = '18px';
-                                    }
-                                    if (!tableEl.style.fontFamily) {
-                                        tableEl.style.fontFamily = 'Vazirmatn, Arial, sans-serif';
-                                    }
+                                    tableEl.style.fontSize = '16px';
+                                    tableEl.style.fontFamily = 'Vazirmatn, Tahoma, Arial, sans-serif';
+                                    tableEl.style.boxSizing = 'border-box';
                                     
-                                    // اطمینان از اینکه هدر جدول رنگ سفید دارد
+                                    // اعمال استایل‌های سلول‌ها برای منظم بودن
+                                    const allCells = tableEl.querySelectorAll('td, th');
+                                    allCells.forEach((cell) => {
+                                        const cellEl = cell as HTMLElement;
+                                        cellEl.style.boxSizing = 'border-box';
+                                        cellEl.style.padding = '10px 12px';
+                                        cellEl.style.verticalAlign = 'middle';
+                                        cellEl.style.wordWrap = 'break-word';
+                                        cellEl.style.overflow = 'hidden';
+                                        
+                                        // تنظیم text-align بر اساس نوع محتوا
+                                        if (cellEl.tagName === 'TH') {
+                                            cellEl.style.textAlign = 'center';
+                                            cellEl.style.fontWeight = 'bold';
+                                            cellEl.style.fontSize = '16px';
+                                        } else {
+                                            // برای td ها: اگر عدد است center، اگر متن است right
+                                            const cellText = (cellEl.textContent || '').trim();
+                                            const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
+                                            if (isNumber || cellText === '-') {
+                                                cellEl.style.textAlign = 'center';
+                                            } else {
+                                                cellEl.style.textAlign = 'right';
+                                            }
+                                        }
+                                    });
+                                    
+                                    // اطمینان از اینکه هدر جدول رنگ سفید دارد و منظم است
                                     const theadRows = tableEl.querySelectorAll('thead tr');
                                     theadRows.forEach((row) => {
                                         const rowEl = row as HTMLElement;
@@ -890,11 +956,15 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 const thEl = th as HTMLElement;
                                                 thEl.style.color = '#ffffff';
                                                 thEl.style.setProperty('color', '#ffffff', 'important');
+                                                thEl.style.textAlign = 'center';
+                                                thEl.style.fontWeight = 'bold';
+                                                thEl.style.fontSize = '16px';
+                                                thEl.style.padding = '12px 10px';
                                             });
                                         }
                                     });
                                     
-                                    // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند
+                                    // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند و منظم هستند
                                     const tbodyRows = tableEl.querySelectorAll('tbody tr');
                                     tbodyRows.forEach((row) => {
                                         const rowEl = row as HTMLElement;
@@ -906,8 +976,31 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             if (!isTotalRow && cellText.length > 0) {
                                                 firstCell.style.color = '#000000';
                                                 firstCell.style.setProperty('color', '#000000', 'important');
+                                                firstCell.style.textAlign = 'right';
+                                                firstCell.style.fontWeight = 'bold';
                                             }
                                         }
+                                        
+                                        // تنظیم text-align برای همه سلول‌های ردیف
+                                        const cells = rowEl.querySelectorAll('td');
+                                        cells.forEach((cell, cellIdx) => {
+                                            const cellEl = cell as HTMLElement;
+                                            const cellText = (cellEl.textContent || '').trim();
+                                            const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
+                                            
+                                            // ستون اول (دسته‌بندی): right
+                                            if (cellIdx === 0) {
+                                                cellEl.style.textAlign = 'right';
+                                            }
+                                            // ستون آخر (مبلغ کل): center برای اعداد
+                                            else if (cellIdx === cells.length - 1) {
+                                                cellEl.style.textAlign = isNumber || cellText === '-' ? 'center' : 'right';
+                                            }
+                                            // ستون‌های میانی: center برای اعداد، right برای متن
+                                            else {
+                                                cellEl.style.textAlign = isNumber || cellText === '-' ? 'center' : 'right';
+                                            }
+                                        });
                                     });
                                 });
                                 
