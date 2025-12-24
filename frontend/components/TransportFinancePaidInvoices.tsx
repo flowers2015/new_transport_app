@@ -1735,6 +1735,832 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         `;
     };
 
+    // ============================================================================
+    // روش 1: استفاده از jsPDF + AutoTable (PDF مستقیم - بدون html2canvas)
+    // ============================================================================
+    const exportInvoicesToPDFWithAutoTable = async (invoiceDataArray: Array<{
+        blocks: Array<{
+            title: string;
+            rows: Array<{
+                kind: 'meta' | 'categoryHeader' | 'cost';
+                label?: string;
+                value?: string;
+                category?: string;
+                description?: string;
+                unitAmount?: number;
+                totalAmount?: number;
+            }>;
+            summary: {
+                totalTripCost: number;
+                deductionsTitle?: string;
+                deductionsAmount?: number;
+                payableAmount: number;
+                notes?: string;
+            };
+        }>;
+    }>) => {
+        try {
+            // Dynamic import برای autoTable (اگر نصب نشده باشد خطا نمی‌دهد)
+            let autoTable: any;
+            try {
+                autoTable = (await import('jspdf-autotable')).default;
+            } catch (importError) {
+                console.error('❌ [PDF_AUTOTABLE] jspdf-autotable نصب نشده است. لطفاً اجرا کنید: npm install jspdf-autotable');
+                alert('کتابخانه jspdf-autotable نصب نشده است. لطفاً ابتدا آن را نصب کنید:\nnpm install jspdf-autotable');
+                return;
+            }
+
+            const doc = new jsPDF('p', 'mm', 'a4');
+            // تلاش برای تنظیم زبان فارسی (اگر پشتیبانی شود)
+            try {
+                doc.setLanguage('fa');
+            } catch (e) {
+                // اگر setLanguage موجود نباشد، ادامه می‌دهیم
+            }
+
+            for (let blockIdx = 0; blockIdx < invoiceDataArray.length; blockIdx++) {
+                const invoiceData = invoiceDataArray[blockIdx];
+                
+                for (let dataBlockIdx = 0; dataBlockIdx < invoiceData.blocks.length; dataBlockIdx++) {
+                    const block = invoiceData.blocks[dataBlockIdx];
+                    
+                    // اضافه کردن صفحه جدید اگر لازم باشد
+                    if (blockIdx > 0 || dataBlockIdx > 0) {
+                        doc.addPage();
+                    }
+
+                    // اضافه کردن عنوان
+                    doc.setFontSize(18);
+                    doc.setFont('Vazir', 'bold');
+                    const titleWidth = doc.getTextWidth(block.title);
+                    const pageWidth = doc.internal.pageSize.getWidth();
+                    doc.text(block.title, pageWidth - titleWidth - 10, 20, { align: 'right' });
+
+                    // آماده کردن داده‌های جدول
+                    const tableData: string[][] = [];
+                    let currentCategory = '';
+
+                    block.rows.forEach((row) => {
+                        if (row.kind === 'meta') {
+                            tableData.push([
+                                row.label || '',
+                                row.value || '',
+                                '',
+                                ''
+                            ]);
+                        } else if (row.kind === 'categoryHeader') {
+                            // ردیف دسته‌بندی را به عنوان یک ردیف جداگانه اضافه می‌کنیم
+                            currentCategory = row.category || '';
+                            tableData.push([
+                                row.category || '',
+                                '',
+                                '',
+                                ''
+                            ]);
+                        } else if (row.kind === 'cost') {
+                            const unitAmountStr = row.unitAmount !== null && row.unitAmount !== undefined
+                                ? (typeof row.unitAmount === 'number' ? row.unitAmount.toLocaleString('fa-IR') : '')
+                                : '';
+                            const totalAmountStr = row.totalAmount !== null && row.totalAmount !== undefined
+                                ? (typeof row.totalAmount === 'number' ? row.totalAmount.toLocaleString('fa-IR') : '')
+                                : '';
+                            
+                            tableData.push([
+                                row.category || '',
+                                row.description || '',
+                                unitAmountStr,
+                                totalAmountStr
+                            ]);
+                        }
+                    });
+
+                    // محاسبه جمع کل
+                    const totalAmount = block.rows
+                        .filter(row => row.kind === 'cost' && row.totalAmount !== null && row.totalAmount !== undefined)
+                        .reduce((sum, row) => sum + (typeof row.totalAmount === 'number' ? row.totalAmount : 0), 0);
+
+                    tableData.push(['جمع کل', '', '', totalAmount.toLocaleString('fa-IR')]);
+
+                    // ساخت جدول با autoTable
+                    try {
+                        autoTable(doc, {
+                            head: [['دسته‌بندی', 'شرح هزینه / (ریال)', 'مبلغ واحد / (ریال)', 'مبلغ کل / (ریال)']],
+                            body: tableData,
+                            startY: 30,
+                            styles: {
+                                font: 'helvetica', // autoTable از Vazir پشتیبانی نمی‌کند، از helvetica استفاده می‌کنیم
+                                fontSize: 10,
+                                textColor: [0, 0, 0],
+                                halign: 'right',
+                                valign: 'middle',
+                                cellPadding: 3,
+                            },
+                            headStyles: {
+                                fillColor: [30, 41, 59], // #1e293b
+                                textColor: [255, 255, 255],
+                                fontStyle: 'bold',
+                                halign: 'center',
+                            },
+                            columnStyles: {
+                                0: { halign: 'center' }, // دسته‌بندی - وسط چین
+                                1: { halign: 'right' }, // شرح هزینه - راست چین
+                                2: { halign: 'right' }, // مبلغ واحد - راست چین
+                                3: { halign: 'right' }, // مبلغ کل - راست چین
+                            },
+                            didParseCell: function (data: any) {
+                                // رنگ پس‌زمینه برای ردیف دسته‌بندی (ردیف‌هایی که فقط ستون اول پر است)
+                                const rowIndex = data.row.index;
+                                if (rowIndex < tableData.length - 1) {
+                                    const row = tableData[rowIndex];
+                                    if (row[0] && !row[1] && !row[2] && !row[3]) {
+                                        // این یک ردیف دسته‌بندی است
+                                        data.cell.styles.fillColor = [243, 244, 246]; // #f3f4f6
+                                        data.cell.styles.fontStyle = 'bold';
+                                        data.cell.styles.halign = 'center';
+                                        // تمام سلول‌های این ردیف را merge می‌کنیم
+                                        if (data.column.index === 0) {
+                                            data.cell.colSpan = 4;
+                                        } else {
+                                            data.row.cells[data.column.index] = null;
+                                        }
+                                    }
+                                }
+                                // ردیف جمع کل
+                                if (rowIndex === tableData.length - 1) {
+                                    data.cell.styles.fillColor = [59, 130, 246]; // #3b82f6
+                                    data.cell.styles.textColor = [255, 255, 255];
+                                    data.cell.styles.fontStyle = 'bold';
+                                }
+                            },
+                            margin: { top: 30, right: 10, bottom: 10, left: 10 },
+                        });
+                    } catch (autoTableError) {
+                        console.error('❌ [PDF_AUTOTABLE] خطا در ساخت جدول:', autoTableError);
+                        throw autoTableError; // خطا را propagate می‌کنیم
+                    }
+
+                    // اضافه کردن بخش summary
+                    const finalY = (doc as any).lastAutoTable?.finalY || 100;
+                    const summaryY = finalY + 10;
+
+                    doc.setFillColor(219, 234, 254); // #dbeafe
+                    doc.setDrawColor(59, 130, 246); // #3b82f6
+                    doc.setLineWidth(0.5);
+                    doc.roundedRect(10, summaryY, pageWidth - 20, 40, 2, 2, 'FD');
+
+                    doc.setFontSize(10);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(`جمع کل هزینه سفر: ${block.summary.totalTripCost.toLocaleString('fa-IR')} ریال`, 
+                        pageWidth - 15, summaryY + 8, { align: 'right' });
+                    
+                    if (block.summary.deductionsAmount && block.summary.deductionsAmount > 0) {
+                        doc.text(`${block.summary.deductionsTitle || 'کسور'}: ${block.summary.deductionsAmount.toLocaleString('fa-IR')} ریال`, 
+                            pageWidth - 15, summaryY + 15, { align: 'right' });
+                    }
+                    
+                    doc.setFont('Vazir', 'bold');
+                    doc.text(`مبلغ قابل پرداخت: ${block.summary.payableAmount.toLocaleString('fa-IR')} ریال`, 
+                        pageWidth - 15, summaryY + 22, { align: 'right' });
+                    
+                    if (block.summary.notes) {
+                        doc.setFont('Vazir', 'normal');
+                        doc.setFontSize(9);
+                        doc.text(`توضیحات: ${block.summary.notes}`, 
+                            pageWidth - 15, summaryY + 30, { align: 'right' });
+                    }
+                }
+            }
+
+            // ذخیره PDF
+            doc.save(`صورتحساب_های_پرداخت_شده_${new Date().toISOString().split('T')[0]}.pdf`);
+            console.log('✅ [PDF_AUTOTABLE] PDF با موفقیت تولید شد');
+        } catch (error) {
+            console.error('❌ [PDF_AUTOTABLE] خطا:', error);
+            alert('خطا در تولید PDF. لطفاً دوباره تلاش کنید.');
+        }
+    };
+
+    // تابع helper برای تبدیل داده‌های calculations به فرمت مورد نیاز renderInvoiceHTMLStandardV2
+    const convertToInvoiceDataFormat = (
+        record: PaidInvoiceRecord,
+        calculations: any[],
+        announcementsMap: Map<string, any>,
+        calcDateFrom: string,
+        calcDateTo: string
+    ): { blocks: Array<{
+        title: string;
+        rows: Array<{
+            kind: 'meta' | 'categoryHeader' | 'cost';
+            label?: string;
+            value?: string;
+            category?: string;
+            description?: string;
+            unitAmount?: number;
+            totalAmount?: number;
+        }>;
+        summary: {
+            totalTripCost: number;
+            deductionsTitle?: string;
+            deductionsAmount?: number;
+            payableAmount: number;
+            notes?: string;
+        };
+    }> } => {
+        const blocks: any[] = [];
+        
+        // محاسبه جمع کل
+        const totalMainAll = calculations.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
+        const helperCostsByEmployee = new Map<string, { employeeId: string; name: string; total: number; calculations: any[] }>();
+        
+        calculations.forEach((calc: any) => {
+            const helperId = calc.helper_driver_id || calc.helperDriverId;
+            const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+            const helperName = calc.helper_driver_name || calc.helperDriverName || '';
+            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+            const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+            
+            if (helperId && helperEmployeeId && helperTotal > 0) {
+                if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                    helperCostsByEmployee.set(helperEmployeeId, {
+                        employeeId: helperEmployeeId,
+                        name: helperName,
+                        total: 0,
+                        calculations: []
+                    });
+                }
+                const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+                existing.total += helperTotal;
+                existing.calculations.push(calc);
+            }
+        });
+        
+        const totalHelper = Array.from(helperCostsByEmployee.values()).reduce((sum, h) => sum + h.total, 0);
+        const totalAdvancePayment = calculations.reduce((sum, calc) => {
+            return sum + (parseFloat(calc.advance_payment || calc.advancePayment || 0));
+        }, 0);
+        const mainDriverPayable = totalMainAll - totalAdvancePayment;
+        const payableAmount = mainDriverPayable + totalHelper;
+
+        // ساخت بلوک راننده اصلی
+        const mainDriverRows: any[] = [];
+        
+        // اضافه کردن اطلاعات اولیه (meta)
+        const firstCalc = calculations[0];
+        const firstAnnouncement = firstCalc ? announcementsMap.get(firstCalc.announcement_id || firstCalc.announcementId) : null;
+        const destinations = firstAnnouncement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+        const billOfLadingNumber = firstCalc?.bill_of_lading_number || firstCalc?.billOfLadingNumber || '-';
+        const billOfLadingDate = firstCalc?.bill_of_lading_date || firstCalc?.billOfLadingDate ? 
+            (typeof (firstCalc.bill_of_lading_date || firstCalc.billOfLadingDate) === 'string' 
+                ? (firstCalc.bill_of_lading_date || firstCalc.billOfLadingDate)
+                : formatJalali(firstCalc.bill_of_lading_date || firstCalc.billOfLadingDate)) : '-';
+        const calculationDate = firstCalc?.calculation_date || firstCalc?.calculationDate ? 
+            (typeof (firstCalc.calculation_date || firstCalc.calculationDate) === 'string' 
+                ? (firstCalc.calculation_date || firstCalc.calculationDate)
+                : formatJalali(firstCalc.calculation_date || firstCalc.calculationDate)) : '-';
+        const origin = firstAnnouncement?.origin?.city || firstAnnouncement?.origin || firstCalc?.origin || '-';
+        const vehiclePlate = firstCalc?.vehicle_plate || firstCalc?.vehiclePlate || firstAnnouncement?.vehicle_plate || firstAnnouncement?.vehiclePlate || '-';
+        const approvedKm = calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0)), 0);
+        const excessKm = calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_kilometers || calc.excessKilometers || 0)), 0);
+        const approvedMissionDays = calculations.reduce((sum, calc) => sum + (parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0)), 0);
+        const excessMissionDays = calculations.reduce((sum, calc) => sum + (parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0)), 0);
+
+        mainDriverRows.push(
+            { kind: 'meta', label: 'شماره بارنامه', value: billOfLadingNumber },
+            { kind: 'meta', label: 'مبدأ', value: origin },
+            { kind: 'meta', label: 'مقاصد', value: destinations },
+            { kind: 'meta', label: 'پلاک خودرو', value: vehiclePlate },
+            { kind: 'meta', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+            { kind: 'meta', label: 'تاریخ محاسبه', value: calculationDate },
+            { kind: 'meta', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm.toLocaleString('fa-IR') },
+            { kind: 'meta', label: 'پیمایش مازاد (کیلومتر)', value: excessKm.toLocaleString('fa-IR') },
+            { kind: 'meta', label: 'پیمایش کل (کیلومتر)', value: (approvedKm + excessKm).toLocaleString('fa-IR') },
+            { kind: 'meta', label: 'ماموریت مصوب (روز)', value: approvedMissionDays.toLocaleString('fa-IR') },
+            { kind: 'meta', label: 'ماموریت مازاد (روز)', value: excessMissionDays.toLocaleString('fa-IR') }
+        );
+
+        // اضافه کردن هزینه‌های مستقیم
+        mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های مستقیم' });
+        
+        const billOfLadingTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0), 0);
+        if (billOfLadingTotal > 0) {
+            mainDriverRows.push({
+                kind: 'cost',
+                category: 'هزینه‌های مستقیم',
+                description: 'بارنامه',
+                unitAmount: billOfLadingTotal,
+                totalAmount: billOfLadingTotal
+            });
+        }
+
+        const foodTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.food_cost || calc.foodCost || 0), 0);
+        if (foodTotal > 0) {
+            mainDriverRows.push({
+                kind: 'cost',
+                category: 'هزینه‌های مستقیم',
+                description: 'غذا',
+                unitAmount: foodTotal,
+                totalAmount: foodTotal
+            });
+        }
+
+        const tollTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.toll_cost || calc.tollCost || 0), 0);
+        if (tollTotal > 0) {
+            mainDriverRows.push({
+                kind: 'cost',
+                category: 'هزینه‌های مستقیم',
+                description: 'عوارض',
+                unitAmount: tollTotal,
+                totalAmount: tollTotal
+            });
+        }
+
+        const returnCargoTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0), 0);
+        if (returnCargoTotal > 0) {
+            mainDriverRows.push({
+                kind: 'cost',
+                category: 'هزینه‌های مستقیم',
+                description: 'بار برگشتی',
+                unitAmount: returnCargoTotal,
+                totalAmount: returnCargoTotal
+            });
+        }
+
+        const excessMissionTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0), 0);
+        if (excessMissionTotal > 0) {
+            mainDriverRows.push({
+                kind: 'cost',
+                category: 'هزینه‌های مستقیم',
+                description: 'ماموریت مازاد',
+                unitAmount: excessMissionTotal,
+                totalAmount: excessMissionTotal
+            });
+        }
+
+        // اضافه کردن هزینه‌های دپو
+        const depotCount = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0), 0);
+        if (depotCount > 0) {
+            mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های دپو' });
+            
+            mainDriverRows.push({
+                kind: 'cost',
+                category: 'هزینه‌های دپو',
+                description: 'تعداد بار دپو',
+                unitAmount: depotCount,
+                totalAmount: depotCount
+            });
+
+            const depotMissionDays = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0), 0);
+            if (depotMissionDays > 0) {
+                mainDriverRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های دپو',
+                    description: 'ماموریت دپو (روز)',
+                    unitAmount: depotMissionDays,
+                    totalAmount: depotMissionDays
+                });
+            }
+
+            const depotMileage = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0), 0);
+            if (depotMileage > 0) {
+                mainDriverRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های دپو',
+                    description: 'پیمایش دپو (کیلومتر)',
+                    unitAmount: depotMileage,
+                    totalAmount: depotMileage
+                });
+            }
+
+            const depotCargoHandlingTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0), 0);
+            if (depotCargoHandlingTotal > 0) {
+                mainDriverRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های دپو',
+                    description: 'جابجایی بار دپو',
+                    unitAmount: depotCargoHandlingTotal,
+                    totalAmount: depotCargoHandlingTotal
+                });
+            }
+
+            const depotMissionTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0), 0);
+            if (depotMissionTotal > 0) {
+                mainDriverRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های دپو',
+                    description: 'حق ماموریت دپو',
+                    unitAmount: depotMissionTotal,
+                    totalAmount: depotMissionTotal
+                });
+            }
+        }
+
+        blocks.push({
+            title: 'هزینه‌های راننده اصلی',
+            rows: mainDriverRows,
+            summary: {
+                totalTripCost: totalMainAll,
+                deductionsTitle: 'کسور (پیش پرداخت)',
+                deductionsAmount: totalAdvancePayment,
+                payableAmount: mainDriverPayable,
+                notes: ''
+            }
+        });
+
+        // اضافه کردن بلوک‌های راننده کمکی
+        helperCostsByEmployee.forEach((helperData) => {
+            const helperRows: any[] = [];
+            
+            // اطلاعات اولیه راننده کمکی
+            helperRows.push(
+                { kind: 'meta', label: 'کدپرسنلی', value: helperData.employeeId },
+                { kind: 'meta', label: 'نام', value: helperData.name }
+            );
+
+            // اضافه کردن همان اطلاعات اولیه سفر (از اولین محاسبه)
+            if (firstCalc) {
+                helperRows.push(
+                    { kind: 'meta', label: 'شماره بارنامه', value: billOfLadingNumber },
+                    { kind: 'meta', label: 'مبدأ', value: origin },
+                    { kind: 'meta', label: 'مقاصد', value: destinations },
+                    { kind: 'meta', label: 'پلاک خودرو', value: vehiclePlate },
+                    { kind: 'meta', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                    { kind: 'meta', label: 'تاریخ محاسبه', value: calculationDate },
+                    { kind: 'meta', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm.toLocaleString('fa-IR') },
+                    { kind: 'meta', label: 'پیمایش مازاد (کیلومتر)', value: excessKm.toLocaleString('fa-IR') },
+                    { kind: 'meta', label: 'پیمایش کل (کیلومتر)', value: (approvedKm + excessKm).toLocaleString('fa-IR') },
+                    { kind: 'meta', label: 'ماموریت مصوب (روز)', value: approvedMissionDays.toLocaleString('fa-IR') },
+                    { kind: 'meta', label: 'ماموریت مازاد (روز)', value: excessMissionDays.toLocaleString('fa-IR') }
+                );
+            }
+
+            helperRows.push({ kind: 'categoryHeader', category: 'هزینه‌های مستقیم' });
+
+            const helperAllowanceTotal = helperData.calculations.reduce((sum, calc) => sum + parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0), 0);
+            if (helperAllowanceTotal > 0) {
+                helperRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های مستقیم',
+                    description: 'اجرت راننده کمکی',
+                    unitAmount: helperAllowanceTotal,
+                    totalAmount: helperAllowanceTotal
+                });
+            }
+
+            const helperFoodTotal = helperData.calculations.reduce((sum, calc) => sum + parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0), 0);
+            if (helperFoodTotal > 0) {
+                helperRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های مستقیم',
+                    description: 'غذای راننده کمکی',
+                    unitAmount: helperFoodTotal,
+                    totalAmount: helperFoodTotal
+                });
+            }
+
+            const helperExcessMissionTotal = helperData.calculations.reduce((sum, calc) => sum + parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0), 0);
+            if (helperExcessMissionTotal > 0) {
+                helperRows.push({
+                    kind: 'cost',
+                    category: 'هزینه‌های مستقیم',
+                    description: 'ماموریت مازاد راننده کمکی',
+                    unitAmount: helperExcessMissionTotal,
+                    totalAmount: helperExcessMissionTotal
+                });
+            }
+
+            blocks.push({
+                title: `راننده کمکی - کدپرسنلی: ${helperData.employeeId} - ${helperData.name}`,
+                rows: helperRows,
+                summary: {
+                    totalTripCost: helperData.total,
+                    deductionsTitle: '',
+                    deductionsAmount: 0,
+                    payableAmount: helperData.total,
+                    notes: ''
+                }
+            });
+        });
+
+        return { blocks };
+    };
+
+    // تابع wrapper برای اتصال به UI
+    const exportAllInvoicesToPDFWithAutoTableWrapper = async () => {
+        console.log('📄 [PDF_AUTOTABLE] ========== شروع تولید PDF با AutoTable ==========');
+        
+        if (filteredRecords.length === 0) {
+            alert('هیچ صورتحساب پرداخت شده‌ای برای تولید PDF وجود ندارد.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const invoiceDataArray: any[] = [];
+
+            // برای هر رکورد پرداخت شده
+            for (let i = 0; i < filteredRecords.length; i++) {
+                const record = filteredRecords[i];
+                
+                console.log(`📄 [PDF_AUTOTABLE] پردازش رکورد ${i + 1}/${filteredRecords.length}: ${record.driverName}`);
+                
+                // دریافت محاسبات
+                const calcDateFrom = record.calculationDateFrom || '';
+                const calcDateTo = record.calculationDateTo || '';
+                let calculationsUrl = `driver-calculations/paid?driverId=${record.driverId}`;
+                if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
+                if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
+
+                const calculationsRes = await fetch(getApiUrl(calculationsUrl), { headers });
+                if (!calculationsRes.ok) {
+                    console.warn(`⚠️ خطا در دریافت محاسبات برای ${record.driverName}`);
+                    continue;
+                }
+
+                const paidCalculations = await calculationsRes.json();
+                const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
+                
+                if (calculationsArray.length === 0) {
+                    console.warn(`⚠️ هیچ محاسبه‌ای برای ${record.driverName}`);
+                    continue;
+                }
+
+                // دریافت اعلان‌های بار
+                const announcementsMap = new Map<string, any>();
+                await Promise.all(calculationsArray.map(async (calc: any) => {
+                    const announcementId = calc.announcement_id || calc.announcementId;
+                    if (announcementId && !announcementsMap.has(announcementId)) {
+                        try {
+                            const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
+                            if (annRes.ok) {
+                                const annData = await annRes.json();
+                                announcementsMap.set(announcementId, annData);
+                            }
+                        } catch (err) {
+                            console.warn('⚠️ خطا در دریافت اعلان بار:', err);
+                        }
+                    }
+                }));
+
+                // تبدیل به فرمت مورد نیاز
+                const invoiceData = convertToInvoiceDataFormat(
+                    record,
+                    calculationsArray,
+                    announcementsMap,
+                    calcDateFrom,
+                    calcDateTo
+                );
+                
+                invoiceDataArray.push(invoiceData);
+            }
+
+            if (invoiceDataArray.length === 0) {
+                alert('هیچ داده‌ای برای تولید PDF یافت نشد.');
+                return;
+            }
+
+            // فراخوانی تابع اصلی
+            await exportInvoicesToPDFWithAutoTable(invoiceDataArray);
+        } catch (error) {
+            console.error('❌ [PDF_AUTOTABLE] خطا:', error);
+            alert('خطا در تولید PDF. لطفاً دوباره تلاش کنید.');
+        }
+    };
+
+    // ============================================================================
+    // روش 2: استفاده از DOM واقعی + html2canvas پیشرفته
+    // ============================================================================
+    const exportInvoicesToImagesZipWithRealDOM = async (invoiceDataArray: Array<{
+        blocks: Array<{
+            title: string;
+            rows: Array<{
+                kind: 'meta' | 'categoryHeader' | 'cost';
+                label?: string;
+                value?: string;
+                category?: string;
+                description?: string;
+                unitAmount?: number;
+                totalAmount?: number;
+            }>;
+            summary: {
+                totalTripCost: number;
+                deductionsTitle?: string;
+                deductionsAmount?: number;
+                payableAmount: number;
+                notes?: string;
+            };
+        }>;
+    }>) => {
+        try {
+            const zip = new JSZip();
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let i = 0; i < invoiceDataArray.length; i++) {
+                const invoiceData = invoiceDataArray[i];
+                
+                try {
+                    // ساخت یک React component موقت
+                    const InvoiceComponent = () => {
+                        return (
+                            <div 
+                                id={`invoice-real-dom-${i}`}
+                                style={{
+                                    direction: 'rtl',
+                                    fontFamily: 'Vazirmatn, Tahoma, sans-serif',
+                                    width: '900px',
+                                    margin: '0 auto',
+                                    backgroundColor: '#ffffff',
+                                    color: '#000000',
+                                    padding: '16px',
+                                    boxSizing: 'border-box',
+                                    position: 'relative' as const,
+                                }}
+                            >
+                                {invoiceData.blocks.map((block, blockIdx) => (
+                                    <div key={blockIdx} style={{ marginBottom: blockIdx < invoiceData.blocks.length - 1 ? '24px' : '0' }}>
+                                        {block.title && (
+                                            <h3 style={{
+                                                fontSize: '18px',
+                                                fontWeight: 'bold',
+                                                textAlign: 'center',
+                                                marginBottom: '12px',
+                                                borderBottom: '1px solid #000',
+                                                paddingBottom: '4px',
+                                            }}>
+                                                {block.title}
+                                            </h3>
+                                        )}
+                                        
+                                        <table style={{
+                                            width: '100%',
+                                            borderCollapse: 'collapse',
+                                            tableLayout: 'fixed',
+                                            direction: 'rtl',
+                                            marginBottom: '12px',
+                                            fontSize: '13px',
+                                        }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ border: '1px solid #000', padding: '6px 8px', backgroundColor: '#e5e7eb', textAlign: 'center' }}>دسته‌بندی</th>
+                                                    <th style={{ border: '1px solid #000', padding: '6px 8px', backgroundColor: '#e5e7eb', textAlign: 'center' }}>شرح هزینه / (ریال)</th>
+                                                    <th style={{ border: '1px solid #000', padding: '6px 8px', backgroundColor: '#e5e7eb', textAlign: 'center' }}>مبلغ واحد / (ریال)</th>
+                                                    <th style={{ border: '1px solid #000', padding: '6px 8px', backgroundColor: '#e5e7eb', textAlign: 'center' }}>مبلغ کل / (ریال)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {block.rows.map((row, rowIdx) => {
+                                                    if (row.kind === 'meta') {
+                                                        return (
+                                                            <tr key={rowIdx}>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'center', fontWeight: 600 }}>{row.label}</td>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right' }}>{row.value}</td>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right' }}></td>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right' }}></td>
+                                                            </tr>
+                                                        );
+                                                    } else if (row.kind === 'categoryHeader') {
+                                                        return (
+                                                            <tr key={rowIdx}>
+                                                                <td colSpan={4} style={{
+                                                                    border: '1px solid #000',
+                                                                    padding: '6px 8px',
+                                                                    backgroundColor: '#f3f4f6',
+                                                                    fontWeight: 'bold',
+                                                                    textAlign: 'center',
+                                                                }}>
+                                                                    {row.category}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    } else if (row.kind === 'cost') {
+                                                        const unitAmountStr = row.unitAmount?.toLocaleString('fa-IR') || '';
+                                                        const totalAmountStr = row.totalAmount?.toLocaleString('fa-IR') || '';
+                                                        return (
+                                                            <tr key={rowIdx}>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'center', fontWeight: 600 }}>{row.category}</td>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'center' }}>{row.description}</td>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{unitAmountStr}</td>
+                                                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{totalAmountStr}</td>
+                                                            </tr>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })}
+                                                <tr style={{ backgroundColor: '#3b82f6', color: '#ffffff' }}>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', color: '#ffffff' }}>جمع کل</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', color: '#ffffff' }}>-</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', color: '#ffffff' }}>-</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', color: '#ffffff' }}>
+                                                        {block.rows
+                                                            .filter(row => row.kind === 'cost' && row.totalAmount)
+                                                            .reduce((sum, row) => sum + (row.totalAmount || 0), 0)
+                                                            .toLocaleString('fa-IR')}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        
+                                        {block.summary && (
+                                            <div style={{
+                                                width: '100%',
+                                                padding: '8px 10px',
+                                                border: '2px solid #3b82f6',
+                                                backgroundColor: '#dbeafe',
+                                                fontSize: '13px',
+                                                direction: 'rtl',
+                                            }}>
+                                                <div>جمع کل هزینه سفر: {block.summary.totalTripCost.toLocaleString('fa-IR')} ریال</div>
+                                                {block.summary.deductionsAmount && block.summary.deductionsAmount > 0 && (
+                                                    <div>{block.summary.deductionsTitle || 'کسور'}: {block.summary.deductionsAmount.toLocaleString('fa-IR')} ریال</div>
+                                                )}
+                                                <div style={{ fontWeight: 'bold' }}>مبلغ قابل پرداخت: {block.summary.payableAmount.toLocaleString('fa-IR')} ریال</div>
+                                                {block.summary.notes && (
+                                                    <div style={{ marginTop: '4px', fontSize: '12px' }}>توضیحات: {block.summary.notes}</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    };
+
+                    // Render به DOM واقعی
+                    const tempDiv = document.createElement('div');
+                    tempDiv.style.position = 'fixed';
+                    tempDiv.style.left = '-9999px';
+                    tempDiv.style.top = '0';
+                    tempDiv.style.width = '900px';
+                    tempDiv.style.backgroundColor = '#ffffff';
+                    document.body.appendChild(tempDiv);
+
+                    // استفاده از ReactDOMServer برای render
+                    const htmlString = ReactDOMServer.renderToString(<InvoiceComponent />);
+                    tempDiv.innerHTML = htmlString;
+
+                    // انتظار برای render کامل
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // گرفتن تصویر با html2canvas
+                    const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, {
+                        scale: 3,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        width: 900,
+                        height: tempDiv.scrollHeight,
+                        windowWidth: 900,
+                        windowHeight: tempDiv.scrollHeight,
+                        logging: false,
+                    });
+
+                    const imgData = canvas.toDataURL('image/png', 1.0);
+                    const base64Data = imgData.split(',')[1];
+                    const binaryString = atob(base64Data);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let j = 0; j < binaryString.length; j++) {
+                        bytes[j] = binaryString.charCodeAt(j);
+                    }
+
+                    const fileName = `صورتحساب_${i + 1}.png`;
+                    zip.file(fileName, bytes);
+                    successCount++;
+
+                    // پاک کردن tempDiv
+                    document.body.removeChild(tempDiv);
+
+                } catch (err: any) {
+                    failCount++;
+                    console.error(`❌ [REAL_DOM] Error processing invoice ${i + 1}:`, err);
+                }
+            }
+
+            if (successCount === 0) {
+                alert('هیچ تصویری تولید نشد.');
+                return;
+            }
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const zipUrl = URL.createObjectURL(zipBlob);
+            const zipLink = document.createElement('a');
+            zipLink.download = `صورتحساب_های_پرداخت_شده_DOM_${new Date().toISOString().split('T')[0]}.zip`;
+            zipLink.href = zipUrl;
+            zipLink.click();
+            URL.revokeObjectURL(zipUrl);
+
+            console.log(`✅ [REAL_DOM] ZIP file generated: ${successCount} images`);
+        } catch (error) {
+            console.error('❌ [REAL_DOM] خطا:', error);
+            alert('خطا در تولید تصاویر. لطفاً دوباره تلاش کنید.');
+        }
+    };
+
     const renderInvoiceHTML = (
         record: PaidInvoiceRecord,
         calculations: any[],
@@ -2316,6 +3142,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 تولید PDF یکجا
+                            </button>
+                            <button
+                                onClick={exportAllInvoicesToPDFWithAutoTableWrapper}
+                                disabled={filteredRecords.length === 0}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="روش جدید: استفاده از jsPDF AutoTable (نیاز به نصب: npm install jspdf-autotable)"
+                            >
+                                تولید PDF (AutoTable) 🆕
                             </button>
                             <button
                                 onClick={exportAllInvoicesToImagesZip}
