@@ -840,7 +840,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                     
                     // صبر برای render شدن محتوا و لود شدن فونت‌ها
-                    await new Promise(resolve => setTimeout(resolve, 1200));
+                    await new Promise(resolve => setTimeout(resolve, 1500));
                     
                     // پیدا کردن div اصلی صورتحساب
                     const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.querySelector('[data-invoice-ref="true"]') || tempDiv.firstElementChild;
@@ -853,7 +853,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     // بررسی اینکه محتوا واقعاً render شده است
                     const hasContent = invoiceDiv.textContent && invoiceDiv.textContent.trim().length > 0;
-                    const hasTables = tempDiv.querySelectorAll('table').length > 0;
+                    const tables = tempDiv.querySelectorAll('table');
+                    const hasTables = tables.length > 0;
                     
                     if (!hasContent || !hasTables) {
                         console.error(`❌ [ZIP_IMAGES] Content not rendered properly for ${record.driverName}`);
@@ -861,7 +862,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
                     
-                    console.log(`✅ [ZIP_IMAGES] Content rendered: ${hasContent}, Tables: ${hasTables}`);
+                    // بررسی اینکه همه جداول کامل هستند
+                    let allTablesComplete = true;
+                    tables.forEach((table, idx) => {
+                        const tableEl = table as HTMLElement;
+                        const tableHeight = tableEl.scrollHeight || tableEl.offsetHeight;
+                        const hasRows = tableEl.querySelectorAll('tr').length > 0;
+                        if (!hasRows || tableHeight === 0) {
+                            console.warn(`⚠️ [ZIP_IMAGES] Table ${idx + 1} may be incomplete`);
+                            allTablesComplete = false;
+                        }
+                    });
+                    
+                    console.log(`✅ [ZIP_IMAGES] Content rendered: ${hasContent}, Tables: ${hasTables}, All complete: ${allTablesComplete}`);
                     
                     // اعمال استایل‌های ثابت برای همه تصاویر
                     const invoiceElement = invoiceDiv as HTMLElement;
@@ -876,19 +889,36 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     // صبر برای اعمال استایل‌ها
                     await new Promise(resolve => setTimeout(resolve, 100));
                     
-                    // بررسی ابعاد عنصر - استفاده از ابعاد ثابت
-                    const elementWidth = 1200; // عرض ثابت برای همه
-                    const elementHeight = Math.max(invoiceElement.scrollHeight || invoiceElement.offsetHeight || 1000, 800);
+                    // بررسی ابعاد واقعی عنصر - برای اطمینان از render کامل
+                    // Force reflow برای اطمینان از محاسبه صحیح ابعاد
+                    tempDiv.offsetHeight;
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     
-                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${elementWidth}x${elementHeight}`);
+                    const actualWidth = tempDiv.scrollWidth || tempDiv.offsetWidth || 1200;
+                    let actualHeight = tempDiv.scrollHeight || tempDiv.offsetHeight || 1000;
                     
-                    if (elementHeight === 0) {
+                    // بررسی ارتفاع همه جداول
+                    tables.forEach((table) => {
+                        const tableEl = table as HTMLElement;
+                        const tableHeight = tableEl.scrollHeight || tableEl.offsetHeight;
+                        if (tableHeight > 0) {
+                            actualHeight = Math.max(actualHeight, tableHeight + 100);
+                        }
+                    });
+                    
+                    // اضافه کردن margin برای اطمینان از render کامل
+                    const elementWidth = Math.max(actualWidth, 1200);
+                    const elementHeight = Math.max(actualHeight + 200, 1200); // اضافه کردن 200px برای اطمینان از render کامل
+                    
+                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${elementWidth}x${elementHeight} (actual: ${actualWidth}x${actualHeight})`);
+                    
+                    if (elementHeight === 0 || actualHeight === 0) {
                         console.error(`❌ [ZIP_IMAGES] Element has zero height for ${record.driverName}`);
                         document.body.removeChild(tempDiv);
                         continue;
                     }
                     
-                    // تبدیل به canvas با تنظیمات ثابت برای همه تصاویر
+                    // تبدیل به canvas با تنظیمات برای render کامل
                     const canvas = await html2canvas(tempDiv as HTMLElement, {
                         scale: 2,
                         useCORS: true,
@@ -898,6 +928,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         height: elementHeight,
                         windowWidth: elementWidth,
                         windowHeight: elementHeight,
+                        allowTaint: true,
+                        removeContainer: false,
                         onclone: (clonedDoc) => {
                             // اضافه کردن style tag برای اطمینان از فرمت یکسان و منظم
                             const styleTag = clonedDoc.createElement('style');
@@ -926,20 +958,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif !important;
                                     border-collapse: collapse !important;
                                     table-layout: fixed !important;
+                                    font-size: 20px !important;
+                                    display: table !important;
                                 }
                                 th {
                                     text-align: center !important;
                                     font-weight: bold !important;
-                                    padding: 12px 10px !important;
+                                    padding: 16px 18px !important;
+                                    font-size: 20px !important;
                                 }
                                 td {
                                     padding: 14px 16px !important;
                                     vertical-align: middle !important;
                                     word-wrap: break-word !important;
                                     line-height: 1.6 !important;
-                                }
-                                th {
-                                    padding: 14px 16px !important;
+                                    font-size: 18px !important;
                                 }
                             `;
                             clonedDoc.head.appendChild(styleTag);
@@ -996,9 +1029,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     tableEl.style.margin = '0 auto 20px auto';
                                     tableEl.style.tableLayout = 'fixed';
                                     tableEl.style.borderCollapse = 'collapse';
-                                    tableEl.style.fontSize = '16px';
+                                    tableEl.style.fontSize = '20px'; // فونت بزرگتر
+                                    tableEl.style.setProperty('font-size', '20px', 'important');
                                     tableEl.style.fontFamily = 'Vazirmatn, Tahoma, Arial, sans-serif';
                                     tableEl.style.boxSizing = 'border-box';
+                                    tableEl.style.display = 'table'; // اطمینان از نمایش کامل
                                     
                                     // اعمال استایل‌های سلول‌ها برای منظم بودن - padding بیشتر
                                     const allCells = tableEl.querySelectorAll('td, th');
@@ -1012,18 +1047,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         cellEl.style.overflow = 'hidden';
                                         cellEl.style.lineHeight = '1.6'; // فاصله خطوط
                                         
-                                        // تنظیم text-align بر اساس نوع محتوا
+                                        // تنظیم text-align بر اساس نوع محتوا - فونت بزرگتر
                                         if (cellEl.tagName === 'TH') {
                                             cellEl.style.textAlign = 'center';
                                             cellEl.style.setProperty('text-align', 'center', 'important');
                                             cellEl.style.fontWeight = 'bold';
-                                            cellEl.style.fontSize = '16px';
-                                            cellEl.style.padding = '14px 16px';
-                                            cellEl.style.setProperty('padding', '14px 16px', 'important');
+                                            cellEl.style.fontSize = '20px'; // فونت بزرگتر
+                                            cellEl.style.setProperty('font-size', '20px', 'important');
+                                            cellEl.style.padding = '16px 18px'; // padding بیشتر
+                                            cellEl.style.setProperty('padding', '16px 18px', 'important');
                                         } else {
                                             // برای td ها: اگر عدد است center، اگر متن است right
                                             const cellText = (cellEl.textContent || '').trim();
                                             const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
+                                            cellEl.style.fontSize = '18px'; // فونت بزرگتر
+                                            cellEl.style.setProperty('font-size', '18px', 'important');
+                                            cellEl.style.padding = '14px 16px';
+                                            cellEl.style.setProperty('padding', '14px 16px', 'important');
                                             if (isNumber || cellText === '-') {
                                                 cellEl.style.textAlign = 'center';
                                                 cellEl.style.setProperty('text-align', 'center', 'important');
@@ -1048,9 +1088,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 thEl.style.textAlign = 'center';
                                                 thEl.style.setProperty('text-align', 'center', 'important');
                                                 thEl.style.fontWeight = 'bold';
-                                                thEl.style.fontSize = '16px';
-                                                thEl.style.padding = '14px 16px';
-                                                thEl.style.setProperty('padding', '14px 16px', 'important');
+                                                thEl.style.fontSize = '20px'; // فونت بزرگتر
+                                                thEl.style.setProperty('font-size', '20px', 'important');
+                                                thEl.style.padding = '16px 18px';
+                                                thEl.style.setProperty('padding', '16px 18px', 'important');
                                             });
                                         }
                                     });
@@ -1097,12 +1138,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 cellEl.style.setProperty('text-align', align, 'important');
                                             }
                                             
-                                            // اطمینان از padding
+                                            // اطمینان از padding و font size
                                             cellEl.style.padding = '14px 16px';
                                             cellEl.style.setProperty('padding', '14px 16px', 'important');
+                                            cellEl.style.fontSize = '18px';
+                                            cellEl.style.setProperty('font-size', '18px', 'important');
                                             cellEl.style.lineHeight = '1.6';
                                         });
                                     });
+                                    
+                                    // اطمینان از اینکه جدول کامل render می‌شود
+                                    tableEl.style.display = 'table';
+                                    tableEl.style.visibility = 'visible';
+                                    tableEl.style.opacity = '1';
                                 });
                                 
                                 // تنظیم رنگ برای سلول‌های "مبلغ کل"
