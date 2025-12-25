@@ -2218,36 +2218,42 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
             helperRows.push({ kind: 'categoryHeader', category: 'هزینه‌های مستقیم' });
 
-            const helperAllowanceTotal = helperData.calculations.reduce((sum, calc) => sum + parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0), 0);
+            const helperAllowanceValues = helperData.calculations.map((calc: any) => parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0));
+            const helperAllowanceTotal = helperAllowanceValues.reduce((sum, val) => sum + val, 0);
             if (helperAllowanceTotal > 0) {
                 helperRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های مستقیم',
                     description: 'اجرت راننده کمکی',
                     unitAmount: helperAllowanceTotal,
-                    totalAmount: helperAllowanceTotal
+                    totalAmount: helperAllowanceTotal,
+                    tourValues: helperAllowanceValues
                 });
             }
 
-            const helperFoodTotal = helperData.calculations.reduce((sum, calc) => sum + parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0), 0);
+            const helperFoodValues = helperData.calculations.map((calc: any) => parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0));
+            const helperFoodTotal = helperFoodValues.reduce((sum, val) => sum + val, 0);
             if (helperFoodTotal > 0) {
                 helperRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های مستقیم',
                     description: 'غذای راننده کمکی',
                     unitAmount: helperFoodTotal,
-                    totalAmount: helperFoodTotal
+                    totalAmount: helperFoodTotal,
+                    tourValues: helperFoodValues
                 });
             }
 
-            const helperExcessMissionTotal = helperData.calculations.reduce((sum, calc) => sum + parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0), 0);
+            const helperExcessMissionValues = helperData.calculations.map((calc: any) => parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0));
+            const helperExcessMissionTotal = helperExcessMissionValues.reduce((sum, val) => sum + val, 0);
             if (helperExcessMissionTotal > 0) {
                 helperRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های مستقیم',
                     description: 'ماموریت مازاد راننده کمکی',
                     unitAmount: helperExcessMissionTotal,
-                    totalAmount: helperExcessMissionTotal
+                    totalAmount: helperExcessMissionTotal,
+                    tourValues: helperExcessMissionValues
                 });
             }
 
@@ -3107,21 +3113,47 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     // محاسبه تعداد تورها
                     const numTours = invoiceData.tourCount || 1;
                     
-                    // محاسبه عرض دینامیک بر اساس تعداد تورها
-                    let containerWidth = 1200; // برای جدول افقی عرض بیشتر نیاز است
-                    let fontSize = 12;
+                    // محاسبه تعداد ستون‌های هزینه
+                    const mainBlock = invoiceData.blocks[0];
+                    const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
+                    const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
+                    const totalColumns = 5 + costColumnsCount + 1; // 5 ستون اطلاعات اولیه + ستون‌های هزینه + جمع کل
                     
-                    if (numTours > 8) {
-                        containerWidth = 1400;
+                    // محاسبه عرض و فونت دینامیک بر اساس تعداد ستون‌ها و تورها
+                    let containerWidth = 1200;
+                    let fontSize = 13;
+                    let cellPadding = '10px 8px';
+                    
+                    // محاسبه بر اساس تعداد ستون‌ها
+                    if (totalColumns > 20) {
+                        containerWidth = 1800;
                         fontSize = 10;
-                    } else if (numTours > 6) {
-                        containerWidth = 1300;
+                        cellPadding = '8px 6px';
+                    } else if (totalColumns > 15) {
+                        containerWidth = 1600;
                         fontSize = 11;
+                        cellPadding = '9px 7px';
+                    } else if (totalColumns > 12) {
+                        containerWidth = 1400;
+                        fontSize = 12;
+                        cellPadding = '10px 8px';
+                    }
+                    
+                    // محاسبه بر اساس تعداد تورها
+                    if (numTours > 10) {
+                        containerWidth = Math.max(containerWidth, 1600);
+                        fontSize = Math.min(fontSize, 11);
+                        cellPadding = '8px 6px';
+                    } else if (numTours > 8) {
+                        containerWidth = Math.max(containerWidth, 1400);
+                        fontSize = Math.min(fontSize, 12);
                     }
                     
                     // ساخت یک React component موقت با ساختار افقی
                     const InvoiceComponent = () => {
-                        const mainBlock = invoiceData.blocks[0]; // بلوک راننده اصلی
+                        const allBlocks = invoiceData.blocks || [];
+                        const mainBlock = allBlocks[0]; // بلوک راننده اصلی
+                        const helperBlocks = allBlocks.slice(1); // بلوک‌های راننده کمکی
                         const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
                         
                         // ساخت ستون‌های هزینه با دسته‌بندی
@@ -3243,7 +3275,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <th colSpan={5} style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
@@ -3251,12 +3283,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
                                             }}>اطلاعات اولیه</th>
                                             {categoryGroups.map((group, groupIdx) => (
                                                 <th key={groupIdx} colSpan={group.count} style={{ 
                                                     border: '1px solid #000', 
-                                                    padding: '12px 10px', 
+                                                    padding: cellPadding, 
                                                     backgroundColor: '#e5e7eb', 
                                                     textAlign: 'center',
                                                     direction: 'rtl',
@@ -3265,12 +3298,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize + 1}px`,
                                                     fontWeight: 'bold',
-                                                    lineHeight: '1.5',
+                                                    lineHeight: '1.4',
                                                 }}>{group.category}</th>
                                             ))}
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
@@ -3278,96 +3311,111 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
                                             }}>جمع کل (ریال)</th>
                                         </tr>
                                         {/* ردیف دوم: عناوین ستون‌ها */}
                                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontSize: `${fontSize}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>ردیف</th>
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontSize: `${fontSize}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>شماره بارنامه</th>
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontSize: `${fontSize}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>مبدأ</th>
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontSize: `${fontSize}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>مقصد</th>
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontSize: `${fontSize}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>پلاک خودرو</th>
                                             {costColumns.map((col, colIdx) => (
                                                 <th key={colIdx} style={{ 
                                                     border: '1px solid #000', 
-                                                    padding: '12px 10px', 
+                                                    padding: cellPadding, 
                                                     backgroundColor: '#e5e7eb', 
                                                     textAlign: 'center',
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                    fontSize: `${fontSize + 1}px`,
-                                                    lineHeight: '1.5',
+                                                    fontSize: `${fontSize}px`,
+                                                    fontWeight: 'bold',
+                                                    lineHeight: '1.4',
+                                                    whiteSpace: 'nowrap',
                                                 }}>{col.label}</th>
                                             ))}
                                             <th style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 backgroundColor: '#e5e7eb', 
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                fontSize: `${fontSize}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>جمع کل (ریال)</th>
                                         </tr>
                                     </thead>
@@ -3383,58 +3431,71 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 <tr key={tourIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                                     <td style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'nowrap',
                                                     }}>{tourIdx + 1}</td>
                                                     <td style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'right',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'normal',
+                                                        wordWrap: 'break-word',
+                                                        maxWidth: '120px',
                                                     }}>{tour?.billOfLadingNumber || '-'}</td>
                                                     <td style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'right',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'normal',
+                                                        wordWrap: 'break-word',
+                                                        maxWidth: '100px',
                                                     }}>{tour?.origin || '-'}</td>
                                                     <td style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'right',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'normal',
+                                                        wordWrap: 'break-word',
+                                                        maxWidth: '150px',
                                                     }}>{tour?.destinations || '-'}</td>
                                                     <td style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'right',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
+                                                        whiteSpace: 'normal',
+                                                        wordWrap: 'break-word',
+                                                        maxWidth: '120px',
                                                     }}>{tour?.vehiclePlate || '-'}</td>
                                                     {costColumns.map((col, colIdx) => {
                                                         const tourValue = col.tourValues?.[tourIdx];
@@ -3442,21 +3503,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         return (
                                                             <td key={colIdx} style={{ 
                                                                 border: '1px solid #000', 
-                                                                padding: '12px 10px', 
+                                                                padding: cellPadding, 
                                                                 textAlign: 'right',
                                                                 whiteSpace: 'nowrap',
                                                                 direction: 'rtl',
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
-                                                                lineHeight: '1.5',
+                                                                fontSize: `${fontSize}px`,
+                                                                lineHeight: '1.4',
                                                             }}>{tourValueStr}</td>
                                                         );
                                                     })}
                                                     <td style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'right',
                                                         whiteSpace: 'nowrap',
                                                         fontWeight: 'bold',
@@ -3464,8 +3525,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
                                                     }}>{tourTotal.toLocaleString('fa-IR')}</td>
                                                 </tr>
                                             );
@@ -3474,7 +3535,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         <tr style={{ backgroundColor: '#3b82f6', direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <td colSpan={5} style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 textAlign: 'center', 
                                                 fontWeight: 'bold', 
                                                 color: '#ffffff',
@@ -3483,14 +3544,15 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                lineHeight: '1.4',
+                                                whiteSpace: 'nowrap',
                                             }}>جمع کل</td>
                                             {costColumns.map((col, colIdx) => {
                                                 if (col.isDepotCount) {
                                                     return (
                                                         <td key={colIdx} style={{ 
                                                             border: '1px solid #000', 
-                                                            padding: '12px 10px', 
+                                                            padding: cellPadding, 
                                                             textAlign: 'center', 
                                                             fontWeight: 'bold', 
                                                             color: '#ffffff',
@@ -3498,8 +3560,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                             unicodeBidi: 'isolate',
                                                             verticalAlign: 'middle',
                                                             fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                            fontSize: `${fontSize + 1}px`,
-                                                            lineHeight: '1.5',
+                                                            fontSize: `${fontSize}px`,
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
                                                         }}>-</td>
                                                     );
                                                 }
@@ -3507,7 +3570,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 return (
                                                     <td key={colIdx} style={{ 
                                                         border: '1px solid #000', 
-                                                        padding: '12px 10px', 
+                                                        padding: cellPadding, 
                                                         textAlign: 'right',
                                                         whiteSpace: 'nowrap',
                                                         fontWeight: 'bold', 
@@ -3516,14 +3579,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
+                                                        fontSize: `${fontSize}px`,
+                                                        lineHeight: '1.4',
                                                     }}>{colTotal.toLocaleString('fa-IR')}</td>
                                                 );
                                             })}
                                             <td style={{ 
                                                 border: '1px solid #000', 
-                                                padding: '12px 10px', 
+                                                padding: cellPadding, 
                                                 textAlign: 'right',
                                                 whiteSpace: 'nowrap',
                                                 fontWeight: 'bold', 
@@ -3533,7 +3596,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 verticalAlign: 'middle',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize + 1}px`,
-                                                lineHeight: '1.5',
+                                                lineHeight: '1.4',
                                             }}>
                                                 {costColumns
                                                     .filter(col => !col.isDepotCount && col.totalAmount)
