@@ -2052,52 +2052,61 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             });
         }
 
-        const foodTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.food_cost || calc.foodCost || 0), 0);
+        const foodValues = calculations.map((calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0));
+        const foodTotal = foodValues.reduce((sum, val) => sum + val, 0);
         if (foodTotal > 0) {
             mainDriverRows.push({
                 kind: 'cost',
                 category: 'هزینه‌های مستقیم',
                 description: 'غذا',
                 unitAmount: foodTotal,
-                totalAmount: foodTotal
+                totalAmount: foodTotal,
+                tourValues: foodValues
             });
         }
 
-        const tollTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.toll_cost || calc.tollCost || 0), 0);
+        const tollValues = calculations.map((calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0));
+        const tollTotal = tollValues.reduce((sum, val) => sum + val, 0);
         if (tollTotal > 0) {
             mainDriverRows.push({
                 kind: 'cost',
                 category: 'هزینه‌های مستقیم',
                 description: 'عوارض',
                 unitAmount: tollTotal,
-                totalAmount: tollTotal
+                totalAmount: tollTotal,
+                tourValues: tollValues
             });
         }
 
-        const returnCargoTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0), 0);
+        const returnCargoValues = calculations.map((calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0));
+        const returnCargoTotal = returnCargoValues.reduce((sum, val) => sum + val, 0);
         if (returnCargoTotal > 0) {
             mainDriverRows.push({
                 kind: 'cost',
                 category: 'هزینه‌های مستقیم',
                 description: 'بار برگشتی',
                 unitAmount: returnCargoTotal,
-                totalAmount: returnCargoTotal
+                totalAmount: returnCargoTotal,
+                tourValues: returnCargoValues
             });
         }
 
-        const excessMissionTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0), 0);
+        const excessMissionValues = calculations.map((calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0));
+        const excessMissionTotal = excessMissionValues.reduce((sum, val) => sum + val, 0);
         if (excessMissionTotal > 0) {
             mainDriverRows.push({
                 kind: 'cost',
                 category: 'هزینه‌های مستقیم',
                 description: 'ماموریت مازاد',
                 unitAmount: excessMissionTotal,
-                totalAmount: excessMissionTotal
+                totalAmount: excessMissionTotal,
+                tourValues: excessMissionValues
             });
         }
 
         // اضافه کردن هزینه‌های دپو
-        const depotCount = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0), 0);
+        const depotCountValues = calculations.map((calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0));
+        const depotCount = depotCountValues.reduce((sum, val) => sum + val, 0);
         if (depotCount > 0) {
             mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های دپو' });
             
@@ -2106,50 +2115,64 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 category: 'هزینه‌های دپو',
                 description: 'تعداد بار دپو',
                 unitAmount: depotCount,
-                totalAmount: depotCount
+                totalAmount: null, // برای تعداد/ماموریت/پیمایش، مبلغ کل نمایش داده نمی‌شود
+                isDepotCount: true, // فلگ برای شناسایی ردیف‌های تعداد/ماموریت/پیمایش
+                tourValues: depotCountValues
+                totalAmount: null, // برای تعداد/ماموریت/پیمایش، مبلغ کل نمایش داده نمی‌شود
+                isDepotCount: true // فلگ برای شناسایی ردیف‌های تعداد/ماموریت/پیمایش
             });
 
-            const depotMissionDays = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0), 0);
+            const depotMissionDaysValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0));
+            const depotMissionDays = depotMissionDaysValues.reduce((sum, val) => sum + val, 0);
             if (depotMissionDays > 0) {
                 mainDriverRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های دپو',
                     description: 'ماموریت دپو (روز)',
                     unitAmount: depotMissionDays,
-                    totalAmount: depotMissionDays
+                    totalAmount: null, // برای تعداد/ماموریت/پیمایش، مبلغ کل نمایش داده نمی‌شود
+                    isDepotCount: true,
+                    tourValues: depotMissionDaysValues
                 });
             }
 
-            const depotMileage = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0), 0);
+            const depotMileageValues = calculations.map((calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0));
+            const depotMileage = depotMileageValues.reduce((sum, val) => sum + val, 0);
             if (depotMileage > 0) {
                 mainDriverRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های دپو',
                     description: 'پیمایش دپو (کیلومتر)',
                     unitAmount: depotMileage,
-                    totalAmount: depotMileage
+                    totalAmount: null, // برای تعداد/ماموریت/پیمایش، مبلغ کل نمایش داده نمی‌شود
+                    isDepotCount: true,
+                    tourValues: depotMileageValues
                 });
             }
 
-            const depotCargoHandlingTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0), 0);
+            const depotCargoHandlingValues = calculations.map((calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0));
+            const depotCargoHandlingTotal = depotCargoHandlingValues.reduce((sum, val) => sum + val, 0);
             if (depotCargoHandlingTotal > 0) {
                 mainDriverRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های دپو',
                     description: 'جابجایی بار دپو',
                     unitAmount: depotCargoHandlingTotal,
-                    totalAmount: depotCargoHandlingTotal
+                    totalAmount: depotCargoHandlingTotal,
+                    tourValues: depotCargoHandlingValues
                 });
             }
 
-            const depotMissionTotal = calculations.reduce((sum, calc) => sum + parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0), 0);
+            const depotMissionValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0));
+            const depotMissionTotal = depotMissionValues.reduce((sum, val) => sum + val, 0);
             if (depotMissionTotal > 0) {
                 mainDriverRows.push({
                     kind: 'cost',
                     category: 'هزینه‌های دپو',
                     description: 'حق ماموریت دپو',
                     unitAmount: depotMissionTotal,
-                    totalAmount: depotMissionTotal
+                    totalAmount: depotMissionTotal,
+                    tourValues: depotMissionValues
                 });
             }
         }
@@ -2631,7 +2654,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 </table>
                                             )}
                                             
-                                            {/* جدول هزینه‌ها - با 3 ستون ثابت */}
+                                            {/* جدول هزینه‌ها - با ستون‌های دینامیک برای هر تور */}
                                             {costRows.length > 0 && (
                                                 <table style={{
                                                     width: '100%',
@@ -2659,18 +2682,20 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>شرح هزینه (ریال)</th>
-                                                            <th style={{ 
-                                                                border: '1px solid #000', 
-                                                                padding: '16px 16px 42px 16px', 
-                                                                backgroundColor: '#e5e7eb', 
-                                                                textAlign: 'center',
-                                                                direction: 'rtl',
-                                                                unicodeBidi: 'isolate',
-                                                                verticalAlign: 'middle',
-                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 2}px`,
-                                                                lineHeight: '1.5',
-                                                            }}>مبلغ واحد (ریال)</th>
+                                                            {Array.from({ length: numTours }, (_, tourIdx) => (
+                                                                <th key={tourIdx} style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: '16px 16px 42px 16px', 
+                                                                    backgroundColor: '#e5e7eb', 
+                                                                    textAlign: 'center',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize + 2}px`,
+                                                                    lineHeight: '1.5',
+                                                                }}>مبلغ واحد تور {tourIdx + 1} (ریال)</th>
+                                                            ))}
                                                             <th style={{ 
                                                                 border: '1px solid #000', 
                                                                 padding: '16px 16px 42px 16px', 
@@ -2690,7 +2715,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                             if (row.kind === 'categoryHeader') {
                                                                 return (
                                                                     <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                                        <td colSpan={3} style={{
+                                                                        <td colSpan={numTours + 2} style={{
                                                                             border: '1px solid #000',
                                                                             padding: '16px 16px 42px 16px',
                                                                             backgroundColor: '#f3f4f6',
@@ -2708,8 +2733,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     </tr>
                                                                 );
                                                             } else if (row.kind === 'cost') {
-                                                                const unitAmountStr = row.unitAmount?.toLocaleString('fa-IR') || '';
-                                                                const totalAmountStr = row.totalAmount?.toLocaleString('fa-IR') || '';
+                                                                const isDepotCount = row.isDepotCount || false;
+                                                                const tourValues = row.tourValues || [];
+                                                                const totalAmountStr = (row.totalAmount && !isDepotCount) ? row.totalAmount.toLocaleString('fa-IR') : '';
+                                                                
                                                                 return (
                                                                     <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                                                         <td style={{ 
@@ -2725,18 +2752,24 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                             fontSize: `${fontSize + 2}px`,
                                                                             lineHeight: '1.5',
                                                                         }}>{row.description}</td>
-                                                                        <td style={{ 
-                                                                            border: '1px solid #000', 
-                                                                            padding: '16px 16px 42px 16px', 
-                                                                            textAlign: 'right',
-                                                                            whiteSpace: 'nowrap',
-                                                                            direction: 'rtl',
-                                                                            unicodeBidi: 'isolate',
-                                                                            verticalAlign: 'middle',
-                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                            fontSize: `${fontSize + 2}px`,
-                                                                            lineHeight: '1.5',
-                                                                        }}>{unitAmountStr}</td>
+                                                                        {Array.from({ length: numTours }, (_, tourIdx) => {
+                                                                            const tourValue = tourValues[tourIdx] !== undefined ? tourValues[tourIdx] : (tourIdx === 0 ? row.unitAmount : null);
+                                                                            const tourValueStr = tourValue !== null && tourValue !== undefined ? tourValue.toLocaleString('fa-IR') : '';
+                                                                            return (
+                                                                                <td key={tourIdx} style={{ 
+                                                                                    border: '1px solid #000', 
+                                                                                    padding: '16px 16px 42px 16px', 
+                                                                                    textAlign: 'right',
+                                                                                    whiteSpace: 'nowrap',
+                                                                                    direction: 'rtl',
+                                                                                    unicodeBidi: 'isolate',
+                                                                                    verticalAlign: 'middle',
+                                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                                    fontSize: `${fontSize + 2}px`,
+                                                                                    lineHeight: '1.5',
+                                                                                }}>{tourValueStr}</td>
+                                                                            );
+                                                                        })}
                                                                         <td style={{ 
                                                                             border: '1px solid #000', 
                                                                             padding: '16px 16px 42px 16px', 
@@ -2768,19 +2801,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>جمع کل</td>
-                                                            <td style={{ 
-                                                                border: '1px solid #000', 
-                                                                padding: '16px 16px 42px 16px', 
-                                                                textAlign: 'center', 
-                                                                fontWeight: 'bold', 
-                                                                color: '#ffffff',
-                                                                direction: 'rtl',
-                                                                unicodeBidi: 'isolate',
-                                                                verticalAlign: 'middle',
-                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 2}px`,
-                                                                lineHeight: '1.5',
-                                                            }}>-</td>
+                                                            {Array.from({ length: numTours }, (_, tourIdx) => (
+                                                                <td key={tourIdx} style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: '16px 16px 42px 16px', 
+                                                                    textAlign: 'center', 
+                                                                    fontWeight: 'bold', 
+                                                                    color: '#ffffff',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize + 2}px`,
+                                                                    lineHeight: '1.5',
+                                                                }}>-</td>
+                                                            ))}
                                                             <td style={{ 
                                                                 border: '1px solid #000', 
                                                                 padding: '16px 16px 42px 16px', 
@@ -2796,7 +2831,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 lineHeight: '1.5',
                                                             }}>
                                                                 {costRows
-                                                                    .filter(row => row.kind === 'cost' && row.totalAmount)
+                                                                    .filter(row => row.kind === 'cost' && row.totalAmount && !row.isDepotCount)
                                                                     .reduce((sum, row) => sum + (row.totalAmount || 0), 0)
                                                                     .toLocaleString('fa-IR')}
                                                             </td>
