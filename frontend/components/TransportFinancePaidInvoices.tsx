@@ -3124,8 +3124,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         const mainBlock = invoiceData.blocks[0]; // بلوک راننده اصلی
                         const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
                         
-                        // ساخت ستون‌های هزینه
-                        const costColumns: Array<{ label: string; tourValues?: number[]; totalAmount?: number; isDepotCount?: boolean }> = [];
+                        // ساخت ستون‌های هزینه با دسته‌بندی
+                        const costColumns: Array<{ 
+                            label: string; 
+                            category: string;
+                            tourValues?: number[]; 
+                            totalAmount?: number; 
+                            isDepotCount?: boolean;
+                        }> = [];
                         let currentCategory = '';
                         
                         costRows.forEach(row => {
@@ -3134,12 +3140,40 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             } else if (row.kind === 'cost') {
                                 costColumns.push({
                                     label: row.description || '',
+                                    category: currentCategory,
                                     tourValues: row.tourValues || [],
                                     totalAmount: row.totalAmount || undefined,
                                     isDepotCount: row.isDepotCount || false,
                                 });
                             }
                         });
+                        
+                        // ساخت دسته‌بندی‌ها با تعداد ستون‌های مربوطه
+                        const categoryGroups: Array<{ category: string; startIndex: number; count: number }> = [];
+                        let currentGroupCategory = '';
+                        let currentGroupStart = 0;
+                        
+                        costColumns.forEach((col, idx) => {
+                            if (col.category !== currentGroupCategory) {
+                                if (currentGroupCategory) {
+                                    categoryGroups.push({
+                                        category: currentGroupCategory,
+                                        startIndex: currentGroupStart,
+                                        count: idx - currentGroupStart
+                                    });
+                                }
+                                currentGroupCategory = col.category;
+                                currentGroupStart = idx;
+                            }
+                        });
+                        // اضافه کردن آخرین گروه
+                        if (currentGroupCategory) {
+                            categoryGroups.push({
+                                category: currentGroupCategory,
+                                startIndex: currentGroupStart,
+                                count: costColumns.length - currentGroupStart
+                            });
+                        }
                         
                         return (
                             <div 
@@ -3205,6 +3239,49 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     boxSizing: 'border-box',
                                 }}>
                                     <thead>
+                                        {/* ردیف اول: دسته‌بندی‌ها */}
+                                        <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                            <th colSpan={5} style={{ 
+                                                border: '1px solid #000', 
+                                                padding: '12px 10px', 
+                                                backgroundColor: '#e5e7eb', 
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                verticalAlign: 'middle',
+                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                fontSize: `${fontSize + 1}px`,
+                                                lineHeight: '1.5',
+                                            }}>اطلاعات اولیه</th>
+                                            {categoryGroups.map((group, groupIdx) => (
+                                                <th key={groupIdx} colSpan={group.count} style={{ 
+                                                    border: '1px solid #000', 
+                                                    padding: '12px 10px', 
+                                                    backgroundColor: '#e5e7eb', 
+                                                    textAlign: 'center',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    verticalAlign: 'middle',
+                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontSize: `${fontSize + 1}px`,
+                                                    fontWeight: 'bold',
+                                                    lineHeight: '1.5',
+                                                }}>{group.category}</th>
+                                            ))}
+                                            <th style={{ 
+                                                border: '1px solid #000', 
+                                                padding: '12px 10px', 
+                                                backgroundColor: '#e5e7eb', 
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                verticalAlign: 'middle',
+                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                fontSize: `${fontSize + 1}px`,
+                                                lineHeight: '1.5',
+                                            }}>جمع کل (ریال)</th>
+                                        </tr>
+                                        {/* ردیف دوم: عناوین ستون‌ها */}
                                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <th style={{ 
                                                 border: '1px solid #000', 
