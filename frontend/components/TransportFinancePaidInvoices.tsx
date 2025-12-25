@@ -2375,6 +2375,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         tourCount?: number;
         mainDriverCost?: number;
         helperDriverCosts?: Array<{ employeeId: string; name: string; total: number }>;
+        tourData?: Array<{
+            billOfLadingNumber?: string;
+            origin?: string;
+            destinations?: string;
+            vehiclePlate?: string;
+            billOfLadingDate?: string;
+            calculationDate?: string;
+            approvedKm?: number;
+            excessKm?: number;
+            totalKm?: number;
+            approvedMissionDays?: number;
+            excessMissionDays?: number;
+        }>;
         blocks: Array<{
             title: string;
             rows: Array<{
@@ -2474,130 +2487,67 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     </div>
                                 </div>
                                 
-                                {invoiceData.blocks.map((block, blockIdx) => (
-                                    <div key={blockIdx} style={{ 
-                                        width: '100%',
-                                        marginBottom: blockIdx < invoiceData.blocks.length - 1 ? '24px' : '0',
-                                        textAlign: 'center',
-                                    }}>
-                                        {block.title && (
-                                            <h3 style={{
-                                                fontSize: '18px',
-                                                fontWeight: 'bold',
-                                                textAlign: 'center',
-                                                marginBottom: '12px',
-                                                borderBottom: '1px solid #000',
-                                                paddingBottom: '4px',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
-                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                            }}>
-                                                {block.title}
-                                            </h3>
-                                        )}
-                                        
-                                        <table style={{
+                                {invoiceData.blocks.map((block, blockIdx) => {
+                                    // جداسازی ردیف‌های meta و cost
+                                    const metaRows = block.rows.filter(r => r.kind === 'meta');
+                                    const costRows = block.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader');
+                                    const numTours = invoiceData.tourCount || 1;
+                                    
+                                    return (
+                                        <div key={blockIdx} style={{ 
                                             width: '100%',
-                                            maxWidth: '100%',
-                                            borderCollapse: 'collapse',
-                                            tableLayout: 'fixed',
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            margin: '0 auto 12px auto',
-                                            fontSize: `${fontSize}px`,
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                            boxSizing: 'border-box',
+                                            marginBottom: blockIdx < invoiceData.blocks.length - 1 ? '24px' : '0',
+                                            textAlign: 'center',
                                         }}>
-                                            <thead>
-                                                <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                    <th style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        backgroundColor: '#e5e7eb', 
-                                                        textAlign: 'center',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>اطلاعات اولیه / شرح هزینه (ریال)</th>
-                                                    <th style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        backgroundColor: '#e5e7eb', 
-                                                        textAlign: 'center',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>مبلغ واحد (ریال)</th>
-                                                    <th style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        backgroundColor: '#e5e7eb', 
-                                                        textAlign: 'center',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>مبلغ کل (ریال)</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                {block.rows.map((row, rowIdx) => {
-                                                    if (row.kind === 'meta') {
-                                                        return (
-                                                            <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                                <td style={{ 
+                                            {block.title && (
+                                                <h3 style={{
+                                                    fontSize: '18px',
+                                                    fontWeight: 'bold',
+                                                    textAlign: 'center',
+                                                    marginBottom: '12px',
+                                                    borderBottom: '1px solid #000',
+                                                    paddingBottom: '4px',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                }}>
+                                                    {block.title}
+                                                </h3>
+                                            )}
+                                            
+                                            {/* جدول اطلاعات اولیه - با ستون‌های دینامیک برای هر تور */}
+                                            {metaRows.length > 0 && (
+                                                <table style={{
+                                                    width: '100%',
+                                                    maxWidth: '100%',
+                                                    borderCollapse: 'collapse',
+                                                    tableLayout: 'fixed',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    margin: '0 auto 12px auto',
+                                                    fontSize: `${fontSize}px`,
+                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    boxSizing: 'border-box',
+                                                }}>
+                                                    <thead>
+                                                        <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                            <th style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                backgroundColor: '#e5e7eb', 
+                                                                textAlign: 'center',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>اطلاعات اولیه</th>
+                                                            {Array.from({ length: numTours }, (_, tourIdx) => (
+                                                                <th key={tourIdx} style={{ 
                                                                     border: '1px solid #000', 
                                                                     padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}>{row.label}: {row.value}</td>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    whiteSpace: 'nowrap',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}></td>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    whiteSpace: 'nowrap',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}></td>
-                                                            </tr>
-                                                        );
-                                                    } else if (row.kind === 'categoryHeader') {
-                                                        return (
-                                                            <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                                <td colSpan={3} style={{
-                                                                    border: '1px solid #000',
-                                                                    padding: '16px 16px 42px 16px',
-                                                                    backgroundColor: '#f3f4f6',
-                                                                    fontWeight: 'bold',
+                                                                    backgroundColor: '#e5e7eb', 
                                                                     textAlign: 'center',
                                                                     direction: 'rtl',
                                                                     unicodeBidi: 'isolate',
@@ -2605,107 +2555,253 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                                     fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
-                                                                }}>
-                                                                    {row.category}
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    } else if (row.kind === 'cost') {
-                                                        const unitAmountStr = row.unitAmount?.toLocaleString('fa-IR') || '';
-                                                        const totalAmountStr = row.totalAmount?.toLocaleString('fa-IR') || '';
-                                                        return (
-                                                            <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    whiteSpace: 'normal',
-                                                                    wordWrap: 'break-word',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}>{row.description}</td>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    whiteSpace: 'nowrap',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}>{unitAmountStr}</td>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    whiteSpace: 'nowrap',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}>{totalAmountStr}</td>
-                                                            </tr>
-                                                        );
-                                                    }
-                                                    return null;
-                                                })}
-                                                <tr style={{ backgroundColor: '#3b82f6', direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                    <td style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        textAlign: 'center', 
-                                                        fontWeight: 'bold', 
-                                                        color: '#ffffff',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>جمع کل</td>
-                                                    <td style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        textAlign: 'center', 
-                                                        fontWeight: 'bold', 
-                                                        color: '#ffffff',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>-</td>
-                                                    <td style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        textAlign: 'right', 
-                                                        whiteSpace: 'nowrap',
-                                                        fontWeight: 'bold', 
-                                                        color: '#ffffff',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize + 1}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>
-                                                        {block.rows
-                                                            .filter(row => row.kind === 'cost' && row.totalAmount)
-                                                            .reduce((sum, row) => sum + (row.totalAmount || 0), 0)
-                                                            .toLocaleString('fa-IR')}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                                                }}>مقدار تور {tourIdx + 1}</th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                        {metaRows.map((row, rowIdx) => {
+                                                            // پیدا کردن مقدار مربوط به هر تور
+                                                            const getTourValue = (tourIdx: number) => {
+                                                                if (!invoiceData.tourData || tourIdx >= invoiceData.tourData.length) return '';
+                                                                const tour = invoiceData.tourData[tourIdx];
+                                                                switch (row.label) {
+                                                                    case 'شماره بارنامه':
+                                                                        return tour.billOfLadingNumber || '-';
+                                                                    case 'مبدأ':
+                                                                        return tour.origin || '-';
+                                                                    case 'مقاصد':
+                                                                        return tour.destinations || '-';
+                                                                    case 'پلاک خودرو':
+                                                                        return tour.vehiclePlate || '-';
+                                                                    case 'تاریخ صدور بارنامه':
+                                                                        return tour.billOfLadingDate || '-';
+                                                                    case 'تاریخ محاسبه':
+                                                                        return tour.calculationDate || '-';
+                                                                    case 'پیمایش مصوب (کیلومتر)':
+                                                                        return tour.approvedKm ? tour.approvedKm.toLocaleString('fa-IR') : '-';
+                                                                    case 'پیمایش مازاد (کیلومتر)':
+                                                                        return tour.excessKm ? tour.excessKm.toLocaleString('fa-IR') : '-';
+                                                                    case 'پیمایش کل (کیلومتر)':
+                                                                        return tour.totalKm ? tour.totalKm.toLocaleString('fa-IR') : '-';
+                                                                    case 'ماموریت مصوب (روز)':
+                                                                        return tour.approvedMissionDays ? tour.approvedMissionDays.toLocaleString('fa-IR') : '-';
+                                                                    case 'ماموریت مازاد (روز)':
+                                                                        return tour.excessMissionDays ? tour.excessMissionDays.toLocaleString('fa-IR') : '-';
+                                                                    default:
+                                                                        return tourIdx === 0 ? row.value : '';
+                                                                }
+                                                            };
+                                                            
+                                                            return (
+                                                                <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                                    <td style={{ 
+                                                                        border: '1px solid #000', 
+                                                                        padding: '16px 16px 42px 16px', 
+                                                                        textAlign: 'right',
+                                                                        direction: 'rtl',
+                                                                        unicodeBidi: 'isolate',
+                                                                        verticalAlign: 'middle',
+                                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                        fontSize: `${fontSize + 1}px`,
+                                                                        lineHeight: '1.5',
+                                                                    }}>{row.label}</td>
+                                                                    {Array.from({ length: numTours }, (_, tourIdx) => (
+                                                                        <td key={tourIdx} style={{ 
+                                                                            border: '1px solid #000', 
+                                                                            padding: '16px 16px 42px 16px', 
+                                                                            textAlign: 'right',
+                                                                            whiteSpace: 'nowrap',
+                                                                            direction: 'rtl',
+                                                                            unicodeBidi: 'isolate',
+                                                                            verticalAlign: 'middle',
+                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            lineHeight: '1.5',
+                                                                        }}>
+                                                                            {getTourValue(tourIdx)}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            )}
+                                            
+                                            {/* جدول هزینه‌ها - با 3 ستون ثابت */}
+                                            {costRows.length > 0 && (
+                                                <table style={{
+                                                    width: '100%',
+                                                    maxWidth: '100%',
+                                                    borderCollapse: 'collapse',
+                                                    tableLayout: 'fixed',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    margin: '0 auto 12px auto',
+                                                    fontSize: `${fontSize}px`,
+                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    boxSizing: 'border-box',
+                                                }}>
+                                                    <thead>
+                                                        <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                            <th style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                backgroundColor: '#e5e7eb', 
+                                                                textAlign: 'center',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>شرح هزینه (ریال)</th>
+                                                            <th style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                backgroundColor: '#e5e7eb', 
+                                                                textAlign: 'center',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>مبلغ واحد (ریال)</th>
+                                                            <th style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                backgroundColor: '#e5e7eb', 
+                                                                textAlign: 'center',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>مبلغ کل (ریال)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                        {costRows.map((row, rowIdx) => {
+                                                            if (row.kind === 'categoryHeader') {
+                                                                return (
+                                                                    <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                                        <td colSpan={3} style={{
+                                                                            border: '1px solid #000',
+                                                                            padding: '16px 16px 42px 16px',
+                                                                            backgroundColor: '#f3f4f6',
+                                                                            fontWeight: 'bold',
+                                                                            textAlign: 'center',
+                                                                            direction: 'rtl',
+                                                                            unicodeBidi: 'isolate',
+                                                                            verticalAlign: 'middle',
+                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            lineHeight: '1.5',
+                                                                        }}>
+                                                                            {row.category}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            } else if (row.kind === 'cost') {
+                                                                const unitAmountStr = row.unitAmount?.toLocaleString('fa-IR') || '';
+                                                                const totalAmountStr = row.totalAmount?.toLocaleString('fa-IR') || '';
+                                                                return (
+                                                                    <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                                        <td style={{ 
+                                                                            border: '1px solid #000', 
+                                                                            padding: '16px 16px 42px 16px', 
+                                                                            textAlign: 'right',
+                                                                            whiteSpace: 'normal',
+                                                                            wordWrap: 'break-word',
+                                                                            direction: 'rtl',
+                                                                            unicodeBidi: 'isolate',
+                                                                            verticalAlign: 'middle',
+                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            lineHeight: '1.5',
+                                                                        }}>{row.description}</td>
+                                                                        <td style={{ 
+                                                                            border: '1px solid #000', 
+                                                                            padding: '16px 16px 42px 16px', 
+                                                                            textAlign: 'right',
+                                                                            whiteSpace: 'nowrap',
+                                                                            direction: 'rtl',
+                                                                            unicodeBidi: 'isolate',
+                                                                            verticalAlign: 'middle',
+                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            lineHeight: '1.5',
+                                                                        }}>{unitAmountStr}</td>
+                                                                        <td style={{ 
+                                                                            border: '1px solid #000', 
+                                                                            padding: '16px 16px 42px 16px', 
+                                                                            textAlign: 'right',
+                                                                            whiteSpace: 'nowrap',
+                                                                            direction: 'rtl',
+                                                                            unicodeBidi: 'isolate',
+                                                                            verticalAlign: 'middle',
+                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            lineHeight: '1.5',
+                                                                        }}>{totalAmountStr}</td>
+                                                                    </tr>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })}
+                                                        <tr style={{ backgroundColor: '#3b82f6', direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                            <td style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                textAlign: 'center', 
+                                                                fontWeight: 'bold', 
+                                                                color: '#ffffff',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>جمع کل</td>
+                                                            <td style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                textAlign: 'center', 
+                                                                fontWeight: 'bold', 
+                                                                color: '#ffffff',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>-</td>
+                                                            <td style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: '16px 16px 42px 16px', 
+                                                                textAlign: 'right', 
+                                                                whiteSpace: 'nowrap',
+                                                                fontWeight: 'bold', 
+                                                                color: '#ffffff',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                lineHeight: '1.5',
+                                                            }}>
+                                                                {costRows
+                                                                    .filter(row => row.kind === 'cost' && row.totalAmount)
+                                                                    .reduce((sum, row) => sum + (row.totalAmount || 0), 0)
+                                                                    .toLocaleString('fa-IR')}
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            )}
                                         
                                         {block.summary && (
                                             <div style={{
@@ -3015,6 +3111,41 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                 });
                 
+                // ساخت داده‌های هر تور برای جدول اطلاعات اولیه
+                const tourData = calculationsArray.map((calc: any) => {
+                    const announcement = announcementsMap.get(calc.announcement_id || calc.announcementId);
+                    const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                    const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                    const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                        (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                            ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                            : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+                    const calculationDate = calc.calculation_date || calc.calculationDate ? 
+                        (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                            ? (calc.calculation_date || calc.calculationDate)
+                            : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
+                    const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                    const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
+                    const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
+                    const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0);
+                    const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0);
+                    
+                    return {
+                        billOfLadingNumber,
+                        origin,
+                        destinations,
+                        vehiclePlate,
+                        billOfLadingDate,
+                        calculationDate,
+                        approvedKm,
+                        excessKm,
+                        totalKm: approvedKm + excessKm,
+                        approvedMissionDays,
+                        excessMissionDays,
+                    };
+                });
+                
                 invoiceDataArray.push({
                     ...invoiceData,
                     driverName: record.driverName,
@@ -3023,6 +3154,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     tourCount: calculationsArray.length,
                     mainDriverCost: mainDriverCost,
                     helperDriverCosts: Array.from(helperCostsByEmployee.values()),
+                    tourData: tourData,
                 });
             }
 
