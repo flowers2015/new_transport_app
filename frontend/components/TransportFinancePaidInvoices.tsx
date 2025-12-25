@@ -2429,10 +2429,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     if (tourCount > 8) {
                         containerWidth = 750;
-                        fontSize = 11;
+                        fontSize = 13; // افزایش از 11 به 13
                     } else if (tourCount > 6) {
                         containerWidth = 800;
-                        fontSize = 12;
+                        fontSize = 14; // افزایش از 12 به 14
+                    } else {
+                        fontSize = 15; // افزایش از 13 به 15
                     }
                     
                     // ساخت یک React component موقت با تنظیمات بهبود یافته
@@ -2475,7 +2477,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         صورتحساب هزینه
                                     </h2>
                                     <div style={{
-                                        fontSize: `${fontSize + 1}px`,
+                                                                    fontSize: `${fontSize + 2}px`,
                                         lineHeight: '1.8',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
@@ -2540,7 +2542,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>اطلاعات اولیه</th>
                                                             {Array.from({ length: numTours }, (_, tourIdx) => (
@@ -2553,7 +2555,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize + 1}px`,
+                                                                    fontSize: `${fontSize + 2}px`,
                                                                     lineHeight: '1.5',
                                                                 }}>مقدار تور {tourIdx + 1}</th>
                                                             ))}
@@ -2603,7 +2605,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                         unicodeBidi: 'isolate',
                                                                         verticalAlign: 'middle',
                                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                        fontSize: `${fontSize + 1}px`,
+                                                                        fontSize: `${fontSize + 2}px`,
                                                                         lineHeight: '1.5',
                                                                     }}>{row.label}</td>
                                                                     {Array.from({ length: numTours }, (_, tourIdx) => (
@@ -2616,7 +2618,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                             unicodeBidi: 'isolate',
                                                                             verticalAlign: 'middle',
                                                                             fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            fontSize: `${fontSize + 2}px`,
                                                                             lineHeight: '1.5',
                                                                         }}>
                                                                             {getTourValue(tourIdx)}
@@ -2654,7 +2656,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>شرح هزینه (ریال)</th>
                                                             <th style={{ 
@@ -2666,7 +2668,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>مبلغ واحد (ریال)</th>
                                                             <th style={{ 
@@ -2678,7 +2680,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>مبلغ کل (ریال)</th>
                                                         </tr>
@@ -2698,7 +2700,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                             unicodeBidi: 'isolate',
                                                                             verticalAlign: 'middle',
                                                                             fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            fontSize: `${fontSize + 2}px`,
                                                                             lineHeight: '1.5',
                                                                         }}>
                                                                             {row.category}
@@ -2720,7 +2722,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                             unicodeBidi: 'isolate',
                                                                             verticalAlign: 'middle',
                                                                             fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            fontSize: `${fontSize + 2}px`,
                                                                             lineHeight: '1.5',
                                                                         }}>{row.description}</td>
                                                                         <td style={{ 
@@ -2732,7 +2734,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                             unicodeBidi: 'isolate',
                                                                             verticalAlign: 'middle',
                                                                             fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            fontSize: `${fontSize + 2}px`,
                                                                             lineHeight: '1.5',
                                                                         }}>{unitAmountStr}</td>
                                                                         <td style={{ 
@@ -2744,7 +2746,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                             unicodeBidi: 'isolate',
                                                                             verticalAlign: 'middle',
                                                                             fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                            fontSize: `${fontSize + 1}px`,
+                                                                            fontSize: `${fontSize + 2}px`,
                                                                             lineHeight: '1.5',
                                                                         }}>{totalAmountStr}</td>
                                                                     </tr>
@@ -2763,7 +2765,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>جمع کل</td>
                                                             <td style={{ 
@@ -2776,7 +2778,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>-</td>
                                                             <td style={{ 
@@ -2790,7 +2792,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                 unicodeBidi: 'isolate',
                                                                 verticalAlign: 'middle',
                                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontSize: `${fontSize + 2}px`,
                                                                 lineHeight: '1.5',
                                                             }}>
                                                                 {costRows
@@ -2810,7 +2812,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 padding: '8px 10px',
                                                 border: '2px solid #3b82f6',
                                                 backgroundColor: '#dbeafe',
-                                                fontSize: `${fontSize + 1}px`,
+                                                                    fontSize: `${fontSize + 2}px`,
                                                 lineHeight: '1.8',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
@@ -2837,10 +2839,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                             </div>
                                         )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                                 
                                 {/* خلاصه تورها - بعد از تمام blocks */}
-                                {invoiceData.tourCount !== undefined && (
+                                {invoiceData.tourCount !== undefined && invoiceData.tourCount > 0 && (
                                     <div style={{
                                         marginTop: '16px',
                                         padding: '12px',
@@ -2852,7 +2855,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                     }}>
                                         <p style={{ 
-                                            fontSize: `${fontSize + 1}px`, 
+                                                                    fontSize: `${fontSize + 2}px`,
                                             fontWeight: 'bold', 
                                             marginBottom: '8px',
                                             direction: 'rtl',
