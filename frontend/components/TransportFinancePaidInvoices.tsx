@@ -3649,41 +3649,462 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     const helperEmployeeId = titleMatch ? titleMatch[1] : '';
                                     const helperName = titleMatch ? titleMatch[2] : '';
                                     
+                                    // ساخت ستون‌های هزینه برای راننده کمکی
+                                    const helperCostRows = helperBlock.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
+                                    const helperCostColumns: Array<{ 
+                                        label: string; 
+                                        category: string;
+                                        tourValues?: number[]; 
+                                        totalAmount?: number; 
+                                        isDepotCount?: boolean;
+                                    }> = [];
+                                    let helperCurrentCategory = '';
+                                    
+                                    helperCostRows.forEach(row => {
+                                        if (row.kind === 'categoryHeader') {
+                                            helperCurrentCategory = row.category || '';
+                                        } else if (row.kind === 'cost') {
+                                            helperCostColumns.push({
+                                                label: row.description || '',
+                                                category: helperCurrentCategory,
+                                                tourValues: row.tourValues || [],
+                                                totalAmount: row.totalAmount || undefined,
+                                                isDepotCount: row.isDepotCount || false,
+                                            });
+                                        }
+                                    });
+                                    
+                                    // ساخت دسته‌بندی‌ها برای راننده کمکی
+                                    const helperCategoryGroups: Array<{ category: string; startIndex: number; count: number }> = [];
+                                    let helperCurrentGroupCategory = '';
+                                    let helperCurrentGroupStart = 0;
+                                    
+                                    helperCostColumns.forEach((col, idx) => {
+                                        if (col.category !== helperCurrentGroupCategory) {
+                                            if (helperCurrentGroupCategory) {
+                                                helperCategoryGroups.push({
+                                                    category: helperCurrentGroupCategory,
+                                                    startIndex: helperCurrentGroupStart,
+                                                    count: idx - helperCurrentGroupStart
+                                                });
+                                            }
+                                            helperCurrentGroupCategory = col.category;
+                                            helperCurrentGroupStart = idx;
+                                        }
+                                    });
+                                    if (helperCurrentGroupCategory) {
+                                        helperCategoryGroups.push({
+                                            category: helperCurrentGroupCategory,
+                                            startIndex: helperCurrentGroupStart,
+                                            count: helperCostColumns.length - helperCurrentGroupStart
+                                        });
+                                    }
+                                    
+                                    // پیدا کردن تورهای مربوط به این راننده کمکی
+                                    const helperCalculations = (invoiceData as any).helperCalculationsByEmployeeId?.get(helperEmployeeId) || [];
+                                    const helperTourData = helperCalculations.map((calc: any) => {
+                                        const announcement = (invoiceData as any).announcementsMap?.get(calc.announcement_id || calc.announcementId);
+                                        const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                        const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                                        const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                                        const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                                        return {
+                                            billOfLadingNumber,
+                                            origin,
+                                            destinations,
+                                            vehiclePlate,
+                                        };
+                                    });
+                                    const helperNumTours = helperTourData.length;
+                                    
                                     return (
-                                        <div key={helperIdx} style={{ marginTop: '24px' }}>
+                                        <div key={helperIdx} style={{ marginTop: '32px' }}>
                                             <h4 style={{
-                                                fontSize: `${fontSize + 2}px`,
+                                                fontSize: `${fontSize + 3}px`,
                                                 fontWeight: 'bold',
-                                                marginBottom: '12px',
+                                                marginBottom: '16px',
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                                 color: '#16a34a',
                                                 borderBottom: '2px solid #16a34a',
-                                                paddingBottom: '6px',
+                                                paddingBottom: '8px',
                                             }}>
                                                 {helperBlock.title}
                                             </h4>
-                                            {/* نمایش خلاصه هزینه راننده کمکی */}
-                                            <div style={{
-                                                padding: '12px',
-                                                backgroundColor: '#f8fafc',
-                                                border: '1px solid #cbd5e1',
-                                                borderRadius: '4px',
+                                            
+                                            {/* جدول افقی راننده کمکی */}
+                                            <table style={{
+                                                width: '100%',
+                                                maxWidth: '100%',
+                                                borderCollapse: 'collapse',
+                                                tableLayout: 'fixed',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
+                                                margin: '0 auto 12px auto',
+                                                fontSize: `${fontSize}px`,
+                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                boxSizing: 'border-box',
                                             }}>
-                                                <p style={{ 
-                                                    fontSize: `${fontSize}px`, 
-                                                    marginBottom: '8px',
+                                                <thead>
+                                                    {/* ردیف اول: دسته‌بندی‌ها */}
+                                                    <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                        <th colSpan={5} style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize + 1}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                        }}>اطلاعات اولیه</th>
+                                                        {helperCategoryGroups.map((group, groupIdx) => (
+                                                            <th key={groupIdx} colSpan={group.count} style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: cellPadding, 
+                                                                backgroundColor: '#e5e7eb', 
+                                                                textAlign: 'center',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize + 1}px`,
+                                                                fontWeight: 'bold',
+                                                                lineHeight: '1.4',
+                                                            }}>{group.category}</th>
+                                                        ))}
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize + 1}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                        }}>جمع کل (ریال)</th>
+                                                    </tr>
+                                                    {/* ردیف دوم: عناوین ستون‌ها */}
+                                                    <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>ردیف</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>شماره بارنامه</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>مبدأ</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>مقصد</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>پلاک خودرو</th>
+                                                        {helperCostColumns.map((col, colIdx) => (
+                                                            <th key={colIdx} style={{ 
+                                                                border: '1px solid #000', 
+                                                                padding: cellPadding, 
+                                                                backgroundColor: '#e5e7eb', 
+                                                                textAlign: 'center',
+                                                                direction: 'rtl',
+                                                                unicodeBidi: 'isolate',
+                                                                verticalAlign: 'middle',
+                                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                fontSize: `${fontSize}px`,
+                                                                fontWeight: 'bold',
+                                                                lineHeight: '1.4',
+                                                                whiteSpace: 'nowrap',
+                                                            }}>{col.label}</th>
+                                                        ))}
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>جمع کل (ریال)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                    {Array.from({ length: helperNumTours }, (_, tourIdx) => {
+                                                        const tour = helperTourData[tourIdx];
+                                                        // محاسبه جمع کل برای این تور
+                                                        const tourTotal = helperCostColumns
+                                                            .filter(col => !col.isDepotCount && col.tourValues && col.tourValues[tourIdx] !== undefined)
+                                                            .reduce((sum, col) => sum + (col.tourValues?.[tourIdx] || 0), 0);
+                                                        
+                                                        return (
+                                                            <tr key={tourIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'center',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'nowrap',
+                                                                }}>{tourIdx + 1}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '120px',
+                                                                }}>{tour?.billOfLadingNumber || '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '100px',
+                                                                }}>{tour?.origin || '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '150px',
+                                                                }}>{tour?.destinations || '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '120px',
+                                                                }}>{tour?.vehiclePlate || '-'}</td>
+                                                                {helperCostColumns.map((col, colIdx) => {
+                                                                    const tourValue = col.tourValues?.[tourIdx];
+                                                                    const tourValueStr = tourValue !== undefined && tourValue !== null ? tourValue.toLocaleString('fa-IR') : '-';
+                                                                    return (
+                                                                        <td key={colIdx} style={{ 
+                                                                            border: '1px solid #000', 
+                                                                            padding: cellPadding, 
+                                                                            textAlign: 'right',
+                                                                            whiteSpace: 'nowrap',
+                                                                            direction: 'rtl',
+                                                                            unicodeBidi: 'isolate',
+                                                                            verticalAlign: 'middle',
+                                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                            fontSize: `${fontSize}px`,
+                                                                            lineHeight: '1.4',
+                                                                        }}>{tourValueStr}</td>
+                                                                    );
+                                                                })}
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    whiteSpace: 'nowrap',
+                                                                    fontWeight: 'bold',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                }}>{tourTotal.toLocaleString('fa-IR')}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                    {/* ردیف جمع کل راننده کمکی */}
+                                                    <tr style={{ backgroundColor: '#16a34a', direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                        <td colSpan={5} style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            textAlign: 'center', 
+                                                            fontWeight: 'bold', 
+                                                            color: '#ffffff',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize + 1}px`,
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>جمع کل</td>
+                                                        {helperCostColumns.map((col, colIdx) => {
+                                                            if (col.isDepotCount) {
+                                                                return (
+                                                                    <td key={colIdx} style={{ 
+                                                                        border: '1px solid #000', 
+                                                                        padding: cellPadding, 
+                                                                        textAlign: 'center', 
+                                                                        fontWeight: 'bold', 
+                                                                        color: '#ffffff',
+                                                                        direction: 'rtl',
+                                                                        unicodeBidi: 'isolate',
+                                                                        verticalAlign: 'middle',
+                                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                        fontSize: `${fontSize}px`,
+                                                                        lineHeight: '1.4',
+                                                                        whiteSpace: 'nowrap',
+                                                                    }}>-</td>
+                                                                );
+                                                            }
+                                                            const colTotal = col.tourValues?.reduce((sum, val) => sum + (val || 0), 0) || 0;
+                                                            return (
+                                                                <td key={colIdx} style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    whiteSpace: 'nowrap',
+                                                                    fontWeight: 'bold', 
+                                                                    color: '#ffffff',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                }}>{colTotal.toLocaleString('fa-IR')}</td>
+                                                            );
+                                                        })}
+                                                        <td style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            textAlign: 'right',
+                                                            whiteSpace: 'nowrap',
+                                                            fontWeight: 'bold', 
+                                                            color: '#ffffff',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize + 1}px`,
+                                                            lineHeight: '1.4',
+                                                        }}>
+                                                            {helperCostColumns
+                                                                .filter(col => !col.isDepotCount && col.totalAmount)
+                                                                .reduce((sum, col) => sum + (col.totalAmount || 0), 0)
+                                                                .toLocaleString('fa-IR')}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                            
+                                            {/* خلاصه راننده کمکی */}
+                                            {helperBlock.summary && (
+                                                <div style={{
+                                                    width: '100%',
+                                                    maxWidth: '100%',
+                                                    padding: '8px 10px',
+                                                    border: '2px solid #16a34a',
+                                                    backgroundColor: '#dcfce7',
+                                                    fontSize: `${fontSize + 1}px`,
+                                                    lineHeight: '1.8',
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    boxSizing: 'border-box',
+                                                    margin: '8px auto 0 auto',
                                                 }}>
-                                                    جمع کل هزینه راننده کمکی: <span style={{ fontWeight: 'bold' }}>{helperBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
-                                                </p>
-                                            </div>
+                                                    <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
+                                                        جمع کل هزینه راننده کمکی: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{helperBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}
