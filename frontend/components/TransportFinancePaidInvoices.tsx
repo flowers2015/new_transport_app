@@ -1736,7 +1736,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     };
 
     // ============================================================================
-    // روش 1: استفاده از jsPDF + AutoTable (PDF مستقیم - بدون html2canvas)
+    // روش 1: استفاده از jsPDF + html2canvas (برای پشتیبانی کامل از فارسی)
     // ============================================================================
     const exportInvoicesToPDFWithAutoTable = async (invoiceDataArray: Array<{
         blocks: Array<{
@@ -1760,208 +1760,125 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         }>;
     }>) => {
         try {
-            // Dynamic import برای autoTable
-            let autoTable: any = null;
-            try {
-                // استفاده از dynamic import
-                const autoTableModule = await import('jspdf-autotable');
-                autoTable = autoTableModule.default || autoTableModule || (autoTableModule as any).autoTable;
-            } catch (importError: any) {
-                console.error('❌ [PDF_AUTOTABLE] jspdf-autotable نصب نشده است:', importError);
-                alert('کتابخانه jspdf-autotable نصب نشده است.\n\nلطفاً در terminal اجرا کنید:\ncd frontend\nnpm install jspdf-autotable\n\nسپس dev server را restart کنید.');
-                return;
-            }
+            console.log('📄 [PDF_HTML2CANVAS] شروع تولید PDF با html2canvas');
             
-            if (!autoTable || typeof autoTable !== 'function') {
-                alert('کتابخانه jspdf-autotable بارگذاری نشد. لطفاً مطمئن شوید که نصب شده است:\nnpm install jspdf-autotable');
-                return;
-            }
+            // ایجاد PDF
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+            const margin = 10; // 1cm margins
 
-            const doc = new jsPDF('p', 'mm', 'a4');
-            // تلاش برای تنظیم زبان فارسی (اگر پشتیبانی شود)
-            try {
-                doc.setLanguage('fa');
-            } catch (e) {
-                // اگر setLanguage موجود نباشد، ادامه می‌دهیم
-            }
-
+            // برای هر صورتحساب
             for (let blockIdx = 0; blockIdx < invoiceDataArray.length; blockIdx++) {
                 const invoiceData = invoiceDataArray[blockIdx];
                 
+                // برای هر بلوک (مثلاً راننده اصلی و راننده کمکی)
                 for (let dataBlockIdx = 0; dataBlockIdx < invoiceData.blocks.length; dataBlockIdx++) {
                     const block = invoiceData.blocks[dataBlockIdx];
                     
                     // اضافه کردن صفحه جدید اگر لازم باشد
                     if (blockIdx > 0 || dataBlockIdx > 0) {
-                        doc.addPage();
+                        pdf.addPage();
                     }
 
-                    // اضافه کردن عنوان
-                    doc.setFontSize(18);
-                    doc.setFont('Vazir', 'bold');
-                    const titleWidth = doc.getTextWidth(block.title);
-                    const pageWidth = doc.internal.pageSize.getWidth();
-                    doc.text(block.title, pageWidth - titleWidth - 10, 20, { align: 'right' });
+                    // ساخت HTML برای این بلوک
+                    const htmlContent = renderInvoiceHTMLStandardV2({ blocks: [block] });
+                    
+                    // ایجاد یک div موقت برای رندر کردن HTML
+                    const tempDiv = document.createElement('div');
+                    tempDiv.style.position = 'absolute';
+                    tempDiv.style.left = '-9999px';
+                    tempDiv.style.top = '0';
+                    tempDiv.style.width = '900px';
+                    tempDiv.style.opacity = '1';
+                    tempDiv.style.visibility = 'visible';
+                    tempDiv.innerHTML = htmlContent;
+                    document.body.appendChild(tempDiv);
 
-                    // آماده کردن داده‌های جدول
-                    const tableData: string[][] = [];
-                    let currentCategory = '';
+                    // پیدا کردن invoice-root
+                    const invoiceElement = tempDiv.querySelector('#invoice-root') as HTMLElement;
+                    if (!invoiceElement) {
+                        console.error('❌ [PDF_HTML2CANVAS] invoice-root پیدا نشد');
+                        document.body.removeChild(tempDiv);
+                        continue;
+                    }
 
-                    block.rows.forEach((row) => {
-                        if (row.kind === 'meta') {
-                            tableData.push([
-                                row.label || '',
-                                row.value || '',
-                                '',
-                                ''
-                            ]);
-                        } else if (row.kind === 'categoryHeader') {
-                            // ردیف دسته‌بندی را به عنوان یک ردیف جداگانه اضافه می‌کنیم
-                            currentCategory = row.category || '';
-                            tableData.push([
-                                row.category || '',
-                                '',
-                                '',
-                                ''
-                            ]);
-                        } else if (row.kind === 'cost') {
-                            const unitAmountStr = row.unitAmount !== null && row.unitAmount !== undefined
-                                ? (typeof row.unitAmount === 'number' ? row.unitAmount.toLocaleString('fa-IR') : '')
-                                : '';
-                            const totalAmountStr = row.totalAmount !== null && row.totalAmount !== undefined
-                                ? (typeof row.totalAmount === 'number' ? row.totalAmount.toLocaleString('fa-IR') : '')
-                                : '';
-                            
-                            tableData.push([
-                                row.category || '',
-                                row.description || '',
-                                unitAmountStr,
-                                totalAmountStr
-                            ]);
+                    // تنظیم استایل‌های اضافی برای html2canvas
+                    invoiceElement.style.width = '900px';
+                    invoiceElement.style.maxWidth = '900px';
+                    invoiceElement.style.margin = '0 auto';
+                    invoiceElement.style.overflow = 'visible';
+                    invoiceElement.style.visibility = 'visible';
+                    invoiceElement.style.opacity = '1';
+
+                    // صبر برای رندر شدن کامل
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // تبدیل به canvas
+                    const canvas = await html2canvas(invoiceElement, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        allowTaint: true,
+                        logging: false,
+                        windowWidth: 900,
+                        windowHeight: invoiceElement.scrollHeight,
+                        onclone: (clonedDoc) => {
+                            const clonedInvoice = clonedDoc.querySelector('#invoice-root') as HTMLElement;
+                            if (clonedInvoice) {
+                                clonedInvoice.style.width = '900px';
+                                clonedInvoice.style.maxWidth = '900px';
+                                clonedInvoice.style.margin = '0 auto';
+                                clonedInvoice.style.overflow = 'visible';
+                                clonedInvoice.style.visibility = 'visible';
+                                clonedInvoice.style.opacity = '1';
+                                
+                                // اعمال استایل‌های اضافی برای همه عناصر
+                                const allElements = clonedInvoice.querySelectorAll('*');
+                                allElements.forEach((el: any) => {
+                                    if (el.style) {
+                                        el.style.visibility = 'visible';
+                                        el.style.opacity = '1';
+                                    }
+                                });
+                            }
                         }
                     });
 
-                    // محاسبه جمع کل
-                    const totalAmount = block.rows
-                        .filter(row => row.kind === 'cost' && row.totalAmount !== null && row.totalAmount !== undefined)
-                        .reduce((sum, row) => sum + (typeof row.totalAmount === 'number' ? row.totalAmount : 0), 0);
-
-                    tableData.push(['جمع کل', '', '', totalAmount.toLocaleString('fa-IR')]);
-
-                    // ساخت جدول با autoTable
-                    try {
-                        autoTable(doc, {
-                            head: [['دسته‌بندی', 'شرح هزینه (ریال)', 'مبلغ واحد (ریال)', 'مبلغ کل (ریال)']],
-                            body: tableData,
-                            startY: 30,
-                            styles: {
-                                font: 'helvetica', // autoTable از Vazir پشتیبانی نمی‌کند، از helvetica استفاده می‌کنیم
-                                fontSize: 10,
-                                textColor: [0, 0, 0],
-                                halign: 'right',
-                                valign: 'middle',
-                                cellPadding: 3,
-                            },
-                            headStyles: {
-                                fillColor: [30, 41, 59], // #1e293b
-                                textColor: [255, 255, 255],
-                                fontStyle: 'bold',
-                                halign: 'center',
-                            },
-                            columnStyles: {
-                                0: { halign: 'center' }, // دسته‌بندی - وسط چین
-                                1: { halign: 'right' }, // شرح هزینه - راست چین
-                                2: { halign: 'right' }, // مبلغ واحد - راست چین
-                                3: { halign: 'right' }, // مبلغ کل - راست چین
-                            },
-                            didParseCell: function (data: any) {
-                                const rowIndex = data.row.index;
-                                const row = tableData[rowIndex];
-                                
-                                // ردیف دسته‌بندی (ردیف‌هایی که فقط ستون اول پر است و بقیه خالی)
-                                if (rowIndex < tableData.length - 1 && row && row[0] && !row[1] && !row[2] && !row[3]) {
-                                    // این یک ردیف دسته‌بندی است
-                                    data.cell.styles.fillColor = [243, 244, 246]; // #f3f4f6
-                                    data.cell.styles.fontStyle = 'bold';
-                                    data.cell.styles.halign = 'center';
-                                    
-                                    // merge کردن تمام ستون‌ها برای ردیف دسته‌بندی
-                                    if (data.column.index === 0) {
-                                        data.cell.colSpan = 4;
-                                        data.cell.text = row[0]; // متن دسته‌بندی
-                                    } else {
-                                        // سایر ستون‌ها را null می‌کنیم تا merge شوند
-                                        data.cell = null;
-                                    }
-                                }
-                                // ردیف جمع کل (آخرین ردیف)
-                                else if (rowIndex === tableData.length - 1) {
-                                    // فقط ستون آخر (مبلغ کل) را highlight می‌کنیم
-                                    if (data.column.index === 3) {
-                                        data.cell.styles.fillColor = [59, 130, 246]; // #3b82f6
-                                        data.cell.styles.textColor = [255, 255, 255];
-                                        data.cell.styles.fontStyle = 'bold';
-                                    } else {
-                                        data.cell.styles.fillColor = [243, 244, 246]; // #f3f4f6
-                                        data.cell.styles.fontStyle = 'bold';
-                                    }
-                                }
-                                // ردیف‌های معمولی (cost)
-                                else if (row && row[1] && row[2] && row[3]) {
-                                    // ستون دسته‌بندی - وسط چین
-                                    if (data.column.index === 0) {
-                                        data.cell.styles.halign = 'center';
-                                    }
-                                    // ستون‌های عددی - راست چین
-                                    if (data.column.index === 2 || data.column.index === 3) {
-                                        data.cell.styles.halign = 'right';
-                                    }
-                                }
-                            },
-                            margin: { top: 30, right: 10, bottom: 10, left: 10 },
-                        });
-                    } catch (autoTableError) {
-                        console.error('❌ [PDF_AUTOTABLE] خطا در ساخت جدول:', autoTableError);
-                        throw autoTableError; // خطا را propagate می‌کنیم
+                    // محاسبه ابعاد تصویر برای PDF
+                    const imgWidth = pageWidth - (2 * margin);
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                    
+                    // اضافه کردن تصویر به PDF
+                    const imgData = canvas.toDataURL('image/png');
+                    
+                    // اگر تصویر از یک صفحه بیشتر است، آن را تقسیم می‌کنیم
+                    let heightLeft = imgHeight;
+                    let position = margin;
+                    
+                    // اضافه کردن تصویر اول
+                    pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+                    heightLeft -= (pageHeight - (2 * margin));
+                    
+                    // اضافه کردن صفحات اضافی اگر لازم باشد
+                    while (heightLeft > 0) {
+                        pdf.addPage();
+                        position = heightLeft - imgHeight + margin;
+                        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+                        heightLeft -= (pageHeight - (2 * margin));
                     }
 
-                    // اضافه کردن بخش summary
-                    const finalY = (doc as any).lastAutoTable?.finalY || 100;
-                    const summaryY = finalY + 10;
-
-                    doc.setFillColor(219, 234, 254); // #dbeafe
-                    doc.setDrawColor(59, 130, 246); // #3b82f6
-                    doc.setLineWidth(0.5);
-                    doc.roundedRect(10, summaryY, pageWidth - 20, 40, 2, 2, 'FD');
-
-                    doc.setFontSize(10);
-                    doc.setTextColor(0, 0, 0);
-                    doc.text(`جمع کل هزینه سفر: ${block.summary.totalTripCost.toLocaleString('fa-IR')} ریال`, 
-                        pageWidth - 15, summaryY + 8, { align: 'right' });
-                    
-                    if (block.summary.deductionsAmount && block.summary.deductionsAmount > 0) {
-                        doc.text(`${block.summary.deductionsTitle || 'کسور'}: ${block.summary.deductionsAmount.toLocaleString('fa-IR')} ریال`, 
-                            pageWidth - 15, summaryY + 15, { align: 'right' });
-                    }
-                    
-                    doc.setFont('Vazir', 'bold');
-                    doc.text(`مبلغ قابل پرداخت: ${block.summary.payableAmount.toLocaleString('fa-IR')} ریال`, 
-                        pageWidth - 15, summaryY + 22, { align: 'right' });
-                    
-                    if (block.summary.notes) {
-                        doc.setFont('Vazir', 'normal');
-                        doc.setFontSize(9);
-                        doc.text(`توضیحات: ${block.summary.notes}`, 
-                            pageWidth - 15, summaryY + 30, { align: 'right' });
-                    }
+                    // حذف div موقت
+                    document.body.removeChild(tempDiv);
                 }
             }
 
             // ذخیره PDF
-            doc.save(`صورتحساب_های_پرداخت_شده_${new Date().toISOString().split('T')[0]}.pdf`);
-            console.log('✅ [PDF_AUTOTABLE] PDF با موفقیت تولید شد');
+            const filename = `صورتحساب_های_پرداخت_شده_${new Date().toISOString().split('T')[0]}.pdf`;
+            pdf.save(filename);
+            console.log('✅ [PDF_HTML2CANVAS] PDF با موفقیت تولید شد');
         } catch (error) {
-            console.error('❌ [PDF_AUTOTABLE] خطا:', error);
+            console.error('❌ [PDF_HTML2CANVAS] خطا:', error);
             alert('خطا در تولید PDF. لطفاً دوباره تلاش کنید.');
         }
     };
