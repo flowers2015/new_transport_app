@@ -910,8 +910,6 @@ async function createFreightAnnouncement(req, res) {
       ? destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0)
       : 0;
 
-    // userId already extracted from req.user above (line 472)
-    
     const insertAnnouncementQuery = `
       INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
@@ -1044,7 +1042,7 @@ async function createFreightAnnouncement(req, res) {
 
     // ثبت رویداد CREATED در تاریخچه - فرمت: "username - name - role"
     // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
-    // userId قبلاً در خط 797 تعریف شده
+    // userId قبلاً در خط 864 تعریف شده
     let userFullName = '';
     if (userId) {
       try {
