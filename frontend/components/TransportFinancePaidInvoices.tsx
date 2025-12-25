@@ -3119,41 +3119,43 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
                     const totalColumns = 5 + costColumnsCount + 1; // 5 ستون اطلاعات اولیه + ستون‌های هزینه + جمع کل
                     
-                    // محاسبه عرض و فونت دینامیک بر اساس تعداد ستون‌ها و تورها
-                    let containerWidth = 1200;
+                    // محاسبه عرض و فونت دینامیک - استفاده از عرض کامل صفحه
+                    // برای html2canvas بهتر است از عرض ثابت استفاده کنیم که بعداً با scale تنظیم می‌شود
+                    let containerWidth = 2100; // عرض بیشتر برای استفاده بهتر از فضا
                     let fontSize = 13;
-                    let cellPadding = '10px 8px';
+                    let cellPadding = '14px 12px'; // padding بیشتر برای جلوگیری از برخورد به حاشیه
                     
                     // محاسبه بر اساس تعداد ستون‌ها
                     if (totalColumns > 20) {
-                        containerWidth = 1800;
-                        fontSize = 10;
-                        cellPadding = '8px 6px';
-                    } else if (totalColumns > 15) {
-                        containerWidth = 1600;
+                        containerWidth = 2400;
                         fontSize = 11;
-                        cellPadding = '9px 7px';
-                    } else if (totalColumns > 12) {
-                        containerWidth = 1400;
+                        cellPadding = '12px 10px';
+                    } else if (totalColumns > 15) {
+                        containerWidth = 2200;
                         fontSize = 12;
-                        cellPadding = '10px 8px';
+                        cellPadding = '13px 11px';
+                    } else if (totalColumns > 12) {
+                        containerWidth = 2100;
+                        fontSize = 13;
+                        cellPadding = '14px 12px';
                     }
                     
                     // محاسبه بر اساس تعداد تورها
                     if (numTours > 10) {
-                        containerWidth = Math.max(containerWidth, 1600);
+                        containerWidth = Math.max(containerWidth, 2400);
                         fontSize = Math.min(fontSize, 11);
-                        cellPadding = '8px 6px';
+                        cellPadding = '12px 10px';
                     } else if (numTours > 8) {
-                        containerWidth = Math.max(containerWidth, 1400);
+                        containerWidth = Math.max(containerWidth, 2200);
                         fontSize = Math.min(fontSize, 12);
+                        cellPadding = '13px 11px';
                     }
                     
                     // ساخت یک React component موقت با ساختار افقی
                     const InvoiceComponent = () => {
                         const allBlocks = invoiceData.blocks || [];
                         const mainBlock = allBlocks[0]; // بلوک راننده اصلی
-                        const helperBlocks = allBlocks.slice(1); // بلوک‌های راننده کمکی
+                        const helperBlocks = sectionType === 'withHelper' ? allBlocks.slice(1) : []; // بلوک‌های راننده کمکی فقط برای تورهای با راننده کمکی
                         const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
                         
                         // ساخت ستون‌های هزینه با دسته‌بندی
@@ -3215,15 +3217,50 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     unicodeBidi: 'isolate',
                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                     width: `${containerWidth}px`,
+                                    maxWidth: '100%',
                                     margin: '0 auto',
                                     backgroundColor: '#ffffff',
                                     color: '#000000',
-                                    padding: '16px',
+                                    padding: '20px',
                                     boxSizing: 'border-box',
                                     position: 'relative' as const,
                                     textAlign: 'center',
                                 }}
                             >
+                                {/* عنوان بخش */}
+                                {sectionType === 'withoutHelper' && (
+                                    <h2 style={{
+                                        fontSize: '20px',
+                                        fontWeight: 'bold',
+                                        marginBottom: '16px',
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        color: '#1e40af',
+                                        borderBottom: '2px solid #1e40af',
+                                        paddingBottom: '8px',
+                                    }}>
+                                        تورهای بدون راننده کمکی
+                                    </h2>
+                                )}
+                                {sectionType === 'withHelper' && (
+                                    <h2 style={{
+                                        fontSize: '20px',
+                                        fontWeight: 'bold',
+                                        marginBottom: '16px',
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        color: '#16a34a',
+                                        borderBottom: '2px solid #16a34a',
+                                        paddingBottom: '8px',
+                                    }}>
+                                        تورهای با راننده کمکی
+                                    </h2>
+                                )}
+                                
                                 {/* اطلاعات راننده در بالای جدول */}
                                 <div style={{
                                     marginBottom: '16px',
@@ -3233,7 +3270,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                 }}>
-                                    <h2 style={{
+                                    <h3 style={{
                                         fontSize: '18px',
                                         fontWeight: 'bold',
                                         marginBottom: '8px',
@@ -3243,7 +3280,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
                                     }}>
                                         صورتحساب هزینه
-                                    </h2>
+                                    </h3>
                                     <div style={{
                                         fontSize: `${fontSize + 2}px`,
                                         lineHeight: '1.8',
@@ -3262,7 +3299,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     width: '100%',
                                     maxWidth: '100%',
                                     borderCollapse: 'collapse',
-                                    tableLayout: 'fixed',
+                                    tableLayout: 'fixed', // fixed برای کنترل بهتر عرض ستون‌ها
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     margin: '0 auto 12px auto',
@@ -4006,67 +4043,135 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     }
                 }));
 
-                // تبدیل به فرمت مورد نیاز
-                const invoiceData = convertToInvoiceDataFormat(
-                    record,
-                    calculationsArray,
-                    announcementsMap,
-                    calcDateFrom,
-                    calcDateTo
-                );
-                
-                // اضافه کردن اطلاعات راننده و خلاصه تورها
-                const mainDriverCost = calculationsArray.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
-                const helperCostsByEmployee = new Map<string, { employeeId: string; name: string; total: number }>();
-                
-                calculationsArray.forEach((calc: any) => {
+                // جدا کردن محاسبات با و بدون راننده کمکی (مثل صفحه لیست پرداخت)
+                const calculationsWithoutHelper = calculationsArray.filter((calc: any) => {
                     const helperId = calc.helper_driver_id || calc.helperDriverId;
-                    const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
-                    const helperName = calc.helper_driver_name || calc.helperDriverName || '';
                     const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
                     const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
                     const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
-                    const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
-                    
-                    if (helperId && helperEmployeeId && helperTotal > 0) {
-                        if (!helperCostsByEmployee.has(helperEmployeeId)) {
-                            helperCostsByEmployee.set(helperEmployeeId, {
-                                employeeId: helperEmployeeId,
-                                name: helperName,
-                                total: 0,
-                            });
+                    return !helperId || (helperAllowance + helperFoodCost + helperExcessMissionCost === 0);
+                });
+                
+                const calculationsWithHelper = calculationsArray.filter((calc: any) => {
+                    const helperId = calc.helper_driver_id || calc.helperDriverId;
+                    const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+                    const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+                    const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+                    return helperId && (helperAllowance + helperFoodCost + helperExcessMissionCost > 0);
+                });
+                
+                // گروه‌بندی محاسبات با راننده کمکی بر اساس کد پرسنلی راننده کمکی
+                const helperCalculationsByEmployeeId = new Map<string, any[]>();
+                calculationsWithHelper.forEach((calc: any) => {
+                    const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+                    if (helperEmployeeId) {
+                        if (!helperCalculationsByEmployeeId.has(helperEmployeeId)) {
+                            helperCalculationsByEmployeeId.set(helperEmployeeId, []);
                         }
-                        const existing = helperCostsByEmployee.get(helperEmployeeId)!;
-                        existing.total += helperTotal;
+                        helperCalculationsByEmployeeId.get(helperEmployeeId)!.push(calc);
                     }
                 });
                 
-                // ساخت داده‌های هر تور برای جدول
-                const tourData = calculationsArray.map((calc: any) => {
-                    const announcement = announcementsMap.get(calc.announcement_id || calc.announcementId);
-                    const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
-                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
-                    const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
-                    const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                // تورهای بدون راننده کمکی
+                if (calculationsWithoutHelper.length > 0) {
+                    const invoiceDataWithoutHelper = convertToInvoiceDataFormat(
+                        record,
+                        calculationsWithoutHelper,
+                        announcementsMap,
+                        calcDateFrom,
+                        calcDateTo
+                    );
                     
-                    return {
-                        billOfLadingNumber,
-                        origin,
-                        destinations,
-                        vehiclePlate,
-                    };
-                });
+                    const mainDriverCostWithoutHelper = calculationsWithoutHelper.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
+                    const tourDataWithoutHelper = calculationsWithoutHelper.map((calc: any) => {
+                        const announcement = announcementsMap.get(calc.announcement_id || calc.announcementId);
+                        const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                        const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                        const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                        const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                        return {
+                            billOfLadingNumber,
+                            origin,
+                            destinations,
+                            vehiclePlate,
+                        };
+                    });
+                    
+                    invoiceDataArray.push({
+                        ...invoiceDataWithoutHelper,
+                        driverName: record.driverName,
+                        employeeId: record.employeeId,
+                        accountNumber: record.accountNumber,
+                        tourCount: calculationsWithoutHelper.length,
+                        mainDriverCost: mainDriverCostWithoutHelper,
+                        helperDriverCosts: [],
+                        tourData: tourDataWithoutHelper,
+                        sectionType: 'withoutHelper', // فلگ برای شناسایی
+                    });
+                }
                 
-                invoiceDataArray.push({
-                    ...invoiceData,
-                    driverName: record.driverName,
-                    employeeId: record.employeeId,
-                    accountNumber: record.accountNumber,
-                    tourCount: calculationsArray.length,
-                    mainDriverCost: mainDriverCost,
-                    helperDriverCosts: Array.from(helperCostsByEmployee.values()),
-                    tourData: tourData,
-                });
+                // تورهای با راننده کمکی
+                if (calculationsWithHelper.length > 0) {
+                    const invoiceDataWithHelper = convertToInvoiceDataFormat(
+                        record,
+                        calculationsWithHelper,
+                        announcementsMap,
+                        calcDateFrom,
+                        calcDateTo
+                    );
+                    
+                    const mainDriverCostWithHelper = calculationsWithHelper.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
+                    const helperCostsByEmployee = new Map<string, { employeeId: string; name: string; total: number }>();
+                    
+                    calculationsWithHelper.forEach((calc: any) => {
+                        const helperId = calc.helper_driver_id || calc.helperDriverId;
+                        const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+                        const helperName = calc.helper_driver_name || calc.helperDriverName || '';
+                        const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+                        const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+                        const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+                        const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+                        
+                        if (helperId && helperEmployeeId && helperTotal > 0) {
+                            if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                                helperCostsByEmployee.set(helperEmployeeId, {
+                                    employeeId: helperEmployeeId,
+                                    name: helperName,
+                                    total: 0,
+                                });
+                            }
+                            const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+                            existing.total += helperTotal;
+                        }
+                    });
+                    
+                    const tourDataWithHelper = calculationsWithHelper.map((calc: any) => {
+                        const announcement = announcementsMap.get(calc.announcement_id || calc.announcementId);
+                        const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                        const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
+                        const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                        const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                        return {
+                            billOfLadingNumber,
+                            origin,
+                            destinations,
+                            vehiclePlate,
+                        };
+                    });
+                    
+                    invoiceDataArray.push({
+                        ...invoiceDataWithHelper,
+                        driverName: record.driverName,
+                        employeeId: record.employeeId,
+                        accountNumber: record.accountNumber,
+                        tourCount: calculationsWithHelper.length,
+                        mainDriverCost: mainDriverCostWithHelper,
+                        helperDriverCosts: Array.from(helperCostsByEmployee.values()),
+                        tourData: tourDataWithHelper,
+                        sectionType: 'withHelper', // فلگ برای شناسایی
+                        helperCalculationsByEmployeeId: helperCalculationsByEmployeeId, // برای ساخت جداول راننده کمکی
+                    });
+                }
             }
 
             if (invoiceDataArray.length === 0) {
