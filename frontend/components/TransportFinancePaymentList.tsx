@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactDOMServer from 'react-dom/server';
 import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
@@ -3728,32 +3729,55 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         return html;
     };
 
-    // دانلود عکس صورتحساب
+    // دانلود عکس صورتحساب - استفاده از روش DOM
     const exportInvoiceToImage = async () => {
         if (!invoiceRef.current || !selectedInvoiceRecord) return;
 
         try {
-            // محدود کردن عرض برای عکس - استفاده از max-width: 90%
-            const invoiceElement = invoiceRef.current as HTMLElement;
-            const originalMaxWidth = invoiceElement.style.maxWidth;
-            const originalWidth = invoiceElement.style.width;
+            console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش DOM');
             
-            // اعمال محدودیت عرض موقت
-            invoiceElement.style.maxWidth = '90%';
-            invoiceElement.style.width = 'auto';
-            invoiceElement.style.margin = '0 auto';
-            
-            // استفاده از تنظیمات بهینه برای کیفیت مناسب
-            const canvas = await html2canvas(invoiceRef.current, {
-                scale: 2, // scale بالاتر برای کیفیت بهتر عکس
-                useCORS: true,
-                logging: false,
-                backgroundColor: '#ffffff',
-                width: invoiceRef.current.scrollWidth,
-                height: invoiceRef.current.scrollHeight,
-                windowWidth: invoiceRef.current.scrollWidth,
-                windowHeight: invoiceRef.current.scrollHeight,
-                onclone: (clonedDoc) => {
+            // ایجاد temp div برای render کردن محتوا
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.top = '0';
+            tempDiv.style.opacity = '1';
+            tempDiv.style.visibility = 'visible';
+            tempDiv.style.backgroundColor = '#ffffff';
+            document.body.appendChild(tempDiv);
+
+            try {
+                // Clone کردن محتوای invoiceRef به temp div
+                const clonedContent = invoiceRef.current.cloneNode(true) as HTMLElement;
+                tempDiv.appendChild(clonedContent);
+                
+                // تنظیم استایل‌های temp div
+                const invoiceElement = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
+                if (invoiceElement) {
+                    invoiceElement.style.width = '100%';
+                    invoiceElement.style.maxWidth = '100%';
+                    invoiceElement.style.margin = '0 auto';
+                    invoiceElement.style.overflow = 'visible';
+                    invoiceElement.style.visibility = 'visible';
+                    invoiceElement.style.opacity = '1';
+                }
+                
+                // انتظار برای render کامل
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // محاسبه ارتفاع دینامیک
+                const calculatedHeight = tempDiv.scrollHeight || 2000;
+                
+                // گرفتن تصویر با html2canvas
+                const canvas = await html2canvas(tempDiv, {
+                    scale: 1.5,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    logging: false,
+                    width: tempDiv.scrollWidth,
+                    height: calculatedHeight,
+                    onclone: (clonedDoc) => {
                     // اضافه کردن style tag برای اطمینان از رنگ مشکی ستون دسته‌بندی
                     const styleTag = clonedDoc.createElement('style');
                     styleTag.textContent = `
@@ -4179,32 +4203,38 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         });
                     }
                 }
-            });
+                });
 
-            // تبدیل به PNG با کیفیت بالا
-            const imgData = canvas.toDataURL('image/png', 1.0);
-            
-            // بازگرداندن استایل‌های اصلی
-            invoiceElement.style.maxWidth = originalMaxWidth;
-            invoiceElement.style.width = originalWidth;
-            invoiceElement.style.margin = '';
-            
-            // ایجاد لینک دانلود
-            const link = document.createElement('a');
-            link.download = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.png`;
-            link.href = imgData;
-            link.click();
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    console.error('❌ [exportInvoiceToImage] Canvas خالی');
+                    document.body.removeChild(tempDiv);
+                    alert('خطا در تولید عکس. لطفاً دوباره تلاش کنید.');
+                    return;
+                }
+
+                // تبدیل به PNG با کیفیت بالا
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                
+                // پاک کردن temp div
+                document.body.removeChild(tempDiv);
+                
+                // ایجاد لینک دانلود
+                const link = document.createElement('a');
+                link.download = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.png`;
+                link.href = imgData;
+                link.click();
+                
+                console.log('✅ [exportInvoiceToImage] عکس با موفقیت تولید شد');
+            } catch (err: any) {
+                console.error('❌ [exportInvoiceToImage] Error:', err);
+                if (document.body.contains(tempDiv)) {
+                    document.body.removeChild(tempDiv);
+                }
+                throw err;
+            }
         } catch (err: any) {
             console.error('❌ [exportInvoiceToImage] Error:', err);
             alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
-            
-            // در صورت خطا هم استایل‌ها را برگردان
-            const invoiceElement = invoiceRef.current as HTMLElement;
-            if (invoiceElement) {
-                invoiceElement.style.maxWidth = '';
-                invoiceElement.style.width = '';
-                invoiceElement.style.margin = '';
-            }
         }
     };
 

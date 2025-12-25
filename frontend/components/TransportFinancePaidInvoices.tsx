@@ -5159,20 +5159,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 </select>
                             </div>
                             <button
-                                onClick={exportAllInvoicesToImagesZipWithRealDOMWrapper}
-                                disabled={filteredRecords.length === 0}
-                                className="px-4 py-2 bg-teal-600 text-white rounded-md text-sm hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="استفاده از Real DOM + html2canvas پیشرفته (عمودی)"
-                            >
-                                دانلود ZIP تصاویر (عمودی)
-                            </button>
-                            <button
                                 onClick={exportAllInvoicesToImagesZipWithRealDOMHorizontalWrapper}
                                 disabled={filteredRecords.length === 0}
                                 className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="استفاده از Real DOM + html2canvas پیشرفته (افقی - هر تور یک ردیف)"
                             >
-                                دانلود ZIP تصاویر (افقی) 🆕
+                                دانلود تصاویر
                             </button>
                             <button
                                 onClick={exportToExcel}
