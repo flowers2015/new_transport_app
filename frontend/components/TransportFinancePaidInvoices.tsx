@@ -2118,8 +2118,6 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 totalAmount: null, // برای تعداد/ماموریت/پیمایش، مبلغ کل نمایش داده نمی‌شود
                 isDepotCount: true, // فلگ برای شناسایی ردیف‌های تعداد/ماموریت/پیمایش
                 tourValues: depotCountValues
-                totalAmount: null, // برای تعداد/ماموریت/پیمایش، مبلغ کل نمایش داده نمی‌شود
-                isDepotCount: true // فلگ برای شناسایی ردیف‌های تعداد/ماموریت/پیمایش
             });
 
             const depotMissionDaysValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0));
