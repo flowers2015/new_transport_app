@@ -1640,9 +1640,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
                             <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif; font-weight: 600;">${row.label || ''}</td>
-                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.value || ''}</td>
-                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
-                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.value || ''}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
                         </tr>
                     `;
                 } else if (row.kind === 'categoryHeader') {
@@ -1665,8 +1665,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         <tr style="direction: rtl; unicode-bidi: isolate;">
                             <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif; font-weight: 600;">${row.category || ''}</td>
                             <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.description || ''}</td>
-                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${unitAmountStr}</td>
-                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmountStr}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${unitAmountStr}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmountStr}</td>
                         </tr>
                     `;
                 }
@@ -1684,7 +1684,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">جمع کل</td>
                     <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
                     <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
-                    <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmount.toLocaleString('fa-IR')}</td>
+                    <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; white-space: nowrap; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmount.toLocaleString('fa-IR')}</td>
                 </tr>
             `;
 
