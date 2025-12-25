@@ -1602,6 +1602,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // بازنویسی کامل با رعایت دقیق همه جزئیات برای html2canvas
     // ============================================================================
     const renderInvoiceHTMLStandardV2 = (invoiceData: {
+        containerWidth?: number; // عرض container (default: 900)
+    } & {
         blocks: Array<{
             title: string;
             rows: Array<{
@@ -1622,7 +1624,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             };
         }>;
     }): string => {
-        const { blocks } = invoiceData;
+        const { blocks, containerWidth = 900 } = invoiceData;
 
         // ساخت HTML برای هر بلوک
         const blocksHTML = blocks.map((block, blockIdx) => {
@@ -1637,17 +1639,17 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     // ردیف متادیتا
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif; font-weight: 600;">${row.label || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.value || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif; font-weight: 600;">${row.label || ''}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.value || ''}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;"></td>
                         </tr>
                     `;
                 } else if (row.kind === 'categoryHeader') {
                     // ردیف دسته‌بندی با colspan=4 - با استایل کامل (وسط چین)
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <td colspan="4" style="font-weight: bold; background-color: #f3f4f6; text-align: center; padding: 6px 8px; border: 1px solid #000; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.category || ''}</td>
+                            <td colspan="4" style="font-weight: bold; background-color: #f3f4f6; text-align: center; padding: 8px 10px; border: 1px solid #000; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.category || ''}</td>
                         </tr>
                     `;
                 } else if (row.kind === 'cost') {
@@ -1661,10 +1663,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     
                     return `
                         <tr style="direction: rtl; unicode-bidi: isolate;">
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif; font-weight: 600;">${row.category || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.description || ''}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${unitAmountStr}</td>
-                            <td style="border: 1px solid #000; padding: 4px 6px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmountStr}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif; font-weight: 600;">${row.category || ''}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-family: 'Vazir', 'Tahoma', sans-serif;">${row.description || ''}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${unitAmountStr}</td>
+                            <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmountStr}</td>
                         </tr>
                     `;
                 }
@@ -1679,10 +1681,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             // ساخت ردیف جمع کل - با استایل کامل
             const totalRowHTML = `
                 <tr style="direction: rtl; unicode-bidi: isolate; background-color: #3b82f6;">
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">جمع کل</td>
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
-                    <td style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; line-height: 1.8; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmount.toLocaleString('fa-IR')}</td>
+                    <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">جمع کل</td>
+                    <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
+                    <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: center; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">-</td>
+                    <td style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; direction: rtl; unicode-bidi: isolate; vertical-align: middle; text-align: right; white-space: nowrap; font-weight: bold; color: #ffffff; font-family: 'Vazir', 'Tahoma', sans-serif;">${totalAmount.toLocaleString('fa-IR')}</td>
                 </tr>
             `;
 
@@ -1706,10 +1708,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         <table style="width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; direction: rtl; unicode-bidi: isolate; margin: 0 auto 12px auto; font-family: 'Vazir', 'Tahoma', sans-serif; box-sizing: border-box;">
                             <thead>
                                 <tr style="direction: rtl; unicode-bidi: isolate;">
-                                    <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">دسته‌بندی</th>
-                                    <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">شرح هزینه / (ریال)</th>
-                                    <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">مبلغ واحد / (ریال)</th>
-                                    <th style="border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">مبلغ کل / (ریال)</th>
+                                    <th style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">دسته‌بندی</th>
+                                    <th style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">شرح هزینه / (ریال)</th>
+                                    <th style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">مبلغ واحد / (ریال)</th>
+                                    <th style="border: 1px solid #000; padding: 8px 10px; font-size: 13px; line-height: 1.5; text-align: center; background-color: #e5e7eb; direction: rtl; unicode-bidi: isolate; vertical-align: middle; font-family: 'Vazir', 'Tahoma', sans-serif;">مبلغ کل / (ریال)</th>
                                 </tr>
                             </thead>
                             <tbody style="direction: rtl; unicode-bidi: isolate;">
@@ -1729,7 +1731,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
         // ساخت HTML کامل - با همه استایل‌های دقیق و مرکز چین
         return `
-            <div id="invoice-root" style="direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif; width: 900px; margin: 0 auto; background-color: #ffffff; color: #000000; padding: 16px; box-sizing: border-box; position: relative; text-align: center;">
+            <div id="invoice-root" style="direction: rtl; unicode-bidi: isolate; font-family: 'Vazir', 'Tahoma', sans-serif; width: ${containerWidth}px; margin: 0 auto; background-color: #ffffff; color: #000000; padding: 16px; box-sizing: border-box; position: relative; text-align: center;">
                 ${blocksHTML}
             </div>
         `;
@@ -1781,15 +1783,36 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         pdf.addPage();
                     }
 
-                    // ساخت HTML برای این بلوک
-                    const htmlContent = renderInvoiceHTMLStandardV2({ blocks: [block] });
+                    // محاسبه تعداد ردیف‌ها برای تنظیم دینامیک عرض و فونت
+                    const rowCount = block.rows.filter(r => r.kind !== 'categoryHeader').length;
+                    const tourCount = rowCount; // تقریباً برابر با تعداد تورها
+                    
+                    // محاسبه عرض دینامیک بر اساس تعداد تورها
+                    // A4 portrait: عرض مفید حدود 190mm = 718px (با scale 1.2)
+                    // برای 4 تور: عرض 900px خوب است
+                    // برای 10 تور: باید عرض را کاهش دهیم
+                    let containerWidth = 900;
+                    let fontSize = 13;
+                    
+                    if (tourCount > 8) {
+                        // برای 9+ تور: عرض کوچکتر و فونت کوچکتر
+                        containerWidth = 750;
+                        fontSize = 11;
+                    } else if (tourCount > 6) {
+                        // برای 7-8 تور: عرض متوسط
+                        containerWidth = 800;
+                        fontSize = 12;
+                    }
+                    
+                    // ساخت HTML برای این بلوک با عرض دینامیک
+                    const htmlContent = renderInvoiceHTMLStandardV2({ blocks: [block], containerWidth });
                     
                     // ایجاد یک div موقت برای رندر کردن HTML
                     const tempDiv = document.createElement('div');
                     tempDiv.style.position = 'absolute';
                     tempDiv.style.left = '-9999px';
                     tempDiv.style.top = '0';
-                    tempDiv.style.width = '900px';
+                    tempDiv.style.width = `${containerWidth}px`;
                     tempDiv.style.opacity = '1';
                     tempDiv.style.visibility = 'visible';
                     tempDiv.innerHTML = htmlContent;
@@ -1803,44 +1826,76 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
 
-                    // تنظیم استایل‌های اضافی برای html2canvas
-                    invoiceElement.style.width = '900px';
-                    invoiceElement.style.maxWidth = '900px';
+                    // تنظیم استایل‌های اضافی برای html2canvas با عرض دینامیک
+                    invoiceElement.style.width = `${containerWidth}px`;
+                    invoiceElement.style.maxWidth = `${containerWidth}px`;
                     invoiceElement.style.margin = '0 auto';
                     invoiceElement.style.overflow = 'visible';
                     invoiceElement.style.visibility = 'visible';
                     invoiceElement.style.opacity = '1';
+                    
+                    // اعمال فونت کوچکتر برای همه عناصر اگر لازم باشد
+                    if (fontSize < 13) {
+                        const style = document.createElement('style');
+                        style.textContent = `
+                            #invoice-root * {
+                                font-size: ${fontSize}px !important;
+                            }
+                            #invoice-root th, #invoice-root td {
+                                padding: 6px 8px !important;
+                            }
+                        `;
+                        tempDiv.appendChild(style);
+                    }
 
                     // صبر برای رندر شدن کامل
                     await new Promise(resolve => setTimeout(resolve, 500));
 
-                    // تبدیل به canvas
+                    // تبدیل به canvas با scale پایین‌تر برای کاهش حجم فایل
                     const canvas = await html2canvas(invoiceElement, {
-                        scale: 2,
+                        scale: 1.2, // کاهش از 2 به 1.2 برای کاهش حجم
                         useCORS: true,
                         backgroundColor: '#ffffff',
                         allowTaint: true,
                         logging: false,
-                        windowWidth: 900,
+                        windowWidth: containerWidth,
                         windowHeight: invoiceElement.scrollHeight,
                         onclone: (clonedDoc) => {
                             const clonedInvoice = clonedDoc.querySelector('#invoice-root') as HTMLElement;
                             if (clonedInvoice) {
-                                clonedInvoice.style.width = '900px';
-                                clonedInvoice.style.maxWidth = '900px';
+                                clonedInvoice.style.width = `${containerWidth}px`;
+                                clonedInvoice.style.maxWidth = `${containerWidth}px`;
                                 clonedInvoice.style.margin = '0 auto';
                                 clonedInvoice.style.overflow = 'visible';
                                 clonedInvoice.style.visibility = 'visible';
                                 clonedInvoice.style.opacity = '1';
                                 
-                                // اعمال استایل‌های اضافی برای همه عناصر
-                                const allElements = clonedInvoice.querySelectorAll('*');
-                                allElements.forEach((el: any) => {
-                                    if (el.style) {
-                                        el.style.visibility = 'visible';
-                                        el.style.opacity = '1';
-                                    }
-                                });
+                                // اعمال فونت کوچکتر اگر لازم باشد
+                                if (fontSize < 13) {
+                                    const allElements = clonedInvoice.querySelectorAll('*');
+                                    allElements.forEach((el: any) => {
+                                        if (el.style) {
+                                            el.style.visibility = 'visible';
+                                            el.style.opacity = '1';
+                                            // کاهش فونت برای عناصر متنی
+                                            if (el.tagName === 'TD' || el.tagName === 'TH' || el.tagName === 'DIV' || el.tagName === 'P') {
+                                                const currentFontSize = parseInt(el.style.fontSize) || 13;
+                                                if (currentFontSize >= 13) {
+                                                    el.style.fontSize = `${fontSize}px`;
+                                                }
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    // فقط visibility را تنظیم می‌کنیم
+                                    const allElements = clonedInvoice.querySelectorAll('*');
+                                    allElements.forEach((el: any) => {
+                                        if (el.style) {
+                                            el.style.visibility = 'visible';
+                                            el.style.opacity = '1';
+                                        }
+                                    });
+                                }
                             }
                         }
                     });
@@ -1849,22 +1904,22 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const imgWidth = pageWidth - (2 * margin);
                     const imgHeight = (canvas.height * imgWidth) / canvas.width;
                     
-                    // اضافه کردن تصویر به PDF
-                    const imgData = canvas.toDataURL('image/png');
+                    // اضافه کردن تصویر به PDF با کیفیت JPEG برای کاهش حجم
+                    const imgData = canvas.toDataURL('image/jpeg', 0.85); // استفاده از JPEG با کیفیت 85% برای کاهش حجم
                     
                     // اگر تصویر از یک صفحه بیشتر است، آن را تقسیم می‌کنیم
                     let heightLeft = imgHeight;
                     let position = margin;
                     
                     // اضافه کردن تصویر اول
-                    pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+                    pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
                     heightLeft -= (pageHeight - (2 * margin));
                     
                     // اضافه کردن صفحات اضافی اگر لازم باشد
                     while (heightLeft > 0) {
                         pdf.addPage();
                         position = heightLeft - imgHeight + margin;
-                        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+                        pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
                         heightLeft -= (pageHeight - (2 * margin));
                     }
 
