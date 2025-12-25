@@ -2315,7 +2315,41 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     calcDateTo
                 );
                 
-                invoiceDataArray.push(invoiceData);
+                // اضافه کردن اطلاعات راننده و خلاصه تورها
+                const mainDriverCost = calculationsArray.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
+                const helperCostsByEmployee = new Map<string, { employeeId: string; name: string; total: number }>();
+                
+                calculationsArray.forEach((calc: any) => {
+                    const helperId = calc.helper_driver_id || calc.helperDriverId;
+                    const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+                    const helperName = calc.helper_driver_name || calc.helperDriverName || '';
+                    const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+                    const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+                    const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+                    const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+                    
+                    if (helperId && helperEmployeeId && helperTotal > 0) {
+                        if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                            helperCostsByEmployee.set(helperEmployeeId, {
+                                employeeId: helperEmployeeId,
+                                name: helperName,
+                                total: 0,
+                            });
+                        }
+                        const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+                        existing.total += helperTotal;
+                    }
+                });
+                
+                invoiceDataArray.push({
+                    ...invoiceData,
+                    driverName: record.driverName,
+                    employeeId: record.employeeId,
+                    accountNumber: record.accountNumber,
+                    tourCount: calculationsArray.length,
+                    mainDriverCost: mainDriverCost,
+                    helperDriverCosts: Array.from(helperCostsByEmployee.values()),
+                });
             }
 
             if (invoiceDataArray.length === 0) {
@@ -2335,6 +2369,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // روش 2: استفاده از DOM واقعی + html2canvas پیشرفته
     // ============================================================================
     const exportInvoicesToImagesZipWithRealDOM = async (invoiceDataArray: Array<{
+        driverName?: string;
+        employeeId?: string;
+        accountNumber?: string;
+        tourCount?: number;
+        mainDriverCost?: number;
+        helperDriverCosts?: Array<{ employeeId: string; name: string; total: number }>;
         blocks: Array<{
             title: string;
             rows: Array<{
@@ -2401,6 +2441,39 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     textAlign: 'center',
                                 }}
                             >
+                                {/* اطلاعات راننده در بالای جدول */}
+                                <div style={{
+                                    marginBottom: '16px',
+                                    paddingBottom: '12px',
+                                    borderBottom: '1px solid #000',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                }}>
+                                    <h2 style={{
+                                        fontSize: '18px',
+                                        fontWeight: 'bold',
+                                        marginBottom: '8px',
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                    }}>
+                                        صورتحساب هزینه
+                                    </h2>
+                                    <div style={{
+                                        fontSize: `${fontSize + 1}px`,
+                                        lineHeight: '1.8',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                    }}>
+                                        <p style={{ marginBottom: '4px' }}>کد پرسنلی: {invoiceData.employeeId || '-'}</p>
+                                        <p style={{ marginBottom: '4px' }}>نام: {invoiceData.driverName || '-'}</p>
+                                        <p>شماره حساب: {invoiceData.accountNumber || '-'}</p>
+                                    </div>
+                                </div>
+                                
                                 {invoiceData.blocks.map((block, blockIdx) => (
                                     <div key={blockIdx} style={{ 
                                         width: '100%',
@@ -2446,9 +2519,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
+                                                        fontSize: `${fontSize + 1}px`,
                                                         lineHeight: '1.5',
-                                                    }}>دسته‌بندی</th>
+                                                    }}>اطلاعات اولیه / شرح هزینه (ریال)</th>
                                                     <th style={{ 
                                                         border: '1px solid #000', 
                                                         padding: '16px 16px 42px 16px', 
@@ -2458,9 +2531,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
+                                                        fontSize: `${fontSize + 1}px`,
                                                         lineHeight: '1.5',
-                                                    }}>شرح هزینه / (ریال)</th>
+                                                    }}>مبلغ واحد (ریال)</th>
                                                     <th style={{ 
                                                         border: '1px solid #000', 
                                                         padding: '16px 16px 42px 16px', 
@@ -2470,21 +2543,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
+                                                        fontSize: `${fontSize + 1}px`,
                                                         lineHeight: '1.5',
-                                                    }}>مبلغ واحد / (ریال)</th>
-                                                    <th style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        backgroundColor: '#e5e7eb', 
-                                                        textAlign: 'center',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>مبلغ کل / (ریال)</th>
+                                                    }}>مبلغ کل (ریال)</th>
                                                 </tr>
                                             </thead>
                                             <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
@@ -2499,22 +2560,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     direction: 'rtl',
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
-                                                                    fontWeight: 600,
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
-                                                                }}>{row.label}</td>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}>{row.value}</td>
+                                                                }}>{row.label}: {row.value}</td>
                                                                 <td style={{ 
                                                                     border: '1px solid #000', 
                                                                     padding: '16px 16px 42px 16px', 
@@ -2524,7 +2573,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
                                                                 }}></td>
                                                                 <td style={{ 
@@ -2536,7 +2585,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
                                                                 }}></td>
                                                             </tr>
@@ -2544,7 +2593,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                     } else if (row.kind === 'categoryHeader') {
                                                         return (
                                                             <tr key={rowIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                                <td colSpan={4} style={{
+                                                                <td colSpan={3} style={{
                                                                     border: '1px solid #000',
                                                                     padding: '16px 16px 42px 16px',
                                                                     backgroundColor: '#f3f4f6',
@@ -2554,7 +2603,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
                                                                 }}>
                                                                     {row.category}
@@ -2570,25 +2619,13 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     border: '1px solid #000', 
                                                                     padding: '16px 16px 42px 16px', 
                                                                     textAlign: 'right',
-                                                                    direction: 'rtl',
-                                                                    unicodeBidi: 'isolate',
-                                                                    verticalAlign: 'middle',
-                                                                    fontWeight: 600,
-                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
-                                                                    lineHeight: '1.5',
-                                                                }}>{row.category}</td>
-                                                                <td style={{ 
-                                                                    border: '1px solid #000', 
-                                                                    padding: '16px 16px 42px 16px', 
-                                                                    textAlign: 'right',
                                                                     whiteSpace: 'normal',
                                                                     wordWrap: 'break-word',
                                                                     direction: 'rtl',
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
                                                                 }}>{row.description}</td>
                                                                 <td style={{ 
@@ -2600,7 +2637,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
                                                                 }}>{unitAmountStr}</td>
                                                                 <td style={{ 
@@ -2612,7 +2649,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                                     unicodeBidi: 'isolate',
                                                                     verticalAlign: 'middle',
                                                                     fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                                    fontSize: `${fontSize}px`,
+                                                                    fontSize: `${fontSize + 1}px`,
                                                                     lineHeight: '1.5',
                                                                 }}>{totalAmountStr}</td>
                                                             </tr>
@@ -2631,7 +2668,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
+                                                        fontSize: `${fontSize + 1}px`,
                                                         lineHeight: '1.5',
                                                     }}>جمع کل</td>
                                                     <td style={{ 
@@ -2644,20 +2681,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
-                                                        lineHeight: '1.5',
-                                                    }}>-</td>
-                                                    <td style={{ 
-                                                        border: '1px solid #000', 
-                                                        padding: '16px 16px 42px 16px', 
-                                                        textAlign: 'center', 
-                                                        fontWeight: 'bold', 
-                                                        color: '#ffffff',
-                                                        direction: 'rtl',
-                                                        unicodeBidi: 'isolate',
-                                                        verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
+                                                        fontSize: `${fontSize + 1}px`,
                                                         lineHeight: '1.5',
                                                     }}>-</td>
                                                     <td style={{ 
@@ -2671,7 +2695,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
                                                         fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                        fontSize: `${fontSize}px`,
+                                                        fontSize: `${fontSize + 1}px`,
                                                         lineHeight: '1.5',
                                                     }}>
                                                         {block.rows
@@ -2690,7 +2714,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 padding: '8px 10px',
                                                 border: '2px solid #3b82f6',
                                                 backgroundColor: '#dbeafe',
-                                                fontSize: `${fontSize}px`,
+                                                fontSize: `${fontSize + 1}px`,
                                                 lineHeight: '1.8',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
@@ -2710,7 +2734,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                     مبلغ قابل پرداخت: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{block.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
                                                 </div>
                                                 {block.summary.notes && (
-                                                    <div style={{ marginTop: '4px', fontSize: '12px', color: '#111827', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', fontFamily: "'Vazir', 'Tahoma', sans-serif" }}>
+                                                    <div style={{ marginTop: '4px', fontSize: `${fontSize}px`, color: '#111827', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', fontFamily: "'Vazir', 'Tahoma', sans-serif" }}>
                                                         توضیحات: {block.summary.notes}
                                                     </div>
                                                 )}
@@ -2718,6 +2742,62 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         )}
                                     </div>
                                 ))}
+                                
+                                {/* خلاصه تورها - بعد از تمام blocks */}
+                                {invoiceData.tourCount !== undefined && (
+                                    <div style={{
+                                        marginTop: '16px',
+                                        padding: '12px',
+                                        backgroundColor: '#f1f5f9',
+                                        borderRadius: '4px',
+                                        border: '1px solid #cbd5e1',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                    }}>
+                                        <p style={{ 
+                                            fontSize: `${fontSize + 1}px`, 
+                                            fontWeight: 'bold', 
+                                            marginBottom: '8px',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                        }}>
+                                            خلاصه:
+                                        </p>
+                                        <p style={{ 
+                                            fontSize: `${fontSize}px`, 
+                                            marginBottom: '4px',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                        }}>
+                                            تعداد تور: {invoiceData.tourCount}
+                                        </p>
+                                        {invoiceData.mainDriverCost !== undefined && (
+                                            <p style={{ 
+                                                fontSize: `${fontSize}px`, 
+                                                marginBottom: '4px',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                            }}>
+                                                هزینه‌های راننده اصلی: <span style={{ fontWeight: 'bold' }}>{invoiceData.mainDriverCost.toLocaleString('fa-IR')}</span> ریال
+                                            </p>
+                                        )}
+                                        {invoiceData.helperDriverCosts && invoiceData.helperDriverCosts.length > 0 && (
+                                            <div style={{ marginTop: '4px' }}>
+                                                {invoiceData.helperDriverCosts.map((helper, idx) => (
+                                                    <p key={idx} style={{ 
+                                                        fontSize: `${fontSize}px`, 
+                                                        marginBottom: '4px',
+                                                        direction: 'rtl',
+                                                        unicodeBidi: 'isolate',
+                                                    }}>
+                                                        هزینه راننده کمکی ({helper.employeeId} - {helper.name}): <span style={{ fontWeight: 'bold' }}>{helper.total.toLocaleString('fa-IR')}</span> ریال
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     };
@@ -2909,7 +2989,41 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     calcDateTo
                 );
                 
-                invoiceDataArray.push(invoiceData);
+                // اضافه کردن اطلاعات راننده و خلاصه تورها
+                const mainDriverCost = calculationsArray.reduce((sum, calc) => sum + calculateMainDriverCostGlobal(calc), 0);
+                const helperCostsByEmployee = new Map<string, { employeeId: string; name: string; total: number }>();
+                
+                calculationsArray.forEach((calc: any) => {
+                    const helperId = calc.helper_driver_id || calc.helperDriverId;
+                    const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
+                    const helperName = calc.helper_driver_name || calc.helperDriverName || '';
+                    const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
+                    const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
+                    const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
+                    const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+                    
+                    if (helperId && helperEmployeeId && helperTotal > 0) {
+                        if (!helperCostsByEmployee.has(helperEmployeeId)) {
+                            helperCostsByEmployee.set(helperEmployeeId, {
+                                employeeId: helperEmployeeId,
+                                name: helperName,
+                                total: 0,
+                            });
+                        }
+                        const existing = helperCostsByEmployee.get(helperEmployeeId)!;
+                        existing.total += helperTotal;
+                    }
+                });
+                
+                invoiceDataArray.push({
+                    ...invoiceData,
+                    driverName: record.driverName,
+                    employeeId: record.employeeId,
+                    accountNumber: record.accountNumber,
+                    tourCount: calculationsArray.length,
+                    mainDriverCost: mainDriverCost,
+                    helperDriverCosts: Array.from(helperCostsByEmployee.values()),
+                });
             }
 
             if (invoiceDataArray.length === 0) {
@@ -3501,34 +3615,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 </select>
                             </div>
                             <button
-                                onClick={exportAllInvoicesToPDF}
-                                disabled={filteredRecords.length === 0}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                تولید PDF یکجا
-                            </button>
-                            <button
-                                onClick={exportAllInvoicesToPDFWithAutoTableWrapper}
-                                disabled={filteredRecords.length === 0}
-                                className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="روش جدید: استفاده از jsPDF AutoTable (نیاز به نصب: npm install jspdf-autotable)"
-                            >
-                                تولید PDF (AutoTable) 🆕
-                            </button>
-                            <button
-                                onClick={exportAllInvoicesToImagesZip}
-                                disabled={filteredRecords.length === 0}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                دانلود ZIP تصاویر
-                            </button>
-                            <button
                                 onClick={exportAllInvoicesToImagesZipWithRealDOMWrapper}
                                 disabled={filteredRecords.length === 0}
                                 className="px-4 py-2 bg-teal-600 text-white rounded-md text-sm hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="روش جدید: استفاده از Real DOM + html2canvas پیشرفته"
+                                title="استفاده از Real DOM + html2canvas پیشرفته"
                             >
-                                دانلود ZIP تصاویر (روش 2) 🆕
+                                دانلود ZIP تصاویر
                             </button>
                             <button
                                 onClick={exportToExcel}
