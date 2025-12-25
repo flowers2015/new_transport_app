@@ -1851,7 +1851,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     // ساخت جدول با autoTable
                     try {
                         autoTable(doc, {
-                            head: [['دسته‌بندی', 'شرح هزینه / (ریال)', 'مبلغ واحد / (ریال)', 'مبلغ کل / (ریال)']],
+                            head: [['دسته‌بندی', 'شرح هزینه (ریال)', 'مبلغ واحد (ریال)', 'مبلغ کل (ریال)']],
                             body: tableData,
                             startY: 30,
                             styles: {
@@ -1875,28 +1875,47 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 3: { halign: 'right' }, // مبلغ کل - راست چین
                             },
                             didParseCell: function (data: any) {
-                                // رنگ پس‌زمینه برای ردیف دسته‌بندی (ردیف‌هایی که فقط ستون اول پر است)
                                 const rowIndex = data.row.index;
-                                if (rowIndex < tableData.length - 1) {
-                                    const row = tableData[rowIndex];
-                                    if (row[0] && !row[1] && !row[2] && !row[3]) {
-                                        // این یک ردیف دسته‌بندی است
-                                        data.cell.styles.fillColor = [243, 244, 246]; // #f3f4f6
-                                        data.cell.styles.fontStyle = 'bold';
-                                        data.cell.styles.halign = 'center';
-                                        // تمام سلول‌های این ردیف را merge می‌کنیم
-                                        if (data.column.index === 0) {
-                                            data.cell.colSpan = 4;
-                                        } else {
-                                            data.row.cells[data.column.index] = null;
-                                        }
+                                const row = tableData[rowIndex];
+                                
+                                // ردیف دسته‌بندی (ردیف‌هایی که فقط ستون اول پر است و بقیه خالی)
+                                if (rowIndex < tableData.length - 1 && row && row[0] && !row[1] && !row[2] && !row[3]) {
+                                    // این یک ردیف دسته‌بندی است
+                                    data.cell.styles.fillColor = [243, 244, 246]; // #f3f4f6
+                                    data.cell.styles.fontStyle = 'bold';
+                                    data.cell.styles.halign = 'center';
+                                    
+                                    // merge کردن تمام ستون‌ها برای ردیف دسته‌بندی
+                                    if (data.column.index === 0) {
+                                        data.cell.colSpan = 4;
+                                        data.cell.text = row[0]; // متن دسته‌بندی
+                                    } else {
+                                        // سایر ستون‌ها را null می‌کنیم تا merge شوند
+                                        data.cell = null;
                                     }
                                 }
-                                // ردیف جمع کل
-                                if (rowIndex === tableData.length - 1) {
-                                    data.cell.styles.fillColor = [59, 130, 246]; // #3b82f6
-                                    data.cell.styles.textColor = [255, 255, 255];
-                                    data.cell.styles.fontStyle = 'bold';
+                                // ردیف جمع کل (آخرین ردیف)
+                                else if (rowIndex === tableData.length - 1) {
+                                    // فقط ستون آخر (مبلغ کل) را highlight می‌کنیم
+                                    if (data.column.index === 3) {
+                                        data.cell.styles.fillColor = [59, 130, 246]; // #3b82f6
+                                        data.cell.styles.textColor = [255, 255, 255];
+                                        data.cell.styles.fontStyle = 'bold';
+                                    } else {
+                                        data.cell.styles.fillColor = [243, 244, 246]; // #f3f4f6
+                                        data.cell.styles.fontStyle = 'bold';
+                                    }
+                                }
+                                // ردیف‌های معمولی (cost)
+                                else if (row && row[1] && row[2] && row[3]) {
+                                    // ستون دسته‌بندی - وسط چین
+                                    if (data.column.index === 0) {
+                                        data.cell.styles.halign = 'center';
+                                    }
+                                    // ستون‌های عددی - راست چین
+                                    if (data.column.index === 2 || data.column.index === 3) {
+                                        data.cell.styles.halign = 'right';
+                                    }
                                 }
                             },
                             margin: { top: 30, right: 10, bottom: 10, left: 10 },
