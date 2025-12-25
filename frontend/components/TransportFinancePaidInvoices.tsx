@@ -3102,16 +3102,19 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         }>;
     }>) => {
         try {
+            console.log(`🖼️ [REAL_DOM_HORIZONTAL] تعداد invoiceDataArray: ${invoiceDataArray.length}`);
             const zip = new JSZip();
             let successCount = 0;
             let failCount = 0;
 
             for (let i = 0; i < invoiceDataArray.length; i++) {
                 const invoiceData = invoiceDataArray[i];
+                console.log(`🖼️ [REAL_DOM_HORIZONTAL] پردازش invoice ${i + 1}/${invoiceDataArray.length}: ${invoiceData.driverName || 'نامشخص'}`);
                 
                 try {
                     // محاسبه تعداد تورها
                     const numTours = invoiceData.tourCount || 1;
+                    const sectionType = (invoiceData as any).sectionType || 'withoutHelper';
                     
                     // محاسبه تعداد ستون‌های هزینه
                     const mainBlock = invoiceData.blocks[0];
@@ -3738,7 +3741,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const invoiceElement = tempDiv.querySelector(`#invoice-real-dom-horizontal-${i}`) as HTMLElement;
                     if (!invoiceElement) {
                         console.error(`❌ [REAL_DOM_HORIZONTAL] invoice-real-dom-horizontal-${i} پیدا نشد`);
+                        console.error(`❌ [REAL_DOM_HORIZONTAL] tempDiv.innerHTML:`, tempDiv.innerHTML.substring(0, 500));
                         document.body.removeChild(tempDiv);
+                        failCount++;
                         continue;
                     }
 
@@ -3796,6 +3801,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 } catch (err: any) {
                     failCount++;
                     console.error(`❌ [REAL_DOM_HORIZONTAL] Error processing invoice ${i + 1}:`, err);
+                    // پاک کردن tempDiv در صورت خطا
+                    const tempDiv = document.querySelector(`div[style*="-9999px"]`);
+                    if (tempDiv && tempDiv.parentNode) {
+                        document.body.removeChild(tempDiv);
+                    }
                 }
             }
 
