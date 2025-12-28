@@ -2680,12 +2680,25 @@ const convertToInvoiceDataFormatHorizontal = (
         });
     }
 
-    // اضافه کردن هزینه‌های دپو
+    // اضافه کردن هزینه‌های دپو - همیشه نمایش داده می‌شوند برای حفظ ساختار جدول
     const depotCountValues = calculations.map((calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0));
     const depotCount = depotCountValues.reduce((sum, val) => sum + val, 0);
-    if (depotCount > 0) {
+    const depotMissionDaysValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0));
+    const depotMissionDays = depotMissionDaysValues.reduce((sum, val) => sum + val, 0);
+    const depotMileageValues = calculations.map((calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0));
+    const depotMileage = depotMileageValues.reduce((sum, val) => sum + val, 0);
+    const depotCargoHandlingValues = calculations.map((calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0));
+    const depotCargoHandlingTotal = depotCargoHandlingValues.reduce((sum, val) => sum + val, 0);
+    const depotMissionValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0));
+    const depotMissionTotal = depotMissionValues.reduce((sum, val) => sum + val, 0);
+    
+    // بررسی اینکه آیا حداقل یکی از هزینه‌های دپو وجود دارد
+    const hasAnyDepotCost = depotCount > 0 || depotMissionDays > 0 || depotMileage > 0 || depotCargoHandlingTotal > 0 || depotMissionTotal > 0;
+    
+    if (hasAnyDepotCost) {
         mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های دپو' });
         
+        // تعداد بار دپو - همیشه نمایش داده می‌شود
         mainDriverRows.push({
             kind: 'cost',
             category: 'هزینه‌های دپو',
@@ -2696,59 +2709,44 @@ const convertToInvoiceDataFormatHorizontal = (
             tourValues: depotCountValues
         });
 
-        const depotMissionDaysValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0));
-        const depotMissionDays = depotMissionDaysValues.reduce((sum, val) => sum + val, 0);
-        if (depotMissionDays > 0) {
-            mainDriverRows.push({
-                kind: 'cost',
-                category: 'هزینه‌های دپو',
-                description: 'ماموریت دپو (روز)',
-                unitAmount: depotMissionDays,
-                totalAmount: null,
-                isDepotCount: true,
-                tourValues: depotMissionDaysValues
-            });
-        }
+        // ماموریت دپو (روز) - همیشه نمایش داده می‌شود
+        mainDriverRows.push({
+            kind: 'cost',
+            category: 'هزینه‌های دپو',
+            description: 'ماموریت دپو (روز)',
+            unitAmount: depotMissionDays,
+            totalAmount: null,
+            isDepotCount: true,
+            tourValues: depotMissionDaysValues
+        });
 
-        const depotMileageValues = calculations.map((calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0));
-        const depotMileage = depotMileageValues.reduce((sum, val) => sum + val, 0);
-        if (depotMileage > 0) {
-            mainDriverRows.push({
-                kind: 'cost',
-                category: 'هزینه‌های دپو',
-                description: 'پیمایش دپو (کیلومتر)',
-                unitAmount: depotMileage,
-                totalAmount: null,
-                isDepotCount: true,
-                tourValues: depotMileageValues
-            });
-        }
+        // پیمایش دپو (کیلومتر) - همیشه نمایش داده می‌شود
+        mainDriverRows.push({
+            kind: 'cost',
+            category: 'هزینه‌های دپو',
+            description: 'پیمایش دپو (کیلومتر)',
+            unitAmount: depotMileage,
+            totalAmount: null,
+            isDepotCount: true,
+            tourValues: depotMileageValues
+        });
 
-        const depotCargoHandlingValues = calculations.map((calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0));
-        const depotCargoHandlingTotal = depotCargoHandlingValues.reduce((sum, val) => sum + val, 0);
-        if (depotCargoHandlingTotal > 0) {
-            mainDriverRows.push({
-                kind: 'cost',
-                category: 'هزینه‌های دپو',
-                description: 'جابجایی بار دپو',
-                unitAmount: depotCargoHandlingTotal,
-                totalAmount: depotCargoHandlingTotal,
-                tourValues: depotCargoHandlingValues
-            });
-        }
-
-        const depotMissionValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0));
-        const depotMissionTotal = depotMissionValues.reduce((sum, val) => sum + val, 0);
-        if (depotMissionTotal > 0) {
-            mainDriverRows.push({
-                kind: 'cost',
-                category: 'هزینه‌های دپو',
-                description: 'حق ماموریت دپو',
-                unitAmount: depotMissionTotal,
-                totalAmount: depotMissionTotal,
-                tourValues: depotMissionValues
-            });
-        }
+        // ماموریت دپو جمع کل (ریال) - مجموع جابجایی بار دپو و حق ماموریت دپو
+        const depotMissionTotalCombined = depotCargoHandlingTotal + depotMissionTotal;
+        const depotMissionTotalCombinedValues = calculations.map((calc: any) => {
+            const cargo = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
+            const mission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
+            return cargo + mission;
+        });
+        // همیشه نمایش داده می‌شود برای حفظ ساختار جدول
+        mainDriverRows.push({
+            kind: 'cost',
+            category: 'هزینه‌های دپو',
+            description: 'ماموریت دپو جمع کل (ریال)',
+            unitAmount: depotMissionTotalCombined,
+            totalAmount: depotMissionTotalCombined,
+            tourValues: depotMissionTotalCombinedValues
+        });
     }
 
     blocks.push({
@@ -2889,8 +2887,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     // دیالوگ قوانین
     const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
     
-    // نوع ساختار صورتحساب (پیش‌فرض: استاندارد حسابداری)
-    const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.STANDARD_ACCOUNTING);
+    // نوع ساختار صورتحساب (پیش‌فرض: افقی)
+    const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.HORIZONTAL);
 
     useEffect(() => {
         fetchData();
@@ -4893,10 +4891,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         onChange={(e) => setInvoiceLayout(e.target.value as InvoiceLayoutType)}
                                         className="px-3 py-1 border border-slate-300 rounded-md text-sm bg-white text-slate-800"
                                     >
-                                        <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 1: استاندارد حسابداری</option>
-                                        <option value={InvoiceLayoutType.COMPACT}>روش 2: فشرده</option>
-                                        <option value={InvoiceLayoutType.DETAILED}>روش 3: تفصیلی</option>
-                                        <option value={InvoiceLayoutType.HORIZONTAL}>روش 4: افقی (هر تور یک ردیف)</option>
+                                        <option value={InvoiceLayoutType.HORIZONTAL}>روش 1: افقی (هر تور یک ردیف)</option>
+                                        <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 2: استاندارد حسابداری</option>
                                     </select>
                                 </div>
                                 <button
@@ -4954,27 +4950,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             </div>
 
                             {/* انتخاب نوع ساختار صورتحساب */}
-                            {invoiceLayout === InvoiceLayoutType.STANDARD_ACCOUNTING && renderInvoiceLayout1(
-                                selectedInvoiceRecord,
-                                invoiceCalculations,
-                                invoiceAnnouncements,
-                                startDate,
-                                endDate
-                            )}
-                            {invoiceLayout === InvoiceLayoutType.COMPACT && renderInvoiceLayout2(
-                                selectedInvoiceRecord,
-                                invoiceCalculations,
-                                invoiceAnnouncements,
-                                startDate,
-                                endDate
-                            )}
-                            {invoiceLayout === InvoiceLayoutType.DETAILED && renderInvoiceLayout3(
-                                selectedInvoiceRecord,
-                                invoiceCalculations,
-                                invoiceAnnouncements,
-                                startDate,
-                                endDate
-                            )}
                             {invoiceLayout === InvoiceLayoutType.HORIZONTAL && (() => {
                                 const invoiceData = convertToInvoiceDataFormatHorizontal(
                                     selectedInvoiceRecord,
@@ -6055,6 +6030,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     </div>
                                 );
                             })()}
+                            {invoiceLayout === InvoiceLayoutType.STANDARD_ACCOUNTING && renderInvoiceLayout1(
+                                selectedInvoiceRecord,
+                                invoiceCalculations,
+                                invoiceAnnouncements,
+                                startDate,
+                                endDate
+                            )}
                             {/* منطق قدیمی - حذف شده (برای مرجع در git history) */}
                             {false && (() => {
                                 // جدا کردن محاسبات با راننده کمکی و بدون راننده کمکی
