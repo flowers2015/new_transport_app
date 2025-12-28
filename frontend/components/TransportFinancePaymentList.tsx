@@ -5105,7 +5105,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                 width: '100%',
                                                 maxWidth: '100%',
                                                 borderCollapse: 'collapse',
-                                                tableLayout: 'fixed',
+                                                tableLayout: 'auto',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 margin: '0 auto 12px auto',
@@ -5243,7 +5243,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                 fontSize: `${fontSize}px`,
                                                                 fontWeight: 'bold',
                                                                 lineHeight: '1.4',
-                                                                whiteSpace: 'nowrap',
+                                                                whiteSpace: 'normal',
+                                                                wordWrap: 'break-word',
+                                                                minWidth: '80px',
                                                             }}>{col.label}</th>
                                                         ))}
                                                         <th style={{ 
@@ -5347,7 +5349,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                             border: '1px solid #000', 
                                                                             padding: cellPadding, 
                                                                             textAlign: 'right',
-                                                                            whiteSpace: 'nowrap',
+                                                                            whiteSpace: 'normal',
+                                                                            wordWrap: 'break-word',
                                                                             direction: 'rtl',
                                                                             unicodeBidi: 'isolate',
                                                                             verticalAlign: 'middle',
@@ -5710,7 +5713,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                             fontSize: `${fontSize}px`,
                                                                             fontWeight: 'bold',
                                                                             lineHeight: '1.4',
-                                                                            whiteSpace: 'nowrap',
+                                                                            whiteSpace: 'normal',
+                                                                            wordWrap: 'break-word',
+                                                                            minWidth: '80px',
                                                                         }}>{col.label}</th>
                                                                     ))}
                                                                     <th style={{ 
@@ -5814,7 +5819,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                                         border: '1px solid #000', 
                                                                                         padding: cellPadding, 
                                                                                         textAlign: 'right',
-                                                                                        whiteSpace: 'nowrap',
+                                                                                        whiteSpace: 'normal',
+                                                                                        wordWrap: 'break-word',
                                                                                         direction: 'rtl',
                                                                                         unicodeBidi: 'isolate',
                                                                                         verticalAlign: 'middle',
