@@ -9,6 +9,13 @@ import { generateUUID } from '../utils/uuid';
 import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
+import ReactDOM from 'react-dom/client';
+import { 
+    convertToInvoiceDataFormatHorizontal, 
+    renderInvoiceLayoutHorizontal, 
+    exportInvoiceToImage,
+    PaymentRecord 
+} from './InvoiceImageHelper';
 
 interface TransportFinanceCalculationProps {
     currentUser: User;
@@ -2110,7 +2117,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             
             // ساخت PaymentRecord برای استفاده در توابع موجود
             const driver = drivers.find(d => d.id === calc.driverId);
-            const invoiceRecord = {
+            const invoiceRecord: PaymentRecord = {
                 driverId: calc.driverId,
                 employeeId: calc.employeeId,
                 driverName: calc.driverName,
@@ -2127,9 +2134,79 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const announcementsMap = new Map();
             announcementsMap.set(tour.announcementId, announcement);
             
-            // استفاده از کد موجود - نیاز به کپی کردن توابع از TransportFinancePaymentList
-            // برای الان یک پیغام نمایش می‌دهیم
-            alert('این قابلیت نیاز به کپی کردن کد زیادی از فایل TransportFinancePaymentList.tsx دارد. لطفاً از صفحه لیست پرداخت استفاده کنید.');
+            // تبدیل داده‌ها به فرمت افقی
+            const invoiceData = convertToInvoiceDataFormatHorizontal(
+                invoiceRecord,
+                [tourAsCalc],
+                announcementsMap,
+                '',
+                ''
+            );
+            
+            // محاسبه عرض و فونت دینامیک
+            const numTours = invoiceData.tourData?.length || 1;
+            const mainBlock = invoiceData.blocks[0];
+            const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
+            const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
+            const totalColumns = 5 + costColumnsCount + 1;
+            
+            let containerWidth = 2100;
+            let fontSize = 13;
+            let cellPadding = '14px 12px';
+            
+            if (totalColumns > 20) {
+                containerWidth = 2400;
+                fontSize = 11;
+                cellPadding = '12px 10px';
+            } else if (totalColumns > 15) {
+                containerWidth = 2200;
+                fontSize = 12;
+                cellPadding = '13px 11px';
+            }
+            
+            if (numTours > 10) {
+                containerWidth = Math.max(containerWidth, 2400);
+                fontSize = Math.min(fontSize, 11);
+                cellPadding = '12px 10px';
+            } else if (numTours > 8) {
+                containerWidth = Math.max(containerWidth, 2200);
+                fontSize = Math.min(fontSize, 12);
+                cellPadding = '13px 11px';
+            }
+            
+            // Render کردن JSX
+            const invoiceJSX = renderInvoiceLayoutHorizontal(
+                invoiceData,
+                invoiceRecord,
+                announcementsMap,
+                containerWidth,
+                fontSize,
+                cellPadding
+            );
+            
+            // ایجاد temp div برای render کردن محتوا
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.top = '0';
+            tempDiv.style.opacity = '1';
+            tempDiv.style.visibility = 'visible';
+            tempDiv.style.backgroundColor = '#ffffff';
+            tempDiv.setAttribute('data-invoice-ref', 'true');
+            document.body.appendChild(tempDiv);
+            
+            // Render کردن React component به DOM
+            const root = ReactDOM.createRoot(tempDiv);
+            root.render(invoiceJSX);
+            
+            // انتظار برای render کامل
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Export کردن تصویر
+            await exportInvoiceToImage(tempDiv, calc.driverName);
+            
+            // پاک کردن temp div
+            document.body.removeChild(tempDiv);
         } catch (err: any) {
             console.error('❌ [handleExportTourInvoiceImage] Error:', err);
             alert(`خطا در تولید تصویر: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
