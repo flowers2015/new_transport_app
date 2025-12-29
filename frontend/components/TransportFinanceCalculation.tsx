@@ -9,7 +9,7 @@ import { generateUUID } from '../utils/uuid';
 import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
-import ReactDOM from 'react-dom/client';
+import ReactDOMServer from 'react-dom/server';
 import { 
     convertToInvoiceDataFormatHorizontal, 
     renderInvoiceLayoutHorizontal, 
@@ -2184,29 +2184,76 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 cellPadding
             );
             
+            // تبدیل JSX به HTML string
+            const htmlString = ReactDOMServer.renderToString(invoiceJSX);
+            
             // ایجاد temp div برای render کردن محتوا
             const tempDiv = document.createElement('div');
             tempDiv.style.position = 'absolute';
             tempDiv.style.left = '-9999px';
             tempDiv.style.top = '0';
+            tempDiv.style.width = '100%';
             tempDiv.style.opacity = '1';
             tempDiv.style.visibility = 'visible';
             tempDiv.style.backgroundColor = '#ffffff';
-            tempDiv.setAttribute('data-invoice-ref', 'true');
+            tempDiv.innerHTML = htmlString;
             document.body.appendChild(tempDiv);
             
-            // Render کردن React component به DOM
-            const root = ReactDOM.createRoot(tempDiv);
-            root.render(invoiceJSX);
-            
-            // انتظار برای render کامل
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Export کردن تصویر
-            await exportInvoiceToImage(tempDiv, calc.driverName);
-            
-            // پاک کردن temp div
-            document.body.removeChild(tempDiv);
+            try {
+                // انتظار برای render کامل
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // استفاده از html2canvas برای تولید تصویر
+                const canvas = await html2canvas(tempDiv, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    removeContainer: false,
+                    onclone: (clonedDoc) => {
+                        const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
+                        if (clonedTempDiv) {
+                            clonedTempDiv.style.visibility = 'visible';
+                            clonedTempDiv.style.opacity = '1';
+                            clonedTempDiv.style.width = '100%';
+                            clonedTempDiv.style.maxWidth = '100%';
+                            clonedTempDiv.style.overflow = 'visible';
+                            
+                            // اعمال استایل‌های جدول
+                            const clonedTables = clonedTempDiv.querySelectorAll('table');
+                            clonedTables.forEach((table) => {
+                                const tableEl = table as HTMLElement;
+                                tableEl.style.width = '100%';
+                                tableEl.style.minWidth = '100%';
+                                tableEl.style.tableLayout = 'auto';
+                                tableEl.style.borderCollapse = 'collapse';
+                                tableEl.style.fontFamily = "'Vazir', 'Tahoma', sans-serif";
+                            });
+                        }
+                    }
+                });
+
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    throw new Error('Canvas خالی است');
+                }
+
+                // تبدیل به PNG با کیفیت بالا
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                
+                // ایجاد لینک دانلود
+                const link = document.createElement('a');
+                link.download = `صورتحساب_${calc.driverName}_${new Date().toISOString().split('T')[0]}.png`;
+                link.href = imgData;
+                link.click();
+                
+                console.log('✅ [handleExportTourInvoiceImage] عکس با موفقیت تولید شد');
+            } finally {
+                // پاک کردن temp div
+                if (document.body.contains(tempDiv)) {
+                    document.body.removeChild(tempDiv);
+                }
+            }
         } catch (err: any) {
             console.error('❌ [handleExportTourInvoiceImage] Error:', err);
             alert(`خطا در تولید تصویر: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);

@@ -487,7 +487,7 @@ export const renderInvoiceLayoutHorizontal = (
             <div style={{
                 direction: 'rtl',
                 unicodeBidi: 'isolate',
-                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                 width: `${containerWidth}px`,
                 maxWidth: '100%',
                 margin: '0 auto',
@@ -514,7 +514,7 @@ export const renderInvoiceLayoutHorizontal = (
                         textAlign: 'center',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                     }}>
                         صورتحساب هزینه
                     </h3>
@@ -523,7 +523,7 @@ export const renderInvoiceLayoutHorizontal = (
                         lineHeight: '1.8',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                     }}>
                         <p style={{ marginBottom: '4px' }}>کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
                         <p style={{ marginBottom: '4px' }}>نام: {selectedInvoiceRecord.driverName}</p>
@@ -541,13 +541,13 @@ export const renderInvoiceLayoutHorizontal = (
                     unicodeBidi: 'isolate',
                     margin: '0 auto 12px auto',
                     fontSize: `${fontSize}px`,
-                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                     boxSizing: 'border-box',
                 }}>
                     <thead>
                         {/* ردیف اول: دسته‌بندی‌ها */}
                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                            <th colSpan={5} style={{ 
+                            <th colSpan={8} style={{ 
                                 border: '1px solid #000', 
                                 padding: cellPadding, 
                                 backgroundColor: '#e5e7eb', 
@@ -555,7 +555,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize + 1}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -569,7 +569,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     fontSize: `${fontSize + 1}px`,
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -583,7 +583,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize + 1}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -599,7 +599,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -613,7 +613,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -627,21 +627,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                fontSize: `${fontSize}px`,
-                                fontWeight: 'bold',
-                                lineHeight: '1.4',
-                                whiteSpace: 'nowrap',
-                            }}>مبدأ</th>
-                            <th style={{ 
-                                border: '1px solid #000', 
-                                padding: cellPadding, 
-                                backgroundColor: '#e5e7eb', 
-                                textAlign: 'center',
-                                direction: 'rtl',
-                                unicodeBidi: 'isolate',
-                                verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -655,12 +641,68 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
                                 whiteSpace: 'nowrap',
                             }}>پلاک خودرو</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>ماموریت مصوب</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>ماموریت مازاد</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>کیلومتر مصوب</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>کیلومتر مازاد</th>
                             {costColumns.map((col, colIdx) => (
                                 <th key={colIdx} style={{ 
                                     border: '1px solid #000', 
@@ -670,7 +712,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     fontSize: `${fontSize}px`,
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -687,7 +729,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -711,7 +753,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: `${fontSize}px`,
                                         lineHeight: '1.4',
                                         whiteSpace: 'nowrap',
@@ -723,7 +765,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: `${fontSize}px`,
                                         lineHeight: '1.4',
                                         whiteSpace: 'normal',
@@ -737,21 +779,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize}px`,
-                                        lineHeight: '1.4',
-                                        whiteSpace: 'normal',
-                                        wordWrap: 'break-word',
-                                        maxWidth: '100px',
-                                    }}>{tour?.origin || '-'}</td>
-                                    <td style={{ 
-                                        border: '1px solid #000', 
-                                        padding: cellPadding, 
-                                        textAlign: 'right',
-                                        direction: 'rtl',
-                                        unicodeBidi: 'isolate',
-                                        verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: `${fontSize}px`,
                                         lineHeight: '1.4',
                                         whiteSpace: 'normal',
@@ -765,13 +793,61 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: `${fontSize}px`,
                                         lineHeight: '1.4',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         maxWidth: '120px',
                                     }}>{tour?.vehiclePlate || '-'}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.excessMissionDays || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.approvedKm || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.excessKm || 0).toLocaleString('fa-IR')}</td>
                                     {costColumns.map((col, colIdx) => {
                                         const tourValue = col.tourValues?.[tourIdx];
                                         const tourValueStr = tourValue !== undefined && tourValue !== null ? tourValue.toLocaleString('fa-IR') : '-';
@@ -785,7 +861,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize}px`,
                                                 lineHeight: '1.4',
                                             }}>{tourValueStr}</td>
@@ -798,7 +874,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: `${fontSize}px`,
                                         fontWeight: 'bold',
                                         lineHeight: '1.4',
@@ -812,20 +888,76 @@ export const renderInvoiceLayoutHorizontal = (
                             unicodeBidi: 'isolate',
                             backgroundColor: '#3b82f6',
                         }}>
-                            <td colSpan={5} style={{ 
+                            <td colSpan={4} style={{ 
                                 border: '1px solid #000', 
                                 padding: cellPadding, 
                                 textAlign: 'center',
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
                                 backgroundColor: '#3b82f6',
                                 color: '#ffffff',
                             }}>جمع کل</td>
+                            <td style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                backgroundColor: '#3b82f6',
+                                color: '#ffffff',
+                            }}>-</td>
+                            <td style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                backgroundColor: '#3b82f6',
+                                color: '#ffffff',
+                            }}>-</td>
+                            <td style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                backgroundColor: '#3b82f6',
+                                color: '#ffffff',
+                            }}>پیمایش کل</td>
+                            <td style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                backgroundColor: '#3b82f6',
+                                color: '#ffffff',
+                            }}>{(invoiceData.tourData?.reduce((sum, t) => sum + (t.totalKm || 0), 0) || 0).toLocaleString('fa-IR')}</td>
                             {costColumns.map((col, colIdx) => {
                                 const totalValue = col.isDepotCount ? '-' : (col.totalAmount !== undefined ? col.totalAmount.toLocaleString('fa-IR') : '-');
                                 return (
@@ -836,7 +968,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: `${fontSize}px`,
                                         fontWeight: 'bold',
                                         lineHeight: '1.4',
@@ -852,7 +984,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
                                 verticalAlign: 'middle',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 fontSize: `${fontSize}px`,
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
@@ -875,7 +1007,7 @@ export const renderInvoiceLayoutHorizontal = (
                         lineHeight: '1.8',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                         boxSizing: 'border-box',
                         margin: '8px auto 0 auto',
                     }}>
@@ -952,14 +1084,21 @@ export const renderInvoiceLayoutHorizontal = (
                     const helperTourData = helperCalculations.map((calc: any) => {
                         const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
                         const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
-                        const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
                         const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
                         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                        const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
+                        const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
+                        const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0);
+                        const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0);
                         return {
                             billOfLadingNumber,
-                            origin,
                             destinations,
                             vehiclePlate,
+                            approvedKm,
+                            excessKm,
+                            totalKm: approvedKm + excessKm,
+                            approvedMissionDays,
+                            excessMissionDays,
                         };
                     });
                     const helperNumTours = helperTourData.length;
@@ -973,7 +1112,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 textAlign: 'center',
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 color: '#16a34a',
                                 borderBottom: '2px solid #16a34a',
                                 paddingBottom: '8px',
@@ -991,13 +1130,13 @@ export const renderInvoiceLayoutHorizontal = (
                                 unicodeBidi: 'isolate',
                                 margin: '0 auto 12px auto',
                                 fontSize: `${fontSize}px`,
-                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                 boxSizing: 'border-box',
                             }}>
                                 <thead>
                                     {/* ردیف اول: دسته‌بندی‌ها */}
                                     <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                        <th colSpan={5} style={{ 
+                                        <th colSpan={8} style={{ 
                                             border: '1px solid #000', 
                                             padding: cellPadding, 
                                             backgroundColor: '#e5e7eb', 
@@ -1005,7 +1144,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize + 1}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
@@ -1019,7 +1158,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize + 1}px`,
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1033,7 +1172,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize + 1}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
@@ -1049,7 +1188,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
@@ -1063,7 +1202,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
@@ -1077,21 +1216,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                            fontSize: `${fontSize}px`,
-                                            fontWeight: 'bold',
-                                            lineHeight: '1.4',
-                                            whiteSpace: 'nowrap',
-                                        }}>مبدأ</th>
-                                        <th style={{ 
-                                            border: '1px solid #000', 
-                                            padding: cellPadding, 
-                                            backgroundColor: '#e5e7eb', 
-                                            textAlign: 'center',
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
@@ -1105,12 +1230,68 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
                                             whiteSpace: 'nowrap',
                                         }}>پلاک خودرو</th>
+                                        <th style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            backgroundColor: '#e5e7eb', 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            whiteSpace: 'nowrap',
+                                        }}>ماموریت مصوب</th>
+                                        <th style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            backgroundColor: '#e5e7eb', 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            whiteSpace: 'nowrap',
+                                        }}>ماموریت مازاد</th>
+                                        <th style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            backgroundColor: '#e5e7eb', 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            whiteSpace: 'nowrap',
+                                        }}>کیلومتر مصوب</th>
+                                        <th style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            backgroundColor: '#e5e7eb', 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            whiteSpace: 'nowrap',
+                                        }}>کیلومتر مازاد</th>
                                         {helperCostColumns.map((col, colIdx) => (
                                             <th key={colIdx} style={{ 
                                                 border: '1px solid #000', 
@@ -1120,7 +1301,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                 fontSize: `${fontSize}px`,
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1137,7 +1318,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize}px`,
                                             fontWeight: 'bold',
                                             lineHeight: '1.4',
@@ -1161,7 +1342,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize}px`,
                                                     lineHeight: '1.4',
                                                     whiteSpace: 'nowrap',
@@ -1173,7 +1354,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize}px`,
                                                     lineHeight: '1.4',
                                                     whiteSpace: 'normal',
@@ -1187,21 +1368,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                    fontSize: `${fontSize}px`,
-                                                    lineHeight: '1.4',
-                                                    whiteSpace: 'normal',
-                                                    wordWrap: 'break-word',
-                                                    maxWidth: '100px',
-                                                }}>{tour?.origin || '-'}</td>
-                                                <td style={{ 
-                                                    border: '1px solid #000', 
-                                                    padding: cellPadding, 
-                                                    textAlign: 'right',
-                                                    direction: 'rtl',
-                                                    unicodeBidi: 'isolate',
-                                                    verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize}px`,
                                                     lineHeight: '1.4',
                                                     whiteSpace: 'normal',
@@ -1215,13 +1382,61 @@ export const renderInvoiceLayoutHorizontal = (
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize}px`,
                                                     lineHeight: '1.4',
                                                     whiteSpace: 'normal',
                                                     wordWrap: 'break-word',
                                                     maxWidth: '120px',
                                                 }}>{tour?.vehiclePlate || '-'}</td>
+                                                <td style={{ 
+                                                    border: '1px solid #000', 
+                                                    padding: cellPadding, 
+                                                    textAlign: 'center',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    verticalAlign: 'middle',
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontSize: `${fontSize}px`,
+                                                    lineHeight: '1.4',
+                                                    whiteSpace: 'nowrap',
+                                                }}>{(tour?.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
+                                                <td style={{ 
+                                                    border: '1px solid #000', 
+                                                    padding: cellPadding, 
+                                                    textAlign: 'center',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    verticalAlign: 'middle',
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontSize: `${fontSize}px`,
+                                                    lineHeight: '1.4',
+                                                    whiteSpace: 'nowrap',
+                                                }}>{(tour?.excessMissionDays || 0).toLocaleString('fa-IR')}</td>
+                                                <td style={{ 
+                                                    border: '1px solid #000', 
+                                                    padding: cellPadding, 
+                                                    textAlign: 'center',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    verticalAlign: 'middle',
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontSize: `${fontSize}px`,
+                                                    lineHeight: '1.4',
+                                                    whiteSpace: 'nowrap',
+                                                }}>{(tour?.approvedKm || 0).toLocaleString('fa-IR')}</td>
+                                                <td style={{ 
+                                                    border: '1px solid #000', 
+                                                    padding: cellPadding, 
+                                                    textAlign: 'center',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    verticalAlign: 'middle',
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontSize: `${fontSize}px`,
+                                                    lineHeight: '1.4',
+                                                    whiteSpace: 'nowrap',
+                                                }}>{(tour?.excessKm || 0).toLocaleString('fa-IR')}</td>
                                                 {helperCostColumns.map((col, colIdx) => {
                                                     const tourValue = col.tourValues?.[tourIdx];
                                                     const tourValueStr = tourValue !== undefined && tourValue !== null ? tourValue.toLocaleString('fa-IR') : '-';
@@ -1235,7 +1450,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                             direction: 'rtl',
                                                             unicodeBidi: 'isolate',
                                                             verticalAlign: 'middle',
-                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                             fontSize: `${fontSize}px`,
                                                             lineHeight: '1.4',
                                                         }}>{tourValueStr}</td>
@@ -1250,7 +1465,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize}px`,
                                                     lineHeight: '1.4',
                                                 }}>{tourTotal > 0 ? tourTotal.toLocaleString('fa-IR') : '-'}</td>
@@ -1259,7 +1474,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     })}
                                     {/* ردیف جمع کل راننده کمکی */}
                                     <tr style={{ backgroundColor: '#16a34a', direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                        <td colSpan={5} style={{ 
+                                        <td colSpan={4} style={{ 
                                             border: '1px solid #000', 
                                             padding: cellPadding, 
                                             textAlign: 'center', 
@@ -1268,11 +1483,67 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize + 1}px`,
                                             lineHeight: '1.4',
                                             whiteSpace: 'nowrap',
                                         }}>جمع کل</td>
+                                        <td style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            backgroundColor: '#16a34a',
+                                            color: '#ffffff',
+                                        }}>-</td>
+                                        <td style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            backgroundColor: '#16a34a',
+                                            color: '#ffffff',
+                                        }}>-</td>
+                                        <td style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            backgroundColor: '#16a34a',
+                                            color: '#ffffff',
+                                        }}>پیمایش کل</td>
+                                        <td style={{ 
+                                            border: '1px solid #000', 
+                                            padding: cellPadding, 
+                                            textAlign: 'center',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            verticalAlign: 'middle',
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontSize: `${fontSize}px`,
+                                            fontWeight: 'bold',
+                                            lineHeight: '1.4',
+                                            backgroundColor: '#16a34a',
+                                            color: '#ffffff',
+                                        }}>{(helperTourData.reduce((sum, t) => sum + (t.totalKm || 0), 0)).toLocaleString('fa-IR')}</td>
                                         {helperCostColumns.map((col, colIdx) => {
                                             if (col.isDepotCount) {
                                                 return (
@@ -1285,7 +1556,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: `${fontSize}px`,
                                                         lineHeight: '1.4',
                                                         whiteSpace: 'nowrap',
@@ -1304,7 +1575,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     verticalAlign: 'middle',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontSize: `${fontSize}px`,
                                                     lineHeight: '1.4',
                                                 }}>{colTotal.toLocaleString('fa-IR')}</td>
@@ -1320,7 +1591,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             verticalAlign: 'middle',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             fontSize: `${fontSize + 1}px`,
                                             lineHeight: '1.4',
                                         }}>
@@ -1345,7 +1616,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     lineHeight: '1.8',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     boxSizing: 'border-box',
                                     margin: '8px auto 0 auto',
                                 }}>
@@ -1424,7 +1695,7 @@ export const exportInvoiceToImage = async (
                             tableEl.style.minWidth = '100%';
                             tableEl.style.tableLayout = 'auto';
                             tableEl.style.borderCollapse = 'collapse';
-                            tableEl.style.fontFamily = "'Vazir', 'Tahoma', sans-serif";
+                            tableEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
                         });
                     }
                 }
