@@ -511,7 +511,7 @@ export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
     invoiceAnnouncements: Map<string, any>,
-    containerWidth: number = 1600,
+    containerWidth: number = 1200,
     fontSize: number = 13,
     cellPadding: string = '14px 12px'
 ): JSX.Element => {
@@ -778,7 +778,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
-                                        borderRight: categoryBorderRight,
+                                        borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
@@ -905,7 +905,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: cellBorder, // border عادی - border جداکننده در directValues است
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
@@ -948,7 +948,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: cellBorder, // border عادی - border جداکننده در depotValues است
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
@@ -1465,17 +1465,15 @@ export const exportInvoiceToImage = async (
             
             // تنظیم استایل‌های temp div
             tempDiv.style.width = 'auto';
-            tempDiv.style.minWidth = '1600px';
-            tempDiv.style.maxWidth = 'none';
-            tempDiv.style.width = 'auto';
+            tempDiv.style.minWidth = '1200px';
+            tempDiv.style.maxWidth = '1200px';
             tempDiv.style.overflow = 'visible';
             
             const invoiceElement_internal = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
             if (invoiceElement_internal) {
                 invoiceElement_internal.style.width = 'auto';
-                invoiceElement_internal.style.minWidth = '1600px';
-                invoiceElement_internal.style.maxWidth = 'none';
-                invoiceElement_internal.style.width = 'auto';
+                invoiceElement_internal.style.minWidth = '1200px';
+                invoiceElement_internal.style.maxWidth = '1200px';
                 invoiceElement_internal.style.margin = '0 auto';
                 invoiceElement_internal.style.overflow = 'visible';
                 invoiceElement_internal.style.visibility = 'visible';
@@ -1486,7 +1484,7 @@ export const exportInvoiceToImage = async (
             await new Promise(resolve => setTimeout(resolve, 500));
             
             // محاسبه عرض واقعی محتوا
-            const actualWidth = Math.max(tempDiv.scrollWidth, tempDiv.offsetWidth, 1600);
+            const actualWidth = Math.max(tempDiv.scrollWidth, tempDiv.offsetWidth, 1200);
             const actualHeight = Math.max(tempDiv.scrollHeight, tempDiv.offsetHeight);
             
             // استفاده از html2canvas
@@ -1501,7 +1499,7 @@ export const exportInvoiceToImage = async (
                 height: actualHeight,
                 windowWidth: actualWidth,
                 windowHeight: actualHeight,
-                    onclone: async (clonedDoc) => {
+                    onclone: (clonedDoc) => {
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
@@ -1535,34 +1533,20 @@ export const exportInvoiceToImage = async (
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
                         
-                        // اضافه کردن چند link tag دیگر برای اطمینان
-                        const link2 = clonedDoc.createElement('link');
-                        link2.href = 'https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2';
-                        link2.rel = 'preload';
-                        link2.as = 'font';
-                        link2.type = 'font/woff2';
-                        link2.crossOrigin = 'anonymous';
-                        clonedDoc.head.appendChild(link2);
-                        
-                        // انتظار بیشتر برای لود شدن فونت
-                        await new Promise(resolve => setTimeout(resolve, 800));
-                    
-                    const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
+                        const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                     if (clonedTempDiv) {
                         clonedTempDiv.style.visibility = 'visible';
                         clonedTempDiv.style.opacity = '1';
                         clonedTempDiv.style.width = 'auto';
-                        clonedTempDiv.style.minWidth = '1600px';
-                        clonedTempDiv.style.maxWidth = 'none';
-                        clonedTempDiv.style.width = 'auto';
+                        clonedTempDiv.style.minWidth = '1200px';
+                        clonedTempDiv.style.maxWidth = '1200px';
                         clonedTempDiv.style.overflow = 'visible';
                         
                         const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
                         if (clonedInvoiceElement) {
                             clonedInvoiceElement.style.width = 'auto';
-                                clonedInvoiceElement.style.minWidth = '1600px';
-                                clonedInvoiceElement.style.maxWidth = 'none';
-                                clonedInvoiceElement.style.width = 'auto';
+                                clonedInvoiceElement.style.minWidth = '1200px';
+                                clonedInvoiceElement.style.maxWidth = '1200px';
                         }
                         
                         // اعمال فونت B Homa به تمام المان‌ها با !important
