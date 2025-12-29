@@ -2203,6 +2203,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 // انتظار برای render کامل
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
+                // محاسبه ارتفاع واقعی محتوا
+                const contentHeight = tempDiv.scrollHeight;
+                const contentWidth = tempDiv.scrollWidth;
+                
                 // استفاده از html2canvas برای تولید تصویر
                 const canvas = await html2canvas(tempDiv, {
                     scale: 2,
@@ -2211,13 +2215,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     backgroundColor: '#ffffff',
                     allowTaint: true,
                     removeContainer: false,
+                    width: contentWidth || tempDiv.offsetWidth,
+                    height: contentHeight || tempDiv.offsetHeight,
+                    windowWidth: contentWidth || tempDiv.offsetWidth,
+                    windowHeight: contentHeight || tempDiv.offsetHeight,
                     onclone: (clonedDoc) => {
                         const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                         if (clonedTempDiv) {
                             clonedTempDiv.style.visibility = 'visible';
                             clonedTempDiv.style.opacity = '1';
-                            clonedTempDiv.style.width = '100%';
+                            clonedTempDiv.style.width = `${contentWidth || tempDiv.offsetWidth}px`;
                             clonedTempDiv.style.maxWidth = '100%';
+                            clonedTempDiv.style.height = `${contentHeight || tempDiv.offsetHeight}px`;
                             clonedTempDiv.style.overflow = 'visible';
                             
                             // اعمال استایل‌های جدول
@@ -2228,7 +2237,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 tableEl.style.minWidth = '100%';
                                 tableEl.style.tableLayout = 'auto';
                                 tableEl.style.borderCollapse = 'collapse';
-                                tableEl.style.fontFamily = "'Vazir', 'Tahoma', sans-serif";
+                                tableEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
                             });
                         }
                     }
