@@ -707,7 +707,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         wordWrap: 'break-word',
                                         width: '25%',
                                     }}>
-                                        {initialValue}
+                                        {initialValues}
                                     </td>
                                     
                                     {/* هزینه های مستقیم - Label */}
@@ -742,7 +742,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         wordWrap: 'break-word',
                                         width: '25%',
                                     }}>
-                                        {directValue}
+                                        {directValues}
                                     </td>
                                     
                                     {/* هزینه دپو - Label */}
@@ -777,7 +777,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         wordWrap: 'break-word',
                                         width: '25%',
                                     }}>
-                                        {depotValue}
+                                        {depotValues}
                                     </td>
                                     
                                     {/* جمع بندی - Label */}
