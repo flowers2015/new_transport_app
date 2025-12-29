@@ -2253,13 +2253,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 font-style: normal;
                                 font-weight: 400;
                                 font-display: block;
-                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2');
+                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
                                 unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
                             }
                             * {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                -webkit-font-smoothing: antialiased;
+                                -moz-osx-font-smoothing: grayscale;
                             }
                             body, html {
+                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                            }
+                            table, td, th, tr {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
                             }
                         `;
@@ -2270,6 +2276,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
+                        
+                        // انتظار کوتاه برای لود شدن فونت
+                        await new Promise(resolve => setTimeout(resolve, 300));
                         
                         const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                         if (clonedTempDiv) {

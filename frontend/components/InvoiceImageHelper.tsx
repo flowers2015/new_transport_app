@@ -862,7 +862,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: cellBorder,
+                                        borderLeft: categoryBorderRight, // border سمت چپ برای جدا کردن از اطلاعات اولیه
                                         borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
@@ -884,7 +884,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: categoryBorderRight,
+                                        borderRight: categoryBorderRight, // border سمت راست برای جدا کردن از هزینه دپو
                                         padding: '10px 8px', 
                                         textAlign: isNumeric(directValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -905,7 +905,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: cellBorder,
+                                        borderLeft: categoryBorderRight, // border سمت چپ برای جدا کردن از هزینه های مستقیم
                                         borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
@@ -927,7 +927,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: categoryBorderRight,
+                                        borderRight: categoryBorderRight, // border سمت راست برای جدا کردن از جمع بندی
                                         padding: '10px 8px', 
                                         textAlign: isNumeric(depotValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -948,7 +948,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: cellBorder,
+                                        borderLeft: categoryBorderRight, // border سمت چپ برای جدا کردن از هزینه دپو
                                         borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
@@ -1286,7 +1286,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     </td>
                                                     
                                                     {/* هزینه های مستقیم */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDirectRow ? helperDirectRow.label : '-'}
                                                     </td>
                                                     <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperDirectValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
@@ -1294,7 +1294,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     </td>
                                                     
                                                     {/* هزینه دپو */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDepotRow ? helperDepotRow.label : '-'}
                                                     </td>
                                                     <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperDepotValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
@@ -1302,7 +1302,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     </td>
                                                     
                                                     {/* جمع بندی */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperSummaryRow ? helperSummaryRow.label : '-'}
                                                     </td>
                                                     <td style={{ borderTop: cellBorder, borderBottom: isLastRow ? cellBorder : cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '10px 8px', textAlign: 'center', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', fontWeight: 'bold', color: '#1e40af', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
@@ -1509,13 +1509,19 @@ export const exportInvoiceToImage = async (
                                 font-style: normal;
                                 font-weight: 400;
                                 font-display: block;
-                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2');
+                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
                                 unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
                             }
                             * {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                -webkit-font-smoothing: antialiased;
+                                -moz-osx-font-smoothing: grayscale;
                             }
                             body, html {
+                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                            }
+                            table, td, th, tr {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
                             }
                         `;
@@ -1526,6 +1532,9 @@ export const exportInvoiceToImage = async (
                         link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
+                        
+                        // انتظار کوتاه برای لود شدن فونت
+                        await new Promise(resolve => setTimeout(resolve, 300));
                     
                     const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                     if (clonedTempDiv) {
@@ -1543,22 +1552,24 @@ export const exportInvoiceToImage = async (
                             clonedInvoiceElement.style.maxWidth = '1200px';
                         }
                         
-                        // اعمال فونت B Homa به تمام المان‌ها
+                        // اعمال فونت B Homa به تمام المان‌ها با !important
                         const allElements = clonedTempDiv.querySelectorAll('*');
                         allElements.forEach((el) => {
                             const htmlEl = el as HTMLElement;
                             if (htmlEl.style) {
-                                // همیشه فونت B Homa را اعمال کن
-                                htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                // استفاده از setProperty برای اعمال !important
+                                htmlEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                                htmlEl.style.setProperty('-webkit-font-smoothing', 'antialiased', 'important');
+                                htmlEl.style.setProperty('-moz-osx-font-smoothing', 'grayscale', 'important');
                             }
                         });
                         
                         // اعمال فونت به body و html
                         if (clonedDoc.body) {
-                            clonedDoc.body.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                            clonedDoc.body.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
                         }
                         if (clonedDoc.documentElement) {
-                            clonedDoc.documentElement.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                            clonedDoc.documentElement.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
                         }
                         
                         // اعمال استایل‌های جدول
@@ -1569,13 +1580,13 @@ export const exportInvoiceToImage = async (
                             tableEl.style.minWidth = '100%';
                             tableEl.style.tableLayout = 'auto';
                             tableEl.style.borderCollapse = 'collapse';
-                            tableEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                            tableEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
                             
                             // اعمال فونت به تمام سلول‌های جدول
                             const cells = tableEl.querySelectorAll('td, th');
                             cells.forEach((cell) => {
                                 const cellEl = cell as HTMLElement;
-                                cellEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                cellEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
                             });
                         });
                     }
