@@ -2220,6 +2220,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     windowWidth: contentWidth || tempDiv.offsetWidth,
                     windowHeight: contentHeight || tempDiv.offsetHeight,
                     onclone: (clonedDoc) => {
+                        // اضافه کردن فونت B Homa به head
+                        const link = clonedDoc.createElement('link');
+                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=swap';
+                        link.rel = 'stylesheet';
+                        clonedDoc.head.appendChild(link);
+                        
                         const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                         if (clonedTempDiv) {
                             clonedTempDiv.style.visibility = 'visible';
@@ -2228,6 +2234,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             clonedTempDiv.style.maxWidth = '100%';
                             clonedTempDiv.style.height = `${contentHeight || tempDiv.offsetHeight}px`;
                             clonedTempDiv.style.overflow = 'visible';
+                            
+                            // اعمال فونت B Homa به تمام المان‌ها
+                            const allElements = clonedTempDiv.querySelectorAll('*');
+                            allElements.forEach((el) => {
+                                const htmlEl = el as HTMLElement;
+                                if (htmlEl.style) {
+                                    const currentFont = htmlEl.style.fontFamily;
+                                    if (currentFont && currentFont.includes("'B Homa'")) {
+                                        htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                    } else if (!currentFont || currentFont === '') {
+                                        htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                    }
+                                }
+                            });
                             
                             // اعمال استایل‌های جدول
                             const clonedTables = clonedTempDiv.querySelectorAll('table');
@@ -2238,6 +2258,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 tableEl.style.tableLayout = 'auto';
                                 tableEl.style.borderCollapse = 'collapse';
                                 tableEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                
+                                // اعمال فونت به تمام سلول‌های جدول
+                                const cells = tableEl.querySelectorAll('td, th');
+                                cells.forEach((cell) => {
+                                    const cellEl = cell as HTMLElement;
+                                    cellEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                });
                             });
                         }
                     }

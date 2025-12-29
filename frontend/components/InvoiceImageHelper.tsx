@@ -615,35 +615,111 @@ export const renderInvoiceLayoutHorizontal = (
                                 fontWeight: 'bold',
                                 lineHeight: '1.4',
                                 whiteSpace: 'nowrap',
-                                        }}>ردیف</th>
-                                        <th style={{ 
-                                            border: '1px solid #000', 
-                                            padding: cellPadding, 
-                                            backgroundColor: '#e5e7eb', 
-                                            textAlign: 'center',
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            verticalAlign: 'middle',
-                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                            fontSize: `${fontSize}px`,
-                                            fontWeight: 'bold',
-                                            lineHeight: '1.4',
-                                            whiteSpace: 'nowrap',
-                                        }}>کدپرسنلی</th>
-                                        <th style={{ 
-                                            border: '1px solid #000', 
-                                            padding: cellPadding, 
-                                            backgroundColor: '#e5e7eb', 
-                                            textAlign: 'center',
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            verticalAlign: 'middle',
-                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                            fontSize: `${fontSize}px`,
-                                            fontWeight: 'bold',
-                                            lineHeight: '1.4',
-                                            whiteSpace: 'nowrap',
-                                        }}>نام</th>
+                            }}>ردیف</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'normal',
+                                wordWrap: 'break-word',
+                                minWidth: '80px',
+                            }}>شماره بارنامه</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'normal',
+                                wordWrap: 'break-word',
+                                minWidth: '100px',
+                            }}>مقصد</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'normal',
+                                wordWrap: 'break-word',
+                                minWidth: '80px',
+                            }}>پلاک خودرو</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>ماموریت مصوب</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>ماموریت مازاد</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>کیلومتر مصوب</th>
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#e5e7eb', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                            }}>کیلومتر مازاد</th>
                             <th style={{ 
                                 border: '1px solid #000', 
                                 padding: cellPadding, 
@@ -726,33 +802,121 @@ export const renderInvoiceLayoutHorizontal = (
                                         fontSize: `${fontSize}px`,
                                         lineHeight: '1.4',
                                         whiteSpace: 'nowrap',
-                                                }}>{tourIdx + 1}</td>
-                                                <td style={{ 
-                                                    border: '1px solid #000', 
-                                                    padding: cellPadding, 
-                                                    textAlign: 'center',
-                                                    direction: 'rtl',
-                                                    unicodeBidi: 'isolate',
-                                                    verticalAlign: 'middle',
-                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                    fontSize: `${fontSize}px`,
-                                                    lineHeight: '1.4',
-                                                    whiteSpace: 'nowrap',
-                                                }}>{tour?.employeeId || '-'}</td>
-                                                <td style={{ 
-                                                    border: '1px solid #000', 
-                                                    padding: cellPadding, 
-                                                    textAlign: 'right',
-                                                    direction: 'rtl',
-                                                    unicodeBidi: 'isolate',
-                                                    verticalAlign: 'middle',
-                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                    fontSize: `${fontSize}px`,
-                                                    lineHeight: '1.4',
-                                                    whiteSpace: 'normal',
-                                                    wordWrap: 'break-word',
-                                                    maxWidth: '200px',
-                                                }}>{tour?.name || '-'}</td>
+                                    }}>{tourIdx + 1}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'right',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'normal',
+                                        wordWrap: 'break-word',
+                                        maxWidth: '120px',
+                                    }}>{tour?.billOfLadingNumber || '-'}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'right',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'normal',
+                                        wordWrap: 'break-word',
+                                        maxWidth: '150px',
+                                    }}>{tour?.destinations || '-'}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'right',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'normal',
+                                        wordWrap: 'break-word',
+                                        maxWidth: '120px',
+                                    }}>{tour?.vehiclePlate || '-'}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.approvedMissionDays || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.excessMissionDays || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.approvedKm || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.excessKm || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{tour?.billOfLadingDate || '-'}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{tour?.calculationDate || '-'}</td>
                                     {costColumns.map((col, colIdx) => {
                                         const tourValue = col.tourValues?.[tourIdx];
                                         const tourValueStr = tourValue !== undefined && tourValue !== null ? tourValue.toLocaleString('fa-IR') : '-';
@@ -793,7 +957,7 @@ export const renderInvoiceLayoutHorizontal = (
                             unicodeBidi: 'isolate',
                             backgroundColor: '#3b82f6',
                         }}>
-                            <td colSpan={6} style={{ 
+                            <td colSpan={10} style={{ 
                                 border: '1px solid #000', 
                                 padding: cellPadding, 
                                 textAlign: 'center',
@@ -807,20 +971,6 @@ export const renderInvoiceLayoutHorizontal = (
                                 backgroundColor: '#3b82f6',
                                 color: '#ffffff',
                             }}>جمع کل</td>
-                            <td colSpan={2} style={{ 
-                                border: '1px solid #000', 
-                                padding: cellPadding, 
-                                textAlign: 'center',
-                                direction: 'rtl',
-                                unicodeBidi: 'isolate',
-                                verticalAlign: 'middle',
-                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                fontSize: `${fontSize}px`,
-                                fontWeight: 'bold',
-                                lineHeight: '1.4',
-                                backgroundColor: '#3b82f6',
-                                color: '#ffffff',
-                            }}>-</td>
                             <td style={{ 
                                 border: '1px solid #000', 
                                 padding: cellPadding, 
@@ -1367,6 +1517,12 @@ export const exportInvoiceToImage = async (
                 allowTaint: true,
                 removeContainer: false,
                 onclone: (clonedDoc) => {
+                    // اضافه کردن فونت B Homa به head
+                    const link = clonedDoc.createElement('link');
+                    link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=swap';
+                    link.rel = 'stylesheet';
+                    clonedDoc.head.appendChild(link);
+                    
                     const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                     if (clonedTempDiv) {
                         clonedTempDiv.style.visibility = 'visible';
@@ -1374,6 +1530,20 @@ export const exportInvoiceToImage = async (
                         clonedTempDiv.style.width = '100%';
                         clonedTempDiv.style.maxWidth = '100%';
                         clonedTempDiv.style.overflow = 'visible';
+                        
+                        // اعمال فونت B Homa به تمام المان‌ها
+                        const allElements = clonedTempDiv.querySelectorAll('*');
+                        allElements.forEach((el) => {
+                            const htmlEl = el as HTMLElement;
+                            if (htmlEl.style) {
+                                const currentFont = htmlEl.style.fontFamily;
+                                if (currentFont && currentFont.includes("'B Homa'")) {
+                                    htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                } else if (!currentFont || currentFont === '') {
+                                    htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                }
+                            }
+                        });
                         
                         // اعمال استایل‌های جدول
                         const clonedTables = clonedTempDiv.querySelectorAll('table');
@@ -1384,6 +1554,13 @@ export const exportInvoiceToImage = async (
                             tableEl.style.tableLayout = 'auto';
                             tableEl.style.borderCollapse = 'collapse';
                             tableEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                            
+                            // اعمال فونت به تمام سلول‌های جدول
+                            const cells = tableEl.querySelectorAll('td, th');
+                            cells.forEach((cell) => {
+                                const cellEl = cell as HTMLElement;
+                                cellEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                            });
                         });
                     }
                 }
