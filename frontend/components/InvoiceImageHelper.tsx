@@ -707,7 +707,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         wordWrap: 'break-word',
                                         width: '25%',
                                     }}>
-                                        {initialRow ? initialValues : ''}
+                                        {initialValue}
                                     </td>
                                     
                                     {/* هزینه های مستقیم - Label */}
@@ -742,7 +742,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         wordWrap: 'break-word',
                                         width: '25%',
                                     }}>
-                                        {directRow ? directValues : ''}
+                                        {directValue}
                                     </td>
                                     
                                     {/* هزینه دپو - Label */}
@@ -777,7 +777,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         wordWrap: 'break-word',
                                         width: '25%',
                                     }}>
-                                        {depotRow ? depotValues : ''}
+                                        {depotValue}
                                     </td>
                                     
                                     {/* جمع بندی - Label */}
@@ -823,32 +823,67 @@ export const renderInvoiceLayoutHorizontal = (
                 
                 {/* بخش خلاصه */}
                 {mainBlock?.summary && (
-                    <div style={{
+                    <table style={{
                         width: '100%',
                         maxWidth: '100%',
-                        padding: '8px 10px',
-                        border: '2px solid #3b82f6',
-                        backgroundColor: '#dbeafe',
-                        fontSize: `${fontSize + 1}px`,
-                        lineHeight: '1.8',
+                        borderCollapse: 'collapse',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
+                        margin: '10px auto 0 auto',
+                        fontSize: `${fontSize + 1}px`,
                         fontFamily: "'B Homa', 'Tahoma', sans-serif",
                         boxSizing: 'border-box',
-                        margin: '8px auto 0 auto',
                     }}>
-                        <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
-                            جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
-                        </div>
-                        {mainBlock.summary.deductionsAmount && mainBlock.summary.deductionsAmount > 0 && (
-                            <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
-                                {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
-                            </div>
-                        )}
-                        <div style={{ direction: 'rtl', unicodeBidi: 'isolate', fontWeight: 'bold', marginBottom: '4px' }}>
-                            مبلغ قابل پرداخت: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
-                        </div>
-                    </div>
+                        <tbody>
+                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                <td style={{
+                                    border: '2px solid #3b82f6',
+                                    padding: '8px 10px',
+                                    backgroundColor: '#dbeafe',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    lineHeight: '1.6',
+                                }}>
+                                    جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
+                                </td>
+                            </tr>
+                            {mainBlock.summary.deductionsAmount && mainBlock.summary.deductionsAmount > 0 && (
+                                <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                    <td style={{
+                                        border: '2px solid #3b82f6',
+                                        borderTop: 'none',
+                                        padding: '8px 10px',
+                                        backgroundColor: '#dbeafe',
+                                        textAlign: 'right',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        lineHeight: '1.6',
+                                    }}>
+                                        {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
+                                    </td>
+                                </tr>
+                            )}
+                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                <td style={{
+                                    border: '2px solid #3b82f6',
+                                    borderTop: 'none',
+                                    padding: '8px 10px',
+                                    backgroundColor: '#dbeafe',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontWeight: 'bold',
+                                    lineHeight: '1.6',
+                                }}>
+                                    مبلغ قابل پرداخت: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 )}
             </div>
         </div>
