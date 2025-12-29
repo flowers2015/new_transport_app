@@ -476,7 +476,7 @@ export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
     invoiceAnnouncements: Map<string, any>,
-    containerWidth: number = 5000,
+    containerWidth: number = 1200,
     fontSize: number = 13,
     cellPadding: string = '14px 12px'
 ): JSX.Element => {
@@ -688,7 +688,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {initialRow ? initialRow.label : ''}
                                     </td>
@@ -705,7 +705,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {initialValues}
                                     </td>
@@ -723,7 +723,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {directRow ? directRow.label : ''}
                                     </td>
@@ -740,7 +740,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {directValues}
                                     </td>
@@ -758,7 +758,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {depotRow ? depotRow.label : ''}
                                     </td>
@@ -775,7 +775,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {depotValues}
                                     </td>
@@ -793,7 +793,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                     }}>
                                         {summaryRow ? summaryRow.label : ''}
                                     </td>
@@ -810,7 +810,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.3',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '25%',
+                                        width: '12.5%',
                                         fontWeight: 'bold',
                                     }}>
                                         {summaryRow ? totalValue : ''}
@@ -915,14 +915,15 @@ export const exportInvoiceToImage = async (
             
             // تنظیم استایل‌های temp div
             tempDiv.style.width = 'auto';
-            tempDiv.style.minWidth = '5000px';
+            tempDiv.style.minWidth = '1200px';
+            tempDiv.style.maxWidth = '1200px';
             tempDiv.style.overflow = 'visible';
             
             const invoiceElement_internal = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
             if (invoiceElement_internal) {
                 invoiceElement_internal.style.width = 'auto';
-                invoiceElement_internal.style.minWidth = '5000px';
-                invoiceElement_internal.style.maxWidth = 'none';
+                invoiceElement_internal.style.minWidth = '1200px';
+                invoiceElement_internal.style.maxWidth = '1200px';
                 invoiceElement_internal.style.margin = '0 auto';
                 invoiceElement_internal.style.overflow = 'visible';
                 invoiceElement_internal.style.visibility = 'visible';
@@ -933,7 +934,7 @@ export const exportInvoiceToImage = async (
             await new Promise(resolve => setTimeout(resolve, 500));
             
             // محاسبه عرض واقعی محتوا
-            const actualWidth = Math.max(tempDiv.scrollWidth, tempDiv.offsetWidth, 5000);
+            const actualWidth = Math.max(tempDiv.scrollWidth, tempDiv.offsetWidth, 1200);
             const actualHeight = Math.max(tempDiv.scrollHeight, tempDiv.offsetHeight);
             
             // استفاده از html2canvas
@@ -960,15 +961,15 @@ export const exportInvoiceToImage = async (
                         clonedTempDiv.style.visibility = 'visible';
                         clonedTempDiv.style.opacity = '1';
                         clonedTempDiv.style.width = 'auto';
-                        clonedTempDiv.style.minWidth = '5000px';
-                        clonedTempDiv.style.maxWidth = 'none';
+                        clonedTempDiv.style.minWidth = '1200px';
+                        clonedTempDiv.style.maxWidth = '1200px';
                         clonedTempDiv.style.overflow = 'visible';
                         
                         const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
                         if (clonedInvoiceElement) {
                             clonedInvoiceElement.style.width = 'auto';
-                            clonedInvoiceElement.style.minWidth = '5000px';
-                            clonedInvoiceElement.style.maxWidth = 'none';
+                            clonedInvoiceElement.style.minWidth = '1200px';
+                            clonedInvoiceElement.style.maxWidth = '1200px';
                         }
                         
                         // اعمال فونت B Homa به تمام المان‌ها

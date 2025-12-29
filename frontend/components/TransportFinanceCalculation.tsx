@@ -2193,7 +2193,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             tempDiv.style.left = '-9999px';
             tempDiv.style.top = '0';
             tempDiv.style.width = 'auto';
-            tempDiv.style.minWidth = '5000px';
+            tempDiv.style.minWidth = '1200px';
+            tempDiv.style.maxWidth = '1200px';
             tempDiv.style.opacity = '1';
             tempDiv.style.visibility = 'visible';
             tempDiv.style.backgroundColor = '#ffffff';
@@ -2233,16 +2234,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             clonedTempDiv.style.visibility = 'visible';
                             clonedTempDiv.style.opacity = '1';
                             clonedTempDiv.style.width = 'auto';
-                            clonedTempDiv.style.minWidth = '5000px';
-                            clonedTempDiv.style.maxWidth = 'none';
+                            clonedTempDiv.style.minWidth = '1200px';
+                            clonedTempDiv.style.maxWidth = '1200px';
                             clonedTempDiv.style.height = 'auto';
                             clonedTempDiv.style.overflow = 'visible';
                             
                             const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
                             if (clonedInvoiceElement) {
                                 clonedInvoiceElement.style.width = 'auto';
-                                clonedInvoiceElement.style.minWidth = '5000px';
-                                clonedInvoiceElement.style.maxWidth = 'none';
+                                clonedInvoiceElement.style.minWidth = '1200px';
+                                clonedInvoiceElement.style.maxWidth = '1200px';
                             }
                             
                             // اعمال فونت B Homa به تمام المان‌ها
