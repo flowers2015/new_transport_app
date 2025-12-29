@@ -2192,10 +2192,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             tempDiv.style.position = 'absolute';
             tempDiv.style.left = '-9999px';
             tempDiv.style.top = '0';
-            tempDiv.style.width = '100%';
+            tempDiv.style.width = 'auto';
+            tempDiv.style.minWidth = '3500px';
             tempDiv.style.opacity = '1';
             tempDiv.style.visibility = 'visible';
             tempDiv.style.backgroundColor = '#ffffff';
+            tempDiv.style.overflow = 'visible';
             tempDiv.innerHTML = htmlString;
             document.body.appendChild(tempDiv);
             
@@ -2230,10 +2232,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         if (clonedTempDiv) {
                             clonedTempDiv.style.visibility = 'visible';
                             clonedTempDiv.style.opacity = '1';
-                            clonedTempDiv.style.width = `${contentWidth || tempDiv.offsetWidth}px`;
-                            clonedTempDiv.style.maxWidth = '100%';
-                            clonedTempDiv.style.height = `${contentHeight || tempDiv.offsetHeight}px`;
+                            clonedTempDiv.style.width = 'auto';
+                            clonedTempDiv.style.minWidth = '3500px';
+                            clonedTempDiv.style.maxWidth = 'none';
+                            clonedTempDiv.style.height = 'auto';
                             clonedTempDiv.style.overflow = 'visible';
+                            
+                            const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
+                            if (clonedInvoiceElement) {
+                                clonedInvoiceElement.style.width = 'auto';
+                                clonedInvoiceElement.style.minWidth = '3500px';
+                                clonedInvoiceElement.style.maxWidth = 'none';
+                            }
                             
                             // اعمال فونت B Homa به تمام المان‌ها
                             const allElements = clonedTempDiv.querySelectorAll('*');

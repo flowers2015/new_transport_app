@@ -435,7 +435,7 @@ export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
     invoiceAnnouncements: Map<string, any>,
-    containerWidth: number = 2100,
+    containerWidth: number = 3500,
     fontSize: number = 13,
     cellPadding: string = '14px 12px'
 ): JSX.Element => {
@@ -495,20 +495,22 @@ export const renderInvoiceLayoutHorizontal = (
     
     return (
         <div style={{ width: '100%', overflowX: 'auto', direction: 'rtl' }}>
-            <div style={{
-                direction: 'rtl',
-                unicodeBidi: 'isolate',
-                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                width: `${containerWidth}px`,
-                maxWidth: '100%',
-                margin: '0 auto',
-                backgroundColor: '#ffffff',
-                color: '#000000',
-                padding: '20px',
-                boxSizing: 'border-box',
-                position: 'relative' as const,
-                textAlign: 'center',
-            }}>
+            <div 
+                data-invoice-ref="true"
+                style={{
+                    direction: 'rtl',
+                    unicodeBidi: 'isolate',
+                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                    width: `${containerWidth}px`,
+                    minWidth: `${containerWidth}px`,
+                    margin: '0 auto',
+                    backgroundColor: '#ffffff',
+                    color: '#000000',
+                    padding: '20px',
+                    boxSizing: 'border-box',
+                    position: 'relative' as const,
+                    textAlign: 'center',
+                }}>
                 {/* اطلاعات راننده */}
                 <div style={{
                     marginBottom: '16px',
@@ -1495,10 +1497,15 @@ export const exportInvoiceToImage = async (
             tempDiv.appendChild(clonedContent);
             
             // تنظیم استایل‌های temp div
+            tempDiv.style.width = 'auto';
+            tempDiv.style.minWidth = '3500px';
+            tempDiv.style.overflow = 'visible';
+            
             const invoiceElement_internal = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
             if (invoiceElement_internal) {
-                invoiceElement_internal.style.width = '100%';
-                invoiceElement_internal.style.maxWidth = '100%';
+                invoiceElement_internal.style.width = 'auto';
+                invoiceElement_internal.style.minWidth = '3500px';
+                invoiceElement_internal.style.maxWidth = 'none';
                 invoiceElement_internal.style.margin = '0 auto';
                 invoiceElement_internal.style.overflow = 'visible';
                 invoiceElement_internal.style.visibility = 'visible';
@@ -1527,9 +1534,17 @@ export const exportInvoiceToImage = async (
                     if (clonedTempDiv) {
                         clonedTempDiv.style.visibility = 'visible';
                         clonedTempDiv.style.opacity = '1';
-                        clonedTempDiv.style.width = '100%';
-                        clonedTempDiv.style.maxWidth = '100%';
+                        clonedTempDiv.style.width = 'auto';
+                        clonedTempDiv.style.minWidth = '3500px';
+                        clonedTempDiv.style.maxWidth = 'none';
                         clonedTempDiv.style.overflow = 'visible';
+                        
+                        const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
+                        if (clonedInvoiceElement) {
+                            clonedInvoiceElement.style.width = 'auto';
+                            clonedInvoiceElement.style.minWidth = '3500px';
+                            clonedInvoiceElement.style.maxWidth = 'none';
+                        }
                         
                         // اعمال فونت B Homa به تمام المان‌ها
                         const allElements = clonedTempDiv.querySelectorAll('*');
