@@ -435,7 +435,7 @@ export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
     invoiceAnnouncements: Map<string, any>,
-    containerWidth: number = 3500,
+    containerWidth: number = 5000,
     fontSize: number = 13,
     cellPadding: string = '14px 12px'
 ): JSX.Element => {
@@ -941,6 +941,18 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{ 
                                         border: '1px solid #000', 
                                         padding: cellPadding, 
+                                        textAlign: 'center',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize}px`,
+                                        lineHeight: '1.4',
+                                        whiteSpace: 'nowrap',
+                                    }}>{(tour?.totalKm || 0).toLocaleString('fa-IR')}</td>
+                                    <td style={{ 
+                                        border: '1px solid #000', 
+                                        padding: cellPadding, 
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
@@ -973,34 +985,6 @@ export const renderInvoiceLayoutHorizontal = (
                                 backgroundColor: '#3b82f6',
                                 color: '#ffffff',
                             }}>جمع کل</td>
-                            <td style={{ 
-                                border: '1px solid #000', 
-                                padding: cellPadding, 
-                                textAlign: 'center',
-                                direction: 'rtl',
-                                unicodeBidi: 'isolate',
-                                verticalAlign: 'middle',
-                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                fontSize: `${fontSize}px`,
-                                fontWeight: 'bold',
-                                lineHeight: '1.4',
-                                backgroundColor: '#3b82f6',
-                                color: '#ffffff',
-                            }}>پیمایش کل</td>
-                            <td style={{ 
-                                border: '1px solid #000', 
-                                padding: cellPadding, 
-                                textAlign: 'center',
-                                direction: 'rtl',
-                                unicodeBidi: 'isolate',
-                                verticalAlign: 'middle',
-                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                fontSize: `${fontSize}px`,
-                                fontWeight: 'bold',
-                                lineHeight: '1.4',
-                                backgroundColor: '#3b82f6',
-                                color: '#ffffff',
-                            }}>{(invoiceData.tourData?.reduce((sum, t) => sum + (t.totalKm || 0), 0) || 0).toLocaleString('fa-IR')}</td>
                             {costColumns.map((col, colIdx) => {
                                 const totalValue = col.isDepotCount ? '-' : (col.totalAmount !== undefined ? col.totalAmount.toLocaleString('fa-IR') : '-');
                                 return (
@@ -1020,6 +1004,35 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>{totalValue}</td>
                                 );
                             })}
+                            <th style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                backgroundColor: '#3b82f6', 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                whiteSpace: 'nowrap',
+                                color: '#ffffff',
+                            }}>پیمایش کل</th>
+                            <td style={{ 
+                                border: '1px solid #000', 
+                                padding: cellPadding, 
+                                textAlign: 'center',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                                verticalAlign: 'middle',
+                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                fontSize: `${fontSize}px`,
+                                fontWeight: 'bold',
+                                lineHeight: '1.4',
+                                backgroundColor: '#3b82f6',
+                                color: '#ffffff',
+                            }}>{(invoiceData.tourData?.reduce((sum, t) => sum + (t.totalKm || 0), 0) || 0).toLocaleString('fa-IR')}</td>
                             <td style={{ 
                                 border: '1px solid #000', 
                                 padding: cellPadding, 
@@ -1498,13 +1511,13 @@ export const exportInvoiceToImage = async (
             
             // تنظیم استایل‌های temp div
             tempDiv.style.width = 'auto';
-            tempDiv.style.minWidth = '3500px';
+            tempDiv.style.minWidth = '5000px';
             tempDiv.style.overflow = 'visible';
             
             const invoiceElement_internal = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
             if (invoiceElement_internal) {
                 invoiceElement_internal.style.width = 'auto';
-                invoiceElement_internal.style.minWidth = '3500px';
+                invoiceElement_internal.style.minWidth = '5000px';
                 invoiceElement_internal.style.maxWidth = 'none';
                 invoiceElement_internal.style.margin = '0 auto';
                 invoiceElement_internal.style.overflow = 'visible';
@@ -1535,14 +1548,14 @@ export const exportInvoiceToImage = async (
                         clonedTempDiv.style.visibility = 'visible';
                         clonedTempDiv.style.opacity = '1';
                         clonedTempDiv.style.width = 'auto';
-                        clonedTempDiv.style.minWidth = '3500px';
+                        clonedTempDiv.style.minWidth = '5000px';
                         clonedTempDiv.style.maxWidth = 'none';
                         clonedTempDiv.style.overflow = 'visible';
                         
                         const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
                         if (clonedInvoiceElement) {
                             clonedInvoiceElement.style.width = 'auto';
-                            clonedInvoiceElement.style.minWidth = '3500px';
+                            clonedInvoiceElement.style.minWidth = '5000px';
                             clonedInvoiceElement.style.maxWidth = 'none';
                         }
                         

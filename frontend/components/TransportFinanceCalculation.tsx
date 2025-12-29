@@ -2193,7 +2193,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             tempDiv.style.left = '-9999px';
             tempDiv.style.top = '0';
             tempDiv.style.width = 'auto';
-            tempDiv.style.minWidth = '3500px';
+            tempDiv.style.minWidth = '5000px';
             tempDiv.style.opacity = '1';
             tempDiv.style.visibility = 'visible';
             tempDiv.style.backgroundColor = '#ffffff';
@@ -2233,7 +2233,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             clonedTempDiv.style.visibility = 'visible';
                             clonedTempDiv.style.opacity = '1';
                             clonedTempDiv.style.width = 'auto';
-                            clonedTempDiv.style.minWidth = '3500px';
+                            clonedTempDiv.style.minWidth = '5000px';
                             clonedTempDiv.style.maxWidth = 'none';
                             clonedTempDiv.style.height = 'auto';
                             clonedTempDiv.style.overflow = 'visible';
@@ -2241,7 +2241,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
                             if (clonedInvoiceElement) {
                                 clonedInvoiceElement.style.width = 'auto';
-                                clonedInvoiceElement.style.minWidth = '3500px';
+                                clonedInvoiceElement.style.minWidth = '5000px';
                                 clonedInvoiceElement.style.maxWidth = 'none';
                             }
                             
