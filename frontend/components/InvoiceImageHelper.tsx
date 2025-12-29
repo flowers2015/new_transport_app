@@ -472,6 +472,41 @@ const formatJalali = (date: any): string => {
 };
 
 // تابع render برای افقی layout - ساختار جدید: دسته‌بندی‌ها به صورت ستون و فیلدها به صورت ردیف
+// تابع helper برای ساخت ردیف‌های اطلاعات اولیه راننده کمکی
+const createHelperInitialInfoRows = (helperCalculations: any[], announcementsMap: Map<string, any>) => {
+    const formatJalali = (date: any): string => {
+        if (!date) return '-';
+        if (typeof date === 'string') return date;
+        return date.toString();
+    };
+    
+    const tours = helperCalculations.map((calc: any) => {
+        const announcement = announcementsMap.get(calc.announcement_id || calc.announcementId);
+        const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+        const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+        const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+            (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                : formatJalali(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+        const calculationDate = calc.calculation_date || calc.calculationDate ? 
+            (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                ? (calc.calculation_date || calc.calculationDate)
+                : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
+        const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+        const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
+        return { billOfLadingNumber, destinations, billOfLadingDate, calculationDate, vehiclePlate, vehicleType };
+    });
+    
+    return [
+        { label: 'شماره بارنامه', getValue: (tour: any) => tour?.billOfLadingNumber || '-', getTotal: () => '-' },
+        { label: 'تاریخ صدور بارنامه', getValue: (tour: any) => tour?.billOfLadingDate || '-', getTotal: () => '-' },
+        { label: 'مقاصد', getValue: (tour: any) => tour?.destinations || '-', getTotal: () => '-' },
+        { label: 'تاریخ محاسبه', getValue: (tour: any) => tour?.calculationDate || '-', getTotal: () => '-' },
+        { label: 'پلاک خودرو', getValue: (tour: any) => tour?.vehiclePlate || '-', getTotal: () => '-' },
+        { label: 'نوع خودرو', getValue: (tour: any) => tour?.vehicleType || '-', getTotal: () => '-' },
+    ];
+};
+
 export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
@@ -482,6 +517,7 @@ export const renderInvoiceLayoutHorizontal = (
 ): JSX.Element => {
     const numTours = invoiceData.tourData?.length || 0;
     const mainBlock = invoiceData.blocks[0];
+    const helperBlocks = invoiceData.blocks.slice(1); // بلوک‌های راننده کمکی
     
     // محاسبه مقادیر برای هر دسته‌بندی
     const initialInfoRows = [
@@ -536,8 +572,9 @@ export const renderInvoiceLayoutHorizontal = (
         { label: 'کل هزینه تور', getValue: () => totalTourCost.toLocaleString('fa-IR'), getTotal: () => totalTourCost.toLocaleString('fa-IR') },
     ];
     
-    // محاسبه حداکثر تعداد ردیف‌ها
-    const maxRows = Math.max(initialInfoRows.length, directCostRows.length, depotCostRows.length, summaryRows.length);
+    // محاسبه حداکثر تعداد ردیف‌ها - اطلاعات اولیه را به 2 تقسیم می‌کنیم چون در هر ردیف 2 فیلد نمایش می‌دهیم
+    const initialInfoRowCount = Math.ceil(initialInfoRows.length / 2);
+    const maxRows = Math.max(initialInfoRowCount, directCostRows.length, depotCostRows.length, summaryRows.length);
     
     return (
         <div style={{ width: '100%', overflowX: 'auto', direction: 'rtl' }}>
@@ -623,8 +660,8 @@ export const renderInvoiceLayoutHorizontal = (
                     }}>
                         <thead>
                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                <th colSpan={2} style={{ 
-                                    border: '1px solid #1e40af', 
+                                <th colSpan={4} style={{ 
+                                    border: '2px solid #1e40af', 
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e40af', 
                                     color: '#ffffff',
@@ -638,7 +675,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     lineHeight: '1.4',
                                 }}>اطلاعات اولیه</th>
                                 <th colSpan={2} style={{ 
-                                    border: '1px solid #1e40af', 
+                                    border: '2px solid #1e40af', 
                                     borderRight: 'none',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e40af', 
@@ -653,7 +690,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     lineHeight: '1.4',
                                 }}>هزینه های مستقیم</th>
                                 <th colSpan={2} style={{ 
-                                    border: '1px solid #1e40af', 
+                                    border: '2px solid #1e40af', 
                                     borderRight: 'none',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e40af', 
@@ -668,7 +705,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     lineHeight: '1.4',
                                 }}>هزینه دپو</th>
                                 <th colSpan={2} style={{ 
-                                    border: '1px solid #1e40af', 
+                                    border: '2px solid #1e40af', 
                                     borderRight: 'none',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e40af', 
@@ -686,13 +723,16 @@ export const renderInvoiceLayoutHorizontal = (
                         </thead>
                     <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                         {Array.from({ length: maxRows }, (_, rowIdx) => {
-                            const initialRow = initialInfoRows[rowIdx];
+                            // برای اطلاعات اولیه: 2 فیلد در هر ردیف
+                            const initialRow1 = initialInfoRows[rowIdx * 2];
+                            const initialRow2 = initialInfoRows[rowIdx * 2 + 1];
                             const directRow = directCostRows[rowIdx];
                             const depotRow = depotCostRows[rowIdx];
                             const summaryRow = summaryRows[rowIdx];
                             
                             // محاسبه مقادیر برای هر تور
-                            const initialValues = invoiceData.tourData?.map(tour => initialRow ? initialRow.getValue(tour) : '-').join(' / ') || '-';
+                            const initialValues1 = invoiceData.tourData?.map(tour => initialRow1 ? initialRow1.getValue(tour) : '-').join(' / ') || '-';
+                            const initialValues2 = invoiceData.tourData?.map(tour => initialRow2 ? initialRow2.getValue(tour) : '-').join(' / ') || '-';
                             const directValues = invoiceData.tourData?.map(tour => directRow ? directRow.getValue(tour) : '-').join(' / ') || '-';
                             const depotValues = invoiceData.tourData?.map(tour => depotRow ? depotRow.getValue(tour) : '-').join(' / ') || '-';
                             const summaryValue = summaryRow ? summaryRow.getValue() : '-';
@@ -700,13 +740,18 @@ export const renderInvoiceLayoutHorizontal = (
                             
                             const isEven = rowIdx % 2 === 0;
                             const rowBgColor = isEven ? '#f9fafb' : '#ffffff';
-                            const hasContent = initialRow || directRow || depotRow || summaryRow;
+                            const hasContent = initialRow1 || initialRow2 || directRow || depotRow || summaryRow;
                             
                             // بررسی اینکه آیا مقدار عددی است یا نه
                             const isNumeric = (str: string) => {
                                 if (!str || str === '-') return false;
                                 return /^[\d,\.\s]+$/.test(str.replace(/[^\d,\.]/g, ''));
                             };
+                            
+                            // تعیین border برای دسته‌بندی‌ها
+                            const categoryBorderRight = '2px solid #1e40af'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL)
+                            const cellBorder = '1px solid #e5e7eb'; // حاشیه‌های کم رنگ داخل جدول
+                            const isLastRow = rowIdx === maxRows - 1;
                             
                             return (
                                 <tr 
@@ -728,10 +773,12 @@ export const renderInvoiceLayoutHorizontal = (
                                         }
                                     }}
                                 >
-                                    {/* اطلاعات اولیه - Label */}
+                                    {/* اطلاعات اولیه - فیلد 1 Label */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: rowIdx === maxRows - 1 ? '1px solid #d1d5db' : 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: cellBorder,
+                                        borderRight: categoryBorderRight,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
@@ -742,17 +789,19 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '10%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
-                                        {initialRow ? initialRow.label : '-'}
+                                        {initialRow1 ? initialRow1.label : '-'}
                                     </td>
-                                    {/* اطلاعات اولیه - Value */}
+                                    {/* اطلاعات اولیه - فیلد 1 Value */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: 'none',
+                                        borderRight: cellBorder,
                                         padding: '10px 8px', 
-                                        textAlign: isNumeric(initialValues) ? 'center' : 'right',
+                                        textAlign: isNumeric(initialValues1) ? 'center' : 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -761,16 +810,60 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '10%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
-                                        {initialValues || '-'}
+                                        {initialValues1 || '-'}
+                                    </td>
+                                    {/* اطلاعات اولیه - فیلد 2 Label */}
+                                    <td style={{ 
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: cellBorder,
+                                        borderRight: cellBorder,
+                                        padding: '10px 8px', 
+                                        textAlign: 'right',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize + 1}px`,
+                                        lineHeight: '1.5',
+                                        whiteSpace: 'normal',
+                                        wordWrap: 'break-word',
+                                        width: '10%',
+                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                    }}>
+                                        {initialRow2 ? initialRow2.label : '-'}
+                                    </td>
+                                    {/* اطلاعات اولیه - فیلد 2 Value */}
+                                    <td style={{ 
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: 'none',
+                                        borderRight: categoryBorderRight,
+                                        padding: '10px 8px', 
+                                        textAlign: isNumeric(initialValues2) ? 'center' : 'right',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        verticalAlign: 'middle',
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: `${fontSize + 1}px`,
+                                        lineHeight: '1.5',
+                                        whiteSpace: 'normal',
+                                        wordWrap: 'break-word',
+                                        width: '10%',
+                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                    }}>
+                                        {initialValues2 || '-'}
                                     </td>
                                     
                                     {/* هزینه های مستقیم - Label */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: cellBorder,
+                                        borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
@@ -781,15 +874,17 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '15%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
                                         {directRow ? directRow.label : '-'}
                                     </td>
                                     {/* هزینه های مستقیم - Value */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: 'none',
+                                        borderRight: categoryBorderRight,
                                         padding: '10px 8px', 
                                         textAlign: isNumeric(directValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -800,7 +895,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '15%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
                                         {directValues || '-'}
@@ -808,8 +903,10 @@ export const renderInvoiceLayoutHorizontal = (
                                     
                                     {/* هزینه دپو - Label */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: cellBorder,
+                                        borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
@@ -820,15 +917,17 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '15%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
                                         {depotRow ? depotRow.label : '-'}
                                     </td>
                                     {/* هزینه دپو - Value */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: 'none',
+                                        borderRight: categoryBorderRight,
                                         padding: '10px 8px', 
                                         textAlign: isNumeric(depotValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -839,7 +938,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '15%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
                                         {depotValues || '-'}
@@ -847,8 +946,10 @@ export const renderInvoiceLayoutHorizontal = (
                                     
                                     {/* جمع بندی - Label */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: cellBorder,
+                                        borderLeft: cellBorder,
+                                        borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
@@ -859,15 +960,17 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '15%',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
                                         {summaryRow ? summaryRow.label : '-'}
                                     </td>
                                     {/* جمع بندی - Value */}
                                     <td style={{ 
-                                        border: '1px solid #d1d5db', 
-                                        borderRight: 'none',
+                                        borderTop: cellBorder,
+                                        borderBottom: isLastRow ? cellBorder : cellBorder,
+                                        borderLeft: 'none',
+                                        borderRight: cellBorder,
                                         padding: '10px 8px', 
                                         textAlign: 'center',
                                         direction: 'rtl',
@@ -878,7 +981,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '12.5%',
+                                        width: '15%',
                                         fontWeight: 'bold',
                                         color: '#1e40af',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
@@ -892,7 +995,7 @@ export const renderInvoiceLayoutHorizontal = (
                 </table>
                 </div>
                 
-                {/* بخش خلاصه */}
+                {/* بخش خلاصه تور */}
                 {mainBlock?.summary && (
                     <div style={{
                         width: '100%',
@@ -966,9 +1069,372 @@ export const renderInvoiceLayoutHorizontal = (
                         </table>
                     </div>
                 )}
+                
+                {/* جداول راننده کمکی */}
+                {helperBlocks.map((helperBlock, helperIdx) => {
+                    const helperCalculations = invoiceData.helperCalculationsByEmployeeId?.get(
+                        helperBlock.title.match(/کدپرسنلی:\s*(\d+)/)?.[1] || ''
+                    ) || [];
+                    
+                    // ساخت ردیف‌های اطلاعات اولیه برای راننده کمکی
+                    const helperInitialInfoRows = createHelperInitialInfoRows(helperCalculations, invoiceAnnouncements);
+                    
+                    // ساخت ردیف‌های هزینه‌های مستقیم برای راننده کمکی
+                    const helperDirectCostRows = helperBlock.rows
+                        .filter((row: any) => row.kind === 'cost' && row.category === 'هزینه‌های مستقیم')
+                        .map((row: any) => ({
+                            label: row.description || '-',
+                            getValue: (tour: any, tourIdx: number) => {
+                                const value = row.tourValues?.[tourIdx] || 0;
+                                return value > 0 ? value.toLocaleString('fa-IR') : '-';
+                            },
+                            getTotal: () => (row.totalAmount || 0).toLocaleString('fa-IR')
+                        }));
+                    
+                    // راننده کمکی هزینه دپو و جمع بندی ندارد
+                    const helperDepotCostRows: any[] = [];
+                    const helperSummaryRows = [
+                        { label: 'کل هزینه تور', getValue: () => (helperBlock.summary?.totalTripCost || 0).toLocaleString('fa-IR'), getTotal: () => (helperBlock.summary?.totalTripCost || 0).toLocaleString('fa-IR') }
+                    ];
+                    
+                    const helperInitialInfoRowCount = Math.ceil(helperInitialInfoRows.length / 2);
+                    const helperMaxRows = Math.max(helperInitialInfoRowCount, helperDirectCostRows.length, helperDepotCostRows.length, helperSummaryRows.length);
+                    
+                    // ساخت tourData برای راننده کمکی
+                    const helperTourData = helperCalculations.map((calc: any) => {
+                        const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
+                        const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                        const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
+                        const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
+                            (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
+                                ? (calc.bill_of_lading_date || calc.billOfLadingDate)
+                                : String(calc.bill_of_lading_date || calc.billOfLadingDate)) : '-';
+                        const calculationDate = calc.calculation_date || calc.calculationDate ? 
+                            (typeof (calc.calculation_date || calc.calculationDate) === 'string' 
+                                ? (calc.calculation_date || calc.calculationDate)
+                                : String(calc.calculation_date || calc.calculationDate)) : '-';
+                        const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                        const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
+                        return { billOfLadingNumber, destinations, billOfLadingDate, calculationDate, vehiclePlate, vehicleType };
+                    });
+                    
+                    return (
+                        <div key={helperIdx} style={{ marginTop: '30px' }}>
+                            {/* عنوان راننده کمکی */}
+                            <div style={{
+                                marginBottom: '16px',
+                                paddingBottom: '12px',
+                                borderBottom: '2px solid #1e40af',
+                                textAlign: 'right',
+                                direction: 'rtl',
+                                unicodeBidi: 'isolate',
+                            }}>
+                                <h3 style={{
+                                    fontSize: '20px',
+                                    fontWeight: 'bold',
+                                    marginBottom: '8px',
+                                    textAlign: 'center',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    color: '#1e40af',
+                                }}>
+                                    {helperBlock.title}
+                                </h3>
+                            </div>
+                            
+                            {/* جدول راننده کمکی */}
+                            <div className="invoice-table-wrapper" style={{ borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' }}>
+                                <table className="invoice-table" style={{
+                                    width: '100%',
+                                    maxWidth: '100%',
+                                    borderCollapse: 'separate',
+                                    borderSpacing: '0',
+                                    tableLayout: 'fixed',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    margin: '0 auto 15px auto',
+                                    fontSize: `${fontSize + 1}px`,
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    boxSizing: 'border-box',
+                                    borderRadius: '8px',
+                                    overflow: 'hidden',
+                                }}>
+                                    <thead>
+                                        <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                            <th colSpan={4} style={{ 
+                                                border: '2px solid #1e40af', 
+                                                padding: '12px 8px', 
+                                                backgroundColor: '#1e40af', 
+                                                color: '#ffffff',
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                verticalAlign: 'middle',
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontSize: `${fontSize + 2}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                            }}>اطلاعات اولیه</th>
+                                            <th colSpan={2} style={{ 
+                                                border: '2px solid #1e40af', 
+                                                borderRight: 'none',
+                                                padding: '12px 8px', 
+                                                backgroundColor: '#1e40af', 
+                                                color: '#ffffff',
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                verticalAlign: 'middle',
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontSize: `${fontSize + 2}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                            }}>هزینه های مستقیم</th>
+                                            <th colSpan={2} style={{ 
+                                                border: '2px solid #1e40af', 
+                                                borderRight: 'none',
+                                                padding: '12px 8px', 
+                                                backgroundColor: '#1e40af', 
+                                                color: '#ffffff',
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                verticalAlign: 'middle',
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontSize: `${fontSize + 2}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                            }}>هزینه دپو</th>
+                                            <th colSpan={2} style={{ 
+                                                border: '2px solid #1e40af', 
+                                                borderRight: 'none',
+                                                padding: '12px 8px', 
+                                                backgroundColor: '#1e40af', 
+                                                color: '#ffffff',
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                verticalAlign: 'middle',
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontSize: `${fontSize + 2}px`,
+                                                fontWeight: 'bold',
+                                                lineHeight: '1.4',
+                                            }}>جمع بندی</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                        {Array.from({ length: helperMaxRows }, (_, rowIdx) => {
+                                            const helperInitialRow1 = helperInitialInfoRows[rowIdx * 2];
+                                            const helperInitialRow2 = helperInitialInfoRows[rowIdx * 2 + 1];
+                                            const helperDirectRow = helperDirectCostRows[rowIdx];
+                                            const helperDepotRow = helperDepotCostRows[rowIdx];
+                                            const helperSummaryRow = helperSummaryRows[rowIdx];
+                                            
+                                            const helperInitialValues1 = helperTourData?.map((tour, tourIdx) => helperInitialRow1 ? helperInitialRow1.getValue(tour, tourIdx) : '-').join(' / ') || '-';
+                                            const helperInitialValues2 = helperTourData?.map((tour, tourIdx) => helperInitialRow2 ? helperInitialRow2.getValue(tour, tourIdx) : '-').join(' / ') || '-';
+                                            const helperDirectValues = helperTourData?.map((tour, tourIdx) => helperDirectRow ? helperDirectRow.getValue(tour, tourIdx) : '-').join(' / ') || '-';
+                                            const helperDepotValues = '-';
+                                            const helperTotalValue = helperSummaryRow ? helperSummaryRow.getTotal() : '-';
+                                            
+                                            const isEven = rowIdx % 2 === 0;
+                                            const rowBgColor = isEven ? '#f9fafb' : '#ffffff';
+                                            const hasContent = helperInitialRow1 || helperInitialRow2 || helperDirectRow || helperDepotRow || helperSummaryRow;
+                                            
+                                            const isNumeric = (str: string) => {
+                                                if (!str || str === '-') return false;
+                                                return /^[\d,\.\s]+$/.test(str.replace(/[^\d,\.]/g, ''));
+                                            };
+                                            
+                                            const categoryBorderRight = '2px solid #1e40af';
+                                            const cellBorder = '1px solid #e5e7eb';
+                                            const isLastRow = rowIdx === helperMaxRows - 1;
+                                            
+                                            return (
+                                                <tr 
+                                                    key={rowIdx} 
+                                                    style={{ 
+                                                        direction: 'rtl', 
+                                                        unicodeBidi: 'isolate',
+                                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                                        transition: 'background-color 0.2s ease',
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        if (hasContent) {
+                                                            e.currentTarget.style.backgroundColor = '#e0f2fe';
+                                                        }
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (hasContent) {
+                                                            e.currentTarget.style.backgroundColor = rowBgColor;
+                                                        }
+                                                    }}
+                                                >
+                                                    {/* اطلاعات اولیه - فیلد 1 */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: categoryBorderRight, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperInitialRow1 ? helperInitialRow1.label : '-'}
+                                                    </td>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '10px 8px', textAlign: isNumeric(helperInitialValues1) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperInitialValues1 || '-'}
+                                                    </td>
+                                                    {/* اطلاعات اولیه - فیلد 2 */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperInitialRow2 ? helperInitialRow2.label : '-'}
+                                                    </td>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperInitialValues2 || '-'}
+                                                    </td>
+                                                    
+                                                    {/* هزینه های مستقیم */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperDirectRow ? helperDirectRow.label : '-'}
+                                                    </td>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperDirectValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperDirectValues || '-'}
+                                                    </td>
+                                                    
+                                                    {/* هزینه دپو */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperDepotRow ? helperDepotRow.label : '-'}
+                                                    </td>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperDepotValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperDepotValues || '-'}
+                                                    </td>
+                                                    
+                                                    {/* جمع بندی */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperSummaryRow ? helperSummaryRow.label : '-'}
+                                                    </td>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: isLastRow ? cellBorder : cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '10px 8px', textAlign: 'center', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', fontWeight: 'bold', color: '#1e40af', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                        {helperSummaryRow ? helperTotalValue : '-'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            {/* بخش خلاصه راننده کمکی */}
+                            {helperBlock.summary && (
+                                <div style={{
+                                    width: '100%',
+                                    maxWidth: '100%',
+                                    borderRadius: '8px',
+                                    overflow: 'hidden',
+                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                    marginTop: '15px',
+                                }}>
+                                    <table style={{
+                                        width: '100%',
+                                        maxWidth: '100%',
+                                        borderCollapse: 'collapse',
+                                        direction: 'rtl',
+                                        unicodeBidi: 'isolate',
+                                        fontSize: `${fontSize + 2}px`,
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        boxSizing: 'border-box',
+                                    }}>
+                                        <tbody>
+                                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                                <td style={{
+                                                    border: '2px solid #1e40af',
+                                                    padding: '12px 15px',
+                                                    backgroundColor: '#bfdbfe',
+                                                    textAlign: 'right',
+                                                    direction: 'rtl',
+                                                    unicodeBidi: 'isolate',
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontWeight: 'bold',
+                                                    fontSize: `${fontSize + 3}px`,
+                                                    color: '#1e3a8a',
+                                                    lineHeight: '1.8',
+                                                }}>
+                                                    مبلغ قابل پرداخت: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{helperBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
+};
+
+// تابع برای لود کردن فونت B Homa
+const loadBHomaFont = async (): Promise<void> => {
+    try {
+        // بررسی اینکه آیا فونت قبلاً لود شده
+        if (document.fonts && document.fonts.check) {
+            const fontLoaded = document.fonts.check("16px 'B Homa'");
+            if (fontLoaded) {
+                console.log('✅ [loadBHomaFont] فونت B Homa قبلاً لود شده');
+                // انتظار کوتاه برای اطمینان
+                await new Promise(resolve => setTimeout(resolve, 200));
+                return;
+            }
+        }
+        
+        // استفاده از FontFace API برای لود کردن فونت
+        if ('FontFace' in window) {
+            console.log('🔄 [loadBHomaFont] در حال لود کردن فونت B Homa...');
+            
+            // چند URL مختلف برای اطمینان
+            const fontUrls = [
+                "url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2')",
+                "url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff')"
+            ];
+            
+            const fontFace = new FontFace(
+                'B Homa',
+                fontUrls.join(', '),
+                {
+                    style: 'normal',
+                    weight: '400',
+                    display: 'block', // استفاده از block به جای swap
+                    unicodeRange: 'U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC'
+                }
+            );
+            
+            await fontFace.load();
+            document.fonts.add(fontFace);
+            console.log('✅ [loadBHomaFont] فونت B Homa با موفقیت لود شد');
+            
+            // بررسی مجدد برای اطمینان
+            let retries = 0;
+            while (retries < 5) {
+                if (document.fonts.check("16px 'B Homa'")) {
+                    console.log(`✅ [loadBHomaFont] فونت B Homa تایید شد (تلاش ${retries + 1})`);
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 200));
+                retries++;
+            }
+            
+            // انتظار اضافی برای اطمینان از render شدن
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+            // Fallback: استفاده از link tag
+            console.log('⚠️ [loadBHomaFont] FontFace API در دسترس نیست، استفاده از link tag');
+            const link = document.createElement('link');
+            link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+            link.rel = 'stylesheet';
+            document.head.appendChild(link);
+            await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+    } catch (error) {
+        console.error('❌ [loadBHomaFont] خطا در لود کردن فونت:', error);
+        // Fallback: استفاده از link tag در صورت خطا
+        const link = document.createElement('link');
+        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 };
 
 // تابع اصلی برای export تصویر با استفاده از DOM
@@ -978,6 +1444,9 @@ export const exportInvoiceToImage = async (
 ): Promise<void> => {
     try {
         console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش DOM');
+        
+        // لود کردن فونت B Homa قبل از شروع
+        await loadBHomaFont();
         
         // ایجاد temp div برای render کردن محتوا
         const tempDiv = document.createElement('div');
@@ -1030,12 +1499,33 @@ export const exportInvoiceToImage = async (
                 height: actualHeight,
                 windowWidth: actualWidth,
                 windowHeight: actualHeight,
-                onclone: (clonedDoc) => {
-                    // اضافه کردن فونت B Homa به head
-                    const link = clonedDoc.createElement('link');
-                    link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=swap';
-                    link.rel = 'stylesheet';
-                    clonedDoc.head.appendChild(link);
+                    onclone: async (clonedDoc) => {
+                        // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
+                        const style = clonedDoc.createElement('style');
+                        style.textContent = `
+                            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                            @font-face {
+                                font-family: 'B Homa';
+                                font-style: normal;
+                                font-weight: 400;
+                                font-display: block;
+                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2');
+                                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                            }
+                            * {
+                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                            }
+                            body, html {
+                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                            }
+                        `;
+                        clonedDoc.head.appendChild(style);
+                        
+                        // اضافه کردن link tag به عنوان fallback
+                        const link = clonedDoc.createElement('link');
+                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+                        link.rel = 'stylesheet';
+                        clonedDoc.head.appendChild(link);
                     
                     const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                     if (clonedTempDiv) {

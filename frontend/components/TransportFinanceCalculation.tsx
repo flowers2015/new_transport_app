@@ -2203,8 +2203,29 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             document.body.appendChild(tempDiv);
             
             try {
-                // انتظار برای render کامل
-                await new Promise(resolve => setTimeout(resolve, 500));
+            // لود کردن فونت B Homa قبل از شروع
+            try {
+                if ('FontFace' in window) {
+                    const fontFace = new FontFace(
+                        'B Homa',
+                        "url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2')",
+                        {
+                            style: 'normal',
+                            weight: '400',
+                            display: 'block',
+                            unicodeRange: 'U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC'
+                        }
+                    );
+                    await fontFace.load();
+                    document.fonts.add(fontFace);
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } catch (error) {
+                console.error('خطا در لود کردن فونت:', error);
+            }
+            
+            // انتظار برای render کامل
+            await new Promise(resolve => setTimeout(resolve, 500));
                 
                 // محاسبه ارتفاع واقعی محتوا
                 const contentHeight = tempDiv.scrollHeight;
@@ -2222,10 +2243,31 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     height: contentHeight || tempDiv.offsetHeight,
                     windowWidth: contentWidth || tempDiv.offsetWidth,
                     windowHeight: contentHeight || tempDiv.offsetHeight,
-                    onclone: (clonedDoc) => {
-                        // اضافه کردن فونت B Homa به head
+                    onclone: async (clonedDoc) => {
+                        // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
+                        const style = clonedDoc.createElement('style');
+                        style.textContent = `
+                            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                            @font-face {
+                                font-family: 'B Homa';
+                                font-style: normal;
+                                font-weight: 400;
+                                font-display: block;
+                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2');
+                                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                            }
+                            * {
+                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                            }
+                            body, html {
+                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                            }
+                        `;
+                        clonedDoc.head.appendChild(style);
+                        
+                        // اضافه کردن link tag به عنوان fallback
                         const link = clonedDoc.createElement('link');
-                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=swap';
+                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
                         
