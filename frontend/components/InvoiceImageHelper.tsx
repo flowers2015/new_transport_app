@@ -645,7 +645,7 @@ export const renderInvoiceLayoutHorizontal = (
                 </div>
                 
                 {/* جدول جدید: برای هر دسته، label در یک ستون و value در ستون دیگر */}
-                <div className="invoice-table-wrapper" style={{ borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' }}>
+                <div className="invoice-table-wrapper" style={{ borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
                     <table className="invoice-table" style={{
                         width: '100%',
                         maxWidth: '100%',
@@ -672,7 +672,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontFamily: "'Vazirmatn', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -687,7 +687,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontFamily: "'Vazirmatn', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -702,7 +702,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontFamily: "'Vazirmatn', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -717,7 +717,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontFamily: "'Vazirmatn', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -752,7 +752,7 @@ export const renderInvoiceLayoutHorizontal = (
                             };
                             
                             // تعیین border برای دسته‌بندی‌ها
-                            const categoryBorderRight = '2px solid #000000'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL) - ضخیم‌تر
+                            const categoryBorderRight = '3px solid #003366'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL) - ضخیم‌تر
                             const cellBorder = '1px solid #cccccc'; // حاشیه‌های عادی داخل جدول
                             const isLastRow = rowIdx === maxRows - 1;
                             
@@ -767,7 +767,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}
                                     onMouseEnter={(e) => {
                                         if (hasContent) {
-                                            e.currentTarget.style.backgroundColor = '#f0f0f0';
+                                            e.currentTarget.style.backgroundColor = '#e3f2fd';
                                         }
                                     }}
                                     onMouseLeave={(e) => {
@@ -787,7 +787,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -808,7 +808,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -829,7 +829,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -850,7 +850,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -872,7 +872,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -893,7 +893,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -915,7 +915,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -936,7 +936,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -958,7 +958,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -979,7 +979,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -1027,7 +1027,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         lineHeight: '1.8',
                                     }}>
                                         جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
@@ -1043,7 +1043,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             textAlign: 'right',
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
-                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontFamily: "'Vazirmatn', sans-serif",
                                             lineHeight: '1.8',
                                         }}>
                                             {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
@@ -1059,7 +1059,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         fontWeight: 'bold',
                                         fontSize: '14px',
                                         color: '#1e3a8a',
@@ -1072,6 +1072,96 @@ export const renderInvoiceLayoutHorizontal = (
                         </table>
                     </div>
                 )}
+                
+                {/* خلاصه تور - زیر فوتر */}
+                <div style={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                    marginTop: '30px',
+                    marginBottom: '20px',
+                    textAlign: 'center',
+                }}>
+                    <h3 style={{
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        marginBottom: '10px',
+                        textAlign: 'center',
+                        fontFamily: "'Vazirmatn', sans-serif",
+                        color: '#1e3a8a',
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderBottom: '2px solid #1e3a8a',
+                    }}>
+                        خلاصه تور
+                    </h3>
+                    <table style={{
+                        width: '100%',
+                        maxWidth: '100%',
+                        borderCollapse: 'collapse',
+                        direction: 'rtl',
+                        unicodeBidi: 'isolate',
+                        fontSize: '14px',
+                        fontFamily: "'Vazirmatn', sans-serif",
+                        boxSizing: 'border-box',
+                        margin: '0 auto',
+                    }}>
+                        <tbody>
+                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                <td style={{
+                                    border: '1px solid #cccccc',
+                                    padding: '10px 15px',
+                                    backgroundColor: '#ffffff',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'Vazirmatn', sans-serif",
+                                    lineHeight: '1.8',
+                                }}>
+                                    تعداد تور راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
+                                </td>
+                            </tr>
+                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                <td style={{
+                                    border: '1px solid #cccccc',
+                                    borderTop: 'none',
+                                    padding: '10px 15px',
+                                    backgroundColor: '#f8f9fa',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'Vazirmatn', sans-serif",
+                                    lineHeight: '1.8',
+                                }}>
+                                    هزینه کل تورهای راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
+                                </td>
+                            </tr>
+                            {helperBlocks.map((helperBlock, helperIdx) => {
+                                const helperEmployeeId = helperBlock.title.match(/کدپرسنلی[:\s]*(\d+)/)?.[1] || '';
+                                const helperName = helperBlock.title.match(/-\s*([^-]+)$/)?.[1]?.trim() || helperBlock.title.match(/:\s*\d+\s*-\s*(.+)$/)?.[1]?.trim() || '';
+                                return (
+                                    <tr key={helperIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                        <td style={{
+                                            border: '1px solid #cccccc',
+                                            borderTop: 'none',
+                                            padding: '10px 15px',
+                                            backgroundColor: helperIdx % 2 === 0 ? '#ffffff' : '#f8f9fa',
+                                            textAlign: 'right',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            fontFamily: "'Vazirmatn', sans-serif",
+                                            lineHeight: '1.8',
+                                        }}>
+                                            راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
                 
                 {/* جداول راننده کمکی */}
                 {helperBlocks.map((helperBlock, helperIdx) => {
@@ -1140,7 +1230,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontFamily: "'Vazirmatn', sans-serif",
                                     color: '#1e3a8a',
                                 }}>
                                     {helperBlock.title}
@@ -1148,7 +1238,7 @@ export const renderInvoiceLayoutHorizontal = (
                             </div>
                             
                             {/* جدول راننده کمکی */}
-                            <div className="invoice-table-wrapper" style={{ borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' }}>
+                            <div className="invoice-table-wrapper" style={{ borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
                                 <table className="invoice-table" style={{
                                     width: '100%',
                                     maxWidth: '100%',
@@ -1159,7 +1249,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     unicodeBidi: 'isolate',
                                     margin: '0 auto 15px auto',
                                     fontSize: '14px',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontFamily: "'Vazirmatn', sans-serif",
                                     boxSizing: 'border-box',
                                     borderRadius: '8px',
                                     overflow: 'hidden',
@@ -1175,7 +1265,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontFamily: "'Vazirmatn', sans-serif",
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1190,7 +1280,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontFamily: "'Vazirmatn', sans-serif",
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1206,7 +1296,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                fontFamily: "'Vazirmatn', sans-serif",
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1320,7 +1410,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         fontSize: '14px',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', sans-serif",
                                         boxSizing: 'border-box',
                                     }}>
                                         <tbody>
@@ -1332,7 +1422,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     textAlign: 'right',
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
-                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontFamily: "'Vazirmatn', sans-serif",
                                                     fontWeight: 'bold',
                                                     fontSize: '14px',
                                                     color: '#1e3a8a',
@@ -1518,23 +1608,14 @@ export const exportInvoiceToImage = async (
                         `;
                         clonedDoc.head.appendChild(style);
                         
-                        // اضافه کردن link tag برای فونت B Homa از Google Fonts
+                        // اضافه کردن link tag برای فونت Vazirmatn از Google Fonts
                         const link = clonedDoc.createElement('link');
-                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+                        link.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
                         
-                        // اضافه کردن preload link برای woff2
-                        const link2 = clonedDoc.createElement('link');
-                        link2.href = 'https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2';
-                        link2.rel = 'preload';
-                        link2.as = 'font';
-                        link2.type = 'font/woff2';
-                        link2.crossOrigin = 'anonymous';
-                        clonedDoc.head.appendChild(link2);
-                        
                         // انتظار برای لود شدن فونت
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        await new Promise(resolve => setTimeout(resolve, 500));
                         
                         const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                     if (clonedTempDiv) {
@@ -1558,7 +1639,7 @@ export const exportInvoiceToImage = async (
                             const htmlEl = el as HTMLElement;
                             if (htmlEl.style) {
                                 // استفاده از setProperty برای اعمال !important
-                                htmlEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                                htmlEl.style.setProperty('font-family', "'Vazirmatn', sans-serif", 'important');
                                 htmlEl.style.setProperty('font-size', '14px', 'important');
                                 htmlEl.style.setProperty('-webkit-font-smoothing', 'antialiased', 'important');
                                 htmlEl.style.setProperty('-moz-osx-font-smoothing', 'grayscale', 'important');
@@ -1567,11 +1648,11 @@ export const exportInvoiceToImage = async (
                         
                         // اعمال فونت به body و html
                         if (clonedDoc.body) {
-                            clonedDoc.body.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                            clonedDoc.body.style.setProperty('font-family', "'Vazirmatn', sans-serif", 'important');
                             clonedDoc.body.style.setProperty('font-size', '14px', 'important');
                         }
                         if (clonedDoc.documentElement) {
-                            clonedDoc.documentElement.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                            clonedDoc.documentElement.style.setProperty('font-family', "'Vazirmatn', sans-serif", 'important');
                             clonedDoc.documentElement.style.setProperty('font-size', '14px', 'important');
                         }
                         
@@ -1590,7 +1671,7 @@ export const exportInvoiceToImage = async (
                             const cells = tableEl.querySelectorAll('td, th');
                             cells.forEach((cell) => {
                                 const cellEl = cell as HTMLElement;
-                                cellEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                                cellEl.style.setProperty('font-family', "'Vazirmatn', sans-serif", 'important');
                                 cellEl.style.setProperty('font-size', '14px', 'important');
                             });
                         });
