@@ -606,6 +606,9 @@ export const renderInvoiceLayoutHorizontal = (
                     textAlign: 'center',
                     borderRadius: '12px',
                     boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
                 }}>
                 {/* اطلاعات راننده */}
                 <div style={{
@@ -836,12 +839,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {initialRow2 ? initialRow2.label : '-'}
                                     </td>
-                                    {/* اطلاعات اولیه - فیلد 2 Value */}
+                                    {/* اطلاعات اولیه - فیلد 2 Value - border جداکننده بعد از 4 ستون */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: cellBorder,
+                                        borderRight: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                         padding: '8px', 
                                         textAlign: isNumeric(initialValues2) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -858,11 +861,11 @@ export const renderInvoiceLayoutHorizontal = (
                                         {initialValues2 || '-'}
                                     </td>
                                     
-                                    {/* هزینه های مستقیم - Label - border جداکننده در اینجا */}
+                                    {/* هزینه های مستقیم - Label */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: categoryBorderRight, // border جداکننده بین اطلاعات اولیه و هزینه های مستقیم
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: 'right',
@@ -879,12 +882,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {directRow ? directRow.label : '-'}
                                     </td>
-                                    {/* هزینه های مستقیم - Value */}
+                                    {/* هزینه های مستقیم - Value - border جداکننده بعد از 2 ستون */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: cellBorder,
+                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                         padding: '8px', 
                                         textAlign: isNumeric(directValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -901,11 +904,11 @@ export const renderInvoiceLayoutHorizontal = (
                                         {directValues || '-'}
                                     </td>
                                     
-                                    {/* هزینه دپو - Label - border جداکننده در اینجا */}
+                                    {/* هزینه دپو - Label */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: categoryBorderRight, // border جداکننده بین هزینه های مستقیم و هزینه دپو
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: 'right',
@@ -922,12 +925,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {depotRow ? depotRow.label : '-'}
                                     </td>
-                                    {/* هزینه دپو - Value */}
+                                    {/* هزینه دپو - Value - border جداکننده بعد از 2 ستون */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: cellBorder,
+                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه دپو
                                         padding: '8px', 
                                         textAlign: isNumeric(depotValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -944,11 +947,11 @@ export const renderInvoiceLayoutHorizontal = (
                                         {depotValues || '-'}
                                     </td>
                                     
-                                    {/* جمع بندی - Label - border جداکننده در اینجا */}
+                                    {/* جمع بندی - Label */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: categoryBorderRight, // border جداکننده بین هزینه دپو و جمع بندی
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: 'right',
@@ -1098,7 +1101,8 @@ export const renderInvoiceLayoutHorizontal = (
                     ];
                     
                     const helperInitialInfoRowCount = Math.ceil(helperInitialInfoRows.length / 2);
-                    const helperMaxRows = Math.max(helperInitialInfoRowCount, helperDirectCostRows.length, helperDepotCostRows.length, helperSummaryRows.length);
+                    // برای راننده کمکی، دسته دپو را حذف می‌کنیم
+                    const helperMaxRows = Math.max(helperInitialInfoRowCount, helperDirectCostRows.length, helperSummaryRows.length);
                     
                     // ساخت tourData برای راننده کمکی
                     const helperTourData = helperCalculations.map((calc: any) => {
@@ -1191,21 +1195,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>هزینه های مستقیم</th>
-                                            <th colSpan={2} style={{ 
-                                                border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
-                                                padding: '8px', 
-                                                backgroundColor: '#1e3a8a', 
-                                                color: '#ffffff',
-                                                textAlign: 'center',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
-                                                verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                fontSize: '14px',
-                                                fontWeight: 'bold',
-                                                lineHeight: '1.4',
-                                            }}>هزینه دپو</th>
+                                            {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم - فقط جمع بندی */}
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
                                                 borderRight: 'none',
@@ -1228,25 +1218,24 @@ export const renderInvoiceLayoutHorizontal = (
                                             const helperInitialRow1 = helperInitialInfoRows[rowIdx * 2];
                                             const helperInitialRow2 = helperInitialInfoRows[rowIdx * 2 + 1];
                                             const helperDirectRow = helperDirectCostRows[rowIdx];
-                                            const helperDepotRow = helperDepotCostRows[rowIdx];
+                                            // برای راننده کمکی، دسته دپو را حذف می‌کنیم
                                             const helperSummaryRow = helperSummaryRows[rowIdx];
                                             
                                             const helperInitialValues1 = helperTourData?.map((tour, tourIdx) => helperInitialRow1 ? helperInitialRow1.getValue(tour, tourIdx) : '-').join(' / ') || '-';
                                             const helperInitialValues2 = helperTourData?.map((tour, tourIdx) => helperInitialRow2 ? helperInitialRow2.getValue(tour, tourIdx) : '-').join(' / ') || '-';
                                             const helperDirectValues = helperTourData?.map((tour, tourIdx) => helperDirectRow ? helperDirectRow.getValue(tour, tourIdx) : '-').join(' / ') || '-';
-                                            const helperDepotValues = '-';
                                             const helperTotalValue = helperSummaryRow ? helperSummaryRow.getTotal() : '-';
                                             
                                             const isEven = rowIdx % 2 === 0;
                                             const rowBgColor = isEven ? '#f5f5f5' : '#ffffff';
-                                            const hasContent = helperInitialRow1 || helperInitialRow2 || helperDirectRow || helperDepotRow || helperSummaryRow;
+                                            const hasContent = helperInitialRow1 || helperInitialRow2 || helperDirectRow || helperSummaryRow;
                                             
                                             const isNumeric = (str: string) => {
                                                 if (!str || str === '-') return false;
                                                 return /^[\d,\.\s]+$/.test(str.replace(/[^\d,\.]/g, ''));
                                             };
                                             
-                                            const categoryBorderRight = '2px solid #1e40af';
+                                            const categoryBorderRight = '2px solid #1e3a8a';
                                             const cellBorder = '1px solid #e5e7eb';
                                             const isLastRow = rowIdx === helperMaxRows - 1;
                                             
@@ -1271,41 +1260,40 @@ export const renderInvoiceLayoutHorizontal = (
                                                     }}
                                                 >
                                                     {/* اطلاعات اولیه - فیلد 1 */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: categoryBorderRight, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    {/* اطلاعات اولیه - فیلد 1 Label */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialRow1 ? helperInitialRow1.label : '-'}
                                                     </td>
+                                                    {/* اطلاعات اولیه - فیلد 1 Value */}
                                                     <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '8px', textAlign: isNumeric(helperInitialValues1) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialValues1 || '-'}
                                                     </td>
-                                                    {/* اطلاعات اولیه - فیلد 2 */}
+                                                    {/* اطلاعات اولیه - فیلد 2 Label */}
                                                     <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialRow2 ? helperInitialRow2.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '8px', textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    {/* اطلاعات اولیه - فیلد 2 Value - border جداکننده بعد از 4 ستون */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '8px', textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialValues2 || '-'}
                                                     </td>
                                                     
-                                                    {/* هزینه های مستقیم */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    {/* هزینه های مستقیم - Label */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDirectRow ? helperDirectRow.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '8px', textAlign: isNumeric(helperDirectValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    {/* هزینه های مستقیم - Value - border جداکننده بعد از 2 ستون */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '8px', textAlign: isNumeric(helperDirectValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDirectValues || '-'}
                                                     </td>
                                                     
-                                                    {/* هزینه دپو */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
-                                                        {helperDepotRow ? helperDepotRow.label : '-'}
-                                                    </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '8px', textAlign: isNumeric(helperDepotValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
-                                                        {helperDepotValues || '-'}
-                                                    </td>
+                                                    {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم */}
                                                     
-                                                    {/* جمع بندی */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    {/* جمع بندی - Label */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperSummaryRow ? helperSummaryRow.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: isLastRow ? cellBorder : cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '8px', textAlign: 'center', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', fontWeight: 'bold', color: '#1e3a8a', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    {/* جمع بندی - Value */}
+                                                    <td style={{ borderTop: cellBorder, borderBottom: isLastRow ? cellBorder : cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '8px', textAlign: 'center', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', fontWeight: 'bold', color: '#1e3a8a', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperSummaryRow ? helperTotalValue : '-'}
                                                     </td>
                                                 </tr>
@@ -1503,16 +1491,29 @@ export const exportInvoiceToImage = async (
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
+                            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                            @font-face {
+                                font-family: 'B Homa';
+                                font-style: normal;
+                                font-weight: 400;
+                                font-display: block;
+                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                            }
                             * {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-size: 14px !important;
                                 -webkit-font-smoothing: antialiased;
                                 -moz-osx-font-smoothing: grayscale;
                             }
                             body, html {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-size: 14px !important;
                             }
-                            table, td, th, tr {
+                            table, td, th, tr, div, span, p, h1, h2, h3, h4, h5, h6 {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-size: 14px !important;
                             }
                         `;
                         clonedDoc.head.appendChild(style);
