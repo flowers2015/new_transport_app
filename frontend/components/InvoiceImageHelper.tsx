@@ -667,6 +667,7 @@ export const renderInvoiceLayoutHorizontal = (
                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                 <th colSpan={4} style={{ 
                                     border: '2px solid #1e3a8a', 
+                                    borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -681,7 +682,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 }}>اطلاعات اولیه</th>
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
+                                    borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -696,7 +697,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 }}>هزینه های مستقیم</th>
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
+                                    borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه دپو
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -711,7 +712,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 }}>هزینه دپو</th>
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
+                                    borderRight: '2px solid #1e3a8a', // آخرین دسته - بدون border جداکننده
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -1172,6 +1173,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <th colSpan={4} style={{ 
                                                 border: '2px solid #1e3a8a', 
+                                                borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1186,7 +1188,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             }}>اطلاعات اولیه</th>
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
+                                                borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1202,7 +1204,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم - فقط جمع بندی */}
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
+                                                borderRight: '2px solid #1e3a8a', // آخرین دسته - بدون border جداکننده
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
