@@ -107,51 +107,34 @@ const loadBHomaFontBase64 = async (): Promise<string> => {
     return await BHOMA_FONT_LOADING;
 };
 
-// تابع برای ساخت @font-face CSS با استفاده از Base64
+// تابع برای ساخت @font-face CSS
+// استفاده از Vazirmatn (موجود در Google Fonts) + فایل محلی B Homa (اگر موجود باشد)
 const getBHomaFontFaceCSS = async (): Promise<string> => {
-    try {
-        const base64 = await loadBHomaFontBase64();
-        return `
-            @font-face {
-                font-family: 'B Homa';
-                font-style: normal;
-                font-weight: 400;
-                font-display: block;
-                src: url('data:font/woff2;charset=utf-8;base64,${base64}') format('woff2');
-                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-            }
-        `;
-    } catch (error) {
-        console.warn('⚠️ [B Homa Font] استفاده از Google Fonts link tag به عنوان fallback');
-        // Fallback: استفاده از link tag برای Google Fonts
-        return `
-            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
-        `;
-    }
+    return `
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block');
+        @font-face {
+            font-family: 'B Homa';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url('/fonts/B-Homa.woff2') format('woff2');
+            unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+        }
+    `;
 };
 
 // تابع sync برای استفاده در جاهایی که نمی‌توانیم await کنیم
-// این تابع Base64 را از cache برمی‌گرداند یا فوراً شروع به دانلود می‌کند
 const getBHomaFontFaceCSSSync = (): string => {
-    if (BHOMA_FONT_BASE64_CACHE) {
-        return `
-            @font-face {
-                font-family: 'B Homa';
-                font-style: normal;
-                font-weight: 400;
-                font-display: block;
-                src: url('data:font/woff2;charset=utf-8;base64,${BHOMA_FONT_BASE64_CACHE}') format('woff2');
-                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-            }
-        `;
-    }
-    
-    // اگر cache نیست، شروع به دانلود کن (async)
-    loadBHomaFontBase64().catch(console.error);
-    
-    // در حال حاضر از Google Fonts import استفاده کن
     return `
-        @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block');
+        @font-face {
+            font-family: 'B Homa';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url('/fonts/B-Homa.woff2') format('woff2');
+            unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+        }
     `;
 };
 
@@ -1999,7 +1982,7 @@ export const exportInvoiceToImage = async (
             fontStyle.textContent = `
                 ${fontFaceCSS}
                 * {
-                    font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                    font-family: 'B Homa', 'Vazirmatn', 'Tahoma', sans-serif !important;
                 }
             `;
             document.head.appendChild(fontStyle);
@@ -2289,7 +2272,7 @@ export const exportInvoiceToImage = async (
             style.textContent = `
                 ${fontFaceCSSForClone}
                 * {
-                    font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                    font-family: 'B Homa', 'Vazirmatn', 'Tahoma', sans-serif !important;
                 }
             `;
             document.head.appendChild(style);
