@@ -4,108 +4,11 @@ import * as domtoimage from 'dom-to-image';
 import ReactDOMServer from 'react-dom/server';
 
 // ============================================
-// راه‌حل فونت B Homa: استفاده از Google Fonts API
+// راه‌حل فونت B Homa: استفاده از فایل محلی یا Vazirmatn
 // ============================================
-
-// Cache برای Base64 فونت (یک‌بار دانلود می‌شود)
-let BHOMA_FONT_BASE64_CACHE: string | null = null;
-let BHOMA_FONT_LOADING: Promise<string> | null = null;
-
-// تابع برای دریافت URL صحیح فونت از Google Fonts CSS
-const getBHomaFontURL = async (): Promise<string> => {
-    try {
-        console.log('🔄 [B Homa Font] در حال دریافت URL فونت از Google Fonts...');
-        const cssResponse = await fetch('https://fonts.googleapis.com/css2?family=B+Homa&display=block', {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-        
-        if (!cssResponse.ok) {
-            throw new Error(`CSS fetch failed: ${cssResponse.status}`);
-        }
-        
-        const cssText = await cssResponse.text();
-        console.log('📄 [B Homa Font] CSS دریافت شد:', cssText.substring(0, 500));
-        
-        // استخراج URL فونت woff2 از CSS (جستجوی دقیق‌تر)
-        // Google Fonts CSS معمولاً به این شکل است: url(https://fonts.gstatic.com/...woff2) format('woff2')
-        const woff2Matches = cssText.matchAll(/url\((['"]?)(https?:\/\/[^'")]+\.woff2[^'")]*)\1\)/g);
-        const matchesArray = Array.from(woff2Matches);
-        
-        if (matchesArray.length > 0) {
-            // استفاده از اولین match (woff2 معمولاً اول است)
-            let fontUrl = matchesArray[0][2];
-            console.log('✅ [B Homa Font] URL فونت دریافت شد:', fontUrl);
-            return fontUrl;
-        }
-        
-        // روش جایگزین: جستجوی ساده‌تر
-        const simpleMatch = cssText.match(/url\(([^)]+\.woff2[^)]*)\)/);
-        if (simpleMatch && simpleMatch[1]) {
-            let fontUrl = simpleMatch[1].replace(/['"]/g, '').trim();
-            // اگر URL نسبی است، آن را کامل کن
-            if (fontUrl.startsWith('//')) {
-                fontUrl = 'https:' + fontUrl;
-            } else if (fontUrl.startsWith('/')) {
-                fontUrl = 'https://fonts.gstatic.com' + fontUrl;
-            }
-            console.log('✅ [B Homa Font] URL فونت دریافت شد (روش جایگزین):', fontUrl);
-            return fontUrl;
-        }
-        
-        throw new Error('Could not extract font URL from CSS');
-    } catch (error) {
-        console.error('❌ [B Homa Font] خطا در دریافت URL فونت:', error);
-        // Fallback: استفاده از Google Fonts link tag به جای URL مستقیم
-        throw error;
-    }
-};
-
-// تابع برای دانلود فونت و تبدیل به Base64
-const loadBHomaFontBase64 = async (): Promise<string> => {
-    if (BHOMA_FONT_BASE64_CACHE) {
-        return BHOMA_FONT_BASE64_CACHE;
-    }
-    
-    if (BHOMA_FONT_LOADING) {
-        return await BHOMA_FONT_LOADING;
-    }
-    
-    BHOMA_FONT_LOADING = (async () => {
-        try {
-            console.log('🔄 [B Homa Font] در حال دانلود فونت...');
-            
-            // دریافت URL صحیح فونت
-            const fontUrl = await getBHomaFontURL();
-            
-            const response = await fetch(fontUrl);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch font: ${response.status} ${response.statusText}`);
-            }
-            
-            const arrayBuffer = await response.arrayBuffer();
-            // تبدیل به Base64
-            const bytes = new Uint8Array(arrayBuffer);
-            let binary = '';
-            for (let i = 0; i < bytes.length; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            const base64 = btoa(binary);
-            
-            BHOMA_FONT_BASE64_CACHE = base64;
-            console.log('✅ [B Homa Font] فونت با موفقیت دانلود و تبدیل به Base64 شد');
-            return base64;
-        } catch (error) {
-            console.error('❌ [B Homa Font] خطا در دانلود فونت:', error);
-            throw error;
-        } finally {
-            BHOMA_FONT_LOADING = null;
-        }
-    })();
-    
-    return await BHOMA_FONT_LOADING;
-};
+// به دلیل مشکل 404 با URL فونت B Homa در Google Fonts:
+// 1. از Vazirmatn استفاده می‌شود (موجود در Google Fonts)
+// 2. اگر فایل فونت B Homa در public/fonts/B-Homa.woff2 موجود باشد، از آن استفاده می‌شود
 
 // تابع برای ساخت @font-face CSS
 // استفاده از Vazirmatn (موجود در Google Fonts) + فایل محلی B Homa (اگر موجود باشد)
