@@ -1689,14 +1689,153 @@ const loadBHomaFont = async (): Promise<void> => {
 };
 
 // تابع اصلی برای export تصویر با استفاده از DOM
+// نسخه بهبود یافته: استفاده از iframe برای isolation کامل
 export const exportInvoiceToImage = async (
     invoiceElement: HTMLElement,
     driverName: string
 ): Promise<void> => {
     try {
-        console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش DOM');
+        console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش iframe (بهبود یافته)');
         
-        // فونت Vazirmatn از Google Fonts در onclone لود می‌شود
+        // روش جدید: استفاده از iframe برای isolation کامل و رندر بهتر
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = `
+            position: fixed;
+            top: -9999px;
+            left: -9999px;
+            width: 1600px;
+            height: 20000px;
+            border: none;
+            overflow: hidden;
+        `;
+        document.body.appendChild(iframe);
+        
+        // انتظار برای load شدن iframe
+        await new Promise<void>((resolve, reject) => {
+            iframe.onload = () => resolve();
+            iframe.onerror = () => reject(new Error('Failed to load iframe'));
+            iframe.src = 'about:blank';
+        });
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!iframeDoc) {
+            throw new Error('Cannot access iframe document');
+        }
+        
+        // Clone کردن محتوا
+        const clonedContent = invoiceElement.cloneNode(true) as HTMLElement;
+        
+        // نوشتن HTML کامل به iframe با فونت و استایل‌های لازم
+        iframeDoc.open();
+        iframeDoc.write(`
+            <!DOCTYPE html>
+            <html dir="rtl" lang="fa">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>صورتحساب</title>
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block" rel="stylesheet">
+                <style>
+                    * {
+                        font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
+                        font-size: 14px !important;
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    body {
+                        margin: 0;
+                        padding: 20px;
+                        background: white;
+                        direction: rtl;
+                        font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
+                        font-size: 14px !important;
+                        width: 100%;
+                        overflow: visible !important;
+                    }
+                    [data-invoice-ref="true"] {
+                        width: auto !important;
+                        min-width: 1400px !important;
+                        max-width: 1400px !important;
+                        margin: 0 auto !important;
+                        overflow: visible !important;
+                    }
+                    [data-tour-summary="true"] {
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        overflow: visible !important;
+                        position: relative !important;
+                        z-index: 1 !important;
+                    }
+                    .invoice-table-wrapper {
+                        overflow: visible !important;
+                    }
+                    table {
+                        border-collapse: collapse;
+                        width: 100%;
+                    }
+                    tr:nth-child(even) {
+                        background: #f8fbff !important;
+                    }
+                </style>
+            </head>
+            <body>
+                ${clonedContent.outerHTML}
+            </body>
+            </html>
+        `);
+        iframeDoc.close();
+        
+        // انتظار برای render کامل و لود شدن فونت
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        
+        // محاسبه اندازه واقعی
+        const body = iframeDoc.body;
+        const actualWidth = Math.max(body.scrollWidth, 1400);
+        const actualHeight = body.scrollHeight;
+        
+        console.log(`📐 [exportInvoiceToImage] Dimensions: ${actualWidth}x${actualHeight}`);
+        
+        // استفاده از html2canvas روی iframe body
+        const canvas = await html2canvas(body, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            width: actualWidth,
+            height: actualHeight,
+            windowWidth: actualWidth,
+            windowHeight: actualHeight,
+            scrollX: 0,
+            scrollY: 0,
+        });
+        
+        // پاک کردن iframe
+        document.body.removeChild(iframe);
+        
+        if (!canvas || canvas.width === 0 || canvas.height === 0) {
+            throw new Error('Canvas is empty');
+        }
+        
+        // تبدیل به PNG
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        
+        // دانلود
+        const link = document.createElement('a');
+        link.download = `صورتحساب_${driverName}_${new Date().toISOString().split('T')[0]}.png`;
+        link.href = imgData;
+        link.click();
+        
+        console.log('✅ [exportInvoiceToImage] عکس با موفقیت تولید شد');
+        
+    } catch (err: any) {
+        console.error('❌ [exportInvoiceToImage] Error with iframe method:', err);
+        // Fallback: استفاده از روش قبلی
+        console.log('🔄 [exportInvoiceToImage] Trying fallback method...');
         
         // ایجاد temp div برای render کردن محتوا
         const tempDiv = document.createElement('div');
