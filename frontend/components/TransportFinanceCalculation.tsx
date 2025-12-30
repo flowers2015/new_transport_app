@@ -2203,22 +2203,31 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             document.body.appendChild(tempDiv);
             
             try {
-            // لود کردن فونت B Homa قبل از شروع
+            // لود کردن فونت Vazirmatn قبل از شروع
             try {
                 if ('FontFace' in window) {
-                    const fontFace = new FontFace(
-                        'B Homa',
-                        "url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2')",
-                        {
-                            style: 'normal',
-                            weight: '400',
-                            display: 'block',
-                            unicodeRange: 'U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC'
+                    // استفاده از Vazirmatn به جای B Homa
+                    const cssResponse = await fetch('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block');
+                    const cssText = await cssResponse.text();
+                    const woff2Match = cssText.match(/url\(([^)]+\.woff2[^)]*)\)/);
+                    if (woff2Match && woff2Match[1]) {
+                        let fontUrl = woff2Match[1].replace(/['"]/g, '');
+                        if (fontUrl.startsWith('//')) {
+                            fontUrl = 'https:' + fontUrl;
                         }
-                    );
-                    await fontFace.load();
-                    document.fonts.add(fontFace);
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                        const fontFace = new FontFace(
+                            'Vazirmatn',
+                            `url('${fontUrl}') format('woff2')`,
+                            {
+                                style: 'normal',
+                                weight: '400',
+                                display: 'block',
+                            }
+                        );
+                        await fontFace.load();
+                        document.fonts.add(fontFace);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
                 }
             } catch (error) {
                 console.error('خطا در لود کردن فونت:', error);
@@ -2247,33 +2256,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
-                            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
-                            @font-face {
-                                font-family: 'B Homa';
-                                font-style: normal;
-                                font-weight: 400;
-                                font-display: block;
-                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
-                                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
-                                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-                            }
+                            @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block');
                             * {
-                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
                                 -webkit-font-smoothing: antialiased;
                                 -moz-osx-font-smoothing: grayscale;
                             }
                             body, html {
-                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
                             }
                             table, td, th, tr {
-                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
                             }
                         `;
                         clonedDoc.head.appendChild(style);
                         
                         // اضافه کردن link tag به عنوان fallback
                         const link = clonedDoc.createElement('link');
-                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+                        link.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
                         
@@ -2297,16 +2297,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 clonedInvoiceElement.style.maxWidth = '1200px';
                             }
                             
-                            // اعمال فونت B Homa به تمام المان‌ها
+                            // اعمال فونت Vazirmatn به تمام المان‌ها
                             const allElements = clonedTempDiv.querySelectorAll('*');
                             allElements.forEach((el) => {
                                 const htmlEl = el as HTMLElement;
                                 if (htmlEl.style) {
                                     const currentFont = htmlEl.style.fontFamily;
-                                    if (currentFont && currentFont.includes("'B Homa'")) {
-                                        htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                    if (currentFont && currentFont.includes("'Vazirmatn'")) {
+                                        htmlEl.style.fontFamily = "'Vazirmatn', 'Tahoma', sans-serif";
                                     } else if (!currentFont || currentFont === '') {
-                                        htmlEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                        htmlEl.style.fontFamily = "'Vazirmatn', 'Tahoma', sans-serif";
                                     }
                                 }
                             });
@@ -2319,13 +2319,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 tableEl.style.minWidth = '100%';
                                 tableEl.style.tableLayout = 'auto';
                                 tableEl.style.borderCollapse = 'collapse';
-                                tableEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                tableEl.style.fontFamily = "'Vazirmatn', 'Tahoma', sans-serif";
                                 
                                 // اعمال فونت به تمام سلول‌های جدول
                                 const cells = tableEl.querySelectorAll('td, th');
                                 cells.forEach((cell) => {
                                     const cellEl = cell as HTMLElement;
-                                    cellEl.style.fontFamily = "'B Homa', 'Tahoma', sans-serif";
+                                    cellEl.style.fontFamily = "'Vazirmatn', 'Tahoma', sans-serif";
                                 });
                             });
                         }
