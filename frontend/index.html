@@ -20,12 +20,14 @@
     <link rel="preload" href="https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B+Homa&display=block">
     <style>
+        /* استفاده از فونت محلی اگر وجود دارد، در غیر این صورت از URL خارجی */
         @font-face {
             font-family: 'B Homa';
             font-style: normal;
             font-weight: 400;
             font-display: block;
-            src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2');
+            src: url('/fonts/B-Homa.woff2') format('woff2'),
+                 url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2');
             unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
         }
     </style>
