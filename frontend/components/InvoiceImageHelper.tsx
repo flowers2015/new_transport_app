@@ -752,8 +752,8 @@ export const renderInvoiceLayoutHorizontal = (
                             };
                             
                             // تعیین border برای دسته‌بندی‌ها
-                            const categoryBorderRight = '2px solid #1e3a8a'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL)
-                            const cellBorder = '1px solid #e5e7eb'; // حاشیه‌های کم رنگ داخل جدول
+                            const categoryBorderRight = '2px solid #000000'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL) - ضخیم‌تر
+                            const cellBorder = '1px solid #cccccc'; // حاشیه‌های عادی داخل جدول
                             const isLastRow = rowIdx === maxRows - 1;
                             
                             return (
@@ -767,7 +767,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}
                                     onMouseEnter={(e) => {
                                         if (hasContent) {
-                                            e.currentTarget.style.backgroundColor = '#e0f2fe';
+                                            e.currentTarget.style.backgroundColor = '#f0f0f0';
                                         }
                                     }}
                                     onMouseLeave={(e) => {
@@ -1487,7 +1487,7 @@ export const exportInvoiceToImage = async (
                 height: actualHeight,
                 windowWidth: actualWidth,
                 windowHeight: actualHeight,
-                    onclone: (clonedDoc) => {
+                    onclone: async (clonedDoc) => {
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
@@ -1518,7 +1518,7 @@ export const exportInvoiceToImage = async (
                         `;
                         clonedDoc.head.appendChild(style);
                         
-                        // اضافه کردن link tag برای فونت B Homa
+                        // اضافه کردن link tag برای فونت B Homa از Google Fonts
                         const link = clonedDoc.createElement('link');
                         link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
                         link.rel = 'stylesheet';
@@ -1532,6 +1532,9 @@ export const exportInvoiceToImage = async (
                         link2.type = 'font/woff2';
                         link2.crossOrigin = 'anonymous';
                         clonedDoc.head.appendChild(link2);
+                        
+                        // انتظار برای لود شدن فونت
+                        await new Promise(resolve => setTimeout(resolve, 1000));
                         
                         const clonedTempDiv = clonedDoc.querySelector('body > div:last-child') as HTMLElement;
                     if (clonedTempDiv) {
