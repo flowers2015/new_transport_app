@@ -666,7 +666,7 @@ export const renderInvoiceLayoutHorizontal = (
                         fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                         boxSizing: 'border-box',
                         borderRadius: '12px',
-                        overflow: 'hidden',
+                        overflow: 'visible',
                         background: 'white',
                     }}>
                         <thead>
@@ -674,7 +674,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 {/* اطلاعات اولیه - 4 ستون: Label1, Value1, Label2, Value2 */}
                                 <th colSpan={4} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                    borderRight: '1px solid #1e3a8a',
                                     fontWeight: '700',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
@@ -688,10 +688,19 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>اطلاعات اولیه</th>
+                                {/* ستون جداکننده */}
+                                <th colSpan={1} style={{
+                                    border: 'none',
+                                    padding: '0',
+                                    width: '8px',
+                                    backgroundColor: '#e5e7eb',
+                                    minWidth: '8px',
+                                    maxWidth: '8px',
+                                }}></th>
                                 {/* هزینه های مستقیم - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                    borderRight: '1px solid #1e3a8a',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -704,10 +713,19 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>هزینه های مستقیم</th>
+                                {/* ستون جداکننده */}
+                                <th colSpan={1} style={{
+                                    border: 'none',
+                                    padding: '0',
+                                    width: '8px',
+                                    backgroundColor: '#e5e7eb',
+                                    minWidth: '8px',
+                                    maxWidth: '8px',
+                                }}></th>
                                 {/* هزینه دپو - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه دپو
+                                    borderRight: '1px solid #1e3a8a',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -720,6 +738,15 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>هزینه دپو</th>
+                                {/* ستون جداکننده */}
+                                <th colSpan={1} style={{
+                                    border: 'none',
+                                    padding: '0',
+                                    width: '8px',
+                                    backgroundColor: '#e5e7eb',
+                                    minWidth: '8px',
+                                    maxWidth: '8px',
+                                }}></th>
                                 {/* جمع بندی - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
@@ -764,10 +791,15 @@ export const renderInvoiceLayoutHorizontal = (
                                 return /^[\d,\.\s]+$/.test(str.replace(/[^\d,\.]/g, ''));
                             };
                             
-                            // تعیین border برای دسته‌بندی‌ها
-                            const categoryBorderRight = '3px solid #003366'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL) - ضخیم‌تر
+                            // تعیین استایل برای دسته‌بندی‌ها - استفاده از background-color برای جدا کردن
                             const cellBorder = '1px solid #cccccc'; // حاشیه‌های عادی داخل جدول
                             const isLastRow = rowIdx === maxRows - 1;
+                            
+                            // رنگ پس‌زمینه برای هر دسته
+                            const initialInfoBg = '#f0f9ff'; // آبی خیلی روشن برای اطلاعات اولیه
+                            const directCostBg = '#fef3c7'; // زرد روشن برای هزینه های مستقیم
+                            const depotCostBg = '#dbeafe'; // آبی روشن برای هزینه دپو
+                            const summaryBg = '#f3e8ff'; // بنفش روشن برای جمع بندی
                             
                             return (
                                 <tr 
@@ -808,7 +840,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '10%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? initialInfoBg : '#ffffff') : 'transparent',
                                     }}>
                                         {initialRow1 ? initialRow1.label : '-'}
                                     </td>
@@ -829,7 +861,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '10%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? initialInfoBg : '#ffffff') : 'transparent',
                                     }}>
                                         {initialValues1 || '-'}
                                     </td>
@@ -850,16 +882,16 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '10%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? initialInfoBg : '#ffffff') : 'transparent',
                                     }}>
                                         {initialRow2 ? initialRow2.label : '-'}
                                     </td>
-                                    {/* اطلاعات اولیه - فیلد 2 Value - border جداکننده بعد از 4 ستون */}
+                                    {/* اطلاعات اولیه - فیلد 2 Value */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                        borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: isNumeric(initialValues2) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -871,9 +903,23 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '10%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? initialInfoBg : '#ffffff') : 'transparent',
                                     }}>
                                         {initialValues2 || '-'}
+                                    </td>
+                                    
+                                    {/* ستون جداکننده بین اطلاعات اولیه و هزینه های مستقیم */}
+                                    <td style={{ 
+                                        borderTop: 'none',
+                                        borderBottom: 'none',
+                                        borderLeft: 'none',
+                                        borderRight: 'none',
+                                        padding: '0',
+                                        width: '8px',
+                                        backgroundColor: '#e5e7eb',
+                                        minWidth: '8px',
+                                        maxWidth: '8px',
+                                    }}>
                                     </td>
                                     
                                     {/* هزینه های مستقیم - Label */}
@@ -893,16 +939,16 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '15%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? directCostBg : '#ffffff') : 'transparent',
                                     }}>
                                         {directRow ? directRow.label : '-'}
                                     </td>
-                                    {/* هزینه های مستقیم - Value - border جداکننده بعد از 2 ستون */}
+                                    {/* هزینه های مستقیم - Value */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                        borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: isNumeric(directValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -914,9 +960,23 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '15%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? directCostBg : '#ffffff') : 'transparent',
                                     }}>
                                         {directValues || '-'}
+                                    </td>
+                                    
+                                    {/* ستون جداکننده بین هزینه های مستقیم و هزینه دپو */}
+                                    <td style={{ 
+                                        borderTop: 'none',
+                                        borderBottom: 'none',
+                                        borderLeft: 'none',
+                                        borderRight: 'none',
+                                        padding: '0',
+                                        width: '8px',
+                                        backgroundColor: '#e5e7eb',
+                                        minWidth: '8px',
+                                        maxWidth: '8px',
+                                    }}>
                                     </td>
                                     
                                     {/* هزینه دپو - Label */}
@@ -940,12 +1000,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {depotRow ? depotRow.label : '-'}
                                     </td>
-                                    {/* هزینه دپو - Value - border جداکننده بعد از 2 ستون */}
+                                    {/* هزینه دپو - Value */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه دپو
+                                        borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: isNumeric(depotValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -957,9 +1017,23 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '15%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? depotCostBg : '#ffffff') : 'transparent',
                                     }}>
                                         {depotValues || '-'}
+                                    </td>
+                                    
+                                    {/* ستون جداکننده بین هزینه دپو و جمع بندی */}
+                                    <td style={{ 
+                                        borderTop: 'none',
+                                        borderBottom: 'none',
+                                        borderLeft: 'none',
+                                        borderRight: 'none',
+                                        padding: '0',
+                                        width: '8px',
+                                        backgroundColor: '#e5e7eb',
+                                        minWidth: '8px',
+                                        maxWidth: '8px',
+                                    }}>
                                     </td>
                                     
                                     {/* جمع بندی - Label */}
@@ -979,7 +1053,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '15%',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? summaryBg : '#ffffff') : 'transparent',
                                     }}>
                                         {summaryRow ? summaryRow.label : '-'}
                                     </td>
@@ -1002,7 +1076,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         width: '15%',
                                         fontWeight: 'bold',
                                         color: '#1e3a8a',
-                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? summaryBg : '#ffffff') : 'transparent',
                                     }}>
                                         {summaryRow ? totalValue : '-'}
                                     </td>
@@ -1184,8 +1258,8 @@ export const renderInvoiceLayoutHorizontal = (
                                             {/* اطلاعات اولیه - 4 ستون: Label1, Value1, Label2, Value2 */}
                                             <th colSpan={4} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
-                                    fontWeight: '700',
+                                                borderRight: '1px solid #1e3a8a',
+                                                fontWeight: '700',
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1198,10 +1272,19 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>اطلاعات اولیه</th>
+                                            {/* ستون جداکننده */}
+                                            <th colSpan={1} style={{
+                                                border: 'none',
+                                                padding: '0',
+                                                width: '8px',
+                                                backgroundColor: '#e5e7eb',
+                                                minWidth: '8px',
+                                                maxWidth: '8px',
+                                            }}></th>
                                             {/* هزینه های مستقیم - 2 ستون: Label, Value */}
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                                borderRight: '1px solid #1e3a8a',
                                                 fontWeight: '700',
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
@@ -1215,6 +1298,15 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>هزینه های مستقیم</th>
+                                            {/* ستون جداکننده */}
+                                            <th colSpan={1} style={{
+                                                border: 'none',
+                                                padding: '0',
+                                                width: '8px',
+                                                backgroundColor: '#e5e7eb',
+                                                minWidth: '8px',
+                                                maxWidth: '8px',
+                                            }}></th>
                                             {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم - فقط جمع بندی */}
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
@@ -1254,9 +1346,13 @@ export const renderInvoiceLayoutHorizontal = (
                                                 return /^[\d,\.\s]+$/.test(str.replace(/[^\d,\.]/g, ''));
                                             };
                                             
-                                            const categoryBorderRight = '3px solid #003366';
                                             const cellBorder = '1px solid #cccccc';
                                             const isLastRow = rowIdx === helperMaxRows - 1;
+                                            
+                                            // رنگ پس‌زمینه برای هر دسته (همانند راننده اصلی)
+                                            const helperInitialInfoBg = '#f0f9ff';
+                                            const helperDirectCostBg = '#fef3c7';
+                                            const helperSummaryBg = '#f3e8ff';
                                             
                                             return (
                                                 <tr 
@@ -1352,12 +1448,12 @@ export const renderInvoiceLayoutHorizontal = (
                                                     }}>
                                                         {helperInitialRow2 ? helperInitialRow2.label : '-'}
                                                     </td>
-                                                    {/* اطلاعات اولیه - فیلد 2 Value - border جداکننده بعد از 4 ستون */}
+                                                    {/* اطلاعات اولیه - فیلد 2 Value */}
                                                     <td style={{ 
                                                         borderTop: cellBorder,
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
-                                                        borderRight: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                                        borderRight: cellBorder,
                                                         padding: '8px', 
                                                         textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right',
                                                         direction: 'rtl',
@@ -1369,9 +1465,23 @@ export const renderInvoiceLayoutHorizontal = (
                                                         whiteSpace: 'normal',
                                                         wordWrap: 'break-word',
                                                         width: '10%',
-                                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? helperInitialInfoBg : '#ffffff') : 'transparent',
                                                     }}>
                                                         {helperInitialValues2 || '-'}
+                                                    </td>
+                                                    
+                                                    {/* ستون جداکننده بین اطلاعات اولیه و هزینه های مستقیم */}
+                                                    <td style={{ 
+                                                        borderTop: 'none',
+                                                        borderBottom: 'none',
+                                                        borderLeft: 'none',
+                                                        borderRight: 'none',
+                                                        padding: '0',
+                                                        width: '8px',
+                                                        backgroundColor: '#e5e7eb',
+                                                        minWidth: '8px',
+                                                        maxWidth: '8px',
+                                                    }}>
                                                     </td>
                                                     
                                                     {/* هزینه های مستقیم - Label */}
@@ -1391,16 +1501,16 @@ export const renderInvoiceLayoutHorizontal = (
                                                         whiteSpace: 'normal',
                                                         wordWrap: 'break-word',
                                                         width: '15%',
-                                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? helperDirectCostBg : '#ffffff') : 'transparent',
                                                     }}>
                                                         {helperDirectRow ? helperDirectRow.label : '-'}
                                                     </td>
-                                                    {/* هزینه های مستقیم - Value - border جداکننده بعد از 2 ستون */}
+                                                    {/* هزینه های مستقیم - Value */}
                                                     <td style={{ 
                                                         borderTop: cellBorder,
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
-                                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                                        borderRight: cellBorder,
                                                         padding: '8px', 
                                                         textAlign: isNumeric(helperDirectValues) ? 'center' : 'right',
                                                         direction: 'rtl',
@@ -1412,9 +1522,23 @@ export const renderInvoiceLayoutHorizontal = (
                                                         whiteSpace: 'normal',
                                                         wordWrap: 'break-word',
                                                         width: '15%',
-                                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? helperDirectCostBg : '#ffffff') : 'transparent',
                                                     }}>
                                                         {helperDirectValues || '-'}
+                                                    </td>
+                                                    
+                                                    {/* ستون جداکننده بین هزینه های مستقیم و جمع بندی */}
+                                                    <td style={{ 
+                                                        borderTop: 'none',
+                                                        borderBottom: 'none',
+                                                        borderLeft: 'none',
+                                                        borderRight: 'none',
+                                                        padding: '0',
+                                                        width: '8px',
+                                                        backgroundColor: '#e5e7eb',
+                                                        minWidth: '8px',
+                                                        maxWidth: '8px',
+                                                    }}>
                                                     </td>
                                                     
                                                     {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم */}
@@ -1436,7 +1560,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         whiteSpace: 'normal',
                                                         wordWrap: 'break-word',
                                                         width: '15%',
-                                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? helperSummaryBg : '#ffffff') : 'transparent',
                                                     }}>
                                                         {helperSummaryRow ? helperSummaryRow.label : '-'}
                                                     </td>
@@ -1459,7 +1583,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         width: '15%',
                                                         fontWeight: 'bold',
                                                         color: '#1e3a8a',
-                                                        backgroundColor: hasContent ? rowBgColor : 'transparent',
+                                                        backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? helperSummaryBg : '#ffffff') : 'transparent',
                                                     }}>
                                                         {helperSummaryRow ? helperTotalValue : '-'}
                                                     </td>
@@ -1738,6 +1862,7 @@ export const exportInvoiceToImage = async (
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
                 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block" rel="stylesheet">
                 <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block');
                     * {
                         font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
                         font-size: 14px !important;
@@ -1761,6 +1886,9 @@ export const exportInvoiceToImage = async (
                         max-width: 1400px !important;
                         margin: 0 auto !important;
                         overflow: visible !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        align-items: center !important;
                     }
                     [data-tour-summary="true"] {
                         display: block !important;
@@ -1769,16 +1897,44 @@ export const exportInvoiceToImage = async (
                         overflow: visible !important;
                         position: relative !important;
                         z-index: 1 !important;
+                        margin-top: 50px !important;
+                        margin-bottom: 20px !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
                     }
                     .invoice-table-wrapper {
                         overflow: visible !important;
+                        box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
+                        border-radius: 12px !important;
+                        margin-bottom: 30px !important;
                     }
                     table {
                         border-collapse: collapse;
                         width: 100%;
+                        box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
+                        border-radius: 12px !important;
+                        overflow: hidden !important;
+                    }
+                    th {
+                        background-color: #1e3a8a !important;
+                        color: #ffffff !important;
+                        font-weight: bold !important;
+                        padding: 12px 8px !important;
                     }
                     tr:nth-child(even) {
                         background: #f8fbff !important;
+                    }
+                    tr:hover {
+                        background: #e6f0ff !important;
+                        transition: background-color 0.3s !important;
+                    }
+                    td {
+                        border: 1px solid #cccccc !important;
+                        padding: 8px !important;
+                    }
+                    /* جداکننده‌های border برای دسته‌بندی‌ها */
+                    td[style*="border-right: 3px solid"] {
+                        border-right: 3px solid #003366 !important;
                     }
                 </style>
             </head>
@@ -1790,28 +1946,59 @@ export const exportInvoiceToImage = async (
         iframeDoc.close();
         
         // انتظار برای render کامل و لود شدن فونت
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
-        // محاسبه اندازه واقعی
+        // اطمینان از لود شدن فونت
+        await iframeDoc.fonts.ready;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // محاسبه اندازه واقعی - با در نظر گرفتن خلاصه تور
         const body = iframeDoc.body;
-        const actualWidth = Math.max(body.scrollWidth, 1400);
-        const actualHeight = body.scrollHeight;
+        const summaryElement = body.querySelector('[data-tour-summary="true"]') as HTMLElement;
+        
+        let actualWidth = Math.max(body.scrollWidth, 1400);
+        let actualHeight = body.scrollHeight;
+        
+        // اگر خلاصه تور وجود دارد، اطمینان از اینکه در محاسبه ارتفاع قرار دارد
+        if (summaryElement) {
+            const summaryBottom = summaryElement.offsetTop + summaryElement.offsetHeight;
+            actualHeight = Math.max(actualHeight, summaryBottom + 100);
+        }
         
         console.log(`📐 [exportInvoiceToImage] Dimensions: ${actualWidth}x${actualHeight}`);
+        console.log(`📐 [exportInvoiceToImage] Summary element:`, summaryElement ? 'Found' : 'Not found');
         
-        // استفاده از html2canvas روی iframe body
+        // استفاده از html2canvas روی iframe body با تنظیمات بهتر
         const canvas = await html2canvas(body, {
             scale: 2,
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#ffffff',
-            logging: false,
+            logging: true, // فعال کردن logging برای debug
             width: actualWidth,
             height: actualHeight,
             windowWidth: actualWidth,
             windowHeight: actualHeight,
             scrollX: 0,
             scrollY: 0,
+            onclone: (clonedDoc) => {
+                // اطمینان از نمایش خلاصه تور در cloned document
+                const clonedSummary = clonedDoc.querySelector('[data-tour-summary="true"]') as HTMLElement;
+                if (clonedSummary) {
+                    clonedSummary.style.display = 'block';
+                    clonedSummary.style.visibility = 'visible';
+                    clonedSummary.style.opacity = '1';
+                    clonedSummary.style.overflow = 'visible';
+                }
+                
+                // اعمال فونت به تمام المان‌ها
+                const allElements = clonedDoc.querySelectorAll('*');
+                allElements.forEach((el) => {
+                    if (el instanceof HTMLElement) {
+                        el.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                    }
+                });
+            }
         });
         
         // پاک کردن iframe
