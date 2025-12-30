@@ -609,6 +609,7 @@ export const renderInvoiceLayoutHorizontal = (
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
+                    justifyContent: 'center',
                 }}>
                 {/* اطلاعات راننده */}
                 <div style={{
@@ -645,7 +646,7 @@ export const renderInvoiceLayoutHorizontal = (
                 </div>
                 
                 {/* جدول جدید: برای هر دسته، label در یک ستون و value در ستون دیگر */}
-                <div className="invoice-table-wrapper" style={{ borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+                <div className="invoice-table-wrapper" style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
                     <table className="invoice-table" style={{
                         width: '100%',
                         maxWidth: '100%',
@@ -742,7 +743,7 @@ export const renderInvoiceLayoutHorizontal = (
                             const totalValue = summaryRow ? summaryRow.getTotal() : '-';
                             
                             const isEven = rowIdx % 2 === 0;
-                            const rowBgColor = isEven ? '#f5f5f5' : '#ffffff';
+                            const rowBgColor = isEven ? '#f8fbff' : '#ffffff';
                             const hasContent = initialRow1 || initialRow2 || directRow || depotRow || summaryRow;
                             
                             // بررسی اینکه آیا مقدار عددی است یا نه
@@ -767,12 +768,14 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}
                                     onMouseEnter={(e) => {
                                         if (hasContent) {
-                                            e.currentTarget.style.backgroundColor = '#e3f2fd';
+                                            e.currentTarget.style.backgroundColor = '#e6f0ff';
+                                            e.currentTarget.style.transition = 'background-color 0.3s';
                                         }
                                     }}
                                     onMouseLeave={(e) => {
                                         if (hasContent) {
                                             e.currentTarget.style.backgroundColor = rowBgColor;
+                                            e.currentTarget.style.transition = 'background-color 0.3s';
                                         }
                                     }}
                                 >
@@ -1073,96 +1076,6 @@ export const renderInvoiceLayoutHorizontal = (
                     </div>
                 )}
                 
-                {/* خلاصه تور - زیر فوتر */}
-                <div style={{
-                    width: '100%',
-                    maxWidth: '100%',
-                    borderRadius: '10px',
-                    overflow: 'hidden',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                    marginTop: '30px',
-                    marginBottom: '20px',
-                    textAlign: 'center',
-                }}>
-                    <h3 style={{
-                        fontSize: '18px',
-                        fontWeight: 'bold',
-                        marginBottom: '10px',
-                        textAlign: 'center',
-                        fontFamily: "'Vazirmatn', sans-serif",
-                        color: '#1e3a8a',
-                        padding: '12px',
-                        backgroundColor: '#f0f9ff',
-                        borderBottom: '2px solid #1e3a8a',
-                    }}>
-                        خلاصه تور
-                    </h3>
-                    <table style={{
-                        width: '100%',
-                        maxWidth: '100%',
-                        borderCollapse: 'collapse',
-                        direction: 'rtl',
-                        unicodeBidi: 'isolate',
-                        fontSize: '14px',
-                        fontFamily: "'Vazirmatn', sans-serif",
-                        boxSizing: 'border-box',
-                        margin: '0 auto',
-                    }}>
-                        <tbody>
-                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                <td style={{
-                                    border: '1px solid #cccccc',
-                                    padding: '10px 15px',
-                                    backgroundColor: '#ffffff',
-                                    textAlign: 'right',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    lineHeight: '1.8',
-                                }}>
-                                    تعداد تور راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
-                                </td>
-                            </tr>
-                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                <td style={{
-                                    border: '1px solid #cccccc',
-                                    borderTop: 'none',
-                                    padding: '10px 15px',
-                                    backgroundColor: '#f8f9fa',
-                                    textAlign: 'right',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    lineHeight: '1.8',
-                                }}>
-                                    هزینه کل تورهای راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
-                                </td>
-                            </tr>
-                            {helperBlocks.map((helperBlock, helperIdx) => {
-                                const helperEmployeeId = helperBlock.title.match(/کدپرسنلی[:\s]*(\d+)/)?.[1] || '';
-                                const helperName = helperBlock.title.match(/-\s*([^-]+)$/)?.[1]?.trim() || helperBlock.title.match(/:\s*\d+\s*-\s*(.+)$/)?.[1]?.trim() || '';
-                                return (
-                                    <tr key={helperIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                        <td style={{
-                                            border: '1px solid #cccccc',
-                                            borderTop: 'none',
-                                            padding: '10px 15px',
-                                            backgroundColor: helperIdx % 2 === 0 ? '#ffffff' : '#f8f9fa',
-                                            textAlign: 'right',
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            fontFamily: "'Vazirmatn', sans-serif",
-                                            lineHeight: '1.8',
-                                        }}>
-                                            راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-                
                 {/* جداول راننده کمکی */}
                 {helperBlocks.map((helperBlock, helperIdx) => {
                     const helperCalculations = invoiceData.helperCalculationsByEmployeeId?.get(
@@ -1213,7 +1126,7 @@ export const renderInvoiceLayoutHorizontal = (
                     });
                     
                     return (
-                        <div key={helperIdx} style={{ marginTop: '30px' }}>
+                        <div key={helperIdx} style={{ marginTop: '50px' }}>
                             {/* عنوان راننده کمکی */}
                             <div style={{
                                 marginBottom: '16px',
@@ -1238,7 +1151,7 @@ export const renderInvoiceLayoutHorizontal = (
                             </div>
                             
                             {/* جدول راننده کمکی */}
-                            <div className="invoice-table-wrapper" style={{ borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+                            <div className="invoice-table-wrapper" style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
                                 <table className="invoice-table" style={{
                                     width: '100%',
                                     maxWidth: '100%',
@@ -1610,7 +1523,7 @@ export const exportInvoiceToImage = async (
                         
                         // اضافه کردن link tag برای فونت Vazirmatn از Google Fonts
                         const link = clonedDoc.createElement('link');
-                        link.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap';
+                        link.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
                         
