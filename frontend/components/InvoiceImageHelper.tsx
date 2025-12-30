@@ -431,10 +431,10 @@ export const convertToInvoiceDataFormatHorizontal = (
                 : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
         const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
-        const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
-        const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
-        const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0);
-        const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0);
+        const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || calc.approved_kilometer || calc.approvedKilometer || 0);
+        const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || calc.excess_kilometer || calc.excessKilometer || 0);
+        const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || calc.approved_mission || calc.approvedMission || 0);
+        const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || calc.excess_mission || calc.excessMission || 0);
         const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
         const depotKilometerRate = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0);
         const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
@@ -532,7 +532,7 @@ export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
     invoiceAnnouncements: Map<string, any>,
-    containerWidth: number = 1400,
+    containerWidth: number = 1600,
     fontSize: number = 13,
     cellPadding: string = '14px 12px'
 ): JSX.Element => {
@@ -548,10 +548,34 @@ export const renderInvoiceLayoutHorizontal = (
         { label: 'تاریخ محاسبه', getValue: (tour: any) => tour?.calculationDate || '-', getTotal: () => '-' },
         { label: 'پلاک خودرو', getValue: (tour: any) => tour?.vehiclePlate || '-', getTotal: () => '-' },
         { label: 'نوع خودرو', getValue: (tour: any) => tour?.vehicleType || '-', getTotal: () => '-' },
-        { label: 'پیمایش مصوب', getValue: (tour: any) => (tour?.approvedKm || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.approvedKm || 0), 0).toLocaleString('fa-IR') || '0' },
-        { label: 'پیمایش مازاد', getValue: (tour: any) => (tour?.excessKm || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.excessKm || 0), 0).toLocaleString('fa-IR') || '0' },
-        { label: 'ماموریت مصوب', getValue: (tour: any) => (tour?.approvedMissionDays || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.approvedMissionDays || 0), 0).toLocaleString('fa-IR') || '0' },
-        { label: 'ماموریت مازاد', getValue: (tour: any) => (tour?.excessMissionDays || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.excessMissionDays || 0), 0).toLocaleString('fa-IR') || '0' },
+        { label: 'پیمایش مصوب', getValue: (tour: any) => {
+            const value = tour?.approvedKm || tour?.approved_kilometers || tour?.approvedKilometers || 0;
+            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+        }, getTotal: () => {
+            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.approvedKm || t.approved_kilometers || t.approvedKilometers || 0), 0) || 0;
+            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+        }},
+        { label: 'پیمایش مازاد', getValue: (tour: any) => {
+            const value = tour?.excessKm || tour?.excess_kilometers || tour?.excessKilometers || 0;
+            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+        }, getTotal: () => {
+            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.excessKm || t.excess_kilometers || t.excessKilometers || 0), 0) || 0;
+            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+        }},
+        { label: 'ماموریت مصوب', getValue: (tour: any) => {
+            const value = tour?.approvedMissionDays || tour?.approved_mission_days || 0;
+            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+        }, getTotal: () => {
+            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.approvedMissionDays || t.approved_mission_days || 0), 0) || 0;
+            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+        }},
+        { label: 'ماموریت مازاد', getValue: (tour: any) => {
+            const value = tour?.excessMissionDays || tour?.excess_mission_days || 0;
+            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+        }, getTotal: () => {
+            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.excessMissionDays || t.excess_mission_days || 0), 0) || 0;
+            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+        }},
     ];
     
     // هزینه‌های مستقیم
@@ -587,9 +611,9 @@ export const renderInvoiceLayoutHorizontal = (
     const totalTourCost = totalFixedAllowance + totalDepotAllowance + totalNonAllowanceCosts;
     
     const summaryRows = [
-        { label: 'پیمایش کل (دپو+مصوب+مازاد)', getValue: () => totalKm.toLocaleString('fa-IR'), getTotal: () => totalKm.toLocaleString('fa-IR') },
-        { label: 'کل اجرت (اجرت ثابت+اجرت دپو)', getValue: () => (totalFixedAllowance + totalDepotAllowance).toLocaleString('fa-IR'), getTotal: () => (totalFixedAllowance + totalDepotAllowance).toLocaleString('fa-IR') },
-        { label: 'هزینه های بغیر اجرت (شامل جمع تمامی فیلدهای هزینه)', getValue: () => totalNonAllowanceCosts.toLocaleString('fa-IR'), getTotal: () => totalNonAllowanceCosts.toLocaleString('fa-IR') },
+        { label: 'پیمایش کل', getValue: () => totalKm.toLocaleString('fa-IR'), getTotal: () => totalKm.toLocaleString('fa-IR') },
+        { label: 'کل اجرت', getValue: () => (totalFixedAllowance + totalDepotAllowance).toLocaleString('fa-IR'), getTotal: () => (totalFixedAllowance + totalDepotAllowance).toLocaleString('fa-IR') },
+        { label: 'هزینه های بغیر اجرت', getValue: () => totalNonAllowanceCosts.toLocaleString('fa-IR'), getTotal: () => totalNonAllowanceCosts.toLocaleString('fa-IR') },
         { label: 'کل هزینه تور', getValue: () => totalTourCost.toLocaleString('fa-IR'), getTotal: () => totalTourCost.toLocaleString('fa-IR') },
     ];
     
@@ -617,7 +641,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                     width: `${containerWidth}px`,
                     minWidth: `${containerWidth}px`,
-                    maxWidth: `${containerWidth}px`,
+                    maxWidth: 'none',
                     margin: '0 auto',
                     backgroundColor: '#ffffff',
                     color: '#000000',
@@ -1819,8 +1843,8 @@ export const exportInvoiceToImage = async (
                 left: -9999px;
                 top: 0;
                 width: auto;
-                min-width: 1400px;
-                max-width: 1400px;
+                min-width: 1600px;
+                max-width: none;
                 background: white;
                 direction: rtl;
                 padding: 20px;
@@ -1849,7 +1873,7 @@ export const exportInvoiceToImage = async (
             console.log(fontCheck ? '✅ [exportInvoiceToImage] فونت Vazirmatn تایید شد' : '⚠️ [exportInvoiceToImage] فونت Vazirmatn تایید نشد');
             
             // محاسبه اندازه
-            const width = Math.max(tempContainer.scrollWidth, 1400);
+            const width = Math.max(tempContainer.scrollWidth, 1600);
             const height = tempContainer.scrollHeight;
             
             console.log(`📐 [exportInvoiceToImage] Dimensions: ${width}x${height}`);
@@ -1898,8 +1922,8 @@ export const exportInvoiceToImage = async (
             position: fixed;
             top: -9999px;
             left: -9999px;
-            width: 1600px;
-            height: 20000px;
+            width: 3000px;
+            height: 50000px;
             border: none;
             overflow: hidden;
         `;
@@ -1956,8 +1980,8 @@ export const exportInvoiceToImage = async (
                     }
                     [data-invoice-ref="true"] {
                         width: auto !important;
-                        min-width: 1400px !important;
-                        max-width: 1400px !important;
+                        min-width: 1600px !important;
+                        max-width: none !important;
                         margin: 0 auto !important;
                         overflow: visible !important;
                         display: flex !important;
@@ -2050,14 +2074,46 @@ export const exportInvoiceToImage = async (
         // محاسبه اندازه واقعی - با در نظر گرفتن خلاصه تور
         const body = iframeDoc.body;
         const summaryElement = body.querySelector('[data-tour-summary="true"]') as HTMLElement;
+        const invoiceRef = body.querySelector('[data-invoice-ref="true"]') as HTMLElement;
         
-        let actualWidth = Math.max(body.scrollWidth, 1400);
+        // محاسبه عرض واقعی از invoice container
+        let actualWidth = 1600; // حداقل عرض
+        if (invoiceRef) {
+            // استفاده از scrollWidth برای محاسبه عرض واقعی محتوا
+            actualWidth = Math.max(
+                invoiceRef.scrollWidth,
+                invoiceRef.offsetWidth,
+                body.scrollWidth,
+                body.offsetWidth,
+                1600
+            );
+            // اضافه کردن padding و margin
+            const computedStyle = iframeDoc.defaultView?.getComputedStyle(invoiceRef);
+            if (computedStyle) {
+                const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+                const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+                const marginLeft = parseFloat(computedStyle.marginLeft) || 0;
+                const marginRight = parseFloat(computedStyle.marginRight) || 0;
+                actualWidth += paddingLeft + paddingRight + marginLeft + marginRight;
+            }
+        } else {
+            actualWidth = Math.max(body.scrollWidth, body.offsetWidth, 1600);
+        }
+        
         let actualHeight = body.scrollHeight;
         
         // اگر خلاصه تور وجود دارد، اطمینان از اینکه در محاسبه ارتفاع قرار دارد
         if (summaryElement) {
             const summaryBottom = summaryElement.offsetTop + summaryElement.offsetHeight;
-            actualHeight = Math.max(actualHeight, summaryBottom + 80); // اضافه کردن فضای خالی پایین
+            actualHeight = Math.max(actualHeight, summaryBottom + 100); // اضافه کردن فضای خالی پایین
+        }
+        
+        // اضافه کردن padding به ارتفاع
+        const bodyComputedStyle = iframeDoc.defaultView?.getComputedStyle(body);
+        if (bodyComputedStyle) {
+            const paddingTop = parseFloat(bodyComputedStyle.paddingTop) || 0;
+            const paddingBottom = parseFloat(bodyComputedStyle.paddingBottom) || 0;
+            actualHeight += paddingTop + paddingBottom;
         }
         
         console.log(`📐 [exportInvoiceToImage] Dimensions: ${actualWidth}x${actualHeight}`);
@@ -2086,10 +2142,12 @@ export const exportInvoiceToImage = async (
                 position: absolute;
                 left: -9999px;
                 top: 0;
-                width: ${actualWidth}px;
+                width: auto;
+                min-width: ${actualWidth}px;
                 height: ${actualHeight}px;
                 background: white;
                 direction: rtl;
+                overflow: visible;
             `;
             
             // Clone کردن محتوای body iframe
