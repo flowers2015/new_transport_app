@@ -623,17 +623,17 @@ export const renderInvoiceLayoutHorizontal = (
                         textAlign: 'center',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                        color: '#1e40af',
+                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        color: '#1e3a8a',
                     }}>
                         صورتحساب هزینه
                     </h3>
                     <div style={{
-                        fontSize: `${fontSize + 2}px`,
+                        fontSize: '14px',
                         lineHeight: '1.8',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                     }}>
                         <p style={{ marginBottom: '4px' }}>کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
                         <p style={{ marginBottom: '4px' }}>نام: {selectedInvoiceRecord.driverName}</p>
@@ -652,8 +652,8 @@ export const renderInvoiceLayoutHorizontal = (
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
                         margin: '0 auto 15px auto',
-                        fontSize: `${fontSize + 1}px`,
-                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                        fontSize: '14px',
+                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                         boxSizing: 'border-box',
                         borderRadius: '8px',
                         overflow: 'hidden',
@@ -661,61 +661,61 @@ export const renderInvoiceLayoutHorizontal = (
                         <thead>
                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                 <th colSpan={4} style={{ 
-                                    border: '2px solid #1e40af', 
+                                    border: '2px solid #1e3a8a', 
                                     padding: '12px 8px', 
-                                    backgroundColor: '#1e40af', 
+                                    backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                    fontSize: `${fontSize + 2}px`,
+                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>اطلاعات اولیه</th>
                                 <th colSpan={2} style={{ 
-                                    border: '2px solid #1e40af', 
+                                    border: '2px solid #1e3a8a', 
                                     borderRight: 'none',
                                     padding: '12px 8px', 
-                                    backgroundColor: '#1e40af', 
+                                    backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                    fontSize: `${fontSize + 2}px`,
+                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>هزینه های مستقیم</th>
                                 <th colSpan={2} style={{ 
-                                    border: '2px solid #1e40af', 
+                                    border: '2px solid #1e3a8a', 
                                     borderRight: 'none',
                                     padding: '12px 8px', 
-                                    backgroundColor: '#1e40af', 
+                                    backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                    fontSize: `${fontSize + 2}px`,
+                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>هزینه دپو</th>
                                 <th colSpan={2} style={{ 
-                                    border: '2px solid #1e40af', 
+                                    border: '2px solid #1e3a8a', 
                                     borderRight: 'none',
                                     padding: '12px 8px', 
-                                    backgroundColor: '#1e40af', 
+                                    backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                    fontSize: `${fontSize + 2}px`,
+                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>جمع بندی</th>
@@ -739,7 +739,7 @@ export const renderInvoiceLayoutHorizontal = (
                             const totalValue = summaryRow ? summaryRow.getTotal() : '-';
                             
                             const isEven = rowIdx % 2 === 0;
-                            const rowBgColor = isEven ? '#f9fafb' : '#ffffff';
+                            const rowBgColor = isEven ? '#f5f5f5' : '#ffffff';
                             const hasContent = initialRow1 || initialRow2 || directRow || depotRow || summaryRow;
                             
                             // بررسی اینکه آیا مقدار عددی است یا نه
@@ -749,7 +749,7 @@ export const renderInvoiceLayoutHorizontal = (
                             };
                             
                             // تعیین border برای دسته‌بندی‌ها
-                            const categoryBorderRight = '2px solid #1e40af'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL)
+                            const categoryBorderRight = '2px solid #1e3a8a'; // border سمت راست برای جدا کردن دسته‌بندی‌ها (RTL)
                             const cellBorder = '1px solid #e5e7eb'; // حاشیه‌های کم رنگ داخل جدول
                             const isLastRow = rowIdx === maxRows - 1;
                             
@@ -779,13 +779,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -800,13 +800,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: isNumeric(initialValues1) ? 'center' : 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -821,13 +821,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -842,13 +842,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
                                         borderRight: categoryBorderRight,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: isNumeric(initialValues2) ? 'center' : 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -864,13 +864,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder, // border عادی - border جداکننده در initialValues2 است
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -885,13 +885,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
                                         borderRight: categoryBorderRight, // border سمت راست برای جدا کردن از هزینه دپو
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: isNumeric(directValues) ? 'center' : 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -907,13 +907,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -928,13 +928,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
                                         borderRight: categoryBorderRight, // border سمت راست برای جدا کردن از جمع بندی
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: isNumeric(depotValues) ? 'center' : 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -950,13 +950,13 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
@@ -971,19 +971,19 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: isLastRow ? cellBorder : cellBorder,
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
-                                        padding: '10px 8px', 
+                                        padding: '8px', 
                                         textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                        fontSize: `${fontSize + 1}px`,
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
                                         width: '15%',
                                         fontWeight: 'bold',
-                                        color: '#1e40af',
+                                        color: '#1e3a8a',
                                         backgroundColor: hasContent ? rowBgColor : 'transparent',
                                     }}>
                                         {summaryRow ? totalValue : '-'}
@@ -1011,20 +1011,20 @@ export const renderInvoiceLayoutHorizontal = (
                             borderCollapse: 'collapse',
                             direction: 'rtl',
                             unicodeBidi: 'isolate',
-                            fontSize: `${fontSize + 2}px`,
-                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                            fontSize: '14px',
+                            fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                             boxSizing: 'border-box',
                         }}>
                             <tbody>
                                 <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                     <td style={{
-                                        border: '2px solid #1e40af',
-                                        padding: '12px 15px',
+                                        border: '2px solid #1e3a8a',
+                                        padding: '8px 15px',
                                         backgroundColor: '#dbeafe',
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                         lineHeight: '1.8',
                                     }}>
                                         جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
@@ -1033,14 +1033,14 @@ export const renderInvoiceLayoutHorizontal = (
                                 {mainBlock.summary.deductionsAmount && mainBlock.summary.deductionsAmount > 0 && (
                                     <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                         <td style={{
-                                            border: '2px solid #1e40af',
+                                            border: '2px solid #1e3a8a',
                                             borderTop: 'none',
-                                            padding: '12px 15px',
+                                            padding: '8px 15px',
                                             backgroundColor: '#dbeafe',
                                             textAlign: 'right',
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
-                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                            fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                             lineHeight: '1.8',
                                         }}>
                                             {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
@@ -1049,16 +1049,16 @@ export const renderInvoiceLayoutHorizontal = (
                                 )}
                                 <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                     <td style={{
-                                        border: '2px solid #1e40af',
+                                        border: '2px solid #1e3a8a',
                                         borderTop: 'none',
-                                        padding: '12px 15px',
+                                        padding: '8px 15px',
                                         backgroundColor: '#bfdbfe',
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                         fontWeight: 'bold',
-                                        fontSize: `${fontSize + 3}px`,
+                                        fontSize: '14px',
                                         color: '#1e3a8a',
                                         lineHeight: '1.8',
                                     }}>
@@ -1124,7 +1124,7 @@ export const renderInvoiceLayoutHorizontal = (
                             <div style={{
                                 marginBottom: '16px',
                                 paddingBottom: '12px',
-                                borderBottom: '2px solid #1e40af',
+                                borderBottom: '2px solid #1e3a8a',
                                 textAlign: 'right',
                                 direction: 'rtl',
                                 unicodeBidi: 'isolate',
@@ -1136,8 +1136,8 @@ export const renderInvoiceLayoutHorizontal = (
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                    color: '#1e40af',
+                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    color: '#1e3a8a',
                                 }}>
                                     {helperBlock.title}
                                 </h3>
@@ -1154,8 +1154,8 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     margin: '0 auto 15px auto',
-                                    fontSize: `${fontSize + 1}px`,
-                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                    fontSize: '14px',
+                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                     boxSizing: 'border-box',
                                     borderRadius: '8px',
                                     overflow: 'hidden',
@@ -1163,61 +1163,61 @@ export const renderInvoiceLayoutHorizontal = (
                                     <thead>
                                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <th colSpan={4} style={{ 
-                                                border: '2px solid #1e40af', 
-                                                padding: '12px 8px', 
-                                                backgroundColor: '#1e40af', 
+                                                border: '2px solid #1e3a8a', 
+                                                padding: '8px', 
+                                                backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 2}px`,
+                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>اطلاعات اولیه</th>
                                             <th colSpan={2} style={{ 
-                                                border: '2px solid #1e40af', 
+                                                border: '2px solid #1e3a8a', 
                                                 borderRight: 'none',
-                                                padding: '12px 8px', 
-                                                backgroundColor: '#1e40af', 
+                                                padding: '8px', 
+                                                backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 2}px`,
+                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>هزینه های مستقیم</th>
                                             <th colSpan={2} style={{ 
-                                                border: '2px solid #1e40af', 
+                                                border: '2px solid #1e3a8a', 
                                                 borderRight: 'none',
-                                                padding: '12px 8px', 
-                                                backgroundColor: '#1e40af', 
+                                                padding: '8px', 
+                                                backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 2}px`,
+                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>هزینه دپو</th>
                                             <th colSpan={2} style={{ 
-                                                border: '2px solid #1e40af', 
+                                                border: '2px solid #1e3a8a', 
                                                 borderRight: 'none',
-                                                padding: '12px 8px', 
-                                                backgroundColor: '#1e40af', 
+                                                padding: '8px', 
+                                                backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
-                                                fontSize: `${fontSize + 2}px`,
+                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>جمع بندی</th>
@@ -1238,7 +1238,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             const helperTotalValue = helperSummaryRow ? helperSummaryRow.getTotal() : '-';
                                             
                                             const isEven = rowIdx % 2 === 0;
-                                            const rowBgColor = isEven ? '#f9fafb' : '#ffffff';
+                                            const rowBgColor = isEven ? '#f5f5f5' : '#ffffff';
                                             const hasContent = helperInitialRow1 || helperInitialRow2 || helperDirectRow || helperDepotRow || helperSummaryRow;
                                             
                                             const isNumeric = (str: string) => {
@@ -1271,41 +1271,41 @@ export const renderInvoiceLayoutHorizontal = (
                                                     }}
                                                 >
                                                     {/* اطلاعات اولیه - فیلد 1 */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: categoryBorderRight, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: categoryBorderRight, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialRow1 ? helperInitialRow1.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '10px 8px', textAlign: isNumeric(helperInitialValues1) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '8px', textAlign: isNumeric(helperInitialValues1) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialValues1 || '-'}
                                                     </td>
                                                     {/* اطلاعات اولیه - فیلد 2 */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialRow2 ? helperInitialRow2.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '8px', textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '10%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperInitialValues2 || '-'}
                                                     </td>
                                                     
                                                     {/* هزینه های مستقیم */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDirectRow ? helperDirectRow.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperDirectValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '8px', textAlign: isNumeric(helperDirectValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDirectValues || '-'}
                                                     </td>
                                                     
                                                     {/* هزینه دپو */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDepotRow ? helperDepotRow.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '10px 8px', textAlign: isNumeric(helperDepotValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: 'none', borderRight: categoryBorderRight, padding: '8px', textAlign: isNumeric(helperDepotValues) ? 'center' : 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperDepotValues || '-'}
                                                     </td>
                                                     
                                                     {/* جمع بندی */}
-                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: categoryBorderRight, borderRight: cellBorder, padding: '10px 8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'right', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperSummaryRow ? helperSummaryRow.label : '-'}
                                                     </td>
-                                                    <td style={{ borderTop: cellBorder, borderBottom: isLastRow ? cellBorder : cellBorder, borderLeft: 'none', borderRight: cellBorder, padding: '10px 8px', textAlign: 'center', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'B Homa', 'Tahoma', sans-serif", fontSize: `${fontSize + 1}px`, lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', fontWeight: 'bold', color: '#1e40af', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
+                                                    <td style={{ borderTop: cellBorder, borderBottom: isLastRow ? cellBorder : cellBorder, borderLeft: cellBorder, borderRight: cellBorder, padding: '8px', textAlign: 'center', direction: 'rtl', unicodeBidi: 'isolate', verticalAlign: 'middle', fontFamily: "'Vazirmatn', 'Tahoma', sans-serif", fontSize: '14px', lineHeight: '1.5', whiteSpace: 'normal', wordWrap: 'break-word', width: '15%', fontWeight: 'bold', color: '#1e3a8a', backgroundColor: hasContent ? rowBgColor : 'transparent' }}>
                                                         {helperSummaryRow ? helperTotalValue : '-'}
                                                     </td>
                                                 </tr>
@@ -1331,22 +1331,22 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderCollapse: 'collapse',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontSize: `${fontSize + 2}px`,
-                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                        fontSize: '14px',
+                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                         boxSizing: 'border-box',
                                     }}>
                                         <tbody>
                                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                                 <td style={{
-                                                    border: '2px solid #1e40af',
-                                                    padding: '12px 15px',
+                                                    border: '2px solid #1e3a8a',
+                                                    padding: '8px 15px',
                                                     backgroundColor: '#bfdbfe',
                                                     textAlign: 'right',
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
-                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
+                                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                                     fontWeight: 'bold',
-                                                    fontSize: `${fontSize + 3}px`,
+                                                    fontSize: '14px',
                                                     color: '#1e3a8a',
                                                     lineHeight: '1.8',
                                                 }}>
@@ -1503,16 +1503,6 @@ export const exportInvoiceToImage = async (
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
-                            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
-                            @font-face {
-                                font-family: 'B Homa';
-                                font-style: normal;
-                                font-weight: 400;
-                                font-display: block;
-                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
-                                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
-                                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-                            }
                             * {
                                 font-family: 'B Homa', 'Tahoma', sans-serif !important;
                                 -webkit-font-smoothing: antialiased;
@@ -1527,9 +1517,9 @@ export const exportInvoiceToImage = async (
                         `;
                         clonedDoc.head.appendChild(style);
                         
-                        // اضافه کردن link tag به عنوان fallback
+                        // اضافه کردن link tag برای فونت Vazirmatn
                         const link = clonedDoc.createElement('link');
-                        link.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+                        link.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap';
                         link.rel = 'stylesheet';
                         clonedDoc.head.appendChild(link);
                         
@@ -1555,7 +1545,8 @@ export const exportInvoiceToImage = async (
                             const htmlEl = el as HTMLElement;
                             if (htmlEl.style) {
                                 // استفاده از setProperty برای اعمال !important
-                                htmlEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                                htmlEl.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                                htmlEl.style.setProperty('font-size', '14px', 'important');
                                 htmlEl.style.setProperty('-webkit-font-smoothing', 'antialiased', 'important');
                                 htmlEl.style.setProperty('-moz-osx-font-smoothing', 'grayscale', 'important');
                             }
@@ -1563,10 +1554,12 @@ export const exportInvoiceToImage = async (
                         
                         // اعمال فونت به body و html
                         if (clonedDoc.body) {
-                            clonedDoc.body.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                            clonedDoc.body.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                            clonedDoc.body.style.setProperty('font-size', '14px', 'important');
                         }
                         if (clonedDoc.documentElement) {
-                            clonedDoc.documentElement.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                            clonedDoc.documentElement.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                            clonedDoc.documentElement.style.setProperty('font-size', '14px', 'important');
                         }
                         
                         // اعمال استایل‌های جدول
@@ -1577,13 +1570,15 @@ export const exportInvoiceToImage = async (
                             tableEl.style.minWidth = '100%';
                             tableEl.style.tableLayout = 'auto';
                             tableEl.style.borderCollapse = 'collapse';
-                            tableEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                            tableEl.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                            tableEl.style.setProperty('font-size', '14px', 'important');
                             
                             // اعمال فونت به تمام سلول‌های جدول
                             const cells = tableEl.querySelectorAll('td, th');
                             cells.forEach((cell) => {
                                 const cellEl = cell as HTMLElement;
-                                cellEl.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                                cellEl.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                                cellEl.style.setProperty('font-size', '14px', 'important');
                             });
                         });
                     }
