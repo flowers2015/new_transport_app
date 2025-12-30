@@ -511,7 +511,7 @@ export const renderInvoiceLayoutHorizontal = (
     invoiceData: InvoiceData,
     selectedInvoiceRecord: PaymentRecord,
     invoiceAnnouncements: Map<string, any>,
-    containerWidth: number = 1200,
+    containerWidth: number = 1400,
     fontSize: number = 13,
     cellPadding: string = '14px 12px'
 ): JSX.Element => {
@@ -610,6 +610,7 @@ export const renderInvoiceLayoutHorizontal = (
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    overflow: 'visible',
                 }}>
                 {/* اطلاعات راننده */}
                 <div style={{
@@ -646,7 +647,7 @@ export const renderInvoiceLayoutHorizontal = (
                 </div>
                 
                 {/* جدول جدید: برای هر دسته، label در یک ستون و value در ستون دیگر */}
-                <div className="invoice-table-wrapper" style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                <div className="invoice-table-wrapper" style={{ borderRadius: '12px', overflow: 'visible', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
                     <table className="invoice-table" style={{
                         width: '100%',
                         maxWidth: '100%',
@@ -1151,7 +1152,7 @@ export const renderInvoiceLayoutHorizontal = (
                             </div>
                             
                             {/* جدول راننده کمکی */}
-                            <div className="invoice-table-wrapper" style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                            <div className="invoice-table-wrapper" style={{ borderRadius: '12px', overflow: 'visible', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
                                 <table className="invoice-table" style={{
                                     width: '100%',
                                     maxWidth: '100%',
@@ -1351,6 +1352,98 @@ export const renderInvoiceLayoutHorizontal = (
                         </div>
                     );
                 })}
+                
+                {/* خلاصه تور - زیر جدول راننده کمکی */}
+                <div style={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    borderRadius: '12px',
+                    overflow: 'visible',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    marginTop: '50px',
+                    marginBottom: '20px',
+                    textAlign: 'center',
+                    position: 'relative' as const,
+                    zIndex: 1,
+                }}>
+                    <h3 style={{
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        marginBottom: '10px',
+                        textAlign: 'center',
+                        fontFamily: "'Vazirmatn', sans-serif",
+                        color: '#1e3a8a',
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderBottom: '2px solid #1e3a8a',
+                    }}>
+                        خلاصه تور
+                    </h3>
+                    <table style={{
+                        width: '100%',
+                        maxWidth: '100%',
+                        borderCollapse: 'collapse',
+                        direction: 'rtl',
+                        unicodeBidi: 'isolate',
+                        fontSize: '14px',
+                        fontFamily: "'Vazirmatn', sans-serif",
+                        boxSizing: 'border-box',
+                        margin: '0 auto',
+                    }}>
+                        <tbody>
+                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                <td style={{
+                                    border: '1px solid #cccccc',
+                                    padding: '10px 15px',
+                                    backgroundColor: '#ffffff',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'Vazirmatn', sans-serif",
+                                    lineHeight: '1.8',
+                                }}>
+                                    تعداد تور راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
+                                </td>
+                            </tr>
+                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                <td style={{
+                                    border: '1px solid #cccccc',
+                                    borderTop: 'none',
+                                    padding: '10px 15px',
+                                    backgroundColor: '#f8fbff',
+                                    textAlign: 'right',
+                                    direction: 'rtl',
+                                    unicodeBidi: 'isolate',
+                                    fontFamily: "'Vazirmatn', sans-serif",
+                                    lineHeight: '1.8',
+                                }}>
+                                    هزینه کل تورهای راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
+                                </td>
+                            </tr>
+                            {helperBlocks.map((helperBlock, helperIdx) => {
+                                const helperEmployeeId = helperBlock.title.match(/کدپرسنلی[:\s]*(\d+)/)?.[1] || '';
+                                const helperName = helperBlock.title.match(/-\s*([^-]+)$/)?.[1]?.trim() || helperBlock.title.match(/:\s*\d+\s*-\s*(.+)$/)?.[1]?.trim() || '';
+                                return (
+                                    <tr key={helperIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                        <td style={{
+                                            border: '1px solid #cccccc',
+                                            borderTop: 'none',
+                                            padding: '10px 15px',
+                                            backgroundColor: helperIdx % 2 === 0 ? '#ffffff' : '#f8fbff',
+                                            textAlign: 'right',
+                                            direction: 'rtl',
+                                            unicodeBidi: 'isolate',
+                                            fontFamily: "'Vazirmatn', sans-serif",
+                                            lineHeight: '1.8',
+                                        }}>
+                                            راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -1436,8 +1529,7 @@ export const exportInvoiceToImage = async (
     try {
         console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش DOM');
         
-        // لود کردن فونت B Homa قبل از شروع
-        await loadBHomaFont();
+        // فونت Vazirmatn از Google Fonts در onclone لود می‌شود
         
         // ایجاد temp div برای render کردن محتوا
         const tempDiv = document.createElement('div');
@@ -1456,15 +1548,15 @@ export const exportInvoiceToImage = async (
             
             // تنظیم استایل‌های temp div
             tempDiv.style.width = 'auto';
-            tempDiv.style.minWidth = '1200px';
-            tempDiv.style.maxWidth = '1200px';
+            tempDiv.style.minWidth = '1400px';
+            tempDiv.style.maxWidth = 'none';
             tempDiv.style.overflow = 'visible';
             
             const invoiceElement_internal = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
             if (invoiceElement_internal) {
                 invoiceElement_internal.style.width = 'auto';
-                invoiceElement_internal.style.minWidth = '1200px';
-                invoiceElement_internal.style.maxWidth = '1200px';
+                invoiceElement_internal.style.minWidth = '1400px';
+                invoiceElement_internal.style.maxWidth = 'none';
                 invoiceElement_internal.style.margin = '0 auto';
                 invoiceElement_internal.style.overflow = 'visible';
                 invoiceElement_internal.style.visibility = 'visible';
@@ -1474,9 +1566,12 @@ export const exportInvoiceToImage = async (
             // انتظار برای render کامل
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // محاسبه عرض واقعی محتوا
-            const actualWidth = Math.max(tempDiv.scrollWidth, tempDiv.offsetWidth, 1200);
-            const actualHeight = Math.max(tempDiv.scrollHeight, tempDiv.offsetHeight);
+            // محاسبه عرض و ارتفاع واقعی محتوا - با padding اضافی برای اطمینان از نمایش کامل
+            const actualWidth = Math.max(tempDiv.scrollWidth, tempDiv.offsetWidth, 1400);
+            // محاسبه ارتفاع با در نظر گرفتن تمام محتوا شامل خلاصه تور
+            const baseHeight = Math.max(tempDiv.scrollHeight, tempDiv.offsetHeight);
+            // اضافه کردن فضای اضافی برای خلاصه تور و marginها
+            const actualHeight = baseHeight + 300; // 300px اضافی برای خلاصه تور و فاصله‌ها
             
             // استفاده از html2canvas
             const canvas = await html2canvas(tempDiv, {
@@ -1494,29 +1589,27 @@ export const exportInvoiceToImage = async (
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
-                            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
-                            @font-face {
-                                font-family: 'B Homa';
-                                font-style: normal;
-                                font-weight: 400;
-                                font-display: block;
-                                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
-                                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
-                                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-                            }
+                            @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
                             * {
-                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', sans-serif !important;
                                 font-size: 14px !important;
                                 -webkit-font-smoothing: antialiased;
                                 -moz-osx-font-smoothing: grayscale;
                             }
                             body, html {
-                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', sans-serif !important;
                                 font-size: 14px !important;
                             }
                             table, td, th, tr, div, span, p, h1, h2, h3, h4, h5, h6 {
-                                font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', sans-serif !important;
                                 font-size: 14px !important;
+                            }
+                            tr:nth-child(even) {
+                                background: #f8fbff !important;
+                            }
+                            tr:hover {
+                                background: #e6f0ff !important;
+                                transition: background-color 0.3s;
                             }
                         `;
                         clonedDoc.head.appendChild(style);
@@ -1535,15 +1628,16 @@ export const exportInvoiceToImage = async (
                         clonedTempDiv.style.visibility = 'visible';
                         clonedTempDiv.style.opacity = '1';
                         clonedTempDiv.style.width = 'auto';
-                        clonedTempDiv.style.minWidth = '1200px';
-                        clonedTempDiv.style.maxWidth = '1200px';
+                        clonedTempDiv.style.minWidth = '1400px';
+                        clonedTempDiv.style.maxWidth = 'none';
                         clonedTempDiv.style.overflow = 'visible';
                         
                         const clonedInvoiceElement = clonedTempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
                         if (clonedInvoiceElement) {
                             clonedInvoiceElement.style.width = 'auto';
-                                clonedInvoiceElement.style.minWidth = '1200px';
-                                clonedInvoiceElement.style.maxWidth = '1200px';
+                            clonedInvoiceElement.style.minWidth = '1400px';
+                            clonedInvoiceElement.style.maxWidth = 'none';
+                            clonedInvoiceElement.style.overflow = 'visible';
                         }
                         
                         // اعمال فونت B Homa به تمام المان‌ها با !important
