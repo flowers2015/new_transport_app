@@ -666,38 +666,7 @@ export const renderInvoiceLayoutHorizontal = (
                         <thead>
                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                 {/* اطلاعات اولیه - 4 ستون: Label1, Value1, Label2, Value2 */}
-                                <th colSpan={2} style={{ 
-                                    border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
-                                    padding: '12px 8px', 
-                                    backgroundColor: '#1e3a8a', 
-                                    color: '#ffffff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    lineHeight: '1.4',
-                                }}>اطلاعات اولیه</th>
-                                <th style={{ 
-                                    border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
-                                    padding: '12px 8px', 
-                                    backgroundColor: '#1e3a8a', 
-                                    color: '#ffffff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    lineHeight: '1.4',
-                                    width: '10%',
-                                }}></th>
-                                <th style={{ 
+                                <th colSpan={4} style={{ 
                                     border: '2px solid #1e3a8a', 
                                     borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                     padding: '12px 8px', 
@@ -711,26 +680,9 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
-                                    width: '10%',
-                                }}></th>
+                                }}>اطلاعات اولیه</th>
                                 {/* هزینه های مستقیم - 2 ستون: Label, Value */}
-                                <th style={{ 
-                                    border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
-                                    padding: '12px 8px', 
-                                    backgroundColor: '#1e3a8a', 
-                                    color: '#ffffff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    lineHeight: '1.4',
-                                    width: '15%',
-                                }}>هزینه های مستقیم</th>
-                                <th style={{ 
+                                <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
                                     borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                     padding: '12px 8px', 
@@ -744,26 +696,9 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
-                                    width: '15%',
-                                }}></th>
+                                }}>هزینه های مستقیم</th>
                                 {/* هزینه دپو - 2 ستون: Label, Value */}
-                                <th style={{ 
-                                    border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
-                                    padding: '12px 8px', 
-                                    backgroundColor: '#1e3a8a', 
-                                    color: '#ffffff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    lineHeight: '1.4',
-                                    width: '15%',
-                                }}>هزینه دپو</th>
-                                <th style={{ 
+                                <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
                                     borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه دپو
                                     padding: '12px 8px', 
@@ -777,12 +712,10 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
-                                    width: '15%',
-                                }}></th>
+                                }}>هزینه دپو</th>
                                 {/* جمع بندی - 2 ستون: Label, Value */}
-                                <th style={{ 
+                                <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderRight: 'none',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -794,24 +727,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
-                                    width: '15%',
                                 }}>جمع بندی</th>
-                                <th style={{ 
-                                    border: '2px solid #1e3a8a', 
-                                    borderRight: '2px solid #1e3a8a', // آخرین دسته - بدون border جداکننده
-                                    padding: '12px 8px', 
-                                    backgroundColor: '#1e3a8a', 
-                                    color: '#ffffff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', sans-serif",
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    lineHeight: '1.4',
-                                    width: '15%',
-                                }}></th>
                             </tr>
                         </thead>
                     <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
@@ -1259,38 +1175,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     <thead>
                                         <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             {/* اطلاعات اولیه - 4 ستون: Label1, Value1, Label2, Value2 */}
-                                            <th colSpan={2} style={{ 
-                                                border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
-                                                padding: '8px', 
-                                                backgroundColor: '#1e3a8a', 
-                                                color: '#ffffff',
-                                                textAlign: 'center',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
-                                                verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', sans-serif",
-                                                fontSize: '14px',
-                                                fontWeight: 'bold',
-                                                lineHeight: '1.4',
-                                            }}>اطلاعات اولیه</th>
-                                            <th style={{ 
-                                                border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
-                                                padding: '8px', 
-                                                backgroundColor: '#1e3a8a', 
-                                                color: '#ffffff',
-                                                textAlign: 'center',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
-                                                verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', sans-serif",
-                                                fontSize: '14px',
-                                                fontWeight: 'bold',
-                                                lineHeight: '1.4',
-                                                width: '10%',
-                                            }}></th>
-                                            <th style={{ 
+                                            <th colSpan={4} style={{ 
                                                 border: '2px solid #1e3a8a', 
                                                 borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                                 padding: '8px', 
@@ -1304,26 +1189,9 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
-                                                width: '10%',
-                                            }}></th>
+                                            }}>اطلاعات اولیه</th>
                                             {/* هزینه های مستقیم - 2 ستون: Label, Value */}
-                                            <th style={{ 
-                                                border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
-                                                padding: '8px', 
-                                                backgroundColor: '#1e3a8a', 
-                                                color: '#ffffff',
-                                                textAlign: 'center',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
-                                                verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', sans-serif",
-                                                fontSize: '14px',
-                                                fontWeight: 'bold',
-                                                lineHeight: '1.4',
-                                                width: '15%',
-                                            }}>هزینه های مستقیم</th>
-                                            <th style={{ 
+                                            <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
                                                 borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                                 padding: '8px', 
@@ -1337,12 +1205,10 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
-                                                width: '15%',
-                                            }}></th>
+                                            }}>هزینه های مستقیم</th>
                                             {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم - فقط جمع بندی */}
-                                            <th style={{ 
+                                            <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderRight: 'none',
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1354,24 +1220,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
-                                                width: '15%',
                                             }}>جمع بندی</th>
-                                            <th style={{ 
-                                                border: '2px solid #1e3a8a', 
-                                                borderRight: '2px solid #1e3a8a', // آخرین دسته - بدون border جداکننده
-                                                padding: '8px', 
-                                                backgroundColor: '#1e3a8a', 
-                                                color: '#ffffff',
-                                                textAlign: 'center',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
-                                                verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', sans-serif",
-                                                fontSize: '14px',
-                                                fontWeight: 'bold',
-                                                lineHeight: '1.4',
-                                                width: '15%',
-                                            }}></th>
                                         </tr>
                                     </thead>
                                     <tbody style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
