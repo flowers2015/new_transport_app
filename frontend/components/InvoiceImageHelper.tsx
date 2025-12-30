@@ -1,5 +1,6 @@
 import React from 'react';
 import html2canvas from 'html2canvas';
+import * as domtoimage from 'dom-to-image';
 import ReactDOMServer from 'react-dom/server';
 
 // Helper function برای محاسبه هزینه راننده اصلی
@@ -1819,7 +1820,107 @@ export const exportInvoiceToImage = async (
     driverName: string
 ): Promise<void> => {
     try {
-        console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش iframe (بهبود یافته)');
+        console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با dom-to-image');
+        
+        // روش 1: استفاده مستقیم از dom-to-image روی element اصلی
+        try {
+            // Clone کردن element برای اطمینان از عدم تغییر DOM اصلی
+            const clonedElement = invoiceElement.cloneNode(true) as HTMLElement;
+            
+            // ایجاد container موقت
+            const tempContainer = document.createElement('div');
+            tempContainer.style.cssText = `
+                position: absolute;
+                left: -9999px;
+                top: 0;
+                width: auto;
+                min-width: 1400px;
+                max-width: 1400px;
+                background: white;
+                direction: rtl;
+                padding: 20px;
+            `;
+            
+            // اضافه کردن استایل‌های فونت
+            const fontStyle = document.createElement('style');
+            fontStyle.textContent = `
+                @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                @font-face {
+                    font-family: 'B Homa';
+                    font-style: normal;
+                    font-weight: 400;
+                    font-display: block;
+                    src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                         url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                    unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                }
+                * {
+                    font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                }
+            `;
+            document.head.appendChild(fontStyle);
+            
+            // اضافه کردن link tag
+            const fontLink = document.createElement('link');
+            fontLink.rel = 'stylesheet';
+            fontLink.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+            document.head.appendChild(fontLink);
+            
+            tempContainer.appendChild(clonedElement);
+            document.body.appendChild(tempContainer);
+            
+            // انتظار برای render و لود شدن فونت
+            await document.fonts.ready;
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // بررسی فونت
+            const fontCheck = document.fonts.check("16px 'B Homa'");
+            console.log(fontCheck ? '✅ [exportInvoiceToImage] فونت B Homa تایید شد' : '⚠️ [exportInvoiceToImage] فونت B Homa تایید نشد');
+            
+            // محاسبه اندازه
+            const width = Math.max(tempContainer.scrollWidth, 1400);
+            const height = tempContainer.scrollHeight;
+            
+            console.log(`📐 [exportInvoiceToImage] Dimensions: ${width}x${height}`);
+            
+            // استفاده از dom-to-image
+            const imgData = await domtoimage.toPng(tempContainer, {
+                quality: 1.0,
+                width: width,
+                height: height,
+                style: {
+                    transform: 'scale(1)',
+                    transformOrigin: 'top left',
+                },
+                filter: (node: Node) => {
+                    if (node instanceof HTMLElement) {
+                        const style = window.getComputedStyle(node);
+                        return style.display !== 'none' && style.visibility !== 'hidden';
+                    }
+                    return true;
+                },
+                bgcolor: '#ffffff',
+            });
+            
+            // پاک کردن
+            document.body.removeChild(tempContainer);
+            document.head.removeChild(fontStyle);
+            document.head.removeChild(fontLink);
+            
+            // دانلود
+            const link = document.createElement('a');
+            link.download = `صورتحساب_${driverName}_${new Date().toISOString().split('T')[0]}.png`;
+            link.href = imgData;
+            link.click();
+            
+            console.log('✅ [exportInvoiceToImage] عکس با موفقیت تولید شد (dom-to-image)');
+            return;
+        } catch (domtoimageError: any) {
+            console.warn('⚠️ [exportInvoiceToImage] dom-to-image مستقیم خطا داد، استفاده از iframe:', domtoimageError);
+        }
+        
+        // روش 2: استفاده از iframe (fallback)
+        console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش iframe (fallback)');
         
         // روش جدید: استفاده از iframe برای isolation کامل و رندر بهتر
         const iframe = document.createElement('iframe');
@@ -2028,73 +2129,159 @@ export const exportInvoiceToImage = async (
         console.log(`📐 [exportInvoiceToImage] Dimensions: ${actualWidth}x${actualHeight}`);
         console.log(`📐 [exportInvoiceToImage] Summary element:`, summaryElement ? 'Found' : 'Not found');
         
-        // استفاده از html2canvas روی iframe body با تنظیمات بهتر
-        const canvas = await html2canvas(body, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff',
-            logging: true, // فعال کردن logging برای debug
-            width: actualWidth,
-            height: actualHeight,
-            windowWidth: actualWidth,
-            windowHeight: actualHeight,
-            scrollX: 0,
-            scrollY: 0,
-            onclone: (clonedDoc) => {
-                // اطمینان از نمایش خلاصه تور در cloned document
-                const clonedSummary = clonedDoc.querySelector('[data-tour-summary="true"]') as HTMLElement;
-                if (clonedSummary) {
-                    clonedSummary.style.display = 'block';
-                    clonedSummary.style.visibility = 'visible';
-                    clonedSummary.style.opacity = '1';
-                    clonedSummary.style.overflow = 'visible';
-                }
-                
-                // اضافه کردن @font-face برای B Homa در cloned document
-                const clonedFontStyle = clonedDoc.createElement('style');
-                clonedFontStyle.textContent = `
-                    @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
-                    @font-face {
-                        font-family: 'B Homa';
-                        font-style: normal;
-                        font-weight: 400;
-                        font-display: block;
-                        src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
-                             url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
-                        unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-                    }
-                    * {
-                        font-family: 'B Homa', 'Tahoma', sans-serif !important;
-                    }
-                `;
-                clonedDoc.head.appendChild(clonedFontStyle);
-                
-                // اضافه کردن link tag
-                const clonedFontLink = clonedDoc.createElement('link');
-                clonedFontLink.rel = 'stylesheet';
-                clonedFontLink.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
-                clonedDoc.head.appendChild(clonedFontLink);
-                
-                // اعمال فونت B Homa به تمام المان‌ها
-                const allElements = clonedDoc.querySelectorAll('*');
-                allElements.forEach((el) => {
-                    if (el instanceof HTMLElement) {
-                        el.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
-                    }
-                });
+        // استفاده از dom-to-image به جای html2canvas
+        console.log('🔄 [exportInvoiceToImage] استفاده از dom-to-image...');
+        
+        let imgData: string;
+        
+        try {
+            // استفاده از dom-to-image - باید از window iframe استفاده کنیم
+            const iframeWindow = iframe.contentWindow;
+            if (!iframeWindow) {
+                throw new Error('Cannot access iframe window');
             }
-        });
+            
+            // استفاده از dom-to-image با window iframe
+            // dom-to-image نیاز به window دارد، پس باید از iframe.contentWindow استفاده کنیم
+            // اما dom-to-image نمی‌تواند مستقیماً با iframe کار کند
+            // پس باید محتوا را به صفحه اصلی clone کنیم
+            
+            // Clone کردن body iframe به یک div موقت در صفحه اصلی
+            const tempContainer = document.createElement('div');
+            tempContainer.style.cssText = `
+                position: absolute;
+                left: -9999px;
+                top: 0;
+                width: ${actualWidth}px;
+                height: ${actualHeight}px;
+                background: white;
+                direction: rtl;
+            `;
+            
+            // Clone کردن محتوای body iframe
+            const bodyClone = body.cloneNode(true) as HTMLElement;
+            
+            // اضافه کردن استایل‌های لازم به clone
+            const style = document.createElement('style');
+            style.textContent = `
+                @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                @font-face {
+                    font-family: 'B Homa';
+                    font-style: normal;
+                    font-weight: 400;
+                    font-display: block;
+                    src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                         url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                    unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                }
+                * {
+                    font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                }
+            `;
+            document.head.appendChild(style);
+            
+            tempContainer.appendChild(bodyClone);
+            document.body.appendChild(tempContainer);
+            
+            // انتظار برای render
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // استفاده از dom-to-image
+            imgData = await domtoimage.toPng(tempContainer, {
+                quality: 1.0,
+                width: actualWidth,
+                height: actualHeight,
+                style: {
+                    transform: 'scale(1)',
+                    transformOrigin: 'top left',
+                },
+                filter: (node: Node) => {
+                    // فیلتر کردن المان‌های نامرئی
+                    if (node instanceof HTMLElement) {
+                        const style = window.getComputedStyle(node);
+                        return style.display !== 'none' && style.visibility !== 'hidden';
+                    }
+                    return true;
+                },
+                bgcolor: '#ffffff',
+                imagePlaceholder: undefined,
+            });
+            
+            // پاک کردن temp container
+            document.body.removeChild(tempContainer);
+            document.head.removeChild(style);
+            
+            console.log('✅ [exportInvoiceToImage] dom-to-image موفق بود');
+        } catch (domtoimageError: any) {
+            console.warn('⚠️ [exportInvoiceToImage] dom-to-image خطا داد، استفاده از html2canvas:', domtoimageError);
+            
+            // Fallback: استفاده از html2canvas
+            const canvas = await html2canvas(body, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: true,
+                width: actualWidth,
+                height: actualHeight,
+                windowWidth: actualWidth,
+                windowHeight: actualHeight,
+                scrollX: 0,
+                scrollY: 0,
+                onclone: (clonedDoc) => {
+                    // اطمینان از نمایش خلاصه تور در cloned document
+                    const clonedSummary = clonedDoc.querySelector('[data-tour-summary="true"]') as HTMLElement;
+                    if (clonedSummary) {
+                        clonedSummary.style.display = 'block';
+                        clonedSummary.style.visibility = 'visible';
+                        clonedSummary.style.opacity = '1';
+                        clonedSummary.style.overflow = 'visible';
+                    }
+                    
+                    // اضافه کردن @font-face برای B Homa در cloned document
+                    const clonedFontStyle = clonedDoc.createElement('style');
+                    clonedFontStyle.textContent = `
+                        @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                        @font-face {
+                            font-family: 'B Homa';
+                            font-style: normal;
+                            font-weight: 400;
+                            font-display: block;
+                            src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                                 url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                            unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                        }
+                        * {
+                            font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                        }
+                    `;
+                    clonedDoc.head.appendChild(clonedFontStyle);
+                    
+                    // اضافه کردن link tag
+                    const clonedFontLink = clonedDoc.createElement('link');
+                    clonedFontLink.rel = 'stylesheet';
+                    clonedFontLink.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+                    clonedDoc.head.appendChild(clonedFontLink);
+                    
+                    // اعمال فونت B Homa به تمام المان‌ها
+                    const allElements = clonedDoc.querySelectorAll('*');
+                    allElements.forEach((el) => {
+                        if (el instanceof HTMLElement) {
+                            el.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
+                        }
+                    });
+                }
+            });
+            
+            if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                throw new Error('Canvas is empty');
+            }
+            
+            imgData = canvas.toDataURL('image/png', 1.0);
+        }
         
         // پاک کردن iframe
         document.body.removeChild(iframe);
-        
-        if (!canvas || canvas.width === 0 || canvas.height === 0) {
-            throw new Error('Canvas is empty');
-        }
-        
-        // تبدیل به PNG
-        const imgData = canvas.toDataURL('image/png', 1.0);
         
         // دانلود
         const link = document.createElement('a');
