@@ -2039,11 +2039,12 @@ export const exportInvoiceToImage = async (
             
             console.log('✅ [exportInvoiceToImage] عکس با موفقیت تولید شد');
         } catch (err: any) {
-            console.error('❌ [exportInvoiceToImage] Error:', err);
+            console.error('❌ [exportInvoiceToImage] Error in fallback method:', err);
             if (document.body.contains(tempDiv)) {
                 document.body.removeChild(tempDiv);
             }
-            throw err;
+            // نمایش خطا به کاربر
+            alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
         }
     } catch (err: any) {
         console.error('❌ [exportInvoiceToImage] Error:', err);
