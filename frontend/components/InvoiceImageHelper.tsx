@@ -4,53 +4,68 @@ import * as domtoimage from 'dom-to-image';
 import ReactDOMServer from 'react-dom/server';
 
 // ============================================
-// راه‌حل فونت B Homa: استفاده از فایل محلی یا Base64
+// راه‌حل فونت B Homa: دانلود و embed مستقیم
 // ============================================
-// اگر فایل فونت را در public/fonts/B-Homa.woff2 قرار داده‌اید، از مسیر محلی استفاده می‌شود
-// در غیر این صورت، Base64 string را در اینجا قرار دهید (اختیاری)
 
-// TODO: اگر می‌خواهید از Base64 استفاده کنید، Base64 string فونت را در اینجا قرار دهید
-// برای تبدیل فونت به Base64، از https://base64.guru/converter/encode/file استفاده کنید
-const BHOMA_FONT_BASE64 = ''; // Base64 string فونت B Homa (اختیاری)
+// Cache برای Base64 فونت (یک‌بار دانلود می‌شود)
+let BHOMA_FONT_BASE64_CACHE: string | null = null;
+let BHOMA_FONT_LOADING: Promise<string> | null = null;
 
-// تشخیص اینکه آیا فونت محلی وجود دارد یا نه
-const BHOMA_FONT_LOCAL_PATH = '/fonts/B-Homa.woff2';
-const BHOMA_FONT_USE_LOCAL = true; // اگر فایل محلی دارید، true کنید
-
-// URL فونت در صورت عدم وجود فایل محلی و Base64
+// URL فونت
 const BHOMA_FONT_URL = 'https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2';
 
-// تابع برای ساخت @font-face CSS با استفاده از بهترین روش موجود
-const getBHomaFontFaceCSS = (): string => {
-    if (BHOMA_FONT_BASE64 && BHOMA_FONT_BASE64.length > 0) {
-        // استفاده از Base64 (بهترین روش)
+// تابع برای دانلود فونت و تبدیل به Base64
+const loadBHomaFontBase64 = async (): Promise<string> => {
+    if (BHOMA_FONT_BASE64_CACHE) {
+        return BHOMA_FONT_BASE64_CACHE;
+    }
+    
+    if (BHOMA_FONT_LOADING) {
+        return await BHOMA_FONT_LOADING;
+    }
+    
+    BHOMA_FONT_LOADING = (async () => {
+        try {
+            console.log('🔄 [B Homa Font] در حال دانلود فونت...');
+            const response = await fetch(BHOMA_FONT_URL);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch font: ${response.statusText}`);
+            }
+            
+            const arrayBuffer = await response.arrayBuffer();
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            
+            BHOMA_FONT_BASE64_CACHE = base64;
+            console.log('✅ [B Homa Font] فونت با موفقیت دانلود و تبدیل به Base64 شد');
+            return base64;
+        } catch (error) {
+            console.error('❌ [B Homa Font] خطا در دانلود فونت:', error);
+            throw error;
+        } finally {
+            BHOMA_FONT_LOADING = null;
+        }
+    })();
+    
+    return await BHOMA_FONT_LOADING;
+};
+
+// تابع برای ساخت @font-face CSS با استفاده از Base64
+const getBHomaFontFaceCSS = async (): Promise<string> => {
+    try {
+        const base64 = await loadBHomaFontBase64();
         return `
             @font-face {
                 font-family: 'B Homa';
                 font-style: normal;
                 font-weight: 400;
                 font-display: block;
-                src: url('data:font/woff2;charset=utf-8;base64,${BHOMA_FONT_BASE64}') format('woff2');
+                src: url('data:font/woff2;charset=utf-8;base64,${base64}') format('woff2');
                 unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
             }
         `;
-    } else if (BHOMA_FONT_USE_LOCAL) {
-        // استفاده از فایل محلی
-        const localPath = typeof window !== 'undefined' 
-            ? `${window.location.origin}${BHOMA_FONT_LOCAL_PATH}`
-            : BHOMA_FONT_LOCAL_PATH;
-        return `
-            @font-face {
-                font-family: 'B Homa';
-                font-style: normal;
-                font-weight: 400;
-                font-display: block;
-                src: url('${localPath}') format('woff2');
-                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-            }
-        `;
-    } else {
-        // استفاده از URL خارجی (fallback)
+    } catch (error) {
+        console.warn('⚠️ [B Homa Font] استفاده از URL خارجی به عنوان fallback');
+        // Fallback به URL خارجی
         return `
             @font-face {
                 font-family: 'B Homa';
@@ -62,6 +77,38 @@ const getBHomaFontFaceCSS = (): string => {
             }
         `;
     }
+};
+
+// تابع sync برای استفاده در جاهایی که نمی‌توانیم await کنیم
+// این تابع Base64 را از cache برمی‌گرداند یا فوراً شروع به دانلود می‌کند
+const getBHomaFontFaceCSSSync = (): string => {
+    if (BHOMA_FONT_BASE64_CACHE) {
+        return `
+            @font-face {
+                font-family: 'B Homa';
+                font-style: normal;
+                font-weight: 400;
+                font-display: block;
+                src: url('data:font/woff2;charset=utf-8;base64,${BHOMA_FONT_BASE64_CACHE}') format('woff2');
+                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+            }
+        `;
+    }
+    
+    // اگر cache نیست، شروع به دانلود کن (async)
+    loadBHomaFontBase64().catch(console.error);
+    
+    // در حال حاضر از URL خارجی استفاده کن
+    return `
+        @font-face {
+            font-family: 'B Homa';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url('${BHOMA_FONT_URL}') format('woff2');
+            unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+        }
+    `;
 };
 
 // Helper function برای محاسبه هزینه راننده اصلی
@@ -1902,10 +1949,11 @@ export const exportInvoiceToImage = async (
                 padding: 20px;
             `;
             
-            // اضافه کردن استایل‌های فونت با استفاده از تابع helper
+            // دانلود فونت و اضافه کردن استایل‌های فونت
+            const fontFaceCSS = await getBHomaFontFaceCSS();
             const fontStyle = document.createElement('style');
             fontStyle.textContent = `
-                ${getBHomaFontFaceCSS()}
+                ${fontFaceCSS}
                 * {
                     font-family: 'B Homa', 'Tahoma', sans-serif !important;
                 }
@@ -1992,6 +2040,9 @@ export const exportInvoiceToImage = async (
             throw new Error('Cannot access iframe document');
         }
         
+        // دانلود فونت قبل از نوشتن به iframe
+        const fontFaceCSS = await getBHomaFontFaceCSS();
+        
         // Clone کردن محتوا
         const clonedContent = invoiceElement.cloneNode(true) as HTMLElement;
         
@@ -2006,10 +2057,9 @@ export const exportInvoiceToImage = async (
                 <title>صورتحساب</title>
                 <link rel="preconnect" href="https://fonts.googleapis.com">
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=B+Homa&display=block" rel="stylesheet">
                 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block" rel="stylesheet">
                 <style>
-                    ${getBHomaFontFaceCSS()}
+                    ${fontFaceCSS}
                     * {
                         font-family: 'B Homa', 'Tahoma', sans-serif !important;
                         font-size: 14px !important;
@@ -2095,9 +2145,11 @@ export const exportInvoiceToImage = async (
         // لود کردن فونت B Homa در iframe
         console.log('🔄 [exportInvoiceToImage] در حال لود کردن فونت B Homa در iframe...');
         
-        // اضافه کردن @font-face به iframe با استفاده از تابع helper
+        // اضافه کردن @font-face به iframe با استفاده از Base64
+        // (fontFaceCSS قبلاً در iframeDoc.write اعمال شده)
+        // اما برای اطمینان بیشتر، دوباره اضافه می‌کنیم
         const fontStyle = iframeDoc.createElement('style');
-        fontStyle.textContent = getBHomaFontFaceCSS();
+        fontStyle.textContent = fontFaceCSS;
         iframeDoc.head.appendChild(fontStyle);
         
         // اضافه کردن link tag برای فونت
@@ -2185,10 +2237,13 @@ export const exportInvoiceToImage = async (
             // Clone کردن محتوای body iframe
             const bodyClone = body.cloneNode(true) as HTMLElement;
             
-            // اضافه کردن استایل‌های لازم به clone با استفاده از تابع helper
+            // دانلود فونت قبل از clone
+            const fontFaceCSSForClone = await getBHomaFontFaceCSS();
+            
+            // اضافه کردن استایل‌های لازم به clone با استفاده از Base64
             const style = document.createElement('style');
             style.textContent = `
-                ${getBHomaFontFaceCSS()}
+                ${fontFaceCSSForClone}
                 * {
                     font-family: 'B Homa', 'Tahoma', sans-serif !important;
                 }
@@ -2253,10 +2308,12 @@ export const exportInvoiceToImage = async (
                         clonedSummary.style.overflow = 'visible';
                     }
                     
-                    // اضافه کردن @font-face برای B Homa در cloned document با استفاده از تابع helper
+                    // اضافه کردن @font-face برای B Homa در cloned document
+                    // استفاده از sync version چون در onclone نمی‌توانیم await کنیم
+                    // اما Base64 باید قبلاً در cache باشد
                     const clonedFontStyle = clonedDoc.createElement('style');
                     clonedFontStyle.textContent = `
-                        ${getBHomaFontFaceCSS()}
+                        ${getBHomaFontFaceCSSSync()}
                         * {
                             font-family: 'B Homa', 'Tahoma', sans-serif !important;
                         }
