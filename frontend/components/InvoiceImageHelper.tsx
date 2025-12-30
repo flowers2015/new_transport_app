@@ -593,7 +593,7 @@ export const renderInvoiceLayoutHorizontal = (
                 style={{
                     direction: 'rtl',
                     unicodeBidi: 'isolate',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                     width: `${containerWidth}px`,
                     minWidth: `${containerWidth}px`,
                     maxWidth: `${containerWidth}px`,
@@ -628,7 +628,7 @@ export const renderInvoiceLayoutHorizontal = (
                         textAlign: 'center',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                         color: '#1e3a8a',
                     }}>
                         صورتحساب هزینه
@@ -638,7 +638,7 @@ export const renderInvoiceLayoutHorizontal = (
                         lineHeight: '1.8',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                     }}>
                         <p style={{ marginBottom: '4px' }}>کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
                         <p style={{ marginBottom: '4px' }}>نام: {selectedInvoiceRecord.driverName}</p>
@@ -663,7 +663,7 @@ export const renderInvoiceLayoutHorizontal = (
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
                         fontSize: '14px',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                         boxSizing: 'border-box',
                         borderRadius: '12px',
                         overflow: 'visible',
@@ -683,7 +683,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -708,7 +708,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -733,7 +733,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -757,7 +757,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     verticalAlign: 'middle',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
@@ -834,7 +834,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -855,7 +855,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -876,7 +876,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -897,7 +897,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -933,7 +933,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -954,7 +954,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -990,7 +990,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -1011,7 +1011,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -1047,7 +1047,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -1068,7 +1068,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontSize: '14px',
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
@@ -1104,7 +1104,7 @@ export const renderInvoiceLayoutHorizontal = (
                             direction: 'rtl',
                             unicodeBidi: 'isolate',
                             fontSize: '14px',
-                            fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                             boxSizing: 'border-box',
                         }}>
                             <tbody>
@@ -1116,7 +1116,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         lineHeight: '1.8',
                                     }}>
                                         جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
@@ -1132,7 +1132,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             textAlign: 'right',
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
-                                            fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             lineHeight: '1.8',
                                         }}>
                                             {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
@@ -1148,7 +1148,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         textAlign: 'right',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         fontWeight: 'bold',
                                         fontSize: '14px',
                                         color: '#1e3a8a',
@@ -1229,7 +1229,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     color: '#1e3a8a',
                                 }}>
                                     {helperBlock.title}
@@ -1248,7 +1248,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     unicodeBidi: 'isolate',
                                     margin: '0 auto 15px auto',
                                     fontSize: '14px',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     boxSizing: 'border-box',
                                     borderRadius: '8px',
                                     overflow: 'hidden',
@@ -1267,7 +1267,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1293,7 +1293,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1317,7 +1317,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 verticalAlign: 'middle',
-                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                 fontSize: '14px',
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
@@ -1396,7 +1396,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1417,7 +1417,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1438,7 +1438,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1459,7 +1459,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1495,7 +1495,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1516,7 +1516,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1554,7 +1554,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1575,7 +1575,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
-                                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                         fontSize: '14px',
                                                         lineHeight: '1.5',
                                                         whiteSpace: 'normal',
@@ -1611,7 +1611,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         fontSize: '14px',
-                                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                         boxSizing: 'border-box',
                                     }}>
                                         <tbody>
@@ -1623,7 +1623,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     textAlign: 'right',
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
-                                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                                     fontWeight: 'bold',
                                                     fontSize: '14px',
                                                     color: '#1e3a8a',
@@ -1662,7 +1662,7 @@ export const renderInvoiceLayoutHorizontal = (
                         fontWeight: 'bold',
                         marginBottom: '10px',
                         textAlign: 'center',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                         color: '#1e3a8a',
                         padding: '12px',
                         backgroundColor: '#f0f9ff',
@@ -1677,7 +1677,7 @@ export const renderInvoiceLayoutHorizontal = (
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
                         fontSize: '14px',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        fontFamily: "'B Homa', 'Tahoma', sans-serif",
                         boxSizing: 'border-box',
                         margin: '0 auto',
                     }}>
@@ -1690,7 +1690,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     textAlign: 'right',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     lineHeight: '1.8',
                                 }}>
                                     تعداد تور راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
@@ -1705,7 +1705,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     textAlign: 'right',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                    fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                     lineHeight: '1.8',
                                 }}>
                                     هزینه کل تورهای راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
@@ -1724,7 +1724,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             textAlign: 'right',
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
-                                            fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                            fontFamily: "'B Homa', 'Tahoma', sans-serif",
                                             lineHeight: '1.8',
                                         }}>
                                             راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
@@ -1860,11 +1860,22 @@ export const exportInvoiceToImage = async (
                 <title>صورتحساب</title>
                 <link rel="preconnect" href="https://fonts.googleapis.com">
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=B+Homa&display=block" rel="stylesheet">
                 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block" rel="stylesheet">
                 <style>
                     @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block');
+                    @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                    @font-face {
+                        font-family: 'B Homa';
+                        font-style: normal;
+                        font-weight: 400;
+                        font-display: block;
+                        src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                             url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                        unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                    }
                     * {
-                        font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
+                        font-family: 'B Homa', 'Tahoma', sans-serif !important;
                         font-size: 14px !important;
                         box-sizing: border-box;
                         margin: 0;
@@ -1875,7 +1886,7 @@ export const exportInvoiceToImage = async (
                         padding: 20px;
                         background: white;
                         direction: rtl;
-                        font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
+                        font-family: 'B Homa', 'Tahoma', sans-serif !important;
                         font-size: 14px !important;
                         width: 100%;
                         overflow: visible !important;
@@ -1945,12 +1956,61 @@ export const exportInvoiceToImage = async (
         `);
         iframeDoc.close();
         
+        // لود کردن فونت B Homa در iframe
+        console.log('🔄 [exportInvoiceToImage] در حال لود کردن فونت B Homa در iframe...');
+        
+        // اضافه کردن @font-face به iframe
+        const fontStyle = iframeDoc.createElement('style');
+        fontStyle.textContent = `
+            @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+            @font-face {
+                font-family: 'B Homa';
+                font-style: normal;
+                font-weight: 400;
+                font-display: block;
+                src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                     url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+            }
+        `;
+        iframeDoc.head.appendChild(fontStyle);
+        
+        // اضافه کردن link tag برای فونت
+        const fontLink = iframeDoc.createElement('link');
+        fontLink.rel = 'stylesheet';
+        fontLink.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+        iframeDoc.head.appendChild(fontLink);
+        
         // انتظار برای render کامل و لود شدن فونت
         await new Promise(resolve => setTimeout(resolve, 3000));
         
+        // استفاده از FontFace API در iframe (اگر در دسترس باشد)
+        try {
+            if (iframeDoc.defaultView && typeof iframeDoc.defaultView.FontFace !== 'undefined') {
+                const fontFace = new iframeDoc.defaultView.FontFace(
+                    'B Homa',
+                    "url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2')",
+                    {
+                        style: 'normal',
+                        weight: '400',
+                        display: 'block',
+                    }
+                );
+                await fontFace.load();
+                iframeDoc.fonts.add(fontFace);
+                console.log('✅ [exportInvoiceToImage] فونت B Homa با FontFace API لود شد');
+            }
+        } catch (err) {
+            console.warn('⚠️ [exportInvoiceToImage] FontFace API در دسترس نیست:', err);
+        }
+        
         // اطمینان از لود شدن فونت
         await iframeDoc.fonts.ready;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // بررسی نهایی
+        const fontCheck = iframeDoc.fonts.check("16px 'B Homa'");
+        console.log(fontCheck ? '✅ [exportInvoiceToImage] فونت B Homa تایید شد' : '⚠️ [exportInvoiceToImage] فونت B Homa تایید نشد');
         
         // محاسبه اندازه واقعی - با در نظر گرفتن خلاصه تور
         const body = iframeDoc.body;
@@ -1991,11 +2051,36 @@ export const exportInvoiceToImage = async (
                     clonedSummary.style.overflow = 'visible';
                 }
                 
-                // اعمال فونت به تمام المان‌ها
+                // اضافه کردن @font-face برای B Homa در cloned document
+                const clonedFontStyle = clonedDoc.createElement('style');
+                clonedFontStyle.textContent = `
+                    @import url('https://fonts.googleapis.com/css2?family=B+Homa&display=block');
+                    @font-face {
+                        font-family: 'B Homa';
+                        font-style: normal;
+                        font-weight: 400;
+                        font-display: block;
+                        src: url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff2') format('woff2'),
+                             url('https://fonts.gstatic.com/s/bhoma/v1/ZgNSjPJFPrvJV5f16Sf4p-FBkHw.woff') format('woff');
+                        unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
+                    }
+                    * {
+                        font-family: 'B Homa', 'Tahoma', sans-serif !important;
+                    }
+                `;
+                clonedDoc.head.appendChild(clonedFontStyle);
+                
+                // اضافه کردن link tag
+                const clonedFontLink = clonedDoc.createElement('link');
+                clonedFontLink.rel = 'stylesheet';
+                clonedFontLink.href = 'https://fonts.googleapis.com/css2?family=B+Homa&display=block';
+                clonedDoc.head.appendChild(clonedFontLink);
+                
+                // اعمال فونت B Homa به تمام المان‌ها
                 const allElements = clonedDoc.querySelectorAll('*');
                 allElements.forEach((el) => {
                     if (el instanceof HTMLElement) {
-                        el.style.setProperty('font-family', "'Vazirmatn', 'Tahoma', sans-serif", 'important');
+                        el.style.setProperty('font-family', "'B Homa', 'Tahoma', sans-serif", 'important');
                     }
                 });
             }
