@@ -431,10 +431,31 @@ export const convertToInvoiceDataFormatHorizontal = (
                 : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
         const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
+        // Debug: لاگ کردن مقادیر برای دیباگ
+        console.log('🔍 [convertToInvoiceDataFormatHorizontal] بررسی فیلدهای پیمایش و ماموریت:', {
+            calcId: calc.id || calc.announcement_id || calc.announcementId,
+            approved_kilometers: calc.approved_kilometers,
+            approvedKilometers: calc.approvedKilometers,
+            excess_kilometers: calc.excess_kilometers,
+            excessKilometers: calc.excessKilometers,
+            approved_mission_days: calc.approved_mission_days,
+            approvedMissionDays: calc.approvedMissionDays,
+            excess_mission_days: calc.excess_mission_days,
+            excessMissionDays: calc.excessMissionDays,
+            allKeys: Object.keys(calc).filter(k => k.includes('approved') || k.includes('excess') || k.includes('mission') || k.includes('kilometer'))
+        });
+        
         const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || calc.approved_kilometer || calc.approvedKilometer || 0);
         const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || calc.excess_kilometer || calc.excessKilometer || 0);
         const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || calc.approved_mission || calc.approvedMission || 0);
         const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || calc.excess_mission || calc.excessMission || 0);
+        
+        console.log('🔍 [convertToInvoiceDataFormatHorizontal] مقادیر پردازش شده:', {
+            approvedKm,
+            excessKm,
+            approvedMissionDays,
+            excessMissionDays
+        });
         const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
         const depotKilometerRate = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || 0);
         const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
@@ -795,7 +816,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 {/* جمع بندی - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    padding: '12px 8px', 
+                                    padding: '12px 15px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
                                     textAlign: 'center',
@@ -806,6 +827,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontSize: '14px',
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
+                                    minWidth: '350px',
                                 }}>جمع بندی</th>
                             </tr>
                         </thead>
@@ -1087,7 +1109,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '12px', 
+                                        padding: '12px 15px', 
                                         textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
@@ -1097,7 +1119,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '15%',
+                                        width: '18%',
+                                        minWidth: '200px',
                                         backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? summaryBg : '#ffffff') : 'transparent',
                                     }}>
                                         {summaryRow ? summaryRow.label : '-'}
@@ -1108,7 +1131,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: isLastRow ? cellBorder : cellBorder,
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
-                                        padding: '8px', 
+                                        padding: '12px 15px', 
                                         textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
@@ -1118,7 +1141,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         lineHeight: '1.5',
                                         whiteSpace: 'normal',
                                         wordWrap: 'break-word',
-                                        width: '15%',
+                                        width: '18%',
+                                        minWidth: '150px',
                                         fontWeight: 'bold',
                                         color: '#1e3a8a',
                                         backgroundColor: hasContent ? (rowBgColor === '#f8fbff' ? summaryBg : '#ffffff') : 'transparent',
