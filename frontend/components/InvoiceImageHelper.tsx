@@ -1671,7 +1671,8 @@ export const renderInvoiceLayoutHorizontal = (
                         overflow: 'visible',
                         boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
                         marginTop: '50px',
-                        marginBottom: '20px',
+                        marginBottom: '50px',
+                        paddingBottom: '30px',
                         textAlign: 'center',
                         position: 'relative' as const,
                         zIndex: 1,
@@ -1714,7 +1715,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                     lineHeight: '1.8',
                                 }}>
-                                    تعداد تور راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
+                                    تعداد تور راننده اصلی: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
                                 </td>
                             </tr>
                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
@@ -1729,7 +1730,7 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                     lineHeight: '1.8',
                                 }}>
-                                    هزینه کل تورهای راننده اصلی: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
+                                    هزینه کل تورهای راننده اصلی: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
                                 </td>
                             </tr>
                             {helperBlocks.map((helperBlock, helperIdx) => {
@@ -1748,7 +1749,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                             lineHeight: '1.8',
                                         }}>
-                                            راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
+                                            راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
                                         </td>
                                     </tr>
                                 );
@@ -1971,7 +1972,8 @@ export const exportInvoiceToImage = async (
                         position: relative !important;
                         z-index: 1 !important;
                         margin-top: 50px !important;
-                        margin-bottom: 20px !important;
+                        margin-bottom: 50px !important;
+                        padding-bottom: 30px !important;
                         width: 100% !important;
                         max-width: 100% !important;
                     }
@@ -2055,7 +2057,7 @@ export const exportInvoiceToImage = async (
         // اگر خلاصه تور وجود دارد، اطمینان از اینکه در محاسبه ارتفاع قرار دارد
         if (summaryElement) {
             const summaryBottom = summaryElement.offsetTop + summaryElement.offsetHeight;
-            actualHeight = Math.max(actualHeight, summaryBottom + 100);
+            actualHeight = Math.max(actualHeight, summaryBottom + 80); // اضافه کردن فضای خالی پایین
         }
         
         console.log(`📐 [exportInvoiceToImage] Dimensions: ${actualWidth}x${actualHeight}`);
