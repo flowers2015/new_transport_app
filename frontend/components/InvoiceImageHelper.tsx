@@ -621,7 +621,7 @@ export const renderInvoiceLayoutHorizontal = (
                     margin: '0 auto',
                     backgroundColor: '#ffffff',
                     color: '#000000',
-                    padding: '20px',
+                    padding: '30px',
                     boxSizing: 'border-box',
                     position: 'relative' as const,
                     textAlign: 'center',
@@ -635,8 +635,8 @@ export const renderInvoiceLayoutHorizontal = (
                 }}>
                 {/* اطلاعات راننده */}
                 <div style={{
-                    marginBottom: '16px',
-                    paddingBottom: '12px',
+                    marginBottom: '30px',
+                    paddingBottom: '20px',
                     borderBottom: '2px solid #1e40af',
                     textAlign: 'right',
                     direction: 'rtl',
@@ -645,7 +645,7 @@ export const renderInvoiceLayoutHorizontal = (
                     <h3 style={{
                         fontSize: '22px',
                         fontWeight: 'bold',
-                        marginBottom: '8px',
+                        marginBottom: '15px',
                         textAlign: 'center',
                         direction: 'rtl',
                         unicodeBidi: 'isolate',
@@ -850,8 +850,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '8px', 
-                                        textAlign: 'right',
+                                        padding: '12px', 
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -872,7 +872,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
                                         padding: '8px', 
-                                        textAlign: isNumeric(initialValues1) ? 'center' : 'right',
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -892,8 +892,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '8px', 
-                                        textAlign: 'right',
+                                        padding: '12px', 
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -914,7 +914,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
                                         padding: '8px', 
-                                        textAlign: isNumeric(initialValues2) ? 'center' : 'right',
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -949,8 +949,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '8px', 
-                                        textAlign: 'right',
+                                        padding: '12px', 
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -971,7 +971,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
                                         padding: '8px', 
-                                        textAlign: isNumeric(directValues) ? 'center' : 'right',
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -1006,8 +1006,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '8px', 
-                                        textAlign: 'right',
+                                        padding: '12px', 
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -1028,7 +1028,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderLeft: 'none',
                                         borderRight: cellBorder,
                                         padding: '8px', 
-                                        textAlign: isNumeric(depotValues) ? 'center' : 'right',
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -1063,8 +1063,8 @@ export const renderInvoiceLayoutHorizontal = (
                                         borderBottom: cellBorder,
                                         borderLeft: cellBorder,
                                         borderRight: cellBorder,
-                                        padding: '8px', 
-                                        textAlign: 'right',
+                                        padding: '12px', 
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         verticalAlign: 'middle',
@@ -1132,15 +1132,15 @@ export const renderInvoiceLayoutHorizontal = (
                                 <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                     <td style={{
                                         border: '2px solid #1e3a8a',
-                                        padding: '8px 15px',
+                                        padding: '12px 20px',
                                         backgroundColor: '#dbeafe',
-                                        textAlign: 'right',
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                         lineHeight: '1.8',
                                     }}>
-                                        جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
+                                        جمع کل هزینه سفر: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
                                     </td>
                                 </tr>
                                 {mainBlock.summary.deductionsAmount && mainBlock.summary.deductionsAmount > 0 && (
@@ -1148,15 +1148,15 @@ export const renderInvoiceLayoutHorizontal = (
                                         <td style={{
                                             border: '2px solid #1e3a8a',
                                             borderTop: 'none',
-                                            padding: '8px 15px',
+                                            padding: '12px 20px',
                                             backgroundColor: '#dbeafe',
-                                            textAlign: 'right',
+                                            textAlign: 'center',
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
                                             lineHeight: '1.8',
                                         }}>
-                                            {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
+                                            {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
                                         </td>
                                     </tr>
                                 )}
@@ -1164,9 +1164,9 @@ export const renderInvoiceLayoutHorizontal = (
                                     <td style={{
                                         border: '2px solid #1e3a8a',
                                         borderTop: 'none',
-                                        padding: '8px 15px',
+                                        padding: '12px 20px',
                                         backgroundColor: '#bfdbfe',
-                                        textAlign: 'right',
+                                        textAlign: 'center',
                                         direction: 'rtl',
                                         unicodeBidi: 'isolate',
                                         fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
@@ -1175,7 +1175,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         color: '#1e3a8a',
                                         lineHeight: '1.8',
                                     }}>
-                                        مبلغ قابل پرداخت: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
+                                        مبلغ قابل پرداخت: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
                                     </td>
                                 </tr>
                             </tbody>
@@ -1236,8 +1236,8 @@ export const renderInvoiceLayoutHorizontal = (
                         <div key={helperIdx} style={{ marginTop: '50px' }}>
                             {/* عنوان راننده کمکی */}
                             <div style={{
-                                marginBottom: '16px',
-                                paddingBottom: '12px',
+                                marginBottom: '30px',
+                                paddingBottom: '20px',
                                 borderBottom: '2px solid #1e3a8a',
                                 textAlign: 'right',
                                 direction: 'rtl',
@@ -1246,7 +1246,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 <h3 style={{
                                     fontSize: '20px',
                                     fontWeight: 'bold',
-                                    marginBottom: '8px',
+                                    marginBottom: '15px',
                                     textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
@@ -1412,8 +1412,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: cellBorder,
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1433,8 +1433,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: isNumeric(helperInitialValues1) ? 'center' : 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1454,8 +1454,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: cellBorder,
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1475,8 +1475,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1511,8 +1511,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: cellBorder,
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1532,8 +1532,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: isNumeric(helperDirectValues) ? 'center' : 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1570,8 +1570,8 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: cellBorder,
                                                         borderLeft: cellBorder,
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
-                                                        textAlign: 'right',
+                                                        padding: '12px', 
+                                                        textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
                                                         verticalAlign: 'middle',
@@ -1591,7 +1591,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                         borderBottom: isLastRow ? cellBorder : cellBorder,
                                                         borderLeft: 'none',
                                                         borderRight: cellBorder,
-                                                        padding: '8px', 
+                                                        padding: '12px', 
                                                         textAlign: 'center',
                                                         direction: 'rtl',
                                                         unicodeBidi: 'isolate',
@@ -1639,9 +1639,9 @@ export const renderInvoiceLayoutHorizontal = (
                                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                                 <td style={{
                                                     border: '2px solid #1e3a8a',
-                                                    padding: '8px 15px',
+                                                    padding: '12px 20px',
                                                     backgroundColor: '#bfdbfe',
-                                                    textAlign: 'right',
+                                                    textAlign: 'center',
                                                     direction: 'rtl',
                                                     unicodeBidi: 'isolate',
                                                     fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
@@ -1650,7 +1650,7 @@ export const renderInvoiceLayoutHorizontal = (
                                                     color: '#1e3a8a',
                                                     lineHeight: '1.8',
                                                 }}>
-                                                    مبلغ قابل پرداخت: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{helperBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
+                                                    مبلغ قابل پرداخت: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{helperBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -1707,9 +1707,9 @@ export const renderInvoiceLayoutHorizontal = (
                             <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                 <td style={{
                                     border: '1px solid #cccccc',
-                                    padding: '10px 15px',
+                                    padding: '12px 20px',
                                     backgroundColor: '#ffffff',
-                                    textAlign: 'right',
+                                    textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
@@ -1722,9 +1722,9 @@ export const renderInvoiceLayoutHorizontal = (
                                 <td style={{
                                     border: '1px solid #cccccc',
                                     borderTop: 'none',
-                                    padding: '10px 15px',
+                                    padding: '12px 20px',
                                     backgroundColor: '#f8fbff',
-                                    textAlign: 'right',
+                                    textAlign: 'center',
                                     direction: 'rtl',
                                     unicodeBidi: 'isolate',
                                     fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
@@ -1741,9 +1741,9 @@ export const renderInvoiceLayoutHorizontal = (
                                         <td style={{
                                             border: '1px solid #cccccc',
                                             borderTop: 'none',
-                                            padding: '10px 15px',
+                                            padding: '12px 20px',
                                             backgroundColor: helperIdx % 2 === 0 ? '#ffffff' : '#f8fbff',
-                                            textAlign: 'right',
+                                            textAlign: 'center',
                                             direction: 'rtl',
                                             unicodeBidi: 'isolate',
                                             fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
