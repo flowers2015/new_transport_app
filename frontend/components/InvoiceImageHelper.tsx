@@ -668,6 +668,7 @@ export const renderInvoiceLayoutHorizontal = (
                                 {/* اطلاعات اولیه - 4 ستون: Label1, Value1, Label2, Value2 */}
                                 <th colSpan={4} style={{ 
                                     border: '2px solid #1e3a8a', 
+                                    borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -680,10 +681,10 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>اطلاعات اولیه</th>
-                                {/* هزینه های مستقیم - 2 ستون: Label, Value - border جداکننده بعد از 4 ستون اطلاعات اولیه */}
+                                {/* هزینه های مستقیم - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderLeft: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                    borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -696,10 +697,10 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>هزینه های مستقیم</th>
-                                {/* هزینه دپو - 2 ستون: Label, Value - border جداکننده بعد از 2 ستون هزینه های مستقیم */}
+                                {/* هزینه دپو - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderLeft: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                    borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه دپو
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -712,10 +713,9 @@ export const renderInvoiceLayoutHorizontal = (
                                     fontWeight: 'bold',
                                     lineHeight: '1.4',
                                 }}>هزینه دپو</th>
-                                {/* جمع بندی - 2 ستون: Label, Value - border جداکننده بعد از 2 ستون هزینه دپو */}
+                                {/* جمع بندی - 2 ستون: Label, Value */}
                                 <th colSpan={2} style={{ 
                                     border: '2px solid #1e3a8a', 
-                                    borderLeft: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه دپو
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -847,12 +847,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {initialRow2 ? initialRow2.label : '-'}
                                     </td>
-                                    {/* اطلاعات اولیه - فیلد 2 Value */}
+                                    {/* اطلاعات اولیه - فیلد 2 Value - border جداکننده بعد از 4 ستون */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: cellBorder,
+                                        borderRight: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                         padding: '8px', 
                                         textAlign: isNumeric(initialValues2) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -869,11 +869,11 @@ export const renderInvoiceLayoutHorizontal = (
                                         {initialValues2 || '-'}
                                     </td>
                                     
-                                    {/* هزینه های مستقیم - Label - border جداکننده بعد از 4 ستون اطلاعات اولیه */}
+                                    {/* هزینه های مستقیم - Label */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: 'right',
@@ -890,12 +890,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {directRow ? directRow.label : '-'}
                                     </td>
-                                    {/* هزینه های مستقیم - Value */}
+                                    {/* هزینه های مستقیم - Value - border جداکننده بعد از 2 ستون */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: cellBorder,
+                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                         padding: '8px', 
                                         textAlign: isNumeric(directValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -912,11 +912,11 @@ export const renderInvoiceLayoutHorizontal = (
                                         {directValues || '-'}
                                     </td>
                                     
-                                    {/* هزینه دپو - Label - border جداکننده بعد از 2 ستون هزینه های مستقیم */}
+                                    {/* هزینه دپو - Label */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: 'right',
@@ -933,12 +933,12 @@ export const renderInvoiceLayoutHorizontal = (
                                     }}>
                                         {depotRow ? depotRow.label : '-'}
                                     </td>
-                                    {/* هزینه دپو - Value */}
+                                    {/* هزینه دپو - Value - border جداکننده بعد از 2 ستون */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
                                         borderLeft: 'none',
-                                        borderRight: cellBorder,
+                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه دپو
                                         padding: '8px', 
                                         textAlign: isNumeric(depotValues) ? 'center' : 'right',
                                         direction: 'rtl',
@@ -955,11 +955,11 @@ export const renderInvoiceLayoutHorizontal = (
                                         {depotValues || '-'}
                                     </td>
                                     
-                                    {/* جمع بندی - Label - border جداکننده بعد از 2 ستون هزینه دپو */}
+                                    {/* جمع بندی - Label */}
                                     <td style={{ 
                                         borderTop: cellBorder,
                                         borderBottom: cellBorder,
-                                        borderLeft: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه دپو
+                                        borderLeft: cellBorder,
                                         borderRight: cellBorder,
                                         padding: '8px', 
                                         textAlign: 'right',
@@ -1177,6 +1177,7 @@ export const renderInvoiceLayoutHorizontal = (
                                             {/* اطلاعات اولیه - 4 ستون: Label1, Value1, Label2, Value2 */}
                                             <th colSpan={4} style={{ 
                                                 border: '2px solid #1e3a8a', 
+                                                borderRight: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1189,10 +1190,10 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>اطلاعات اولیه</th>
-                                            {/* هزینه های مستقیم - 2 ستون: Label, Value - border جداکننده بعد از 4 ستون اطلاعات اولیه */}
+                                            {/* هزینه های مستقیم - 2 ستون: Label, Value */}
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderLeft: '3px solid #003366', // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                                borderRight: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1205,10 +1206,9 @@ export const renderInvoiceLayoutHorizontal = (
                                                 fontWeight: 'bold',
                                                 lineHeight: '1.4',
                                             }}>هزینه های مستقیم</th>
-                                            {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم - فقط جمع بندی - border جداکننده بعد از 2 ستون هزینه های مستقیم */}
+                                            {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم - فقط جمع بندی */}
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
-                                                borderLeft: '3px solid #003366', // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1336,12 +1336,12 @@ export const renderInvoiceLayoutHorizontal = (
                                                     }}>
                                                         {helperInitialRow2 ? helperInitialRow2.label : '-'}
                                                     </td>
-                                                    {/* اطلاعات اولیه - فیلد 2 Value */}
+                                                    {/* اطلاعات اولیه - فیلد 2 Value - border جداکننده بعد از 4 ستون */}
                                                     <td style={{ 
                                                         borderTop: cellBorder,
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
-                                                        borderRight: cellBorder,
+                                                        borderRight: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
                                                         padding: '8px', 
                                                         textAlign: isNumeric(helperInitialValues2) ? 'center' : 'right',
                                                         direction: 'rtl',
@@ -1358,11 +1358,11 @@ export const renderInvoiceLayoutHorizontal = (
                                                         {helperInitialValues2 || '-'}
                                                     </td>
                                                     
-                                                    {/* هزینه های مستقیم - Label - border جداکننده بعد از 4 ستون اطلاعات اولیه */}
+                                                    {/* هزینه های مستقیم - Label */}
                                                     <td style={{ 
                                                         borderTop: cellBorder,
                                                         borderBottom: cellBorder,
-                                                        borderLeft: categoryBorderRight, // border جداکننده بعد از 4 ستون اطلاعات اولیه
+                                                        borderLeft: cellBorder,
                                                         borderRight: cellBorder,
                                                         padding: '8px', 
                                                         textAlign: 'right',
@@ -1379,12 +1379,12 @@ export const renderInvoiceLayoutHorizontal = (
                                                     }}>
                                                         {helperDirectRow ? helperDirectRow.label : '-'}
                                                     </td>
-                                                    {/* هزینه های مستقیم - Value */}
+                                                    {/* هزینه های مستقیم - Value - border جداکننده بعد از 2 ستون */}
                                                     <td style={{ 
                                                         borderTop: cellBorder,
                                                         borderBottom: cellBorder,
                                                         borderLeft: 'none',
-                                                        borderRight: cellBorder,
+                                                        borderRight: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
                                                         padding: '8px', 
                                                         textAlign: isNumeric(helperDirectValues) ? 'center' : 'right',
                                                         direction: 'rtl',
@@ -1403,11 +1403,11 @@ export const renderInvoiceLayoutHorizontal = (
                                                     
                                                     {/* برای راننده کمکی، دسته دپو را حذف می‌کنیم */}
                                                     
-                                                    {/* جمع بندی - Label - border جداکننده بعد از 2 ستون هزینه های مستقیم */}
+                                                    {/* جمع بندی - Label */}
                                                     <td style={{ 
                                                         borderTop: cellBorder,
                                                         borderBottom: cellBorder,
-                                                        borderLeft: categoryBorderRight, // border جداکننده بعد از 2 ستون هزینه های مستقیم
+                                                        borderLeft: cellBorder,
                                                         borderRight: cellBorder,
                                                         padding: '8px', 
                                                         textAlign: 'right',
