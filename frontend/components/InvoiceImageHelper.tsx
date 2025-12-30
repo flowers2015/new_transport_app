@@ -1837,17 +1837,16 @@ export const exportInvoiceToImage = async (
         // Fallback: استفاده از روش قبلی
         console.log('🔄 [exportInvoiceToImage] Trying fallback method...');
         
-        // ایجاد temp div برای render کردن محتوا
-        const tempDiv = document.createElement('div');
-        tempDiv.style.position = 'absolute';
-        tempDiv.style.left = '-9999px';
-        tempDiv.style.top = '0';
-        tempDiv.style.opacity = '1';
-        tempDiv.style.visibility = 'visible';
-        tempDiv.style.backgroundColor = '#ffffff';
-        document.body.appendChild(tempDiv);
-
         try {
+            // ایجاد temp div برای render کردن محتوا
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.top = '0';
+            tempDiv.style.opacity = '1';
+            tempDiv.style.visibility = 'visible';
+            tempDiv.style.backgroundColor = '#ffffff';
+            document.body.appendChild(tempDiv);
             // Clone کردن محتوای invoiceElement به temp div
             const clonedContent = invoiceElement.cloneNode(true) as HTMLElement;
             tempDiv.appendChild(clonedContent);
@@ -2038,16 +2037,20 @@ export const exportInvoiceToImage = async (
             link.click();
             
             console.log('✅ [exportInvoiceToImage] عکس با موفقیت تولید شد');
-        } catch (err: any) {
-            console.error('❌ [exportInvoiceToImage] Error in fallback method:', err);
+            
+            // پاک کردن temp div
             if (document.body.contains(tempDiv)) {
                 document.body.removeChild(tempDiv);
             }
+        } catch (fallbackErr: any) {
+            console.error('❌ [exportInvoiceToImage] Error in fallback method:', fallbackErr);
+            // پاک کردن temp div در صورت وجود
+            const tempDivCheck = document.querySelector('div[style*="-9999px"]') as HTMLElement;
+            if (tempDivCheck && document.body.contains(tempDivCheck)) {
+                document.body.removeChild(tempDivCheck);
+            }
             // نمایش خطا به کاربر
-            alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+            alert(`خطا در تولید عکس: ${fallbackErr.message || 'لطفاً دوباره تلاش کنید.'}`);
         }
-    } catch (err: any) {
-        console.error('❌ [exportInvoiceToImage] Error:', err);
-        alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
     }
 };
