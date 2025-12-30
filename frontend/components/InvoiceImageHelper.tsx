@@ -2147,7 +2147,7 @@ export const exportInvoiceToImage = async (
                 useCORS: true,
                 allowTaint: true,
                 backgroundColor: '#ffffff',
-                logging: true,
+                logging: false,
                 width: actualWidth,
                 height: actualHeight,
                 windowWidth: actualWidth,
