@@ -2331,6 +2331,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 const paidCalculations = await calculationsRes.json();
                 const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
                 
+                // Debug: بررسی فیلدهای پیمایش و ماموریت در داده‌های دریافتی از backend
+                if (calculationsArray.length > 0) {
+                    const firstCalc = calculationsArray[0];
+                    console.log('🔍 [REAL_DOM] ========== بررسی فیلدهای پیمایش و ماموریت از backend ==========');
+                    console.log('🔍 [REAL_DOM] تمام کلیدهای اولین calc:', Object.keys(firstCalc).sort());
+                    console.log('🔍 [REAL_DOM] فیلدهای پیمایش و ماموریت:', {
+                        calcId: firstCalc.id || firstCalc.announcement_id,
+                        approved_kilometers: firstCalc.approved_kilometers,
+                        excess_kilometers: firstCalc.excess_kilometers,
+                        approved_mission_days: firstCalc.approved_mission_days,
+                        excess_mission_days: firstCalc.excess_mission_days,
+                        helper_driver_excess_kilometers: firstCalc.helper_driver_excess_kilometers,
+                        helper_driver_excess_mission_days: firstCalc.helper_driver_excess_mission_days,
+                    });
+                    console.log('🔍 [REAL_DOM] ============================================');
+                }
+                
                 if (calculationsArray.length === 0) {
                     console.warn(`⚠️ هیچ محاسبه‌ای برای ${record.driverName}`);
                     continue;
@@ -4332,6 +4349,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 const paidCalculations = await calculationsRes.json();
                 const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
                 
+                // Debug: بررسی فیلدهای پیمایش و ماموریت در داده‌های دریافتی از backend
+                if (calculationsArray.length > 0) {
+                    const firstCalc = calculationsArray[0];
+                    console.log('🔍 [REAL_DOM] ========== بررسی فیلدهای پیمایش و ماموریت از backend ==========');
+                    console.log('🔍 [REAL_DOM] تمام کلیدهای اولین calc:', Object.keys(firstCalc).sort());
+                    console.log('🔍 [REAL_DOM] فیلدهای پیمایش و ماموریت:', {
+                        calcId: firstCalc.id || firstCalc.announcement_id,
+                        approved_kilometers: firstCalc.approved_kilometers,
+                        excess_kilometers: firstCalc.excess_kilometers,
+                        approved_mission_days: firstCalc.approved_mission_days,
+                        excess_mission_days: firstCalc.excess_mission_days,
+                        helper_driver_excess_kilometers: firstCalc.helper_driver_excess_kilometers,
+                        helper_driver_excess_mission_days: firstCalc.helper_driver_excess_mission_days,
+                    });
+                    console.log('🔍 [REAL_DOM] ============================================');
+                }
+                
                 if (calculationsArray.length === 0) {
                     console.warn(`⚠️ هیچ محاسبه‌ای برای ${record.driverName}`);
                     continue;
@@ -4404,10 +4438,33 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             ? (calc.calculation_date || calc.calculationDate)
                             : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
                     const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
-                    const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
-                    const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
-                    const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0);
-                    const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || 0);
+                    
+                    // Debug: بررسی مقادیر raw قبل از parseFloat
+                    const approvedKmRaw = calc.approved_kilometers ?? calc.approvedKilometers ?? null;
+                    const excessKmRaw = calc.excess_kilometers ?? calc.excessKilometers ?? null;
+                    const approvedMissionDaysRaw = calc.approved_mission_days ?? calc.approvedMissionDays ?? null;
+                    const excessMissionDaysRaw = calc.excess_mission_days ?? calc.excessMissionDays ?? null;
+                    
+                    console.log('🔍 [REAL_DOM] tourData - مقادیر raw قبل از parseFloat:', {
+                        calcId: calc.id || calc.announcement_id,
+                        approvedKmRaw,
+                        excessKmRaw,
+                        approvedMissionDaysRaw,
+                        excessMissionDaysRaw,
+                    });
+                    
+                    const approvedKm = approvedKmRaw != null && approvedKmRaw !== '' && !isNaN(Number(approvedKmRaw)) ? Number(approvedKmRaw) : 0;
+                    const excessKm = excessKmRaw != null && excessKmRaw !== '' && !isNaN(Number(excessKmRaw)) ? Number(excessKmRaw) : 0;
+                    const approvedMissionDays = approvedMissionDaysRaw != null && approvedMissionDaysRaw !== '' && !isNaN(Number(approvedMissionDaysRaw)) ? Number(approvedMissionDaysRaw) : 0;
+                    const excessMissionDays = excessMissionDaysRaw != null && excessMissionDaysRaw !== '' && !isNaN(Number(excessMissionDaysRaw)) ? Number(excessMissionDaysRaw) : 0;
+                    
+                    console.log('🔍 [REAL_DOM] tourData - مقادیر نهایی بعد از parseFloat:', {
+                        calcId: calc.id || calc.announcement_id,
+                        approvedKm,
+                        excessKm,
+                        approvedMissionDays,
+                        excessMissionDays,
+                    });
                     
                     return {
                         billOfLadingNumber,
@@ -4490,6 +4547,23 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
 
                 const paidCalculations = await calculationsRes.json();
                 const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
+                
+                // Debug: بررسی فیلدهای پیمایش و ماموریت در داده‌های دریافتی از backend
+                if (calculationsArray.length > 0) {
+                    const firstCalc = calculationsArray[0];
+                    console.log('🔍 [REAL_DOM] ========== بررسی فیلدهای پیمایش و ماموریت از backend ==========');
+                    console.log('🔍 [REAL_DOM] تمام کلیدهای اولین calc:', Object.keys(firstCalc).sort());
+                    console.log('🔍 [REAL_DOM] فیلدهای پیمایش و ماموریت:', {
+                        calcId: firstCalc.id || firstCalc.announcement_id,
+                        approved_kilometers: firstCalc.approved_kilometers,
+                        excess_kilometers: firstCalc.excess_kilometers,
+                        approved_mission_days: firstCalc.approved_mission_days,
+                        excess_mission_days: firstCalc.excess_mission_days,
+                        helper_driver_excess_kilometers: firstCalc.helper_driver_excess_kilometers,
+                        helper_driver_excess_mission_days: firstCalc.helper_driver_excess_mission_days,
+                    });
+                    console.log('🔍 [REAL_DOM] ============================================');
+                }
                 
                 if (calculationsArray.length === 0) {
                     console.warn(`⚠️ هیچ محاسبه‌ای برای ${record.driverName}`);
