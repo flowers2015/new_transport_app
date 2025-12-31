@@ -431,18 +431,27 @@ export const convertToInvoiceDataFormatHorizontal = (
                 : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
         const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
-        // Debug: لاگ کردن مقادیر برای دیباگ
-        console.log('🔍 [convertToInvoiceDataFormatHorizontal] بررسی فیلدهای پیمایش و ماموریت:', {
+        // Debug: لاگ کردن تمام کلیدهای calc object برای بررسی
+        console.log('🔍 [convertToInvoiceDataFormatHorizontal] تمام فیلدهای calc object:', {
             calcId: calc.id || calc.announcement_id || calc.announcementId,
+            allKeys: Object.keys(calc),
             approved_kilometers: calc.approved_kilometers,
             approvedKilometers: calc.approvedKilometers,
+            approved_kilometer: calc.approved_kilometer,
+            approvedKilometer: calc.approvedKilometer,
             excess_kilometers: calc.excess_kilometers,
             excessKilometers: calc.excessKilometers,
+            excess_kilometer: calc.excess_kilometer,
+            excessKilometer: calc.excessKilometer,
             approved_mission_days: calc.approved_mission_days,
             approvedMissionDays: calc.approvedMissionDays,
+            approved_mission: calc.approved_mission,
+            approvedMission: calc.approvedMission,
             excess_mission_days: calc.excess_mission_days,
             excessMissionDays: calc.excessMissionDays,
-            allKeys: Object.keys(calc).filter(k => k.includes('approved') || k.includes('excess') || k.includes('mission') || k.includes('kilometer'))
+            excess_mission: calc.excess_mission,
+            excessMission: calc.excessMission,
+            fullCalcObject: calc // کل object برای بررسی کامل
         });
         
         // خواندن مقادیر با بررسی دقیق‌تر برای null/undefined
@@ -587,24 +596,24 @@ const createHelperInitialInfoRows = (helperCalculations: any[], announcementsMap
         { label: 'پلاک خودرو', getValue: (tour: any) => tour?.vehiclePlate || '-', getTotal: () => '-' },
         { label: 'نوع خودرو', getValue: (tour: any) => tour?.vehicleType || '-', getTotal: () => '-' },
         { label: 'پیمایش مازاد راننده کمکی (کیلومتر)', getValue: (tour: any) => {
-            const value = tour?.helperExcessKilometers ?? tour?.helper_excess_kilometers ?? 0;
-            return value != null && value !== '' && !isNaN(Number(value)) && Number(value) > 0 ? Number(value).toLocaleString('fa-IR') : '-';
+            const value = tour?.helperExcessKilometers ?? tour?.helper_excess_kilometers ?? null;
+            return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
             const total = tours.reduce((sum, t) => {
                 const val = t.helperExcessKilometers ?? t.helper_excess_kilometers ?? 0;
                 return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
             }, 0);
-            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+            return total != null && !isNaN(total) ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'ماموریت مازاد راننده کمکی (روز)', getValue: (tour: any) => {
-            const value = tour?.helperExcessMissionDays ?? tour?.helper_excess_mission_days ?? 0;
-            return value != null && value !== '' && !isNaN(Number(value)) && Number(value) > 0 ? Number(value).toLocaleString('fa-IR') : '-';
+            const value = tour?.helperExcessMissionDays ?? tour?.helper_excess_mission_days ?? null;
+            return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
             const total = tours.reduce((sum, t) => {
                 const val = t.helperExcessMissionDays ?? t.helper_excess_mission_days ?? 0;
                 return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
             }, 0);
-            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+            return total != null && !isNaN(total) ? total.toLocaleString('fa-IR') : '-';
         }},
     ];
 };
@@ -630,7 +639,7 @@ export const renderInvoiceLayoutHorizontal = (
         { label: 'پلاک خودرو', getValue: (tour: any) => tour?.vehiclePlate || '-', getTotal: () => '-' },
         { label: 'نوع خودرو', getValue: (tour: any) => tour?.vehicleType || '-', getTotal: () => '-' },
         { label: 'پیمایش مصوب', getValue: (tour: any) => {
-            const value = tour?.approvedKm ?? tour?.approved_kilometers ?? tour?.approvedKilometers ?? 0;
+            const value = tour?.approvedKm ?? tour?.approved_kilometers ?? tour?.approvedKilometers ?? null;
             console.log('🔍 [renderInvoiceLayoutHorizontal] پیمایش مصوب - tour:', tour, 'value:', value);
             return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
@@ -638,10 +647,10 @@ export const renderInvoiceLayoutHorizontal = (
                 const val = t.approvedKm ?? t.approved_kilometers ?? t.approvedKilometers ?? 0;
                 return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
             }, 0) || 0;
-            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+            return total != null && !isNaN(total) ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'پیمایش مازاد', getValue: (tour: any) => {
-            const value = tour?.excessKm ?? tour?.excess_kilometers ?? tour?.excessKilometers ?? 0;
+            const value = tour?.excessKm ?? tour?.excess_kilometers ?? tour?.excessKilometers ?? null;
             console.log('🔍 [renderInvoiceLayoutHorizontal] پیمایش مازاد - tour:', tour, 'value:', value);
             return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
@@ -649,10 +658,10 @@ export const renderInvoiceLayoutHorizontal = (
                 const val = t.excessKm ?? t.excess_kilometers ?? t.excessKilometers ?? 0;
                 return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
             }, 0) || 0;
-            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+            return total != null && !isNaN(total) ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'ماموریت مصوب', getValue: (tour: any) => {
-            const value = tour?.approvedMissionDays ?? tour?.approved_mission_days ?? 0;
+            const value = tour?.approvedMissionDays ?? tour?.approved_mission_days ?? null;
             console.log('🔍 [renderInvoiceLayoutHorizontal] ماموریت مصوب - tour:', tour, 'value:', value);
             return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
@@ -660,10 +669,10 @@ export const renderInvoiceLayoutHorizontal = (
                 const val = t.approvedMissionDays ?? t.approved_mission_days ?? 0;
                 return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
             }, 0) || 0;
-            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+            return total != null && !isNaN(total) ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'ماموریت مازاد', getValue: (tour: any) => {
-            const value = tour?.excessMissionDays ?? tour?.excess_mission_days ?? 0;
+            const value = tour?.excessMissionDays ?? tour?.excess_mission_days ?? null;
             console.log('🔍 [renderInvoiceLayoutHorizontal] ماموریت مازاد - tour:', tour, 'value:', value);
             return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
@@ -671,7 +680,7 @@ export const renderInvoiceLayoutHorizontal = (
                 const val = t.excessMissionDays ?? t.excess_mission_days ?? 0;
                 return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
             }, 0) || 0;
-            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+            return total != null && !isNaN(total) ? total.toLocaleString('fa-IR') : '-';
         }},
     ];
     
