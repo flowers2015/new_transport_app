@@ -6,6 +6,8 @@ const {
   getDriverCalculations,
   getCalculationsByDateRange,
   getPaidCalculations,
+  debugListPaidCalculations,
+  debugGetCalculation,
 } = require('../controllers/driverCalculationController');
 
 const financeRoles = ['finance', 'central_finance', 'transport_finance', 'admin'];
@@ -21,6 +23,12 @@ router.get('/by-date-range', authenticateToken, authorizeRole(financeRoles), get
 
 // GET /api/v1/driver-calculations/paid - دریافت محاسبات پرداخت شده
 router.get('/paid', authenticateToken, authorizeRole(financeRoles), getPaidCalculations);
+
+// GET /api/v1/driver-calculations/debug/list-paid?driverId=xxx - Debug: لیست رکوردهای پرداخت شده
+router.get('/debug/list-paid', authenticateToken, authorizeRole(financeRoles), debugListPaidCalculations);
+
+// GET /api/v1/driver-calculations/debug/:driverId/:announcementId - Debug: دریافت تمام فیلدهای یک رکورد
+router.get('/debug/:driverId/:announcementId', authenticateToken, authorizeRole(financeRoles), debugGetCalculation);
 
 module.exports = router;
 

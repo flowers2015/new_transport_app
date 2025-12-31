@@ -60,6 +60,7 @@ const AdminResourceManagement = React.lazy(() => import('./components/AdminResou
 const CityManagement = React.lazy(() => import('./components/CityManagement'));
 const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
 const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
+const DebugDriverCalculations = React.lazy(() => import('./components/DebugDriverCalculations'));
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
@@ -613,6 +614,9 @@ const App: React.FC = () => {
             case View.TransportFinancePaidInvoices:
                 console.log('[App] Render view:', View.TransportFinancePaidInvoices);
                 return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinancePaidInvoices} onNavigate={handleNavigate} />;
+            case View.DebugDriverCalculations:
+                console.log('[App] Render view:', View.DebugDriverCalculations);
+                return <TransportFinanceContainer currentUser={currentUser} currentView={View.DebugDriverCalculations} onNavigate={handleNavigate} />;
             case View.FreightHistory:
                 console.log('[App] Render view:', View.FreightHistory);
                 return <FreightHistoryContainer currentUser={currentUser} />;

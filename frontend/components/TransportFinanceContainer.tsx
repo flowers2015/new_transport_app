@@ -6,6 +6,7 @@ import MonthlyCommissionCalculation from './MonthlyCommissionCalculation';
 import AllowanceRegulationManagement from './AllowanceRegulationManagement';
 import TransportFinancePaymentList from './TransportFinancePaymentList';
 import TransportFinancePaidInvoices from './TransportFinancePaidInvoices';
+import DebugDriverCalculations from './DebugDriverCalculations';
 
 interface TransportFinanceContainerProps {
     currentUser: User;
@@ -33,6 +34,10 @@ const TransportFinanceContainer: React.FC<TransportFinanceContainerProps> = ({ c
 
     if (currentView === View.TransportFinancePaidInvoices) {
         return <TransportFinancePaidInvoices currentUser={currentUser} />;
+    }
+
+    if (currentView === View.DebugDriverCalculations) {
+        return <DebugDriverCalculations />;
     }
 
     // در غیر این صورت داشبورد اصلی را نمایش بده

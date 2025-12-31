@@ -48,6 +48,7 @@ export enum View {
     CityManagement = 'city-management',
     FinalizePermissionManagement = 'finalize-permission-management',
     PlanningManagerApprovalPermissionManagement = 'planning-manager-approval-permission-management',
+    DebugDriverCalculations = 'debug-driver-calculations',
 }
 
 export enum UserRole {

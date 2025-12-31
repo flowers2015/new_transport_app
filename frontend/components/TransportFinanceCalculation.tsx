@@ -4919,6 +4919,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         <li><strong>حق ماموریت دپو:</strong> تعداد روز ماموریت دپو × هزینه ماموریت مازاد طبق بخشنامه</li>
                                     </ul>
                                 </div>
+                                
+                                {/* قوانین ویرایش و قفل */}
+                                <div className="bg-amber-50 p-4 rounded-lg border-2 border-amber-300 shadow-sm">
+                                    <h4 className="font-bold text-slate-700 mb-3 text-base flex items-center gap-2">
+                                        <span>⚖️</span>
+                                        <span>قوانین ویرایش و قفل</span>
+                                    </h4>
+                                    <ul className="space-y-2 text-slate-600 list-disc list-inside">
+                                        <li><strong>تورهای پرداخت شده:</strong> پس از پرداخت، تورها همچنان قابل ویرایش هستند و می‌توانید اطلاعات آن‌ها را تغییر دهید. صورتحساب‌های پرداخت شده همیشه آخرین نسخه محاسبات را نمایش می‌دهند.</li>
+                                        <li><strong>قفل بعد از بستن دوره:</strong> پس از بستن دوره مالی در صفحه "محاسبه پورسانت ماهانه"، تمام تورهای آن دوره قفل می‌شوند و دیگر قابل ویرایش نیستند. این قفل تا زمان باز شدن دوره توسط مدیر سیستم ادامه دارد.</li>
+                                        <li><strong>اولویت قفل دوره:</strong> اگر تور در دوره بسته شده باشد، حتی اگر پرداخت شده باشد، امکان ویرایش وجود ندارد.</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     </div>

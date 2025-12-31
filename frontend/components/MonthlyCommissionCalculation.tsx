@@ -1379,9 +1379,10 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                 <strong>⚠️ توجه:</strong> پس از بستن دوره:
                             </p>
                             <ul className="text-red-600 text-xs mt-2 list-disc list-inside">
-                                <li>تورهای ثبت شده قفل می‌شوند و قابل ویرایش نیستند</li>
+                                <li>تورهای ثبت شده قفل می‌شوند و قابل ویرایش نیستند (حتی اگر پرداخت شده باشند)</li>
                                 <li>این تورها از کارتابل محاسبه هزینه تور حذف می‌شوند</li>
                                 <li>فقط مدیر سیستم می‌تواند دوره را باز کند</li>
+                                <li className="mt-2 text-amber-700"><strong>نکته:</strong> تا قبل از بستن دوره، تورهای پرداخت شده قابل ویرایش هستند و تغییرات در صورتحساب‌های پرداخت شده اعمال می‌شود</li>
                             </ul>
                         </div>
                         
