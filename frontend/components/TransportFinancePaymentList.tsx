@@ -3014,11 +3014,15 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.HORIZONTAL);
 
     useEffect(() => {
-        fetchData();
+        console.log('🔄 [useEffect] فراخوانی fetchData');
+        fetchData().catch((err) => {
+            console.error('❌ [useEffect] خطا در fetchData:', err);
+        });
     }, []);
 
     const fetchData = async () => {
         try {
+            console.log('🚀 [fetchData] شروع fetchData');
             setLoading(true);
             setError(null);
             
@@ -3028,6 +3032,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 'Content-Type': 'application/json',
             };
 
+            console.log('📡 [fetchData] در حال دریافت داده‌ها از API...');
             // دریافت رانندگان و محاسبات (فقط محاسبات ثبت شده)
             const [driversRes, calculationsRes] = await Promise.all([
                 fetch(getApiUrl('drivers'), { headers }),
@@ -3046,21 +3051,73 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 calculationsRes.json(),
             ]);
 
+            console.log('✅ [fetchData] داده‌ها دریافت شد:', {
+                driversCount: Array.isArray(driversData) ? driversData.length : 0,
+                calculationsCount: Array.isArray(calculationsData) ? calculationsData.length : 0,
+                calculationsSample: Array.isArray(calculationsData) && calculationsData.length > 0 ? calculationsData[0] : null
+            });
+
             setDrivers(Array.isArray(driversData) ? driversData : []);
             
             // تبدیل محاسبات به رکوردهای پرداخت - برای هر تور یک ردیف جداگانه
             const allRecords: PaymentRecord[] = [];
             
-            (Array.isArray(calculationsData) ? calculationsData : []).forEach((calc: any) => {
+            const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
+            console.log('🔄 [fetchData] شروع پردازش', calculationsArray.length, 'محاسبه');
+            
+            let processedCount = 0;
+            let skippedCount = 0;
+            let skippedReasons = { totalCostZero: 0, isPaid: 0, noDriver: 0 };
+            
+            calculationsArray.forEach((calc: any, index: number) => {
                 // فقط محاسباتی که total_cost دارند (یعنی ثبت شده‌اند) و پرداخت نشده‌اند
-                const totalCost = parseFloat(calc.total_cost || calc.totalCost || 0);
+                const totalCost = parseFloat(calc.total_cost || calc.totalCost || '0') || 0;
                 const isPaid = calc.is_paid || calc.isPaid || false;
-                if (totalCost <= 0 || isPaid) return; // محاسبات ثبت نشده یا پرداخت شده را نادیده بگیر
+                
+                if (totalCost <= 0) {
+                    skippedCount++;
+                    skippedReasons.totalCostZero++;
+                    if (index < 3) { // فقط 3 مورد اول را لاگ کن
+                        console.log('⏭️ [fetchData] رد شد - totalCost <= 0:', {
+                            index,
+                            id: calc.id,
+                            total_cost: calc.total_cost || calc.totalCost,
+                            totalCost
+                        });
+                    }
+                    return;
+                }
+                
+                if (isPaid) {
+                    skippedCount++;
+                    skippedReasons.isPaid++;
+                    if (index < 3) {
+                        console.log('⏭️ [fetchData] رد شد - isPaid:', {
+                            index,
+                            id: calc.id,
+                            is_paid: calc.is_paid || calc.isPaid
+                        });
+                    }
+                    return;
+                }
                 
                 const driverId = calc.driver_id || calc.driverId;
                 const driver = driversData.find((d: Driver) => d.id === driverId);
                 
-                if (!driver) return;
+                if (!driver) {
+                    skippedCount++;
+                    skippedReasons.noDriver++;
+                    if (index < 3) {
+                        console.log('⏭️ [fetchData] رد شد - driver not found:', {
+                            index,
+                            id: calc.id,
+                            driver_id: driverId
+                        });
+                    }
+                    return;
+                }
+                
+                processedCount++;
                 
                 // لاگ برای دیباگ - بررسی فیلدهای عددی
                 console.log('🔍 [fetchData] بررسی calc:', {
@@ -3153,6 +3210,14 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 }
             });
             
+            console.log('📊 [fetchData] خلاصه پردازش:', {
+                totalCalculations: calculationsArray.length,
+                processed: processedCount,
+                skipped: skippedCount,
+                skippedReasons,
+                allRecordsCount: allRecords.length
+            });
+            
             // دریافت اطلاعات پرداخت‌ها برای هر رکورد
             const recordsWithPayments = await Promise.all(
                 allRecords.map(async (record) => {
@@ -3177,11 +3242,23 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 })
             );
             
+            console.log('✅ [fetchData] تمام رکوردها پردازش شد:', {
+                totalRecords: recordsWithPayments.length,
+                sampleRecord: recordsWithPayments.length > 0 ? recordsWithPayments[0] : null
+            });
+            
             setPaymentRecords(recordsWithPayments);
+            console.log('✅ [fetchData] paymentRecords تنظیم شد');
         } catch (err: any) {
             console.error('❌ [TransportFinancePaymentList] Failed to fetch data:', err);
+            console.error('❌ [TransportFinancePaymentList] Error details:', {
+                message: err.message,
+                stack: err.stack,
+                name: err.name
+            });
             setError(err.message || 'خطا در بارگذاری داده‌ها');
         } finally {
+            console.log('🏁 [fetchData] finally block - setLoading(false)');
             setLoading(false);
         }
     };
