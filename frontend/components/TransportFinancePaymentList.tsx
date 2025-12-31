@@ -43,6 +43,11 @@ interface PaymentRecord {
     lastPaymentDate?: string;
     lastPaymentAmount?: number;
     descriptions?: string; // توضیحات خودکار
+    announcementId?: string; // شناسه اعلام بار (برای نمایش هر تور به صورت جداگانه)
+    calculationId?: string; // شناسه محاسبه (برای نمایش هر تور به صورت جداگانه)
+    isHelper?: boolean; // آیا این ردیف برای راننده کمکی است؟
+    helperDriverId?: string; // شناسه راننده کمکی (اگر این ردیف برای راننده کمکی است)
+    helperEmployeeId?: string; // کد پرسنلی راننده کمکی
 }
 
 // ============================================================================
@@ -2954,7 +2959,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     const [error, setError] = useState<string | null>(null);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
-    const [helperRecordsMap, setHelperRecordsMap] = useState<Map<string, PaymentRecord>>(new Map());
     
     // فیلتر تاریخ (تاریخ محاسبه)
     const [startDate, setStartDate] = useState<string>('');
@@ -3008,14 +3012,14 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
             setDrivers(Array.isArray(driversData) ? driversData : []);
             
-            // تبدیل محاسبات به رکوردهای پرداخت (فقط محاسبات ثبت شده)
-            const recordsMap = new Map<string, PaymentRecord>();
-            const helperRecordsMap = new Map<string, PaymentRecord>(); // برای راننده‌های کمکی
+            // تبدیل محاسبات به رکوردهای پرداخت - برای هر تور یک ردیف جداگانه
+            const allRecords: PaymentRecord[] = [];
             
             (Array.isArray(calculationsData) ? calculationsData : []).forEach((calc: any) => {
-                // فقط محاسباتی که total_cost دارند (یعنی ثبت شده‌اند)
+                // فقط محاسباتی که total_cost دارند (یعنی ثبت شده‌اند) و پرداخت نشده‌اند
                 const totalCost = parseFloat(calc.total_cost || calc.totalCost || 0);
-                if (totalCost <= 0) return; // محاسبات ثبت نشده را نادیده بگیر
+                const isPaid = calc.is_paid || calc.isPaid || false;
+                if (totalCost <= 0 || isPaid) return; // محاسبات ثبت نشده یا پرداخت شده را نادیده بگیر
                 
                 const driverId = calc.driver_id || calc.driverId;
                 const driver = driversData.find((d: Driver) => d.id === driverId);
@@ -3039,192 +3043,56 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 const advancePayment = parseFloat(calc.advance_payment || calc.advancePayment || 0);
                 
                 const calculationDate = calc.calculation_date || calc.calculationDate || '';
+                const announcementId = calc.announcement_id || calc.announcementId;
+                const calculationId = calc.id;
                 
-                // راننده اصلی
-                const existing = recordsMap.get(driverId);
-                if (existing) {
-                    existing.mainDriverAmount += mainDriverCost; // جمع هزینه راننده اصلی برای همه تورها (مطابق منطق صورتحساب)
-                    existing.advancePayment += advancePayment;
-                    existing.payableAmount = existing.mainDriverAmount - existing.advancePayment;
-                    // استفاده از جدیدترین تاریخ محاسبه
-                    if (calculationDate && (!existing.calculationDate || calculationDate > existing.calculationDate)) {
-                        existing.calculationDate = calculationDate;
-                    }
-                } else {
-                    recordsMap.set(driverId, {
-                        driverId,
-                        employeeId: driver.employee_id || driver.employeeId || '',
-                        driverName: driver.name || '',
-                        accountNumber: (driver as any).account_number || (driver as any).accountNumber || '',
-                        totalAmount: mainDriverCost + helperDriverCost, // فقط برای نمایش - استفاده نمی‌شود
-                        mainDriverAmount: mainDriverCost, // هزینه راننده اصلی (مطابق منطق صورتحساب)
-                        helperDriverAmount: 0, // دیگر استفاده نمی‌شود
-                        advancePayment: advancePayment,
-                        payableAmount: mainDriverCost - advancePayment,
-                        calculationDate,
-                    });
-                }
+                // ساخت ردیف برای راننده اصلی (این تور)
+                allRecords.push({
+                    driverId,
+                    employeeId: driver.employee_id || driver.employeeId || '',
+                    driverName: driver.name || '',
+                    accountNumber: (driver as any).account_number || (driver as any).accountNumber || '',
+                    totalAmount: mainDriverCost + helperDriverCost,
+                    mainDriverAmount: mainDriverCost,
+                    helperDriverAmount: 0,
+                    advancePayment: advancePayment,
+                    payableAmount: mainDriverCost - advancePayment,
+                    calculationDate,
+                    announcementId,
+                    calculationId,
+                    isHelper: false,
+                });
                 
-                // راننده کمکی (اگر وجود دارد)
+                // ساخت ردیف جداگانه برای راننده کمکی (اگر وجود دارد)
                 if (helperId && helperEmployeeId && helperDriverCost > 0) {
                     const helperDriver = driversData.find((d: Driver) => 
                         (d.employeeId === helperEmployeeId) || d.id === helperId
                     );
                     
-                    const helperKey = helperEmployeeId || helperId;
-                    const existingHelper = helperRecordsMap.get(helperKey);
-                    
-                    if (existingHelper) {
-                        existingHelper.mainDriverAmount += helperDriverCost; // استفاده از mainDriverAmount برای هزینه راننده کمکی
-                        existingHelper.totalAmount += helperDriverCost;
-                        existingHelper.payableAmount = existingHelper.mainDriverAmount; // بدون پیش پرداخت
-                        if (calculationDate && (!existingHelper.calculationDate || calculationDate > existingHelper.calculationDate)) {
-                            existingHelper.calculationDate = calculationDate;
-                        }
-                    } else {
-                        helperRecordsMap.set(helperKey, {
-                            driverId: helperId,
-                            employeeId: helperEmployeeId,
-                            driverName: helperName || (helperDriver?.name || ''),
-                            accountNumber: (helperDriver as any)?.account_number || (helperDriver as any)?.accountNumber || '',
-                            totalAmount: helperDriverCost,
-                            mainDriverAmount: helperDriverCost,
-                            helperDriverAmount: 0,
-                            advancePayment: 0,
-                            payableAmount: helperDriverCost,
-                            calculationDate,
-                        });
-                    }
+                    allRecords.push({
+                        driverId: helperId,
+                        employeeId: helperEmployeeId,
+                        driverName: helperName || (helperDriver?.name || ''),
+                        accountNumber: (helperDriver as any)?.account_number || (helperDriver as any)?.accountNumber || '',
+                        totalAmount: helperDriverCost,
+                        mainDriverAmount: helperDriverCost,
+                        helperDriverAmount: 0,
+                        advancePayment: 0,
+                        payableAmount: helperDriverCost,
+                        calculationDate,
+                        announcementId,
+                        calculationId,
+                        isHelper: true,
+                        helperDriverId: helperId,
+                        helperEmployeeId: helperEmployeeId,
+                    });
                 }
             });
             
-            // ساخت توضیحات برای هر رکورد
-            const buildDescriptions = async (record: PaymentRecord, isHelper: boolean = false): Promise<string> => {
-                const relevantCalcs = (Array.isArray(calculationsData) ? calculationsData : []).filter((calc: any) => {
-                    const totalCost = parseFloat(calc.total_cost || calc.totalCost || 0);
-                    if (totalCost <= 0) return false;
-                    
-                    if (isHelper) {
-                        const helperId = calc.helper_driver_id || calc.helperDriverId;
-                        return helperId === record.driverId;
-                    } else {
-                        const mainDriverId = calc.driver_id || calc.driverId;
-                        return mainDriverId === record.driverId;
-                    }
-                });
-                
-                if (relevantCalcs.length === 0) return '';
-                
-                const descriptions: string[] = [];
-                const processedAnnouncements = new Set<string>();
-                
-                for (const calc of relevantCalcs.slice(0, 10)) { // محدود به 10 مورد اول
-                    try {
-                        const announcementId = calc.announcement_id || calc.announcementId;
-                        if (!announcementId || processedAnnouncements.has(announcementId)) continue;
-                        processedAnnouncements.add(announcementId);
-                        
-                        const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
-                        if (!annRes.ok) continue;
-                        
-                        const annData = await annRes.json();
-                        const destinations = Array.isArray(annData.destinations) 
-                            ? annData.destinations.map((d: any) => d.city || '').filter(Boolean).join('، ')
-                            : '-';
-                        
-                        const mainDriverId = calc.driver_id || calc.driverId;
-                        const mainDriver = driversData.find((d: Driver) => d.id === mainDriverId);
-                        const mainDriverName = mainDriver?.name || record.driverName || '';
-                        
-                        const helperName = calc.helper_driver_name || calc.helperDriverName || '';
-                        const calcDate = calc.calculation_date || calc.calculationDate || '';
-                        
-                        let desc = '';
-                        if (isHelper) {
-                            // برای راننده کمکی: راننده کمکی، راننده اصلی، مقاصد، تاریخ
-                            desc = `راننده کمکی: ${record.driverName || 'نامشخص'}، راننده اصلی: ${mainDriverName}، تور به مقاصد: ${destinations}`;
-                        } else {
-                            // برای راننده اصلی: فقط راننده اصلی، مقاصد، تاریخ (بدون ذکر راننده کمکی)
-                            desc = `راننده اصلی: ${record.driverName || 'نامشخص'}، تور به مقاصد: ${destinations}`;
-                        }
-                        
-                        if (calcDate) {
-                            desc += ` در تاریخ: ${calcDate}`;
-                        }
-                        
-                        descriptions.push(desc);
-                    } catch (err) {
-                        console.warn(`⚠️ [buildDescriptions] خطا در ساخت توضیحات:`, err);
-                    }
-                }
-                
-                return descriptions.join(' / ');
-            };
-            
-            // ذخیره helperRecordsMap برای استفاده در generateInvoiceImage
-            setHelperRecordsMap(helperRecordsMap);
-            
-            // ترکیب راننده اصلی و راننده کمکی
-            const allRecords = [...Array.from(recordsMap.values()), ...Array.from(helperRecordsMap.values())];
-            
-            // بررسی اینکه آیا راننده کمکی است یا نه برای هر رکورد
-            const isHelperDriverMap = new Map<string, boolean>();
-            helperRecordsMap.forEach((record, key) => {
-                isHelperDriverMap.set(record.driverId, true);
-                isHelperDriverMap.set(record.employeeId, true);
-            });
-            
-            // بررسی پرداخت‌های ثبت شده و فیلتر کردن راننده‌های پرداخت شده
+            // دریافت اطلاعات پرداخت‌ها برای هر رکورد
             const recordsWithPayments = await Promise.all(
                 allRecords.map(async (record) => {
-                    const isHelper = isHelperDriverMap.has(record.driverId) || isHelperDriverMap.has(record.employeeId);
-                    
                     try {
-                        // بررسی اینکه آیا برای این راننده محاسبات پرداخت نشده وجود دارد یا نه
-                        // برای راننده اصلی: بررسی محاسبات با driver_id = record.driverId و is_paid = false
-                        // برای راننده کمکی: بررسی محاسبات با helper_driver_id = record.driverId و is_paid = false (در واقع باید بررسی کنم که آیا محاسباتی با helper_driver_id وجود دارد)
-                        let unpaidCalculationsRes;
-                        if (isHelper) {
-                            // برای راننده کمکی، باید تمام محاسبات را بگیریم و بررسی کنیم که آیا محاسباتی با helper_driver_id = record.driverId و is_paid = false وجود دارد
-                            unpaidCalculationsRes = await fetch(
-                                getApiUrl('driver-calculations'),
-                                { headers }
-                            );
-                        } else {
-                            // برای راننده اصلی
-                            unpaidCalculationsRes = await fetch(
-                                getApiUrl(`driver-calculations?driverId=${record.driverId}`),
-                                { headers }
-                            );
-                        }
-                        
-                        if (unpaidCalculationsRes.ok) {
-                            const allCalculations = await unpaidCalculationsRes.json();
-                            let unpaidCalculations;
-                            
-                            if (isHelper) {
-                                // فیلتر کردن محاسباتی که helper_driver_id = record.driverId دارند و پرداخت نشده‌اند
-                                unpaidCalculations = allCalculations.filter((calc: any) => {
-                                    const calcHelperId = calc.helper_driver_id || calc.helperDriverId;
-                                    const calcHelperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
-                                    const isPaid = calc.is_paid || calc.isPaid;
-                                    return (calcHelperId === record.driverId || calcHelperEmployeeId === record.employeeId) && !isPaid;
-                                });
-                            } else {
-                                // برای راننده اصلی: فقط محاسبات پرداخت نشده که مربوط به این راننده است
-                                unpaidCalculations = allCalculations.filter((calc: any) => {
-                                    const calcDriverId = calc.driver_id || calc.driverId;
-                                    const isPaid = calc.is_paid || calc.isPaid;
-                                    return calcDriverId === record.driverId && !isPaid;
-                                });
-                            }
-                            
-                            // اگر هیچ محاسبه پرداخت نشده‌ای وجود ندارد، این راننده را از لیست حذف کن
-                            if (!unpaidCalculations || unpaidCalculations.length === 0) {
-                                return null; // این رکورد را از لیست حذف کن
-                            }
-                        }
-                        
                         // دریافت آخرین پرداخت
                         const paymentRes = await fetch(
                             getApiUrl(`payments/last/${record.driverId}`),
@@ -3241,17 +3109,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         console.warn(`⚠️ [fetchData] Failed to fetch payment info for driver ${record.driverId}:`, err);
                     }
                     
-                    // ساخت توضیحات
-                    record.descriptions = await buildDescriptions(record, isHelper);
-                    
                     return record;
                 })
             );
             
-            // فیلتر کردن null ها (راننده‌های پرداخت شده)
-            const filteredRecords = recordsWithPayments.filter((r): r is PaymentRecord => r !== null);
-            
-            setPaymentRecords(filteredRecords);
+            setPaymentRecords(recordsWithPayments);
         } catch (err: any) {
             console.error('❌ [TransportFinancePaymentList] Failed to fetch data:', err);
             setError(err.message || 'خطا در بارگذاری داده‌ها');
@@ -3295,7 +3157,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredRecords, currentPage, itemsPerPage]);
 
-    // خروجی اکسل برای بانک
+    // خروجی اکسل برای بانک - تجمیع شده بر اساس راننده
     const exportToExcelForBank = async () => {
         const token = localStorage.getItem('token');
         const headers = {
@@ -3307,18 +3169,40 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره حساب مقصد', 'مبلغ هزینه (ریال)', 'کسور(پیش پرداخت) (ریال)', 'مبلغ قابل پرداخت (ریال)']
         ];
 
-        let rowIndex = 0;
+        // Grouping بر اساس driverId و employeeId (تجمیع هزینه‌ها)
+        const groupedRecords = new Map<string, { employeeId: string; driverName: string; accountNumber: string; mainDriverAmount: number; advancePayment: number; payableAmount: number }>();
+        
         filteredRecords.forEach((record) => {
-            // استفاده از مقادیر از قبل محاسبه شده در record
+            const key = record.employeeId || record.driverId;
+            const existing = groupedRecords.get(key);
+            
+            if (existing) {
+                existing.mainDriverAmount += record.mainDriverAmount || 0;
+                existing.advancePayment += record.advancePayment || 0;
+                existing.payableAmount = existing.mainDriverAmount - existing.advancePayment;
+            } else {
+                groupedRecords.set(key, {
+                    employeeId: record.employeeId || '',
+                    driverName: record.driverName || '',
+                    accountNumber: record.accountNumber || '',
+                    mainDriverAmount: record.mainDriverAmount || 0,
+                    advancePayment: record.advancePayment || 0,
+                    payableAmount: record.payableAmount || 0
+                });
+            }
+        });
+
+        let rowIndex = 0;
+        Array.from(groupedRecords.values()).forEach((record) => {
             rowIndex++;
             wsData.push([
                 rowIndex,
-                record.employeeId || '',
-                record.driverName || '',
-                record.accountNumber || '',
-                record.mainDriverAmount || 0,
-                record.advancePayment || 0,
-                record.payableAmount || 0
+                record.employeeId,
+                record.driverName,
+                record.accountNumber,
+                record.mainDriverAmount,
+                record.advancePayment,
+                record.payableAmount
             ]);
         });
 
@@ -3367,83 +3251,78 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     const [invoiceAnnouncements, setInvoiceAnnouncements] = useState<Map<string, any>>(new Map());
     const invoiceRef = useRef<HTMLDivElement>(null);
 
-    // تولید تصویر صورتحساب
+    // تولید تصویر صورتحساب - فقط برای همان تور (announcementId/calculationId)
     const generateInvoiceImage = async (record: PaymentRecord) => {
         try {
             setSelectedInvoiceRecord(record);
             
-            // دریافت جزئیات محاسبات برای این راننده
+            // دریافت جزئیات محاسبات برای همان تور خاص
             const token = localStorage.getItem('token');
             const headers = {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             };
 
-            // بررسی اینکه آیا این راننده کمکی است یا نه
-            const isHelper = helperRecordsMap.has(record.driverId) || Array.from(helperRecordsMap.values()).some((r: PaymentRecord) => r.employeeId === record.employeeId);
-            
-            let calculationsRes;
-            if (isHelper) {
-                // برای راننده کمکی، باید تمام محاسبات را بگیریم و فیلتر کنیم
-                calculationsRes = await fetch(
-                    getApiUrl(`driver-calculations${startDate ? `?startDate=${startDate}` : '?'}${endDate ? `&endDate=${endDate}` : ''}`),
+            // اگر calculationId داریم، فقط همان calculation را بگیریم
+            let calculation: any = null;
+            if (record.calculationId) {
+                const calcRes = await fetch(
+                    getApiUrl(`driver-calculations`),
                     { headers }
                 );
-            } else {
-                // برای راننده اصلی
-                calculationsRes = await fetch(
-                    getApiUrl(`driver-calculations?driverId=${record.driverId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
-                    { headers }
-                );
-            }
-
-            if (calculationsRes.ok) {
-                const calculationsData = await calculationsRes.json();
-                const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
-                
-                // فیلتر کردن محاسبات مربوط به این راننده و پرداخت نشده
-                let unpaidCalculations;
-                if (isHelper) {
-                    // برای راننده کمکی: فیلتر بر اساس helper_driver_id یا helper_driver_employee_id
-                    unpaidCalculations = calculationsArray.filter((calc: any) => {
-                        const calcHelperId = calc.helper_driver_id || calc.helperDriverId;
-                        const calcHelperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
-                        const isPaid = calc.is_paid || calc.isPaid;
-                        return (calcHelperId === record.driverId || calcHelperEmployeeId === record.employeeId) && !isPaid;
-                    });
-                } else {
-                    // برای راننده اصلی: فیلتر بر اساس driver_id و is_paid = false
-                    unpaidCalculations = calculationsArray.filter((calc: any) => {
-                        const calcDriverId = calc.driver_id || calc.driverId;
-                        const isPaid = calc.is_paid || calc.isPaid;
-                        return calcDriverId === record.driverId && !isPaid;
-                    });
+                if (calcRes.ok) {
+                    const calculationsData = await calcRes.json();
+                    const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
+                    calculation = calculationsArray.find((calc: any) => 
+                        (calc.id === record.calculationId) || 
+                        (calc.announcement_id === record.announcementId && calc.driver_id === record.driverId)
+                    );
                 }
-                
-                setInvoiceCalculations(unpaidCalculations);
-                
-                // دریافت اطلاعات اعلام بار برای هر محاسبه (برای نمایش مقاصد)
-                const announcementsMap = new Map<string, any>();
-                await Promise.all(calculationsArray.map(async (calc: any) => {
-                    const announcementId = calc.announcement_id || calc.announcementId;
-                    if (announcementId && !announcementsMap.has(announcementId)) {
-                        try {
-                            const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { headers });
-                            if (annRes.ok) {
-                                const annData = await annRes.json();
-                                announcementsMap.set(announcementId, annData);
-                            }
-                        } catch (err) {
-                            console.warn('⚠️ [generateInvoiceImage] خطا در دریافت اعلام بار:', err);
-                        }
+            } else if (record.announcementId) {
+                // اگر فقط announcementId داریم، اولین calculation مربوط به این announcement را بگیریم
+                const calcRes = await fetch(
+                    getApiUrl(`driver-calculations`),
+                    { headers }
+                );
+                if (calcRes.ok) {
+                    const calculationsData = await calcRes.json();
+                    const calculationsArray = Array.isArray(calculationsData) ? calculationsData : [];
+                    if (record.isHelper) {
+                        calculation = calculationsArray.find((calc: any) => 
+                            (calc.announcement_id === record.announcementId) &&
+                            (calc.helper_driver_id === record.driverId || calc.helper_driver_employee_id === record.employeeId)
+                        );
+                    } else {
+                        calculation = calculationsArray.find((calc: any) => 
+                            (calc.announcement_id === record.announcementId) &&
+                            (calc.driver_id === record.driverId)
+                        );
                     }
-                }));
-                setInvoiceAnnouncements(announcementsMap);
-            } else {
-                console.warn('⚠️ [generateInvoiceImage] خطا در دریافت محاسبات:', calculationsRes.status);
-                setInvoiceCalculations([]);
-                setInvoiceAnnouncements(new Map());
+                }
             }
+            
+            if (!calculation) {
+                alert('محاسبه یافت نشد');
+                return;
+            }
+            
+            // فقط همان calculation را نمایش می‌دهیم
+            setInvoiceCalculations([calculation]);
+            
+            // دریافت اطلاعات اعلام بار برای همان announcementId
+            const announcementsMap = new Map<string, any>();
+            if (record.announcementId) {
+                try {
+                    const annRes = await fetch(getApiUrl(`freight-announcements/${record.announcementId}`), { headers });
+                    if (annRes.ok) {
+                        const annData = await annRes.json();
+                        announcementsMap.set(record.announcementId, annData);
+                    }
+                } catch (err) {
+                    console.warn('⚠️ [generateInvoiceImage] خطا در دریافت اعلام بار:', err);
+                }
+            }
+            setInvoiceAnnouncements(announcementsMap);
 
             setInvoiceDialogOpen(true);
         } catch (err: any) {
@@ -4695,7 +4574,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
-    // علامت‌گذاری پرداخت شد
+    // علامت‌گذاری پرداخت شد - فقط برای همان تور خاص
     const markAsPaid = async (record: PaymentRecord) => {
         try {
             const token = localStorage.getItem('token');
@@ -4704,6 +4583,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 'Content-Type': 'application/json',
             };
 
+            // اگر calculationId نداریم، نمی‌توانیم پرداخت را ثبت کنیم
+            if (!record.calculationId && !record.announcementId) {
+                alert('خطا: شناسه محاسبه یافت نشد');
+                return;
+            }
+
             // تاریخ امروز
             const today = new Date();
             const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
@@ -4711,6 +4596,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
             const userId = currentUser?.id || currentUser?.userId || '';
 
+            // برای هر تور، فقط همان calculationId را پرداخت می‌کنیم
+            // از API payments استفاده می‌کنیم اما با calculationId (یا announcementId + driverId)
             const response = await fetch(getApiUrl('payments'), {
                 method: 'POST',
                 headers,
@@ -4718,10 +4605,13 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     driverId: record.driverId,
                     paymentDate,
                     paymentAmount: record.payableAmount,
-                    calculationDateFrom: startDate || null,
-                    calculationDateTo: endDate || null,
+                    calculationDateFrom: record.calculationDate || startDate || null,
+                    calculationDateTo: record.calculationDate || endDate || null,
                     paymentListDate: paymentDate,
                     userId,
+                    announcementId: record.announcementId || null, // اضافه کردن announcementId برای شناسایی تور خاص
+                    calculationId: record.calculationId || null, // اضافه کردن calculationId برای شناسایی محاسبه خاص
+                    isHelper: record.isHelper || false, // مشخص کردن اینکه آیا برای راننده کمکی است یا نه
                 }),
             });
 
@@ -4729,7 +4619,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 throw new Error('خطا در ثبت پرداخت');
             }
 
-            alert(`پرداخت برای ${record.driverName} با موفقیت ثبت شد`);
+            alert(`پرداخت برای ${record.driverName} (تور خاص) با موفقیت ثبت شد`);
             // صبر کردن کمی تا backend پرداخت را ثبت کند
             await new Promise(resolve => setTimeout(resolve, 500));
             // بارگذاری مجدد داده‌ها
