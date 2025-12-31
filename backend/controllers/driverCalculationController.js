@@ -1158,6 +1158,124 @@ async function debugListPaidCalculations(req, res) {
 }
 
 /**
+ * Debug endpoint: لیست همه محاسبات یک راننده (بدون فیلتر is_paid - برای تولید تصویر)
+ * GET /api/v1/driver-calculations/debug/list-all?driverId=xxx OR ?employeeId=xxx
+ */
+async function debugListAllCalculations(req, res) {
+  try {
+    const { driverId, employeeId } = req.query;
+    
+    console.log('🔍 [debugListAllCalculations] Request:', { driverId, employeeId });
+    
+    if (!driverId && !employeeId) {
+      return res.status(400).json({ message: 'driverId یا employeeId الزامی است.' });
+    }
+    
+    let query = '';
+    let params = [];
+    
+    if (employeeId) {
+      // جستجو با کد پرسنلی
+      query = `
+        SELECT dc.id,
+               dc.driver_id,
+               dc.announcement_id,
+               dc.is_paid,
+               dc.approved_kilometers,
+               dc.excess_kilometers,
+               dc.approved_mission_days,
+               dc.excess_mission_days,
+               dc.helper_driver_excess_kilometers,
+               dc.helper_driver_excess_mission_days,
+               dc.calculation_date,
+               fa.announcement_code,
+               fa.loading_date,
+               d.name as driver_name,
+               d.employee_id
+        FROM driver_calculations dc
+        LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+        LEFT JOIN drivers d ON dc.driver_id = d.id
+        WHERE d.employee_id = $1
+        ORDER BY dc.calculation_date DESC, dc.created_at DESC
+        LIMIT 50
+      `;
+      params = [employeeId];
+      console.log('🔍 [debugListAllCalculations] جستجو با کد پرسنلی:', employeeId);
+    } else {
+      // جستجو با driver_id
+      query = `
+        SELECT dc.id,
+               dc.driver_id,
+               dc.announcement_id,
+               dc.is_paid,
+               dc.approved_kilometers,
+               dc.excess_kilometers,
+               dc.approved_mission_days,
+               dc.excess_mission_days,
+               dc.helper_driver_excess_kilometers,
+               dc.helper_driver_excess_mission_days,
+               dc.calculation_date,
+               fa.announcement_code,
+               fa.loading_date,
+               d.name as driver_name,
+               d.employee_id
+        FROM driver_calculations dc
+        LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+        LEFT JOIN drivers d ON dc.driver_id = d.id
+        WHERE dc.driver_id = $1
+        ORDER BY dc.calculation_date DESC, dc.created_at DESC
+        LIMIT 50
+      `;
+      params = [driverId];
+      console.log('🔍 [debugListAllCalculations] جستجو با driver_id:', driverId);
+    }
+    
+    const { rows } = await pool.query(query, params);
+    
+    console.log('📊 [debugListAllCalculations] تعداد رکوردها:', rows.length);
+    if (rows.length > 0) {
+      console.log('📊 [debugListAllCalculations] اولین رکورد:', {
+        driver_id: rows[0].driver_id,
+        employee_id: rows[0].employee_id,
+        driver_name: rows[0].driver_name,
+        is_paid: rows[0].is_paid,
+        approved_kilometers: rows[0].approved_kilometers,
+        excess_kilometers: rows[0].excess_kilometers,
+        approved_mission_days: rows[0].approved_mission_days,
+        excess_mission_days: rows[0].excess_mission_days
+      });
+    }
+    
+    res.json({
+      success: true,
+      count: rows.length,
+      searchBy: employeeId ? 'employeeId' : 'driverId',
+      searchValue: employeeId || driverId,
+      records: rows.map(r => ({
+        id: r.id,
+        driver_id: r.driver_id,
+        driver_name: r.driver_name,
+        employee_id: r.employee_id,
+        announcement_id: r.announcement_id,
+        announcement_code: r.announcement_code,
+        loading_date: r.loading_date,
+        calculation_date: r.calculation_date,
+        is_paid: r.is_paid,
+        approved_kilometers: r.approved_kilometers,
+        excess_kilometers: r.excess_kilometers,
+        approved_mission_days: r.approved_mission_days,
+        excess_mission_days: r.excess_mission_days,
+        helper_driver_excess_kilometers: r.helper_driver_excess_kilometers,
+        helper_driver_excess_mission_days: r.helper_driver_excess_mission_days,
+      }))
+    });
+  } catch (error) {
+    console.error('❌ [debugListAllCalculations] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت لیست.', error: error.message });
+  }
+}
+
+/**
  * Debug endpoint: دریافت تمام فیلدهای یک رکورد مشخص از driver_calculations
  * GET /api/v1/driver-calculations/debug/:driverId/:announcementId
  */
@@ -1233,6 +1351,7 @@ module.exports = {
   getCalculationsByDateRange,
   getPaidCalculations,
   debugListPaidCalculations,
+  debugListAllCalculations,
   debugGetCalculation,
 };
 

@@ -7,6 +7,7 @@ const {
   getCalculationsByDateRange,
   getPaidCalculations,
   debugListPaidCalculations,
+  debugListAllCalculations,
   debugGetCalculation,
 } = require('../controllers/driverCalculationController');
 
@@ -26,6 +27,9 @@ router.get('/paid', authenticateToken, authorizeRole(financeRoles), getPaidCalcu
 
 // GET /api/v1/driver-calculations/debug/list-paid?driverId=xxx - Debug: لیست رکوردهای پرداخت شده
 router.get('/debug/list-paid', authenticateToken, authorizeRole(financeRoles), debugListPaidCalculations);
+
+// GET /api/v1/driver-calculations/debug/list-all?driverId=xxx OR ?employeeId=xxx - Debug: لیست همه محاسبات (برای تولید تصویر)
+router.get('/debug/list-all', authenticateToken, authorizeRole(financeRoles), debugListAllCalculations);
 
 // GET /api/v1/driver-calculations/debug/:driverId/:announcementId - Debug: دریافت تمام فیلدهای یک رکورد
 router.get('/debug/:driverId/:announcementId', authenticateToken, authorizeRole(financeRoles), debugGetCalculation);
