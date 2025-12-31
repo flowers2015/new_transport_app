@@ -1012,14 +1012,20 @@ async function getPaidCalculations(req, res) {
     
     console.log('✅ [getPaidCalculations] تعداد رکوردهای برگشتی:', rows.length);
     if (rows.length > 0) {
-      console.log('📊 [getPaidCalculations] نمونه اولین رکورد:', {
-        id: rows[0].id,
-        driver_id: rows[0].driver_id,
-        announcement_id: rows[0].announcement_id,
-        is_paid: rows[0].is_paid,
-        calculation_date: rows[0].calculation_date,
-        total_cost: rows[0].total_cost
+      // لاگ کامل تمام فیلدها
+      const firstRow = rows[0];
+      console.log('📊 [getPaidCalculations] ========== نمونه اولین رکورد ==========');
+      console.log('📊 [getPaidCalculations] تمام کلیدهای رکورد:', Object.keys(firstRow).sort());
+      console.log('📊 [getPaidCalculations] فیلدهای پیمایش و ماموریت:', {
+        approved_kilometers: firstRow.approved_kilometers,
+        excess_kilometers: firstRow.excess_kilometers,
+        approved_mission_days: firstRow.approved_mission_days,
+        excess_mission_days: firstRow.excess_mission_days,
+        helper_driver_excess_kilometers: firstRow.helper_driver_excess_kilometers,
+        helper_driver_excess_mission_days: firstRow.helper_driver_excess_mission_days,
       });
+      console.log('📊 [getPaidCalculations] تمام مقادیر رکورد:', JSON.stringify(firstRow, null, 2));
+      console.log('📊 [getPaidCalculations] =======================================');
     }
     
     res.json(rows);
