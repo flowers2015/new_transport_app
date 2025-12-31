@@ -40,6 +40,10 @@ const DebugDriverCalculations: React.FC = () => {
 
             const data = await response.json();
             setListData(data);
+            
+            // نمایش در console برای کپی کردن
+            console.log('📊 [DEBUG] لیست رکوردهای پرداخت شده:', data);
+            console.log('📋 [DEBUG] برای کپی کردن، این را در console بزنید:', 'copy(JSON.stringify(' + JSON.stringify(data).substring(0, 50) + '))');
         } catch (err: any) {
             setError(err.message || 'خطا در دریافت لیست');
             console.error('Error fetching list:', err);
@@ -73,6 +77,19 @@ const DebugDriverCalculations: React.FC = () => {
 
             const data = await response.json();
             setDetailData(data);
+            
+            // نمایش در console برای کپی کردن
+            console.log('📊 [DEBUG] جزئیات کامل رکورد:', data);
+            console.log('📋 [DEBUG] فیلدهای پیمایش و ماموریت:', data.mileageAndMission);
+            console.log('💾 [DEBUG] برای کپی کردن تمام داده‌ها، این کد را در console بزنید:');
+            console.log(`
+// کپی این کد و در console بزنید:
+const debugData = ${JSON.stringify(data, null, 2)};
+console.log('Driver ID:', '${selectedDriverId}');
+console.log('Announcement ID:', '${selectedAnnouncementId}');
+console.log('فیلدهای پیمایش و ماموریت:', debugData.mileageAndMission);
+console.log('تمام داده‌ها:', debugData.record);
+            `);
         } catch (err: any) {
             setError(err.message || 'خطا در دریافت جزئیات');
             console.error('Error fetching detail:', err);
@@ -217,7 +234,20 @@ const DebugDriverCalculations: React.FC = () => {
 
                         {/* تمام فیلدها */}
                         <div className="p-4 bg-slate-50 border border-slate-200 rounded-md">
-                            <h3 className="font-semibold text-slate-700 mb-3">📋 تمام فیلدها:</h3>
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-semibold text-slate-700">📋 تمام فیلدها:</h3>
+                                <button
+                                    onClick={() => {
+                                        const dataToCopy = JSON.stringify(detailData.record, null, 2);
+                                        navigator.clipboard.writeText(dataToCopy).then(() => {
+                                            alert('✅ داده‌ها در کلیپ‌بورد کپی شد! حالا در Console این را بزنید تا نمایش داده شود:\n\nconsole.log(' + JSON.stringify(dataToCopy.substring(0, 100)) + '...)');
+                                        });
+                                    }}
+                                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                >
+                                    کپی JSON
+                                </button>
+                            </div>
                             <div className="max-h-96 overflow-auto">
                                 <pre className="text-xs bg-white p-4 rounded border border-slate-300 overflow-x-auto">
                                     {JSON.stringify(detailData.record, null, 2)}

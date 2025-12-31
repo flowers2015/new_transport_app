@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 body {
-  font-family: 'Vazirmatn', sans-serif;
+  font-family: 'Vazirmatn', 'Tahoma', 'Arial', sans-serif;
   zoom: 0.9; /* کاهش zoom کلی به 90% */
 }
 
