@@ -6,6 +6,12 @@ import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { 
+    convertToInvoiceDataFormatHorizontal, 
+    renderInvoiceLayoutHorizontal, 
+    exportInvoiceToImage as exportInvoiceToImageHelper,
+    PaymentRecord as InvoicePaymentRecord
+} from './InvoiceImageHelper';
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
@@ -16,6 +22,7 @@ enum InvoiceLayoutType {
     COMPACT = 'compact', // روش 2: فشرده
     DETAILED = 'detailed', // روش 3: تفصیلی
     HORIZONTAL = 'horizontal', // روش 4: افقی (هر تور یک ردیف)
+    TOUR_DETAILS_STYLE = 'tour_details_style', // روش 5: سبک جزئیات تور (هر تور یک ردیف با راننده اصلی و کمکی)
 }
 
 interface TransportFinancePaymentListProps {
@@ -4969,6 +4976,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     >
                                         <option value={InvoiceLayoutType.HORIZONTAL}>روش 1: افقی (هر تور یک ردیف)</option>
                                         <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 2: استاندارد حسابداری</option>
+                                        <option value={InvoiceLayoutType.TOUR_DETAILS_STYLE}>روش 3: سبک جزئیات تور (هر تور یک ردیف با راننده اصلی و کمکی)</option>
                                     </select>
                                 </div>
                                 <button
@@ -6689,6 +6697,82 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         })()}
                                     </>
                                 );
+                            })()}
+
+                            {/* روش 3: سبک جزئیات تور - هر تور یک ردیف با راننده اصلی و کمکی */}
+                            {invoiceLayout === InvoiceLayoutType.TOUR_DETAILS_STYLE && (() => {
+                                // تبدیل داده‌ها به فرمت InvoiceImageHelper
+                                const invoicePaymentRecord: InvoicePaymentRecord = {
+                                    employeeId: selectedInvoiceRecord.employeeId,
+                                    driverName: selectedInvoiceRecord.driverName,
+                                    accountNumber: selectedInvoiceRecord.accountNumber || '',
+                                    startDate: startDate,
+                                    endDate: endDate
+                                };
+
+                                // تبدیل calculations به فرمت مورد نیاز InvoiceImageHelper
+                                const convertedCalculations = invoiceCalculations.map((calc: any) => {
+                                    const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
+                                    const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                    
+                                    return {
+                                        ...calc,
+                                        destinations: destinations,
+                                        origin: announcement?.origin?.city || announcement?.origin || calc.origin || '-',
+                                    };
+                                });
+
+                                // تبدیل به فرمت InvoiceImageHelper
+                                const invoiceData = convertToInvoiceDataFormatHorizontal(
+                                    invoicePaymentRecord,
+                                    convertedCalculations,
+                                    invoiceAnnouncements,
+                                    startDate,
+                                    endDate
+                                );
+
+                                // محاسبه عرض و فونت دینامیک
+                                const numTours = invoiceData.tourData?.length || invoiceCalculations.length;
+                                const mainBlock = invoiceData.blocks[0];
+                                const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
+                                const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
+                                const totalColumns = 10 + costColumnsCount + 1;
+                                
+                                let containerWidth = 2100;
+                                let fontSize = 13;
+                                let cellPadding = '14px 12px';
+                                
+                                if (totalColumns > 20) {
+                                    containerWidth = 2400;
+                                    fontSize = 11;
+                                    cellPadding = '12px 10px';
+                                } else if (totalColumns > 15) {
+                                    containerWidth = 2200;
+                                    fontSize = 12;
+                                    cellPadding = '13px 11px';
+                                }
+                                
+                                if (numTours > 10) {
+                                    containerWidth = Math.max(containerWidth, 2400);
+                                    fontSize = Math.min(fontSize, 11);
+                                    cellPadding = '12px 10px';
+                                } else if (numTours > 8) {
+                                    containerWidth = Math.max(containerWidth, 2200);
+                                    fontSize = Math.min(fontSize, 12);
+                                    cellPadding = '13px 11px';
+                                }
+
+                                // Render کردن با استفاده از InvoiceImageHelper
+                                const invoiceJSX = renderInvoiceLayoutHorizontal(
+                                    invoiceData,
+                                    invoicePaymentRecord,
+                                    invoiceAnnouncements,
+                                    containerWidth,
+                                    fontSize,
+                                    cellPadding
+                                );
+
+                                return invoiceJSX;
                             })()}
 
                             {/* پیام در صورت عدم وجود محاسبات پرداخت نشده */}
