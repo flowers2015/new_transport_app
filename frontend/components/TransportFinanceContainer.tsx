@@ -15,20 +15,26 @@ interface TransportFinanceContainerProps {
 }
 
 const TransportFinanceContainer: React.FC<TransportFinanceContainerProps> = ({ currentUser, currentView, onNavigate }) => {
+    console.log('🔍 [TransportFinanceContainer] Render با currentView:', currentView);
+    
     // اگر view مشخص شده، آن را نمایش بده
     if (currentView === View.TransportFinanceCalculation) {
+        console.log('✅ [TransportFinanceContainer] نمایش TransportFinanceCalculation');
         return <TransportFinanceCalculation currentUser={currentUser} />;
     }
 
     if (currentView === View.MonthlyCommissionCalculation) {
+        console.log('✅ [TransportFinanceContainer] نمایش MonthlyCommissionCalculation');
         return <MonthlyCommissionCalculation currentUser={currentUser} />;
     }
 
     if (currentView === View.AllowanceRegulation) {
+        console.log('✅ [TransportFinanceContainer] نمایش AllowanceRegulation');
         return <AllowanceRegulationManagement currentUser={currentUser} />;
     }
 
     if (currentView === View.TransportFinancePaymentList) {
+        console.log('✅ [TransportFinanceContainer] نمایش TransportFinancePaymentList');
         return <TransportFinancePaymentList currentUser={currentUser} />;
     }
 

@@ -2988,6 +2988,8 @@ const convertToInvoiceDataFormatHorizontal = (
 // کامپوننت اصلی
 // ============================================================================
 const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = ({ currentUser }) => {
+    console.log('🎬 [TransportFinancePaymentList] کامپوننت render شد', { currentUser: currentUser?.id || 'null' });
+    
     // استفاده از تابع global
     const calculateMainDriverCost = calculateMainDriverCostGlobal;
 
@@ -2995,6 +2997,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     const [error, setError] = useState<string | null>(null);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
+    
+    console.log('📊 [TransportFinancePaymentList] State initialized:', { loading, error, driversCount: drivers.length, paymentRecordsCount: paymentRecords.length });
     
     // فیلتر تاریخ (تاریخ محاسبه)
     const [startDate, setStartDate] = useState<string>('');
@@ -4771,7 +4775,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         }
     };
 
+    console.log('🎨 [TransportFinancePaymentList] قبل از render:', { loading, error, paymentRecordsCount: paymentRecords.length });
+    
     if (loading) {
+        console.log('⏳ [TransportFinancePaymentList] نمایش loading...');
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-slate-500">در حال بارگذاری...</div>
@@ -4780,6 +4787,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     }
 
     if (error) {
+        console.log('❌ [TransportFinancePaymentList] نمایش error:', error);
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-red-500">{error}</div>
@@ -4787,6 +4795,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         );
     }
 
+    console.log('✅ [TransportFinancePaymentList] render کردن محتوای اصلی');
     return (
         <div className="w-full px-6 py-4 space-y-4">
             <div className="bg-white rounded-xl shadow-lg p-6">
