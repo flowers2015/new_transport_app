@@ -12,7 +12,7 @@ const DebugDriverCalculations: React.FC = () => {
     // لیست رکوردهای پرداخت شده
     const fetchList = async () => {
         if (!driverId.trim()) {
-            alert('لطفاً شناسه راننده را وارد کنید');
+            alert('لطفاً شناسه راننده یا کد پرسنلی را وارد کنید');
             return;
         }
 
@@ -23,8 +23,15 @@ const DebugDriverCalculations: React.FC = () => {
 
         try {
             const token = localStorage.getItem('token');
+            const searchValue = driverId.trim();
+            
+            // تشخیص اینکه UUID است (driver_id) یا کد پرسنلی (employee_id)
+            // UUID فرمت: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36 کاراکتر با خط تیره)
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchValue);
+            const queryParam = isUUID ? 'driverId' : 'employeeId';
+            
             const response = await fetch(
-                getApiUrl(`driver-calculations/debug/list-paid?driverId=${encodeURIComponent(driverId.trim())}`),
+                getApiUrl(`driver-calculations/debug/list-paid?${queryParam}=${encodeURIComponent(searchValue)}`),
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -120,7 +127,7 @@ console.log('تمام داده‌ها:', debugData.record);
                 {/* ورودی شناسه راننده */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                        شناسه راننده (Driver ID):
+                        شناسه راننده (Driver ID) یا کد پرسنلی (Employee ID):
                     </label>
                     <div className="flex gap-3">
                         <input

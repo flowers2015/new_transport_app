@@ -1044,49 +1044,95 @@ async function getPaidCalculations(req, res) {
 
 /**
  * Debug endpoint: لیست رکوردهای پرداخت شده یک راننده (برای پیدا کردن driverId و announcementId)
- * GET /api/v1/driver-calculations/debug/list-paid?driverId=xxx
+ * GET /api/v1/driver-calculations/debug/list-paid?driverId=xxx OR ?employeeId=xxx
  */
 async function debugListPaidCalculations(req, res) {
   try {
-    const { driverId } = req.query;
+    const { driverId, employeeId } = req.query;
     
-    console.log('🔍 [debugListPaidCalculations] Request:', { driverId });
+    console.log('🔍 [debugListPaidCalculations] Request:', { driverId, employeeId });
     
-    if (!driverId) {
-      return res.status(400).json({ message: 'driverId الزامی است.' });
+    if (!driverId && !employeeId) {
+      return res.status(400).json({ message: 'driverId یا employeeId الزامی است.' });
     }
     
-    const query = `
-      SELECT dc.id,
-             dc.driver_id,
-             dc.announcement_id,
-             dc.is_paid,
-             dc.approved_kilometers,
-             dc.excess_kilometers,
-             dc.approved_mission_days,
-             dc.excess_mission_days,
-             dc.helper_driver_excess_kilometers,
-             dc.helper_driver_excess_mission_days,
-             dc.calculation_date,
-             fa.announcement_code,
-             fa.loading_date,
-             d.name as driver_name,
-             d.employee_id
-      FROM driver_calculations dc
-      LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
-      LEFT JOIN drivers d ON dc.driver_id = d.id
-      WHERE dc.driver_id = $1 AND dc.is_paid = TRUE
-      ORDER BY dc.calculation_date DESC, dc.created_at DESC
-      LIMIT 50
-    `;
+    let query = '';
+    let params = [];
     
-    const { rows } = await pool.query(query, [driverId]);
+    if (employeeId) {
+      // جستجو با کد پرسنلی
+      query = `
+        SELECT dc.id,
+               dc.driver_id,
+               dc.announcement_id,
+               dc.is_paid,
+               dc.approved_kilometers,
+               dc.excess_kilometers,
+               dc.approved_mission_days,
+               dc.excess_mission_days,
+               dc.helper_driver_excess_kilometers,
+               dc.helper_driver_excess_mission_days,
+               dc.calculation_date,
+               fa.announcement_code,
+               fa.loading_date,
+               d.name as driver_name,
+               d.employee_id
+        FROM driver_calculations dc
+        LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+        LEFT JOIN drivers d ON dc.driver_id = d.id
+        WHERE d.employee_id = $1 AND dc.is_paid = TRUE
+        ORDER BY dc.calculation_date DESC, dc.created_at DESC
+        LIMIT 50
+      `;
+      params = [employeeId];
+      console.log('🔍 [debugListPaidCalculations] جستجو با کد پرسنلی:', employeeId);
+    } else {
+      // جستجو با driver_id
+      query = `
+        SELECT dc.id,
+               dc.driver_id,
+               dc.announcement_id,
+               dc.is_paid,
+               dc.approved_kilometers,
+               dc.excess_kilometers,
+               dc.approved_mission_days,
+               dc.excess_mission_days,
+               dc.helper_driver_excess_kilometers,
+               dc.helper_driver_excess_mission_days,
+               dc.calculation_date,
+               fa.announcement_code,
+               fa.loading_date,
+               d.name as driver_name,
+               d.employee_id
+        FROM driver_calculations dc
+        LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+        LEFT JOIN drivers d ON dc.driver_id = d.id
+        WHERE dc.driver_id = $1 AND dc.is_paid = TRUE
+        ORDER BY dc.calculation_date DESC, dc.created_at DESC
+        LIMIT 50
+      `;
+      params = [driverId];
+      console.log('🔍 [debugListPaidCalculations] جستجو با driver_id:', driverId);
+    }
+    
+    const { rows } = await pool.query(query, params);
     
     console.log('📊 [debugListPaidCalculations] تعداد رکوردها:', rows.length);
+    if (rows.length > 0) {
+      console.log('📊 [debugListPaidCalculations] اولین رکورد:', {
+        driver_id: rows[0].driver_id,
+        employee_id: rows[0].employee_id,
+        driver_name: rows[0].driver_name,
+        approved_kilometers: rows[0].approved_kilometers,
+        excess_kilometers: rows[0].excess_kilometers
+      });
+    }
     
     res.json({
       success: true,
       count: rows.length,
+      searchBy: employeeId ? 'employeeId' : 'driverId',
+      searchValue: employeeId || driverId,
       records: rows.map(r => ({
         id: r.id,
         driver_id: r.driver_id,
