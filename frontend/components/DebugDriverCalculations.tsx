@@ -43,7 +43,16 @@ const DebugDriverCalculations: React.FC = () => {
             
             // نمایش در console برای کپی کردن
             console.log('📊 [DEBUG] لیست رکوردهای پرداخت شده:', data);
-            console.log('📋 [DEBUG] برای کپی کردن، این را در console بزنید:', 'copy(JSON.stringify(' + JSON.stringify(data).substring(0, 50) + '))');
+            console.log('📋 [DEBUG] تعداد رکوردها:', data.count);
+            if (data.records && data.records.length > 0) {
+                console.log('🔍 [DEBUG] اولین رکورد:', data.records[0]);
+                console.log('📊 [DEBUG] فیلدهای پیمایش در اولین رکورد:', {
+                    approved_kilometers: data.records[0].approved_kilometers,
+                    excess_kilometers: data.records[0].excess_kilometers,
+                    approved_mission_days: data.records[0].approved_mission_days,
+                    excess_mission_days: data.records[0].excess_mission_days
+                });
+            }
         } catch (err: any) {
             setError(err.message || 'خطا در دریافت لیست');
             console.error('Error fetching list:', err);
