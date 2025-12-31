@@ -589,27 +589,25 @@ const renderInvoiceLayout1 = (
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
                                     // استخراج فیلدهای اضافی از محاسبات و اعلام بار
-                                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
                                     const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                                    const vehicleType = announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
                                     const approvedKm = (calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR');
                                     const excessKm = (calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR');
                                     const approvedMissionDays = (calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR');
                                     const excessMissionDays = (calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR');
-                                    const totalKm = ((calc.approved_kilometers || calc.approvedKilometers || 0) + (calc.excess_kilometers || calc.excessKilometers || 0)).toLocaleString('fa-IR');
                                     
-                                    // تعریف ردیف‌های اطلاعات اولیه
+                                    // تعریف ردیف‌های اطلاعات اولیه - مطابق با فهرست 10 فیلد
                                     const initialInfoRows = [
                                         { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
-                                        { key: 'origin', label: 'مبدأ', value: origin },
-                                        { key: 'destinations', label: 'مقاصد', value: destinations },
-                                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
                                         { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                                        { key: 'destinations', label: 'مقاصد', value: destinations },
                                         { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate },
-                                        { key: 'approved_km', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm },
-                                        { key: 'excess_km', label: 'پیمایش مازاد (کیلومتر)', value: excessKm },
-                                        { key: 'total_km', label: 'پیمایش کل (کیلومتر)', value: totalKm },
-                                        { key: 'approved_mission', label: 'ماموریت مصوب (روز)', value: approvedMissionDays },
-                                        { key: 'excess_mission', label: 'ماموریت مازاد (روز)', value: excessMissionDays }
+                                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
+                                        { key: 'vehicle_type', label: 'نوع خودرو', value: vehicleType },
+                                        { key: 'approved_km', label: 'پیمایش مصوب', value: approvedKm },
+                                        { key: 'excess_km', label: 'پیمایش مازاد', value: excessKm },
+                                        { key: 'approved_mission', label: 'ماموریت مصوب', value: approvedMissionDays },
+                                        { key: 'excess_mission', label: 'ماموریت مازاد', value: excessMissionDays }
                                     ];
                                     
                                     // محاسبه تعداد کل ردیف‌ها (اطلاعات اولیه + هزینه‌ها)
@@ -1019,29 +1017,27 @@ const renderInvoiceLayout1 = (
                                     const relevantCostRows = costRows.filter(row => !row.isTotal && row.getValue(calc) > 0);
                                     
                                     // استخراج فیلدهای اضافی از محاسبات و اعلام بار
-                                    const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
                                     const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                                    const vehicleType = announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
                                     const approvedKm = (calc.approved_kilometers || calc.approvedKilometers || 0).toLocaleString('fa-IR');
                                     const excessKm = (calc.excess_kilometers || calc.excessKilometers || 0).toLocaleString('fa-IR');
-                                    const totalKm = ((calc.approved_kilometers || calc.approvedKilometers || 0) + (calc.excess_kilometers || calc.excessKilometers || 0)).toLocaleString('fa-IR');
                                     const approvedMissionDays = (calc.approved_mission_days || calc.approvedMissionDays || 0).toLocaleString('fa-IR');
                                     const excessMissionDays = (calc.excess_mission_days || calc.excessMissionDays || 0).toLocaleString('fa-IR');
                                     
-                                    // تعریف ردیف‌های اطلاعات اولیه برای راننده کمکی
+                                    // تعریف ردیف‌های اطلاعات اولیه برای راننده کمکی - مطابق با فهرست 10 فیلد (به اضافه کد پرسنلی و نام برای راننده کمکی)
                                     const initialInfoRows = [
                                         { key: 'employee_id', label: 'کد پرسنلی', value: helperEmployeeId },
                                         { key: 'name', label: 'نام', value: helperName },
                                         { key: 'bill_number', label: 'شماره بارنامه', value: billOfLadingNumber },
-                                        { key: 'origin', label: 'مبدأ', value: origin },
-                                        { key: 'destinations', label: 'مقاصد', value: destinations },
-                                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
                                         { key: 'bill_date', label: 'تاریخ صدور بارنامه', value: billOfLadingDate },
+                                        { key: 'destinations', label: 'مقاصد', value: destinations },
                                         { key: 'calc_date', label: 'تاریخ محاسبه', value: calculationDate },
-                                        { key: 'approved_km', label: 'پیمایش مصوب (کیلومتر)', value: approvedKm },
-                                        { key: 'excess_km', label: 'پیمایش مازاد (کیلومتر)', value: excessKm },
-                                        { key: 'total_km', label: 'پیمایش کل (کیلومتر)', value: totalKm },
-                                        { key: 'approved_mission', label: 'ماموریت مصوب (روز)', value: approvedMissionDays },
-                                        { key: 'excess_mission', label: 'ماموریت مازاد (روز)', value: excessMissionDays }
+                                        { key: 'vehicle_plate', label: 'پلاک خودرو', value: vehiclePlate },
+                                        { key: 'vehicle_type', label: 'نوع خودرو', value: vehicleType },
+                                        { key: 'approved_km', label: 'پیمایش مصوب', value: approvedKm },
+                                        { key: 'excess_km', label: 'پیمایش مازاد', value: excessKm },
+                                        { key: 'approved_mission', label: 'ماموریت مصوب', value: approvedMissionDays },
+                                        { key: 'excess_mission', label: 'ماموریت مازاد', value: excessMissionDays }
                                     ];
                                     
                                     const rows = [];
@@ -2520,14 +2516,13 @@ const convertToInvoiceDataFormatHorizontal = (
     }>;
     tourData?: Array<{
         billOfLadingNumber?: string;
-        origin?: string;
-        destinations?: string;
-        vehiclePlate?: string;
         billOfLadingDate?: string;
+        destinations?: string;
         calculationDate?: string;
+        vehiclePlate?: string;
+        vehicleType?: string;
         approvedKm?: number;
         excessKm?: number;
-        totalKm?: number;
         approvedMissionDays?: number;
         excessMissionDays?: number;
     }>;
@@ -2826,7 +2821,6 @@ const convertToInvoiceDataFormatHorizontal = (
     const tourData = calculations.map((calc: any) => {
         const announcement = announcementsMap.get(calc.announcement_id || calc.announcementId);
         const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
-        const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
         const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
         const billOfLadingDate = calc.bill_of_lading_date || calc.billOfLadingDate ? 
             (typeof (calc.bill_of_lading_date || calc.billOfLadingDate) === 'string' 
@@ -2837,6 +2831,7 @@ const convertToInvoiceDataFormatHorizontal = (
                 ? (calc.calculation_date || calc.calculationDate)
                 : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+        const vehicleType = announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
         const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || 0);
         const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || 0);
         const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || 0);
@@ -2844,14 +2839,13 @@ const convertToInvoiceDataFormatHorizontal = (
         
         return {
             billOfLadingNumber,
-            origin,
-            destinations,
-            vehiclePlate,
             billOfLadingDate,
+            destinations,
             calculationDate,
+            vehiclePlate,
+            vehicleType,
             approvedKm,
             excessKm,
-            totalKm: approvedKm + excessKm,
             approvedMissionDays,
             excessMissionDays,
         };
@@ -4965,7 +4959,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 const mainBlock = invoiceData.blocks[0];
                                 const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
                                 const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
-                                const totalColumns = 5 + costColumnsCount + 1; // 5 ستون اطلاعات اولیه + ستون‌های هزینه + جمع کل
+                                const totalColumns = 10 + costColumnsCount + 1; // 10 ستون اطلاعات اولیه + ستون‌های هزینه + جمع کل
                                 
                                 // محاسبه عرض و فونت دینامیک
                                 let containerWidth = 2100;
@@ -5116,7 +5110,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                 <thead>
                                                     {/* ردیف اول: دسته‌بندی‌ها */}
                                                     <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                        <th colSpan={5} style={{ 
+                                                        <th colSpan={10} style={{ 
                                                             border: '1px solid #000', 
                                                             padding: cellPadding, 
                                                             backgroundColor: '#e5e7eb', 
@@ -5201,7 +5195,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                             fontWeight: 'bold',
                                                             lineHeight: '1.4',
                                                             whiteSpace: 'nowrap',
-                                                        }}>مبدأ</th>
+                                                        }}>تاریخ صدور بارنامه</th>
                                                         <th style={{ 
                                                             border: '1px solid #000', 
                                                             padding: cellPadding, 
@@ -5215,7 +5209,21 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                             fontWeight: 'bold',
                                                             lineHeight: '1.4',
                                                             whiteSpace: 'nowrap',
-                                                        }}>مقصد</th>
+                                                        }}>مقاصد</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>تاریخ محاسبه</th>
                                                         <th style={{ 
                                                             border: '1px solid #000', 
                                                             padding: cellPadding, 
@@ -5230,6 +5238,76 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                             lineHeight: '1.4',
                                                             whiteSpace: 'nowrap',
                                                         }}>پلاک خودرو</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>نوع خودرو</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>پیمایش مصوب</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>پیمایش مازاد</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>ماموریت مصوب</th>
+                                                        <th style={{ 
+                                                            border: '1px solid #000', 
+                                                            padding: cellPadding, 
+                                                            backgroundColor: '#e5e7eb', 
+                                                            textAlign: 'center',
+                                                            direction: 'rtl',
+                                                            unicodeBidi: 'isolate',
+                                                            verticalAlign: 'middle',
+                                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                            fontSize: `${fontSize}px`,
+                                                            fontWeight: 'bold',
+                                                            lineHeight: '1.4',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>ماموریت مازاد</th>
                                                         {costColumns.map((col, colIdx) => (
                                                             <th key={colIdx} style={{ 
                                                                 border: '1px solid #000', 
@@ -5311,8 +5389,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                     lineHeight: '1.4',
                                                                     whiteSpace: 'normal',
                                                                     wordWrap: 'break-word',
-                                                                    maxWidth: '100px',
-                                                                }}>{tour?.origin || '-'}</td>
+                                                                    maxWidth: '120px',
+                                                                }}>{tour?.billOfLadingDate || '-'}</td>
                                                                 <td style={{ 
                                                                     border: '1px solid #000', 
                                                                     padding: cellPadding, 
@@ -5340,7 +5418,91 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                                     whiteSpace: 'normal',
                                                                     wordWrap: 'break-word',
                                                                     maxWidth: '120px',
+                                                                }}>{tour?.calculationDate || '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '120px',
                                                                 }}>{tour?.vehiclePlate || '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '100px',
+                                                                }}>{tour?.vehicleType || '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '100px',
+                                                                }}>{tour?.approvedKm != null && !isNaN(Number(tour.approvedKm)) ? Number(tour.approvedKm).toLocaleString('fa-IR') : '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '100px',
+                                                                }}>{tour?.excessKm != null && !isNaN(Number(tour.excessKm)) ? Number(tour.excessKm).toLocaleString('fa-IR') : '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '100px',
+                                                                }}>{tour?.approvedMissionDays != null && !isNaN(Number(tour.approvedMissionDays)) ? Number(tour.approvedMissionDays).toLocaleString('fa-IR') : '-'}</td>
+                                                                <td style={{ 
+                                                                    border: '1px solid #000', 
+                                                                    padding: cellPadding, 
+                                                                    textAlign: 'right',
+                                                                    direction: 'rtl',
+                                                                    unicodeBidi: 'isolate',
+                                                                    verticalAlign: 'middle',
+                                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
+                                                                    fontSize: `${fontSize}px`,
+                                                                    lineHeight: '1.4',
+                                                                    whiteSpace: 'normal',
+                                                                    wordWrap: 'break-word',
+                                                                    maxWidth: '100px',
+                                                                }}>{tour?.excessMissionDays != null && !isNaN(Number(tour.excessMissionDays)) ? Number(tour.excessMissionDays).toLocaleString('fa-IR') : '-'}</td>
                                                                 {costColumns.map((col, colIdx) => {
                                                                     const tourValue = col.tourValues?.[tourIdx];
                                                                     const tourValueStr = tourValue !== undefined && tourValue !== null ? tourValue.toLocaleString('fa-IR') : '-';
@@ -5378,7 +5540,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                                     })}
                                                     {/* ردیف جمع کل */}
                                                     <tr style={{ backgroundColor: '#3b82f6', direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                                        <td colSpan={5} style={{ 
+                                                        <td colSpan={10} style={{ 
                                                             border: '1px solid #000', 
                                                             padding: cellPadding, 
                                                             textAlign: 'center', 
