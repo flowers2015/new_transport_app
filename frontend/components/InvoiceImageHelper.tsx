@@ -25,18 +25,20 @@ const getBHomaFontFaceCSSSync = (): string => {
 
 // Helper function برای محاسبه هزینه راننده اصلی
 export const calculateMainDriverCostGlobal = (calc: any): number => {
-    const billOfLading = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
-    const food = parseFloat(calc.food_cost || calc.foodCost || 0);
-    const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
-    const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
-    const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
-    const returnBillOfLading = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0);
-    const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
-    const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
-    const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
-    const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
-    const depotMission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
-    return billOfLading + food + fuel + toll + returnCargo + returnBillOfLading + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotMission;
+    const billOfLading = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || '0') || 0;
+    const food = parseFloat(calc.food_cost || calc.foodCost || '0') || 0;
+    const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || '0') || 0;
+    const toll = parseFloat(calc.toll_cost || calc.tollCost || '0') || 0;
+    const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || '0') || 0;
+    const returnBillOfLading = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0;
+    const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0;
+    const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || '0') || 0;
+    const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || '0') || 0;
+    const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0;
+    const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || '0') || 0;
+    const depotMission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || '0') || 0;
+    const total = billOfLading + food + fuel + toll + returnCargo + returnBillOfLading + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotAllowance + depotMission;
+    return isNaN(total) ? 0 : total;
 };
 
 // Helper function برای محاسبه هزینه راننده کمکی

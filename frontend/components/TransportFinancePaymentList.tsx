@@ -10,7 +10,8 @@ import {
     convertToInvoiceDataFormatHorizontal, 
     renderInvoiceLayoutHorizontal, 
     exportInvoiceToImage as exportInvoiceToImageHelper,
-    PaymentRecord as InvoicePaymentRecord
+    PaymentRecord as InvoicePaymentRecord,
+    calculateMainDriverCostGlobal
 } from './InvoiceImageHelper';
 
 // Helper function for padding
@@ -54,59 +55,6 @@ interface PaymentRecord {
 // توابع Render برای انواع مختلف ساختار صورتحساب
 // ============================================================================
 
-// تابع محاسبه هزینه‌های راننده اصلی (برای استفاده در همه جا)
-// توجه: فیلدها از دیتابیس با نام‌های snake_case برمی‌گردند (مثل food_cost، نه foodCost)
-const calculateMainDriverCostGlobal = (calc: any): number => {
-    // خواندن فیلدها - اول snake_case (از دیتابیس)، بعد camelCase (از frontend)
-    // هزینه‌های مستقیم
-    const food = parseFloat(calc.food_cost || calc.foodCost || '0') || 0;
-    const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || '0') || 0;
-    const toll = parseFloat(calc.toll_cost || calc.tollCost || '0') || 0;
-    const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || '0') || 0;
-    const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || '0') || 0;
-    const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0;
-    const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || '0') || 0;
-    const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || '0') || 0;
-    
-    // هزینه‌های دپو
-    const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0;
-    const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || '0') || 0;
-    const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || '0') || 0;
-    
-    const total = food + fuel + toll + bill + returnCargo + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotAllowance + depotMissionCost;
-    
-    // لاگ برای دیباگ - فقط اگر مجموع صفر باشد یا مقادیر مشکوک باشند
-    if (total === 0 || isNaN(total)) {
-        console.log('⚠️ [calculateMainDriverCostGlobal] مشکل در محاسبه! جزئیات:', {
-            food, fuel, toll, bill, returnCargo, multiUnload, excessMission, fixedAllowance,
-            depotCargoHandling, depotAllowance, depotMissionCost,
-            total,
-            // بررسی مقادیر خام
-            rawFood: calc.food_cost || calc.foodCost,
-            rawFuel: calc.fuel_cost || calc.fuelCost,
-            rawToll: calc.toll_cost || calc.tollCost,
-            rawBill: calc.bill_of_lading_cost || calc.billOfLadingCost,
-            rawReturnCargo: calc.return_cargo_cost || calc.returnCargoCost,
-            rawMultiUnload: calc.multi_unload_cost || calc.multiUnloadCost,
-            rawExcessMission: calc.excess_mission_cost || calc.excessMissionCost,
-            rawFixedAllowance: calc.fixed_allowance || calc.fixedAllowance,
-            rawDepotCargoHandling: calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost,
-            rawDepotAllowance: calc.depot_kilometer_rate || calc.depotKilometerRate,
-            rawDepotMissionCost: calc.depot_mission_cost || calc.depotMissionCost,
-            // تمام کلیدهای موجود
-            calcKeys: Object.keys(calc).sort(),
-            // نمونه از calc برای بررسی
-            calcSample: {
-                id: calc.id,
-                driver_id: calc.driver_id,
-                announcement_id: calc.announcement_id,
-                total_cost: calc.total_cost
-            }
-        });
-    }
-    
-    return isNaN(total) ? 0 : total;
-};
 
 // تابع محاسبه هزینه‌های راننده کمکی
 const calculateHelperDriverCostGlobal = (calc: any): number => {
@@ -2990,7 +2938,7 @@ const convertToInvoiceDataFormatHorizontal = (
 const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = ({ currentUser }) => {
     console.log('🎬 [TransportFinancePaymentList] کامپوننت render شد', { currentUser: currentUser?.id || 'null' });
     
-    // استفاده از تابع global
+    // استفاده از تابع global از InvoiceImageHelper (که depot_kilometer_rate را هم شامل می‌شود)
     const calculateMainDriverCost = calculateMainDriverCostGlobal;
 
     const [loading, setLoading] = useState(true);
