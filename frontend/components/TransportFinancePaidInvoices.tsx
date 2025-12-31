@@ -4510,6 +4510,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // Wrapper function برای روش 3 (Real DOM - افقی)
     // ============================================================================
     const exportAllInvoicesToImagesZipWithRealDOMHorizontalWrapper = async () => {
+        console.log('🚀🚀🚀 [REAL_DOM_HORIZONTAL] ========== تابع اجرا شد! ==========');
         console.log('🖼️ [REAL_DOM_HORIZONTAL] ========== شروع تولید ZIP تصاویر افقی با Real DOM ==========');
         
         if (filteredRecords.length === 0) {
@@ -4639,6 +4640,21 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     const origin = announcement?.origin?.city || announcement?.origin || calc.origin || '-';
                     const billOfLadingNumber = calc.bill_of_lading_number || calc.billOfLadingNumber || '-';
                     const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
+                    
+                    // Debug: بررسی مقادیر raw قبل از parseFloat
+                    const approvedKmRaw = calc.approved_kilometers ?? calc.approvedKilometers ?? null;
+                    const excessKmRaw = calc.excess_kilometers ?? calc.excessKilometers ?? null;
+                    const approvedMissionDaysRaw = calc.approved_mission_days ?? calc.approvedMissionDays ?? null;
+                    const excessMissionDaysRaw = calc.excess_mission_days ?? calc.excessMissionDays ?? null;
+                    
+                    console.log('🔍 [REAL_DOM_HORIZONTAL] tourData - مقادیر raw قبل از parseFloat:', {
+                        calcId: calc.id || calc.announcement_id,
+                        approvedKmRaw,
+                        excessKmRaw,
+                        approvedMissionDaysRaw,
+                        excessMissionDaysRaw,
+                    });
+                    
                     return {
                         billOfLadingNumber,
                         origin,

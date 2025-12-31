@@ -2052,6 +2052,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     };
 
     const handleExportTourInvoiceImage = async (calc: DriverCalculationRow, tour: DriverTourDetailWithCalculation) => {
+        console.log('🚀🚀🚀 [handleExportTourInvoiceImage] ========== تابع اجرا شد! ==========');
+        console.log('🔍 [handleExportTourInvoiceImage] tour object:', {
+            announcementId: tour.announcementId,
+            approvedKilometers: tour.approvedKilometers,
+            excessKilometers: tour.excessKilometers,
+            approvedMissionDays: tour.approvedMissionDays,
+            excessMissionDays: tour.excessMissionDays,
+            allTourKeys: Object.keys(tour),
+        });
+        
         try {
             // دریافت اطلاعات اعلام بار
             const token = localStorage.getItem('token');
@@ -2125,7 +2135,32 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 queue_type: (tour as any).queueType || calc.queueType || 'porsant',
                 queueType: (tour as any).queueType || calc.queueType || 'porsant',
                 origin: announcement?.origin?.city || announcement?.origin || '-',
+                // فیلدهای پیمایش و ماموریت - اضافه کردن از tour object
+                approved_kilometers: tour.approvedKilometers ?? (tour as any).approved_kilometers ?? 0,
+                approvedKilometers: tour.approvedKilometers ?? (tour as any).approved_kilometers ?? 0,
+                excess_kilometers: tour.excessKilometers ?? (tour as any).excess_kilometers ?? 0,
+                excessKilometers: tour.excessKilometers ?? (tour as any).excess_kilometers ?? 0,
+                approved_mission_days: tour.approvedMissionDays ?? (tour as any).approved_mission_days ?? 0,
+                approvedMissionDays: tour.approvedMissionDays ?? (tour as any).approved_mission_days ?? 0,
+                excess_mission_days: tour.excessMissionDays ?? (tour as any).excess_mission_days ?? 0,
+                excessMissionDays: tour.excessMissionDays ?? (tour as any).excess_mission_days ?? 0,
+                helper_driver_excess_kilometers: (tour as any).helperDriverExcessKilometers ?? (tour as any).helper_driver_excess_kilometers ?? 0,
+                helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers ?? (tour as any).helper_driver_excess_kilometers ?? 0,
+                helper_driver_excess_mission_days: (tour as any).helperDriverExcessMissionDays ?? (tour as any).helper_driver_excess_mission_days ?? 0,
+                helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays ?? (tour as any).helper_driver_excess_mission_days ?? 0,
             };
+            
+            console.log('🔍 [handleExportTourInvoiceImage] tourAsCalc ساخته شد:', {
+                announcementId: tourAsCalc.announcementId,
+                approved_kilometers: tourAsCalc.approved_kilometers,
+                approvedKilometers: tourAsCalc.approvedKilometers,
+                excess_kilometers: tourAsCalc.excess_kilometers,
+                excessKilometers: tourAsCalc.excessKilometers,
+                approved_mission_days: tourAsCalc.approved_mission_days,
+                approvedMissionDays: tourAsCalc.approvedMissionDays,
+                excess_mission_days: tourAsCalc.excess_mission_days,
+                excessMissionDays: tourAsCalc.excessMissionDays,
+            });
             
             // ساخت PaymentRecord برای استفاده در توابع موجود
             const driver = drivers.find(d => d.id === calc.driverId);
