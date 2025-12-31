@@ -893,6 +893,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || saved.helperDriverExcessMissionCost || 0,
                                         helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || saved.helperDriverExcessKilometers || 0,
                                         isPaid: saved.is_paid === true || saved.is_paid === 'true' || saved.is_paid === 't' || saved.isPaid === true || saved.isPaid === 'true' || false,
+                                        periodId: saved.period_id || saved.periodId || null, // قانون 2: قفل ویرایش بعد از بستن دوره
                                         // فیلدهای محاسبات دپو
                                         depotMissionDays: saved.depot_mission_days || saved.depotMissionDays || 0,
                                         depotShipmentCount: saved.depot_shipment_count || saved.depotShipmentCount || 0,
@@ -990,6 +991,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             helperDriverExcessMissionCost: saved.helper_driver_excess_mission_cost || 0,
                             helperDriverExcessKilometers: saved.helper_driver_excess_kilometers || 0,
                             isPaid: saved.is_paid === true || saved.is_paid === 'true' || saved.is_paid === 't' || saved.isPaid === true || saved.isPaid === 'true' || false,
+                            periodId: saved.period_id || saved.periodId || null, // قانون 2: قفل ویرایش بعد از بستن دوره
                             depotMissionDays: saved.depot_mission_days || 0,
                             depotShipmentCount: saved.depot_shipment_count || 0,
                             depotCargoHandlingCost: saved.depot_cargo_handling_cost || 0,
@@ -1860,10 +1862,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             return;
         }
         
-        // بررسی اینکه آیا این تور پرداخت شده است
-        if ((tour as any).isPaid) {
-            alert('این تور پرداخت شده است و امکان ویرایش ندارد.');
+        // قانون 2: بررسی قفل ویرایش بعد از بستن دوره
+        const periodId = (tour as any).periodId || (tour as any).period_id;
+        if (periodId) {
+            alert('این تور در یک دوره بسته شده است و امکان ویرایش ندارد.');
             return;
+        }
+        
+        // قانون 1: تورهای پرداخت شده قابل ویرایش هستند
+        // نمایش پیام اطلاع‌رسانی به جای قفل کردن
+        if ((tour as any).isPaid) {
+            console.log('ℹ️ [handleEditData] این تور پرداخت شده است، اما قابل ویرایش است.');
         }
         
         console.log('✅ [handleEditData] راننده و تور پیدا شدند');
@@ -1895,6 +1904,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // تعیین نوع محاسبه اجرت - از تور ذخیره شده یا پیش‌فرض
             const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';
             const isPaid = (tour as any).isPaid === true || (tour as any).is_paid === true || (tour as any).is_paid === 't' || (tour as any).is_paid === 'true';
+            const periodId = (tour as any).periodId || (tour as any).period_id || null; // قانون 2
             
             setInputDialogData({
                 tourId: tour.announcementId,
@@ -1985,6 +1995,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // تعیین نوع محاسبه اجرت - پیش‌فرض پورسانت
             const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';
             const isPaid = (tour as any).isPaid === true || (tour as any).is_paid === true || (tour as any).is_paid === 't' || (tour as any).is_paid === 'true';
+            const periodId = (tour as any).periodId || (tour as any).period_id || null; // قانون 2
             
             setInputDialogData({
                 tourId: tour.announcementId,
@@ -2033,6 +2044,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 depotRows: [],
                 queueType: tourQueueType as 'porsant' | 'fixed_allowance' | 'helper',
                 isPaid: isPaid,
+                periodId: periodId, // قانون 2: قفل ویرایش بعد از بستن دوره
             } as any);
             
             setShowInputDialog(true);
@@ -2365,10 +2377,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const tour = calc.tours.find(t => t.announcementId === tourId);
         if (!tour) return;
         
-        // بررسی اینکه آیا این تور پرداخت شده است
-        if ((tour as any).isPaid) {
-            alert('این تور پرداخت شده است و امکان ثبت اطلاعات ندارد.');
+        // قانون 2: بررسی قفل ویرایش بعد از بستن دوره
+        const periodId = (tour as any).periodId || (tour as any).period_id;
+        if (periodId) {
+            alert('این تور در یک دوره بسته شده است و امکان ثبت/ویرایش اطلاعات ندارد.');
             return;
+        }
+        
+        // قانون 1: تورهای پرداخت شده قابل ویرایش هستند
+        // نمایش پیام اطلاع‌رسانی به جای قفل کردن
+        if ((tour as any).isPaid) {
+            console.log('ℹ️ [handleRecordData] این تور پرداخت شده است، اما قابل ویرایش است.');
         }
 
         // دریافت اطلاعات مصوب از API بر اساس مسیر و شهر
@@ -2596,6 +2615,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 }))) : []),
                 queueType: tourQueueType as 'porsant' | 'fixed_allowance' | 'helper',
                 isPaid: isPaid,
+                periodId: (tour as any).periodId || (tour as any).period_id || null, // قانون 2
             } as any);
         } catch (err) {
             console.error('خطا در دریافت اطلاعات مصوب:', err);
@@ -3727,10 +3747,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 queueType: newQueueType
                                             });
                                         }}
-                                        disabled={(inputDialogData as any).isPaid === true}
-                                        className={`px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 ${
-                                            (inputDialogData as any).isPaid === true ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
+                                        className="px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="porsant">پورسانت (محاسبه از بخشنامه پلکانی)</option>
                                         <option value="fixed_allowance">اجرت ثابت</option>
@@ -3745,8 +3762,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             : '💰 اجرت ثابت'}
                                     </span>
                                     {(inputDialogData as any).isPaid === true && (
-                                        <span className="text-xs text-red-600 font-medium">
-                                            ⚠️ این تور پرداخت شده و قابل تغییر نیست
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-300">
+                                            ✓ وضعیت: پرداخت شد (قابل ویرایش)
                                         </span>
                                     )}
                                 </div>
@@ -5105,43 +5122,76 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         📄 تصویر
                                                                     </button>
                                                                 )}
-                                                                {(tour as any).isPaid ? (
-                                                                    <span className="text-xs text-purple-600 font-semibold">✓ پرداخت شد</span>
-                                                                ) : !tour.isDataRecorded ? (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                            if (calc) {
-                                                                                handleRecordData(calc.driverId, tour.announcementId);
-                                                                            }
-                                                                        }}
-                                                                        disabled={(tour as any).isPaid}
-                                                                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                                                                            (tour as any).isPaid
-                                                                                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                                                : 'bg-green-600 text-white hover:bg-green-700'
-                                                                        }`}
-                                                                    >
-                                                                        ثبت اطلاعات
-                                                                    </button>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                            if (calc) {
-                                                                                handleEditData(calc.driverId, tour.announcementId);
-                                                                            }
-                                                                        }}
-                                                                        disabled={(tour as any).isPaid}
-                                                                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                                                                            (tour as any).isPaid
-                                                                                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                                                : 'bg-blue-600 text-white hover:bg-blue-700'
-                                                                        }`}
-                                                                    >
-                                                                        ویرایش
-                                                                    </button>
-                                                                )}
+                                                                {(() => {
+                                                                    const periodId = (tour as any).periodId || (tour as any).period_id;
+                                                                    const isPaid = (tour as any).isPaid;
+                                                                    
+                                                                    // قانون 2: اگر دوره بسته شده، قفل کن
+                                                                    if (periodId) {
+                                                                        return (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-xs text-red-600 font-semibold">🔒 دوره بسته شده</span>
+                                                                                {isPaid && (
+                                                                                    <span className="text-xs text-purple-600 font-semibold">✓ پرداخت شد</span>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    
+                                                                    // قانون 1: تورهای پرداخت شده قابل ویرایش هستند
+                                                                    if (isPaid) {
+                                                                        return (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-xs text-purple-600 font-semibold">✓ پرداخت شد</span>
+                                                                                {tour.isDataRecorded && (
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                                            if (calc) {
+                                                                                                handleEditData(calc.driverId, tour.announcementId);
+                                                                                            }
+                                                                                        }}
+                                                                                        className="px-3 py-1.5 rounded-md text-xs transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                                                                                        title="ویرایش تور پرداخت شده"
+                                                                                    >
+                                                                                        ویرایش
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    
+                                                                    // تورهای عادی
+                                                                    if (!tour.isDataRecorded) {
+                                                                        return (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                                    if (calc) {
+                                                                                        handleRecordData(calc.driverId, tour.announcementId);
+                                                                                    }
+                                                                                }}
+                                                                                className="px-3 py-1.5 rounded-md text-xs transition-colors bg-green-600 text-white hover:bg-green-700"
+                                                                            >
+                                                                                ثبت اطلاعات
+                                                                            </button>
+                                                                        );
+                                                                    } else {
+                                                                        return (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                                    if (calc) {
+                                                                                        handleEditData(calc.driverId, tour.announcementId);
+                                                                                    }
+                                                                                }}
+                                                                                className="px-3 py-1.5 rounded-md text-xs transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                                                                            >
+                                                                                ویرایش
+                                                                            </button>
+                                                                        );
+                                                                    }
+                                                                })()}
                                                             </div>
                                                         </td>
                                                     </tr>

@@ -271,6 +271,7 @@ async function saveDriverCalculation(req, res) {
 
     if (existingCheck.rows.length > 0) {
       // آپدیت رکورد موجود
+      // ⚠️ مهم: is_paid را در UPDATE نمی‌آوریم تا اگر قبلاً پرداخت شده بود، حفظ شود (قانون 1)
       const updateQuery = `
         UPDATE driver_calculations SET
           bill_of_lading_number = NULLIF($1, ''),
@@ -318,6 +319,7 @@ async function saveDriverCalculation(req, res) {
           depot_rows = CASE WHEN $42::text = '' THEN NULL ELSE $42::jsonb END,
           updated_by = NULLIF($43, ''),
           updated_at = NOW()
+          -- is_paid حفظ می‌شود (اگر قبلاً TRUE بود، همچنان TRUE می‌ماند)
         WHERE driver_id = $44 AND announcement_id = $45
       `;
       
@@ -958,10 +960,15 @@ async function getCalculationsByDateRange(req, res) {
  * دریافت محاسبات پرداخت شده برای یک راننده در بازه تاریخ محاسبه
  */
 async function getPaidCalculations(req, res) {
+  console.log('🚀 [getPaidCalculations] ========== تابع صدا زده شد ==========');
+  console.log('🚀 [getPaidCalculations] req.query:', req.query);
+  console.log('🚀 [getPaidCalculations] req.method:', req.method);
+  console.log('🚀 [getPaidCalculations] req.url:', req.url);
   try {
     const { driverId, startDate, endDate } = req.query;
 
     if (!driverId) {
+      console.log('❌ [getPaidCalculations] driverId وجود ندارد');
       return res.status(400).json({ message: 'شناسه راننده الزامی است.' });
     }
 
