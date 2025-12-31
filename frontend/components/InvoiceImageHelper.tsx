@@ -445,15 +445,25 @@ export const convertToInvoiceDataFormatHorizontal = (
             allKeys: Object.keys(calc).filter(k => k.includes('approved') || k.includes('excess') || k.includes('mission') || k.includes('kilometer'))
         });
         
-        const approvedKm = parseFloat(calc.approved_kilometers || calc.approvedKilometers || calc.approved_kilometer || calc.approvedKilometer || 0);
-        const excessKm = parseFloat(calc.excess_kilometers || calc.excessKilometers || calc.excess_kilometer || calc.excessKilometer || 0);
-        const approvedMissionDays = parseFloat(calc.approved_mission_days || calc.approvedMissionDays || calc.approved_mission || calc.approvedMission || 0);
-        const excessMissionDays = parseFloat(calc.excess_mission_days || calc.excessMissionDays || calc.excess_mission || calc.excessMission || 0);
+        // خواندن مقادیر با بررسی دقیق‌تر برای null/undefined
+        const approvedKmRaw = calc.approved_kilometers ?? calc.approvedKilometers ?? calc.approved_kilometer ?? calc.approvedKilometer ?? null;
+        const excessKmRaw = calc.excess_kilometers ?? calc.excessKilometers ?? calc.excess_kilometer ?? calc.excessKilometer ?? null;
+        const approvedMissionDaysRaw = calc.approved_mission_days ?? calc.approvedMissionDays ?? calc.approved_mission ?? calc.approvedMission ?? null;
+        const excessMissionDaysRaw = calc.excess_mission_days ?? calc.excessMissionDays ?? calc.excess_mission ?? calc.excessMission ?? null;
         
-        console.log('🔍 [convertToInvoiceDataFormatHorizontal] مقادیر پردازش شده:', {
+        const approvedKm = approvedKmRaw != null && approvedKmRaw !== '' && !isNaN(Number(approvedKmRaw)) ? Number(approvedKmRaw) : 0;
+        const excessKm = excessKmRaw != null && excessKmRaw !== '' && !isNaN(Number(excessKmRaw)) ? Number(excessKmRaw) : 0;
+        const approvedMissionDays = approvedMissionDaysRaw != null && approvedMissionDaysRaw !== '' && !isNaN(Number(approvedMissionDaysRaw)) ? Number(approvedMissionDaysRaw) : 0;
+        const excessMissionDays = excessMissionDaysRaw != null && excessMissionDaysRaw !== '' && !isNaN(Number(excessMissionDaysRaw)) ? Number(excessMissionDaysRaw) : 0;
+        
+        console.log('🔍 [convertToInvoiceDataFormatHorizontal] مقادیر raw و پردازش شده:', {
+            approvedKmRaw,
             approvedKm,
+            excessKmRaw,
             excessKm,
+            approvedMissionDaysRaw,
             approvedMissionDays,
+            excessMissionDaysRaw,
             excessMissionDays
         });
         const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
@@ -471,7 +481,7 @@ export const convertToInvoiceDataFormatHorizontal = (
         const returnCargoCost = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
         const excessMissionCost = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
         
-        return {
+        const tourObj = {
             billOfLadingNumber,
             destinations,
             vehiclePlate,
@@ -500,6 +510,17 @@ export const convertToInvoiceDataFormatHorizontal = (
             depotKilometerRate,
             depotMissionCost,
         };
+        
+        // Debug: لاگ کردن tour object برای بررسی
+        console.log('🔍 [convertToInvoiceDataFormatHorizontal] tour object ساخته شد:', {
+            billOfLadingNumber: tourObj.billOfLadingNumber,
+            approvedKm: tourObj.approvedKm,
+            excessKm: tourObj.excessKm,
+            approvedMissionDays: tourObj.approvedMissionDays,
+            excessMissionDays: tourObj.excessMissionDays,
+        });
+        
+        return tourObj;
     });
 
     return { blocks, tourData, helperCalculationsByEmployeeId };
@@ -536,7 +557,26 @@ const createHelperInitialInfoRows = (helperCalculations: any[], announcementsMap
                 : formatJalali(calc.calculation_date || calc.calculationDate)) : '-';
         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
         const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
-        return { billOfLadingNumber, destinations, billOfLadingDate, calculationDate, vehiclePlate, vehicleType };
+        
+        // خواندن مقادیر پیمایش و ماموریت مازاد راننده کمکی
+        const helperExcessKilometersRaw = calc.helper_driver_excess_kilometers ?? calc.helperDriverExcessKilometers ?? null;
+        const helperExcessMissionDaysRaw = calc.helper_driver_excess_mission_days ?? calc.helperDriverExcessMissionDays ?? null;
+        
+        const helperExcessKilometers = helperExcessKilometersRaw != null && helperExcessKilometersRaw !== '' && !isNaN(Number(helperExcessKilometersRaw)) ? Number(helperExcessKilometersRaw) : 0;
+        const helperExcessMissionDays = helperExcessMissionDaysRaw != null && helperExcessMissionDaysRaw !== '' && !isNaN(Number(helperExcessMissionDaysRaw)) ? Number(helperExcessMissionDaysRaw) : 0;
+        
+        return { 
+            billOfLadingNumber, 
+            destinations, 
+            billOfLadingDate, 
+            calculationDate, 
+            vehiclePlate, 
+            vehicleType,
+            helperExcessKilometers,
+            helper_excess_kilometers: helperExcessKilometers,
+            helperExcessMissionDays,
+            helper_excess_mission_days: helperExcessMissionDays,
+        };
     });
     
     return [
@@ -546,6 +586,26 @@ const createHelperInitialInfoRows = (helperCalculations: any[], announcementsMap
         { label: 'تاریخ محاسبه', getValue: (tour: any) => tour?.calculationDate || '-', getTotal: () => '-' },
         { label: 'پلاک خودرو', getValue: (tour: any) => tour?.vehiclePlate || '-', getTotal: () => '-' },
         { label: 'نوع خودرو', getValue: (tour: any) => tour?.vehicleType || '-', getTotal: () => '-' },
+        { label: 'پیمایش مازاد راننده کمکی (کیلومتر)', getValue: (tour: any) => {
+            const value = tour?.helperExcessKilometers ?? tour?.helper_excess_kilometers ?? 0;
+            return value != null && value !== '' && !isNaN(Number(value)) && Number(value) > 0 ? Number(value).toLocaleString('fa-IR') : '-';
+        }, getTotal: () => {
+            const total = tours.reduce((sum, t) => {
+                const val = t.helperExcessKilometers ?? t.helper_excess_kilometers ?? 0;
+                return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
+            }, 0);
+            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+        }},
+        { label: 'ماموریت مازاد راننده کمکی (روز)', getValue: (tour: any) => {
+            const value = tour?.helperExcessMissionDays ?? tour?.helper_excess_mission_days ?? 0;
+            return value != null && value !== '' && !isNaN(Number(value)) && Number(value) > 0 ? Number(value).toLocaleString('fa-IR') : '-';
+        }, getTotal: () => {
+            const total = tours.reduce((sum, t) => {
+                const val = t.helperExcessMissionDays ?? t.helper_excess_mission_days ?? 0;
+                return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
+            }, 0);
+            return total > 0 ? total.toLocaleString('fa-IR') : '-';
+        }},
     ];
 };
 
@@ -570,31 +630,47 @@ export const renderInvoiceLayoutHorizontal = (
         { label: 'پلاک خودرو', getValue: (tour: any) => tour?.vehiclePlate || '-', getTotal: () => '-' },
         { label: 'نوع خودرو', getValue: (tour: any) => tour?.vehicleType || '-', getTotal: () => '-' },
         { label: 'پیمایش مصوب', getValue: (tour: any) => {
-            const value = tour?.approvedKm || tour?.approved_kilometers || tour?.approvedKilometers || 0;
-            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+            const value = tour?.approvedKm ?? tour?.approved_kilometers ?? tour?.approvedKilometers ?? 0;
+            console.log('🔍 [renderInvoiceLayoutHorizontal] پیمایش مصوب - tour:', tour, 'value:', value);
+            return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
-            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.approvedKm || t.approved_kilometers || t.approvedKilometers || 0), 0) || 0;
+            const total = invoiceData.tourData?.reduce((sum, t) => {
+                const val = t.approvedKm ?? t.approved_kilometers ?? t.approvedKilometers ?? 0;
+                return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
+            }, 0) || 0;
             return total > 0 ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'پیمایش مازاد', getValue: (tour: any) => {
-            const value = tour?.excessKm || tour?.excess_kilometers || tour?.excessKilometers || 0;
-            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+            const value = tour?.excessKm ?? tour?.excess_kilometers ?? tour?.excessKilometers ?? 0;
+            console.log('🔍 [renderInvoiceLayoutHorizontal] پیمایش مازاد - tour:', tour, 'value:', value);
+            return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
-            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.excessKm || t.excess_kilometers || t.excessKilometers || 0), 0) || 0;
+            const total = invoiceData.tourData?.reduce((sum, t) => {
+                const val = t.excessKm ?? t.excess_kilometers ?? t.excessKilometers ?? 0;
+                return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
+            }, 0) || 0;
             return total > 0 ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'ماموریت مصوب', getValue: (tour: any) => {
-            const value = tour?.approvedMissionDays || tour?.approved_mission_days || 0;
-            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+            const value = tour?.approvedMissionDays ?? tour?.approved_mission_days ?? 0;
+            console.log('🔍 [renderInvoiceLayoutHorizontal] ماموریت مصوب - tour:', tour, 'value:', value);
+            return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
-            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.approvedMissionDays || t.approved_mission_days || 0), 0) || 0;
+            const total = invoiceData.tourData?.reduce((sum, t) => {
+                const val = t.approvedMissionDays ?? t.approved_mission_days ?? 0;
+                return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
+            }, 0) || 0;
             return total > 0 ? total.toLocaleString('fa-IR') : '-';
         }},
         { label: 'ماموریت مازاد', getValue: (tour: any) => {
-            const value = tour?.excessMissionDays || tour?.excess_mission_days || 0;
-            return value > 0 ? value.toLocaleString('fa-IR') : '-';
+            const value = tour?.excessMissionDays ?? tour?.excess_mission_days ?? 0;
+            console.log('🔍 [renderInvoiceLayoutHorizontal] ماموریت مازاد - tour:', tour, 'value:', value);
+            return value != null && value !== '' && !isNaN(Number(value)) ? Number(value).toLocaleString('fa-IR') : '-';
         }, getTotal: () => {
-            const total = invoiceData.tourData?.reduce((sum, t) => sum + (t.excessMissionDays || t.excess_mission_days || 0), 0) || 0;
+            const total = invoiceData.tourData?.reduce((sum, t) => {
+                const val = t.excessMissionDays ?? t.excess_mission_days ?? 0;
+                return sum + (val != null && val !== '' && !isNaN(Number(val)) ? Number(val) : 0);
+            }, 0) || 0;
             return total > 0 ? total.toLocaleString('fa-IR') : '-';
         }},
     ];
@@ -1277,7 +1353,26 @@ export const renderInvoiceLayoutHorizontal = (
                                 : String(calc.calculation_date || calc.calculationDate)) : '-';
                         const vehiclePlate = calc.vehicle_plate || calc.vehiclePlate || announcement?.vehicle_plate || announcement?.vehiclePlate || '-';
                         const vehicleType = announcement?.vehicle_type || announcement?.vehicleType || calc.vehicle_type || calc.vehicleType || '-';
-                        return { billOfLadingNumber, destinations, billOfLadingDate, calculationDate, vehiclePlate, vehicleType };
+                        
+                        // خواندن مقادیر پیمایش و ماموریت مازاد راننده کمکی
+                        const helperExcessKilometersRaw = calc.helper_driver_excess_kilometers ?? calc.helperDriverExcessKilometers ?? null;
+                        const helperExcessMissionDaysRaw = calc.helper_driver_excess_mission_days ?? calc.helperDriverExcessMissionDays ?? null;
+                        
+                        const helperExcessKilometers = helperExcessKilometersRaw != null && helperExcessKilometersRaw !== '' && !isNaN(Number(helperExcessKilometersRaw)) ? Number(helperExcessKilometersRaw) : 0;
+                        const helperExcessMissionDays = helperExcessMissionDaysRaw != null && helperExcessMissionDaysRaw !== '' && !isNaN(Number(helperExcessMissionDaysRaw)) ? Number(helperExcessMissionDaysRaw) : 0;
+                        
+                        return { 
+                            billOfLadingNumber, 
+                            destinations, 
+                            billOfLadingDate, 
+                            calculationDate, 
+                            vehiclePlate, 
+                            vehicleType,
+                            helperExcessKilometers,
+                            helper_excess_kilometers: helperExcessKilometers,
+                            helperExcessMissionDays,
+                            helper_excess_mission_days: helperExcessMissionDays,
+                        };
                     });
                     
                     return (
