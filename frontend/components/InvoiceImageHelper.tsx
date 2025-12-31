@@ -2084,9 +2084,7 @@ export const exportInvoiceToImage = async (
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>صورتحساب</title>
-                <link rel="preconnect" href="https://fonts.googleapis.com">
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block" rel="stylesheet">
+                <!-- فونت از index.html لود می‌شود -->
                 <style>
                     ${fontFaceCSS}
                     * {
@@ -2182,11 +2180,7 @@ export const exportInvoiceToImage = async (
         fontStyle.textContent = fontFaceCSS;
         iframeDoc.head.appendChild(fontStyle);
         
-        // اضافه کردن link tag برای فونت Vazirmatn
-        const fontLink = iframeDoc.createElement('link');
-        fontLink.rel = 'stylesheet';
-        fontLink.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=block';
-        iframeDoc.head.appendChild(fontLink);
+        // فونت از index.html لود می‌شود، نیازی به لود مجدد نیست
         
         // انتظار برای render کامل و لود شدن فونت
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -2352,14 +2346,11 @@ export const exportInvoiceToImage = async (
                         clonedSummary.style.overflow = 'visible';
                     }
                     
-                    // اضافه کردن @font-face برای B Homa در cloned document
-                    // استفاده از sync version چون در onclone نمی‌توانیم await کنیم
-                    // اما Base64 باید قبلاً در cache باشد
+                    // اضافه کردن فونت بدون استفاده از Google Fonts برای جلوگیری از CORS
                     const clonedFontStyle = clonedDoc.createElement('style');
                     clonedFontStyle.textContent = `
-                        ${getBHomaFontFaceCSSSync()}
                         * {
-                            font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
+                            font-family: 'Vazirmatn', 'Tahoma', 'Arial', sans-serif !important;
                         }
                     `;
                     clonedDoc.head.appendChild(clonedFontStyle);
@@ -2460,21 +2451,21 @@ export const exportInvoiceToImage = async (
                 windowHeight: actualHeight,
                     onclone: async (clonedDoc) => {
                         // اضافه کردن @font-face به head برای اطمینان از لود شدن فونت
+                        // استفاده از فونت‌های سیستم به جای Google Fonts برای جلوگیری از CORS
                         const style = clonedDoc.createElement('style');
                         style.textContent = `
-                            @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
                             * {
-                                font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
+                                font-family: 'Vazirmatn', 'Tahoma', 'Arial', sans-serif !important;
                                 font-size: 14px !important;
                                 -webkit-font-smoothing: antialiased;
                                 -moz-osx-font-smoothing: grayscale;
                             }
                             body, html {
-                                font-family: 'Vazirmatn', sans-serif !important;
+                                font-family: 'Vazirmatn', 'Tahoma', 'Arial', sans-serif !important;
                                 font-size: 14px !important;
                             }
                             table, td, th, tr, div, span, p, h1, h2, h3, h4, h5, h6 {
-                                font-family: 'Vazirmatn', sans-serif !important;
+                                font-family: 'Vazirmatn', 'Tahoma', 'Arial', sans-serif !important;
                                 font-size: 14px !important;
                             }
                             tr:nth-child(even) {
@@ -2486,12 +2477,6 @@ export const exportInvoiceToImage = async (
                             }
                         `;
                         clonedDoc.head.appendChild(style);
-                        
-                        // اضافه کردن link tag برای فونت Vazirmatn از Google Fonts
-                        const link = clonedDoc.createElement('link');
-                        link.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap';
-                        link.rel = 'stylesheet';
-                        clonedDoc.head.appendChild(link);
                         
                         // انتظار برای لود شدن فونت
                         await new Promise(resolve => setTimeout(resolve, 500));

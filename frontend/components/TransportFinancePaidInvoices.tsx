@@ -235,6 +235,24 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 const calculationsArray = Array.isArray(paidCalculations) ? paidCalculations : [];
                 console.log(`📄 [PDF_BEFORE] paidCalculations.length: ${calculationsArray.length}`);
                 console.log(`📄 [PDF_BEFORE] paidCalculations:`, JSON.stringify(calculationsArray.slice(0, 2), null, 2));
+                
+                // Debug: بررسی فیلدهای پیمایش و ماموریت
+                if (calculationsArray.length > 0) {
+                    const firstCalc = calculationsArray[0];
+                    console.log('🔍 [PDF_BEFORE] ========== بررسی فیلدهای پیمایش و ماموریت ==========');
+                    console.log('🔍 [PDF_BEFORE] تمام کلیدهای اولین calc:', Object.keys(firstCalc).sort());
+                    console.log('🔍 [PDF_BEFORE] فیلدهای پیمایش و ماموریت:', {
+                        calcId: firstCalc.id || firstCalc.announcement_id,
+                        approved_kilometers: firstCalc.approved_kilometers,
+                        excess_kilometers: firstCalc.excess_kilometers,
+                        approved_mission_days: firstCalc.approved_mission_days,
+                        excess_mission_days: firstCalc.excess_mission_days,
+                        helper_driver_excess_kilometers: firstCalc.helper_driver_excess_kilometers,
+                        helper_driver_excess_mission_days: firstCalc.helper_driver_excess_mission_days,
+                    });
+                    console.log('🔍 [PDF_BEFORE] تمام مقادیر اولین calc:', JSON.stringify(firstCalc, null, 2));
+                    console.log('🔍 [PDF_BEFORE] ============================================');
+                }
 
                 if (calculationsArray.length === 0) {
                     console.warn(`⚠️ [PDF_BEFORE] هیچ محاسبه پرداخت شده‌ای برای ${record.driverName} یافت نشد`);
