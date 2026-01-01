@@ -3399,6 +3399,27 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 return;
             }
             
+            console.log('🔍 [generateInvoiceImage] calculation یافت شد:', {
+                id: calculation.id,
+                announcement_id: calculation.announcement_id || calculation.announcementId,
+                driver_id: calculation.driver_id || calculation.driverId,
+                allKeys: Object.keys(calculation).sort(),
+                costFields: {
+                    bill_of_lading_cost: calculation.bill_of_lading_cost || calculation.billOfLadingCost,
+                    food_cost: calculation.food_cost || calculation.foodCost,
+                    fuel_cost: calculation.fuel_cost || calculation.fuelCost,
+                    toll_cost: calculation.toll_cost || calculation.tollCost,
+                    return_cargo_cost: calculation.return_cargo_cost || calculation.returnCargoCost,
+                    multi_unload_cost: calculation.multi_unload_cost || calculation.multiUnloadCost,
+                    excess_mission_cost: calculation.excess_mission_cost || calculation.excessMissionCost,
+                    fixed_allowance: calculation.fixed_allowance || calculation.fixedAllowance,
+                    depot_cargo_handling_cost: calculation.depot_cargo_handling_cost || calculation.depotCargoHandlingCost,
+                    depot_kilometer_rate: calculation.depot_kilometer_rate || calculation.depotKilometerRate,
+                    depot_mission_cost: calculation.depot_mission_cost || calculation.depotMissionCost,
+                },
+                fullCalculation: calculation
+            });
+            
             // فقط همان calculation را نمایش می‌دهیم
             setInvoiceCalculations([calculation]);
             

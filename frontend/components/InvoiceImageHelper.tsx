@@ -116,6 +116,30 @@ export const convertToInvoiceDataFormatHorizontal = (
     startDate: string,
     endDate: string
 ): InvoiceData => {
+    console.log('🔍 [convertToInvoiceDataFormatHorizontal] شروع تبدیل داده‌ها:', {
+        calculationsCount: calculations.length,
+        firstCalc: calculations.length > 0 ? calculations[0] : null,
+        firstCalcKeys: calculations.length > 0 ? Object.keys(calculations[0]).sort() : []
+    });
+    
+    // لاگ همه فیلدهای هزینه از اولین calc
+    if (calculations.length > 0) {
+        const firstCalc = calculations[0];
+        console.log('🔍 [convertToInvoiceDataFormatHorizontal] فیلدهای هزینه از اولین calc:', {
+            bill_of_lading_cost: firstCalc.bill_of_lading_cost || firstCalc.billOfLadingCost,
+            food_cost: firstCalc.food_cost || firstCalc.foodCost,
+            fuel_cost: firstCalc.fuel_cost || firstCalc.fuelCost,
+            toll_cost: firstCalc.toll_cost || firstCalc.tollCost,
+            return_cargo_cost: firstCalc.return_cargo_cost || firstCalc.returnCargoCost,
+            multi_unload_cost: firstCalc.multi_unload_cost || firstCalc.multiUnloadCost,
+            excess_mission_cost: firstCalc.excess_mission_cost || firstCalc.excessMissionCost,
+            fixed_allowance: firstCalc.fixed_allowance || firstCalc.fixedAllowance,
+            depot_cargo_handling_cost: firstCalc.depot_cargo_handling_cost || firstCalc.depotCargoHandlingCost,
+            depot_kilometer_rate: firstCalc.depot_kilometer_rate || firstCalc.depotKilometerRate,
+            depot_mission_cost: firstCalc.depot_mission_cost || firstCalc.depotMissionCost,
+        });
+    }
+    
     const blocks: any[] = [];
     
     // محاسبه جمع کل
@@ -156,194 +180,252 @@ export const convertToInvoiceDataFormatHorizontal = (
     // ساخت بلوک راننده اصلی
     const mainDriverRows: any[] = [];
     
-    // اضافه کردن هزینه‌های مستقیم
+    // اضافه کردن هزینه‌های مستقیم - همیشه نمایش داده می‌شوند (حتی اگر صفر باشند)
     mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های مستقیم' });
     
-    const billOfLadingValues = calculations.map((calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0));
+    const billOfLadingValues = calculations.map((calc: any) => parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || '0') || 0);
     const billOfLadingTotal = billOfLadingValues.reduce((sum, val) => sum + val, 0);
-    if (billOfLadingTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'بارنامه',
-            unitAmount: billOfLadingTotal,
-            totalAmount: billOfLadingTotal,
-            tourValues: billOfLadingValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'بارنامه',
+        unitAmount: billOfLadingTotal,
+        totalAmount: billOfLadingTotal,
+        tourValues: billOfLadingValues
+    });
 
-    const foodValues = calculations.map((calc: any) => parseFloat(calc.food_cost || calc.foodCost || 0));
+    const foodValues = calculations.map((calc: any) => parseFloat(calc.food_cost || calc.foodCost || '0') || 0);
     const foodTotal = foodValues.reduce((sum, val) => sum + val, 0);
-    if (foodTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'غذا',
-            unitAmount: foodTotal,
-            totalAmount: foodTotal,
-            tourValues: foodValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'غذا',
+        unitAmount: foodTotal,
+        totalAmount: foodTotal,
+        tourValues: foodValues
+    });
 
-    const fuelValues = calculations.map((calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0));
+    const fuelValues = calculations.map((calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || '0') || 0);
     const fuelTotal = fuelValues.reduce((sum, val) => sum + val, 0);
-    if (fuelTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'سوخت',
-            unitAmount: fuelTotal,
-            totalAmount: fuelTotal,
-            tourValues: fuelValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'سوخت',
+        unitAmount: fuelTotal,
+        totalAmount: fuelTotal,
+        tourValues: fuelValues
+    });
 
-    const tollValues = calculations.map((calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0));
+    const tollValues = calculations.map((calc: any) => parseFloat(calc.toll_cost || calc.tollCost || '0') || 0);
     const tollTotal = tollValues.reduce((sum, val) => sum + val, 0);
-    if (tollTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'عوارض',
-            unitAmount: tollTotal,
-            totalAmount: tollTotal,
-            tourValues: tollValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'عوارض',
+        unitAmount: tollTotal,
+        totalAmount: tollTotal,
+        tourValues: tollValues
+    });
 
-    const returnCargoValues = calculations.map((calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0));
+    const returnCargoValues = calculations.map((calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || '0') || 0);
     const returnCargoTotal = returnCargoValues.reduce((sum, val) => sum + val, 0);
-    if (returnCargoTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'بار برگشتی',
-            unitAmount: returnCargoTotal,
-            totalAmount: returnCargoTotal,
-            tourValues: returnCargoValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'بار برگشتی',
+        unitAmount: returnCargoTotal,
+        totalAmount: returnCargoTotal,
+        tourValues: returnCargoValues
+    });
 
-    const returnBillOfLadingValues = calculations.map((calc: any) => parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || 0));
+    const returnBillOfLadingValues = calculations.map((calc: any) => parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0);
     const returnBillOfLadingTotal = returnBillOfLadingValues.reduce((sum, val) => sum + val, 0);
-    if (returnBillOfLadingTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'بارنامه برگشتی',
-            unitAmount: returnBillOfLadingTotal,
-            totalAmount: returnBillOfLadingTotal,
-            tourValues: returnBillOfLadingValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'بارنامه برگشتی',
+        unitAmount: returnBillOfLadingTotal,
+        totalAmount: returnBillOfLadingTotal,
+        tourValues: returnBillOfLadingValues
+    });
 
-    const multiUnloadValues = calculations.map((calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0));
+    const multiUnloadValues = calculations.map((calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0);
     const multiUnloadTotal = multiUnloadValues.reduce((sum, val) => sum + val, 0);
-    if (multiUnloadTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'چندجا تخلیه',
-            unitAmount: multiUnloadTotal,
-            totalAmount: multiUnloadTotal,
-            tourValues: multiUnloadValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'چندجا تخلیه',
+        unitAmount: multiUnloadTotal,
+        totalAmount: multiUnloadTotal,
+        tourValues: multiUnloadValues
+    });
 
-    const excessMissionValues = calculations.map((calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0));
+    const excessMissionValues = calculations.map((calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || '0') || 0);
     const excessMissionTotal = excessMissionValues.reduce((sum, val) => sum + val, 0);
-    if (excessMissionTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'ماموریت مازاد',
-            unitAmount: excessMissionTotal,
-            totalAmount: excessMissionTotal,
-            tourValues: excessMissionValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'ماموریت مازاد',
+        unitAmount: excessMissionTotal,
+        totalAmount: excessMissionTotal,
+        tourValues: excessMissionValues
+    });
 
-    const fixedAllowanceValues = calculations.map((calc: any) => parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0));
+    const fixedAllowanceValues = calculations.map((calc: any) => parseFloat(calc.fixed_allowance || calc.fixedAllowance || '0') || 0);
     const fixedAllowanceTotal = fixedAllowanceValues.reduce((sum, val) => sum + val, 0);
-    if (fixedAllowanceTotal > 0) {
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های مستقیم',
-            description: 'اجرت ثابت',
-            unitAmount: fixedAllowanceTotal,
-            totalAmount: fixedAllowanceTotal,
-            tourValues: fixedAllowanceValues
-        });
-    }
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'اجرت ثابت',
+        unitAmount: fixedAllowanceTotal,
+        totalAmount: fixedAllowanceTotal,
+        tourValues: fixedAllowanceValues
+    });
 
-    // اضافه کردن هزینه‌های دپو - همیشه نمایش داده می‌شوند برای حفظ ساختار جدول
-    const depotCountValues = calculations.map((calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0));
-    const depotCount = depotCountValues.reduce((sum, val) => sum + val, 0);
-    const depotMissionDaysValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || 0));
+    // اضافه کردن هزینه‌های دپو - همیشه نمایش داده می‌شوند
+    mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های دپو' });
+    
+    const depotMissionDaysValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_days || calc.depotMissionDays || '0') || 0);
     const depotMissionDays = depotMissionDaysValues.reduce((sum, val) => sum + val, 0);
-    const depotMileageValues = calculations.map((calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || 0));
-    const depotMileage = depotMileageValues.reduce((sum, val) => sum + val, 0);
-    const depotCargoHandlingValues = calculations.map((calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0));
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های دپو',
+        description: 'تعداد روز ماموریت دپو',
+        unitAmount: depotMissionDays,
+        totalAmount: null,
+        isDepotCount: true,
+        tourValues: depotMissionDaysValues
+    });
+
+    const depotCargoHandlingValues = calculations.map((calc: any) => parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0);
     const depotCargoHandlingTotal = depotCargoHandlingValues.reduce((sum, val) => sum + val, 0);
-    const depotMissionValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0));
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های دپو',
+        description: 'هزینه جابجایی بار در دپو',
+        unitAmount: depotCargoHandlingTotal,
+        totalAmount: depotCargoHandlingTotal,
+        tourValues: depotCargoHandlingValues
+    });
+
+    const depotCountValues = calculations.map((calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || '0') || 0);
+    const depotCount = depotCountValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های دپو',
+        description: 'تعداد بار ارسالی',
+        unitAmount: depotCount,
+        totalAmount: null,
+        isDepotCount: true,
+        tourValues: depotCountValues
+    });
+
+    const depotMileageValues = calculations.map((calc: any) => parseFloat(calc.depot_total_mileage || calc.depotTotalMileage || '0') || 0);
+    const depotMileage = depotMileageValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های دپو',
+        description: 'پیمایش کل دپو',
+        unitAmount: depotMileage,
+        totalAmount: null,
+        isDepotCount: true,
+        tourValues: depotMileageValues
+    });
+
+    const depotAllowanceValues = calculations.map((calc: any) => parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || '0') || 0);
+    const depotAllowanceTotal = depotAllowanceValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های دپو',
+        description: 'اجرت دپو',
+        unitAmount: depotAllowanceTotal,
+        totalAmount: depotAllowanceTotal,
+        tourValues: depotAllowanceValues
+    });
+
+    const depotMissionValues = calculations.map((calc: any) => parseFloat(calc.depot_mission_cost || calc.depotMissionCost || '0') || 0);
     const depotMissionTotal = depotMissionValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های دپو',
+        description: 'حق ماموریت دپو',
+        unitAmount: depotMissionTotal,
+        totalAmount: depotMissionTotal,
+        tourValues: depotMissionValues
+    });
+
+    // اضافه کردن جمع‌بندی
+    mainDriverRows.push({ kind: 'categoryHeader', category: 'جمع‌بندی' });
     
-    // بررسی اینکه آیا حداقل یکی از هزینه‌های دپو وجود دارد
-    const hasAnyDepotCost = depotCount > 0 || depotMissionDays > 0 || depotMileage > 0 || depotCargoHandlingTotal > 0 || depotMissionTotal > 0;
+    // محاسبه پیمایش کل (approved + excess)
+    const totalMileageValues = calculations.map((calc: any) => {
+        const approved = parseFloat(calc.approved_kilometers || calc.approvedKilometers || '0') || 0;
+        const excess = parseFloat(calc.excess_kilometers || calc.excessKilometers || '0') || 0;
+        return approved + excess;
+    });
+    const totalMileage = totalMileageValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'جمع‌بندی',
+        description: 'پیمایش کل',
+        unitAmount: totalMileage,
+        totalAmount: null,
+        isDepotCount: true,
+        tourValues: totalMileageValues
+    });
     
-    if (hasAnyDepotCost) {
-        mainDriverRows.push({ kind: 'categoryHeader', category: 'هزینه‌های دپو' });
-        
-        // تعداد بار دپو - همیشه نمایش داده می‌شود
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های دپو',
-            description: 'تعداد بار دپو',
-            unitAmount: depotCount,
-            totalAmount: null,
-            isDepotCount: true,
-            tourValues: depotCountValues
-        });
-
-        // ماموریت دپو (روز) - همیشه نمایش داده می‌شود
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های دپو',
-            description: 'ماموریت دپو (روز)',
-            unitAmount: depotMissionDays,
-            totalAmount: null,
-            isDepotCount: true,
-            tourValues: depotMissionDaysValues
-        });
-
-        // پیمایش دپو (کیلومتر) - همیشه نمایش داده می‌شود
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های دپو',
-            description: 'پیمایش دپو (کیلومتر)',
-            unitAmount: depotMileage,
-            totalAmount: null,
-            isDepotCount: true,
-            tourValues: depotMileageValues
-        });
-
-        // ماموریت دپو جمع کل (ریال) - مجموع جابجایی بار دپو و حق ماموریت دپو
-        const depotMissionTotalCombined = depotCargoHandlingTotal + depotMissionTotal;
-        const depotMissionTotalCombinedValues = calculations.map((calc: any) => {
-            const cargo = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
-            const mission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
-            return cargo + mission;
-        });
-        // همیشه نمایش داده می‌شود برای حفظ ساختار جدول
-        mainDriverRows.push({
-            kind: 'cost',
-            category: 'هزینه‌های دپو',
-            description: 'ماموریت دپو جمع کل (ریال)',
-            unitAmount: depotMissionTotalCombined,
-            totalAmount: depotMissionTotalCombined,
-            tourValues: depotMissionTotalCombinedValues
-        });
-    }
+    // کل اجرت (fixed_allowance + excess_mission_cost + depot_kilometer_rate + depot_mission_cost)
+    const totalAllowanceValues = calculations.map((calc: any) => {
+        const fixed = parseFloat(calc.fixed_allowance || calc.fixedAllowance || '0') || 0;
+        const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || '0') || 0;
+        const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || '0') || 0;
+        const depotMission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || '0') || 0;
+        return fixed + excessMission + depotAllowance + depotMission;
+    });
+    const totalAllowance = totalAllowanceValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'جمع‌بندی',
+        description: 'کل اجرت',
+        unitAmount: totalAllowance,
+        totalAmount: totalAllowance,
+        tourValues: totalAllowanceValues
+    });
+    
+    // هزینه‌های غیر اجرت (همه هزینه‌ها به جز اجرت)
+    const nonAllowanceCostValues = calculations.map((calc: any) => {
+        const billOfLading = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || '0') || 0;
+        const food = parseFloat(calc.food_cost || calc.foodCost || '0') || 0;
+        const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || '0') || 0;
+        const toll = parseFloat(calc.toll_cost || calc.tollCost || '0') || 0;
+        const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || '0') || 0;
+        const returnBillOfLading = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0;
+        const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0;
+        const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0;
+        return billOfLading + food + fuel + toll + returnCargo + returnBillOfLading + multiUnload + depotCargoHandling;
+    });
+    const nonAllowanceCost = nonAllowanceCostValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'جمع‌بندی',
+        description: 'هزینه‌های غیر اجرت',
+        unitAmount: nonAllowanceCost,
+        totalAmount: nonAllowanceCost,
+        tourValues: nonAllowanceCostValues
+    });
+    
+    // کل هزینه تور (totalMainAll)
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'جمع‌بندی',
+        description: 'کل هزینه تور',
+        unitAmount: totalMainAll,
+        totalAmount: totalMainAll,
+        tourValues: calculations.map((calc: any, index: number) => {
+            // برای هر تور، هزینه کل همان calculateMainDriverCostGlobal است
+            return calculateMainDriverCostGlobal(calc);
+        })
+    });
 
     blocks.push({
         title: 'هزینه‌های راننده اصلی',

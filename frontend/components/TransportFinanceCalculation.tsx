@@ -13,7 +13,7 @@ import ReactDOMServer from 'react-dom/server';
 import { 
     convertToInvoiceDataFormatHorizontal, 
     renderInvoiceLayoutHorizontal, 
-    exportInvoiceToImage,
+    exportInvoiceToImage as exportInvoiceToImageHelper,
     PaymentRecord 
 } from './InvoiceImageHelper';
 
@@ -195,6 +195,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     
     // State برای دیالوگ قوانین محاسبات
     const [showCalculationRulesDialog, setShowCalculationRulesDialog] = useState(false);
+    
+    // State برای دیالوگ invoice
+    const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+    const [selectedInvoiceRecord, setSelectedInvoiceRecord] = useState<PaymentRecord | null>(null);
+    const [invoiceCalculations, setInvoiceCalculations] = useState<any[]>([]);
+    const [invoiceAnnouncements, setInvoiceAnnouncements] = useState<Map<string, any>>(new Map());
+    const invoiceRef = useRef<HTMLDivElement>(null);
     
     // بخشنامه‌ها
     const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
@@ -2051,6 +2058,129 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
     };
 
+    // تولید تصویر صورتحساب - باز کردن دیالوگ (مثل لیست پرداخت)
+    const generateInvoiceImage = async (calc: DriverCalculationRow, tour: DriverTourDetailWithCalculation) => {
+        try {
+            // دریافت اطلاعات اعلام بار
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+            
+            const announcementRes = await fetch(getApiUrl(`freight-announcements/${tour.announcementId}`), { headers });
+            if (!announcementRes.ok) {
+                throw new Error('خطا در دریافت اطلاعات اعلام بار');
+            }
+            const announcement = await announcementRes.json();
+            
+            // تبدیل tour به فرمت calculation
+            const tourAsCalc: any = {
+                announcement_id: tour.announcementId,
+                announcementId: tour.announcementId,
+                driver_id: calc.driverId,
+                driverId: calc.driverId,
+                bill_of_lading_number: tour.billOfLadingNumber,
+                billOfLadingNumber: tour.billOfLadingNumber,
+                bill_of_lading_date: tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '',
+                billOfLadingDate: tour.billOfLadingDate,
+                calculation_date: tour.calculationDate || '',
+                calculationDate: tour.calculationDate || '',
+                vehicle_plate: tour.plateNumber || '',
+                vehiclePlate: tour.plateNumber || '',
+                food_cost: tour.foodCost || 0,
+                foodCost: tour.foodCost || 0,
+                fuel_cost: tour.fuelCost || 0,
+                fuelCost: tour.fuelCost || 0,
+                toll_cost: tour.tollCost || 0,
+                tollCost: tour.tollCost || 0,
+                bill_of_lading_cost: (tour as any).billOfLadingCost || 0,
+                billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                return_cargo_cost: (tour as any).returnCargoCost || 0,
+                returnCargoCost: (tour as any).returnCargoCost || 0,
+                multi_unload_cost: (tour as any).multiUnloadCost || 0,
+                multiUnloadCost: (tour as any).multiUnloadCost || 0,
+                excess_mission_cost: (tour as any).excessMissionCost || 0,
+                excessMissionCost: (tour as any).excessMissionCost || 0,
+                fixed_allowance: (tour as any).fixedAllowance || 0,
+                fixedAllowance: (tour as any).fixedAllowance || 0,
+                depot_cargo_handling_cost: (tour as any).depotCargoHandlingCost || 0,
+                depotCargoHandlingCost: (tour as any).depotCargoHandlingCost || 0,
+                depot_kilometer_rate: (tour as any).depotKilometerRate || 0,
+                depotKilometerRate: (tour as any).depotKilometerRate || 0,
+                depot_mission_cost: (tour as any).depotMissionCost || 0,
+                depotMissionCost: (tour as any).depotMissionCost || 0,
+                depot_shipment_count: (tour as any).depotShipmentCount || 0,
+                depotShipmentCount: (tour as any).depotShipmentCount || 0,
+                depot_mission_days: (tour as any).depotMissionDays || 0,
+                depotMissionDays: (tour as any).depotMissionDays || 0,
+                depot_total_mileage: (tour as any).depotTotalMileage || 0,
+                depotTotalMileage: (tour as any).depotTotalMileage || 0,
+                helper_driver_id: (tour as any).helperDriverId || '',
+                helperDriverId: (tour as any).helperDriverId || '',
+                helper_driver_employee_id: (tour as any).helperDriverEmployeeId || '',
+                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || '',
+                helper_driver_name: (tour as any).helperDriverName || '',
+                helperDriverName: (tour as any).helperDriverName || '',
+                helper_driver_allowance: (tour as any).helperDriverAllowance || 0,
+                helperDriverAllowance: (tour as any).helperDriverAllowance || 0,
+                helper_driver_food_cost: (tour as any).helperDriverFoodCost || 0,
+                helperDriverFoodCost: (tour as any).helperDriverFoodCost || 0,
+                helper_driver_excess_mission_cost: (tour as any).helperDriverExcessMissionCost || 0,
+                helperDriverExcessMissionCost: (tour as any).helperDriverExcessMissionCost || 0,
+                advance_payment: (tour as any).advancePayment || 0,
+                advancePayment: (tour as any).advancePayment || 0,
+                queue_type: (tour as any).queueType || calc.queueType || 'porsant',
+                queueType: (tour as any).queueType || calc.queueType || 'porsant',
+                approved_kilometers: tour.approvedKilometers ?? (tour as any).approved_kilometers ?? 0,
+                approvedKilometers: tour.approvedKilometers ?? (tour as any).approved_kilometers ?? 0,
+                excess_kilometers: tour.excessKilometers ?? (tour as any).excess_kilometers ?? 0,
+                excessKilometers: tour.excessKilometers ?? (tour as any).excess_kilometers ?? 0,
+                approved_mission_days: tour.approvedMissionDays ?? (tour as any).approved_mission_days ?? 0,
+                approvedMissionDays: tour.approvedMissionDays ?? (tour as any).approved_mission_days ?? 0,
+                excess_mission_days: tour.excessMissionDays ?? (tour as any).excess_mission_days ?? 0,
+                excessMissionDays: tour.excessMissionDays ?? (tour as any).excess_mission_days ?? 0,
+            };
+            
+            // ساخت PaymentRecord
+            const driver = drivers.find(d => d.id === calc.driverId);
+            const invoiceRecord: PaymentRecord = {
+                driverId: calc.driverId,
+                employeeId: calc.employeeId,
+                driverName: calc.driverName,
+                accountNumber: (driver as any)?.account_number || (driver as any)?.accountNumber || '',
+                totalAmount: 0,
+                mainDriverAmount: 0,
+                helperDriverAmount: 0,
+                advancePayment: (tour as any).advancePayment || 0,
+                payableAmount: 0,
+                calculationDate: tour.calculationDate || '',
+            };
+            
+            // تنظیم state‌ها
+            setSelectedInvoiceRecord(invoiceRecord);
+            setInvoiceCalculations([tourAsCalc]);
+            
+            const announcementsMap = new Map();
+            announcementsMap.set(tour.announcementId, announcement);
+            setInvoiceAnnouncements(announcementsMap);
+            
+            setInvoiceDialogOpen(true);
+        } catch (err: any) {
+            console.error('❌ [generateInvoiceImage] Error:', err);
+            alert(`خطا در تولید صورتحساب: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+    
+    // دانلود عکس از دیالوگ
+    const exportInvoiceToImage = () => {
+        if (!invoiceRef.current) {
+            alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
+            return;
+        }
+        exportInvoiceToImageHelper(invoiceRef.current);
+    };
+    
     const handleExportTourInvoiceImage = async (calc: DriverCalculationRow, tour: DriverTourDetailWithCalculation) => {
         console.log('🚀🚀🚀 [handleExportTourInvoiceImage] ========== تابع اجرا شد! ==========');
         console.log('🔍 [handleExportTourInvoiceImage] tour object:', {
@@ -5151,24 +5281,44 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                     {isExpanded ? '▼' : '▶'} جزئیات
                                                                 </button>
                                                                 {tour.isDataRecorded && (
-                                                                    <button
-                                                                        onClick={async () => {
-                                                                            try {
-                                                                                const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                                if (!calc) return;
-                                                                                
-                                                                                // تولید تصویر صورتحساب برای این تور
-                                                                                await handleExportTourInvoiceImage(calc, tour);
-                                                                            } catch (err) {
-                                                                                console.error('خطا در تولید تصویر صورتحساب:', err);
-                                                                                alert('خطا در تولید تصویر صورتحساب');
-                                                                            }
-                                                                        }}
-                                                                        className="px-3 py-1.5 rounded-md text-xs transition-colors bg-purple-600 text-white hover:bg-purple-700"
-                                                                        title="دانلود تصویر صورتحساب"
-                                                                    >
-                                                                        📄 تصویر
-                                                                    </button>
+                                                                    <>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                                    if (!calc) return;
+                                                                                    
+                                                                                    // باز کردن دیالوگ تصویر صورتحساب
+                                                                                    await generateInvoiceImage(calc, tour);
+                                                                                } catch (err) {
+                                                                                    console.error('خطا در تولید صورتحساب:', err);
+                                                                                    alert('خطا در تولید صورتحساب');
+                                                                                }
+                                                                            }}
+                                                                            className="px-3 py-1.5 rounded-md text-xs transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                                                                            title="نمایش تصویر صورتحساب"
+                                                                        >
+                                                                            تصویر صورتحساب
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
+                                                                                    if (!calc) return;
+                                                                                    
+                                                                                    // تولید تصویر صورتحساب برای این تور (دانلود مستقیم)
+                                                                                    await handleExportTourInvoiceImage(calc, tour);
+                                                                                } catch (err) {
+                                                                                    console.error('خطا در تولید تصویر صورتحساب:', err);
+                                                                                    alert('خطا در تولید تصویر صورتحساب');
+                                                                                }
+                                                                            }}
+                                                                            className="px-3 py-1.5 rounded-md text-xs transition-colors bg-purple-600 text-white hover:bg-purple-700"
+                                                                            title="دانلود تصویر صورتحساب"
+                                                                        >
+                                                                            📄 تصویر
+                                                                        </button>
+                                                                    </>
                                                                 )}
                                                                 {(() => {
                                                                     const periodId = (tour as any).periodId || (tour as any).period_id;
@@ -5437,6 +5587,110 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         })}
                                     </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* دیالوگ صورتحساب */}
+            {invoiceDialogOpen && selectedInvoiceRecord && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-full max-h-[95vh] overflow-hidden flex flex-col">
+                        <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-white">
+                                صورتحساب {selectedInvoiceRecord.driverName}
+                            </h2>
+                            <div className="flex gap-2 items-center">
+                                <button
+                                    onClick={exportInvoiceToImage}
+                                    className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700"
+                                >
+                                    دانلود عکس
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setInvoiceDialogOpen(false);
+                                        setSelectedInvoiceRecord(null);
+                                        setInvoiceCalculations([]);
+                                        setInvoiceAnnouncements(new Map());
+                                    }}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                                >
+                                    بستن
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">
+                            <div 
+                                ref={invoiceRef} 
+                                data-invoice-ref="true"
+                                className="p-6 bg-white mx-auto" 
+                                dir="rtl" 
+                                style={{ 
+                                    width: '100%',
+                                    maxWidth: '100%',
+                                    minHeight: '210mm',
+                                    overflowX: 'hidden',
+                                    overflowY: 'visible',
+                                }}
+                            >
+                                {/* هدر صورتحساب */}
+                                <div className="mb-4 border-b-2 border-slate-800 pb-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h1 className="text-2xl font-bold text-slate-900 mb-2" style={{ fontSize: '20px' }}>صورتحساب هزینه</h1>
+                                            <p className="text-sm text-slate-600 mb-1" style={{ fontSize: '14px' }}>کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
+                                            <p className="text-sm text-slate-600 mb-1" style={{ fontSize: '14px' }}>نام: {selectedInvoiceRecord.driverName}</p>
+                                            <p className="text-sm text-slate-600" style={{ fontSize: '14px' }}>شماره حساب: {selectedInvoiceRecord.accountNumber || '-'}</p>
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="text-sm text-slate-600 mb-1" style={{ fontSize: '14px' }}>تاریخ تهیه: {formatJalali(new Date())}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Render invoice با استفاده از renderInvoiceLayoutHorizontal */}
+                                {(() => {
+                                    const invoiceData = convertToInvoiceDataFormatHorizontal(
+                                        selectedInvoiceRecord,
+                                        invoiceCalculations,
+                                        invoiceAnnouncements,
+                                        '',
+                                        ''
+                                    );
+                                    
+                                    // محاسبه عرض و فونت دینامیک
+                                    const numTours = invoiceData.tourData?.length || 1;
+                                    const mainBlock = invoiceData.blocks[0];
+                                    const costRows = mainBlock?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
+                                    const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
+                                    const totalColumns = 10 + costColumnsCount + 1;
+                                    
+                                    let containerWidth = 2100;
+                                    let fontSize = 13;
+                                    let cellPadding = '14px 12px';
+                                    
+                                    if (totalColumns > 20) {
+                                        containerWidth = 2400;
+                                        fontSize = 11;
+                                        cellPadding = '12px 10px';
+                                    } else if (totalColumns > 15) {
+                                        containerWidth = 2200;
+                                        fontSize = 12;
+                                        cellPadding = '13px 11px';
+                                    }
+                                    
+                                    return renderInvoiceLayoutHorizontal(
+                                        invoiceData,
+                                        selectedInvoiceRecord,
+                                        invoiceAnnouncements,
+                                        containerWidth,
+                                        fontSize,
+                                        cellPadding
+                                    );
+                                })()}
+                            </div>
                         </div>
                     </div>
                 </div>
