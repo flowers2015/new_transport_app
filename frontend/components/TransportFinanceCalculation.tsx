@@ -216,6 +216,49 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [accountNumberSortColumn, setAccountNumberSortColumn] = useState<'employeeId' | 'name' | 'accountNumber' | null>(null);
     const [accountNumberSortDirection, setAccountNumberSortDirection] = useState<'asc' | 'desc'>('asc');
     
+    // مرتب‌سازی نتایج جستجو
+    const sortedAccountNumberResults = useMemo(() => {
+        if (!accountNumberSortColumn) {
+            return accountNumberSearchResults;
+        }
+        
+        return [...accountNumberSearchResults].sort((a, b) => {
+            let aValue: string | number = '';
+            let bValue: string | number = '';
+            
+            if (accountNumberSortColumn === 'employeeId') {
+                aValue = a.employeeId || '';
+                bValue = b.employeeId || '';
+            } else if (accountNumberSortColumn === 'name') {
+                aValue = a.name || '';
+                bValue = b.name || '';
+            } else if (accountNumberSortColumn === 'accountNumber') {
+                aValue = (a as any).accountNumber || (a as any).account_number || '';
+                bValue = (b as any).accountNumber || (b as any).account_number || '';
+            }
+            
+            if (aValue < bValue) {
+                return accountNumberSortDirection === 'asc' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return accountNumberSortDirection === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
+    }, [accountNumberSearchResults, accountNumberSortColumn, accountNumberSortDirection]);
+    
+    // تابع مرتب‌سازی
+    const handleAccountNumberSort = (column: 'employeeId' | 'name' | 'accountNumber') => {
+        if (accountNumberSortColumn === column) {
+            // اگر روی همان ستون کلیک شد، جهت را تغییر بده
+            setAccountNumberSortDirection(accountNumberSortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            // اگر روی ستون دیگری کلیک شد، ستون جدید را انتخاب کن و جهت را asc کن
+            setAccountNumberSortColumn(column);
+            setAccountNumberSortDirection('asc');
+        }
+    };
+    
     // State برای دیالوگ مدیریت شهرها
     const [cityManagementDialogOpen, setCityManagementDialogOpen] = useState(false);
     
