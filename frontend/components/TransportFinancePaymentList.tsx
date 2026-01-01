@@ -4971,7 +4971,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             {/* دیالوگ صورتحساب */}
             {invoiceDialogOpen && selectedInvoiceRecord && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-full max-h-[95vh] overflow-hidden flex flex-col">
+                    <div className="bg-white rounded-xl shadow-2xl w-[98vw] max-w-[98vw] max-h-[95vh] overflow-hidden flex flex-col">
                         <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center z-10">
                             <h2 className="text-xl font-bold text-white">
                                 صورتحساب {selectedInvoiceRecord.driverName}
@@ -5006,7 +5006,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 style={{ 
                                     width: '100%',
                                     maxWidth: '100%',
-                                    minHeight: '210mm',
                                     overflowX: 'hidden',
                                     overflowY: 'visible',
                                 }}
@@ -5032,12 +5031,37 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             </div>
 
                             {/* روش 3: سبک جزئیات تور - هر تور یک ردیف با راننده اصلی و کمکی */}
+                            {(() => {
+                                // تبدیل داده‌ها به فرمت InvoiceImageHelper
+                                const invoicePaymentRecord: InvoicePaymentRecord = {
+                                    employeeId: selectedInvoiceRecord.employeeId,
+                                    driverName: selectedInvoiceRecord.driverName,
+                                    accountNumber: selectedInvoiceRecord.accountNumber || '',
+                                    startDate: startDate,
+                                    endDate: endDate
+                                };
+
+                                // تبدیل calculations به فرمت مورد نیاز InvoiceImageHelper
+                                const convertedCalculations = invoiceCalculations.map((calc: any) => {
+                                    const announcement = invoiceAnnouncements.get(calc.announcement_id || calc.announcementId);
+                                    const destinations = announcement?.destinations?.map((d: any) => d.city || '').filter(Boolean).join('، ') || '-';
+                                    
+                                    return {
+                                        ...calc,
+                                        destinations: destinations,
+                                        origin: announcement?.origin?.city || announcement?.origin || calc.origin || '-',
+                                    };
+                                });
+
+                                // تبدیل به فرمت InvoiceImageHelper
+                                const invoiceData = convertToInvoiceDataFormatHorizontal(
                                     invoicePaymentRecord,
-                                    invoiceCalculations,
+                                    convertedCalculations,
                                     invoiceAnnouncements,
                                     startDate,
                                     endDate
                                 );
+                                
                                 // محاسبه تعداد تورها
                                 const numTours = invoiceData.tourData?.length || invoiceCalculations.length;
                                 
@@ -5047,114 +5071,50 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 const costColumnsCount = costRows.filter(r => r.kind === 'cost').length;
                                 const totalColumns = 10 + costColumnsCount + 1; // 10 ستون اطلاعات اولیه + ستون‌های هزینه + جمع کل
                                 
-                                // محاسبه عرض و فونت دینامیک
-                                let containerWidth = 2100;
-                                let fontSize = 13;
-                                let cellPadding = '14px 12px';
+                                // محاسبه عرض و فونت دینامیک - متناسب با viewport
+                                // محاسبه عرض بر اساس viewport (98vw - padding)
+                                const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+                                const availableWidth = (viewportWidth * 0.98) - 64; // 98vw minus padding (32px each side)
+                                let containerWidth = Math.min(availableWidth, 1900);
+                                let fontSize = 11;
+                                let cellPadding = '8px 6px';
                                 
+                                // تنظیم فونت و padding بر اساس تعداد ستون‌ها
                                 if (totalColumns > 20) {
-                                    containerWidth = 2400;
-                                    fontSize = 11;
-                                    cellPadding = '12px 10px';
+                                    fontSize = 9;
+                                    cellPadding = '6px 4px';
                                 } else if (totalColumns > 15) {
-                                    containerWidth = 2200;
-                                    fontSize = 12;
-                                    cellPadding = '13px 11px';
+                                    fontSize = 10;
+                                    cellPadding = '7px 5px';
                                 } else if (totalColumns > 12) {
-                                    containerWidth = 2100;
-                                    fontSize = 13;
-                                    cellPadding = '14px 12px';
+                                    fontSize = 11;
+                                    cellPadding = '8px 6px';
+                                } else {
+                                    fontSize = 12;
+                                    cellPadding = '9px 7px';
                                 }
                                 
+                                // تنظیم بر اساس تعداد تورها
                                 if (numTours > 10) {
-                                    containerWidth = Math.max(containerWidth, 2400);
-                                    fontSize = Math.min(fontSize, 11);
-                                    cellPadding = '12px 10px';
+                                    fontSize = Math.min(fontSize, 9);
+                                    cellPadding = '6px 4px';
                                 } else if (numTours > 8) {
-                                    containerWidth = Math.max(containerWidth, 2200);
-                                    fontSize = Math.min(fontSize, 12);
-                                    cellPadding = '13px 11px';
+                                    fontSize = Math.min(fontSize, 10);
+                                    cellPadding = '7px 5px';
                                 }
-                                
-                                const allBlocks = invoiceData.blocks || [];
-                                const mainBlock2 = allBlocks[0];
-                                const helperBlocks = allBlocks.slice(1);
-                                const costRows2 = mainBlock2?.rows.filter(r => r.kind === 'cost' || r.kind === 'categoryHeader') || [];
-                                
-                                // ساخت ستون‌های هزینه با دسته‌بندی
-                                const costColumns: Array<{ 
-                                    label: string; 
-                                    category: string;
-                                    tourValues?: number[]; 
-                                    totalAmount?: number; 
-                                    isDepotCount?: boolean;
-                                }> = [];
-                                let currentCategory = '';
-                                
-                                costRows2.forEach(row => {
-                                    if (row.kind === 'categoryHeader') {
-                                        currentCategory = row.category || '';
-                                    } else if (row.kind === 'cost') {
-                                        costColumns.push({
-                                            label: row.description || '',
-                                            category: currentCategory,
-                                            tourValues: row.tourValues || [],
-                                            totalAmount: row.totalAmount || undefined,
-                                            isDepotCount: row.isDepotCount || false,
-                                        });
-                                    }
-                                });
-                                
-                                // ساخت دسته‌بندی‌ها
-                                const categoryGroups: Array<{ category: string; startIndex: number; count: number }> = [];
-                                let currentGroupCategory = '';
-                                let currentGroupStart = 0;
-                                
-                                costColumns.forEach((col, idx) => {
-                                    if (col.category !== currentGroupCategory) {
-                                        if (currentGroupCategory) {
-                                            categoryGroups.push({
-                                                category: currentGroupCategory,
-                                                startIndex: currentGroupStart,
-                                                count: idx - currentGroupStart
-                                            });
-                                        }
-                                        currentGroupCategory = col.category;
-                                        currentGroupStart = idx;
-                                    }
-                                });
-                                if (currentGroupCategory) {
-                                    categoryGroups.push({
-                                        category: currentGroupCategory,
-                                        startIndex: currentGroupStart,
-                                        count: costColumns.length - currentGroupStart
-                                    });
-                                }
-                                
-                                return (
-                                    <div style={{ width: '100%', overflowX: 'auto', direction: 'rtl' }}>
-                                        <div style={{
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                            width: `${containerWidth}px`,
-                                            maxWidth: '100%',
-                                            margin: '0 auto',
-                                            backgroundColor: '#ffffff',
-                                            color: '#000000',
-                                            padding: '20px',
-                                            boxSizing: 'border-box',
-                                            position: 'relative' as const,
-                                            textAlign: 'center',
-                                        }}>
-                                            {/* اطلاعات راننده */}
-                                            <div style={{
-                                                marginBottom: '16px',
-                                                paddingBottom: '12px',
-                                                borderBottom: '1px solid #000',
-                                                textAlign: 'right',
-                                                direction: 'rtl',
-                                                unicodeBidi: 'isolate',
+
+                                // Render کردن با استفاده از InvoiceImageHelper
+                                const invoiceJSX = renderInvoiceLayoutHorizontal(
+                                    invoiceData,
+                                    invoicePaymentRecord,
+                                    invoiceAnnouncements,
+                                    containerWidth,
+                                    fontSize,
+                                    cellPadding
+                                );
+
+                                return invoiceJSX;
+                            })()}
                                             }}>
                                                 <h3 style={{
                                                     fontSize: '18px',
@@ -6282,9 +6242,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                             })()}
                                         </div>
                                     </div>
-                                );
-                            })()}
-                            {false && (() => {
                                 // جدا کردن محاسبات با راننده کمکی و بدون راننده کمکی
                                 const calculationsWithoutHelper = invoiceCalculations.filter((calc: any) => {
                                     const helperId = calc.helper_driver_id || calc.helperDriverId;
