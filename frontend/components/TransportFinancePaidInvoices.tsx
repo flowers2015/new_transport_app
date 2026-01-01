@@ -4842,25 +4842,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             />
                         </div>
                         <div className="flex gap-2 items-end">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    نوع صورتحساب
-                                </label>
-                                <select
-                                    value={invoiceLayout}
-                                    onChange={(e) => setInvoiceLayout(e.target.value as InvoiceLayoutType)}
-                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-sm"
-                                >
-                                    <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 1: استاندارد حسابداری</option>
-                                    <option value={InvoiceLayoutType.COMPACT}>روش 2: فشرده</option>
-                                    <option value={InvoiceLayoutType.DETAILED}>روش 3: تفصیلی</option>
-                                </select>
-                            </div>
                             <button
-                                onClick={exportAllInvoicesToImagesZipWithRealDOMHorizontalWrapper}
+                                onClick={exportAllInvoicesToImagesZip}
                                 disabled={filteredRecords.length === 0}
                                 className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="استفاده از Real DOM + html2canvas پیشرفته (افقی - هر تور یک ردیف)"
+                                title="دانلود تصاویر صورتحساب (روش 3: سبک جزئیات تور)"
                             >
                                 دانلود تصاویر
                             </button>

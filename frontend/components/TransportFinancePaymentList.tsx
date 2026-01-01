@@ -2963,8 +2963,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     // دیالوگ قوانین
     const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
     
-    // نوع ساختار صورتحساب (پیش‌فرض: افقی)
-    const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.HORIZONTAL);
+    // نوع ساختار صورتحساب (فقط روش 3: سبک جزئیات تور)
+    const [invoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.TOUR_DETAILS_STYLE);
 
     useEffect(() => {
         console.log('🔄 [useEffect] فراخوانی fetchData');
@@ -4977,18 +4977,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 صورتحساب {selectedInvoiceRecord.driverName}
                             </h2>
                             <div className="flex gap-2 items-center">
-                                <div className="flex items-center gap-2">
-                                    <label className="text-sm text-white">نوع صورتحساب:</label>
-                                    <select
-                                        value={invoiceLayout}
-                                        onChange={(e) => setInvoiceLayout(e.target.value as InvoiceLayoutType)}
-                                        className="px-3 py-1 border border-slate-300 rounded-md text-sm bg-white text-slate-800"
-                                    >
-                                        <option value={InvoiceLayoutType.HORIZONTAL}>روش 1: افقی (هر تور یک ردیف)</option>
-                                        <option value={InvoiceLayoutType.STANDARD_ACCOUNTING}>روش 2: استاندارد حسابداری</option>
-                                        <option value={InvoiceLayoutType.TOUR_DETAILS_STYLE}>روش 3: سبک جزئیات تور (هر تور یک ردیف با راننده اصلی و کمکی)</option>
-                                    </select>
-                                </div>
                                 <button
                                     onClick={exportInvoiceToImage}
                                     className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700"
@@ -5043,17 +5031,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 </div>
                             </div>
 
-                            {/* انتخاب نوع ساختار صورتحساب */}
-                            {invoiceLayout === InvoiceLayoutType.HORIZONTAL && (() => {
-                                // استفاده از InvoiceImageHelper برای یکپارچه‌سازی
-                                const invoicePaymentRecord: InvoicePaymentRecord = {
-                                    employeeId: selectedInvoiceRecord.employeeId,
-                                    driverName: selectedInvoiceRecord.driverName,
-                                    accountNumber: selectedInvoiceRecord.accountNumber || '',
-                                    startDate: startDate,
-                                    endDate: endDate
-                                };
-                                const invoiceData = convertToInvoiceDataFormatHorizontal(
+                            {/* روش 3: سبک جزئیات تور - هر تور یک ردیف با راننده اصلی و کمکی */}
                                     invoicePaymentRecord,
                                     invoiceCalculations,
                                     invoiceAnnouncements,
@@ -6306,14 +6284,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     </div>
                                 );
                             })()}
-                            {invoiceLayout === InvoiceLayoutType.STANDARD_ACCOUNTING && renderInvoiceLayout1(
-                                selectedInvoiceRecord,
-                                invoiceCalculations,
-                                invoiceAnnouncements,
-                                startDate,
-                                endDate
-                            )}
-                            {/* منطق قدیمی - حذف شده (برای مرجع در git history) */}
                             {false && (() => {
                                 // جدا کردن محاسبات با راننده کمکی و بدون راننده کمکی
                                 const calculationsWithoutHelper = invoiceCalculations.filter((calc: any) => {
@@ -6718,7 +6688,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             })()}
 
                             {/* روش 3: سبک جزئیات تور - هر تور یک ردیف با راننده اصلی و کمکی */}
-                            {invoiceLayout === InvoiceLayoutType.TOUR_DETAILS_STYLE && (() => {
+                            {(() => {
                                 // تبدیل داده‌ها به فرمت InvoiceImageHelper
                                 const invoicePaymentRecord: InvoicePaymentRecord = {
                                     employeeId: selectedInvoiceRecord.employeeId,
