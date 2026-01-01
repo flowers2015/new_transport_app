@@ -19,6 +19,7 @@ async function saveDriverCalculation(req, res) {
       tollCost,
       loadingCost,
       returnCargoCost,
+      returnInterBranchCargoCost,
       returnBillOfLadingCost,
       multiUnloadCost,
       excessMissionCost,
@@ -172,6 +173,7 @@ async function saveDriverCalculation(req, res) {
           toll_cost INTEGER DEFAULT 0,
           loading_cost INTEGER DEFAULT 0, -- هزینه بارگیری اصلی
           return_cargo_cost INTEGER DEFAULT 0, -- هزینه بار برگشتی
+          return_inter_branch_cargo_cost INTEGER DEFAULT 0, -- هزینه بار برگشتی بین شعب
           return_bill_of_lading_cost INTEGER DEFAULT 0, -- هزینه بارنامه برگشتی
           multi_unload_cost INTEGER DEFAULT 0, -- هزینه چندجا تخلیه
           excess_mission_cost INTEGER DEFAULT 0, -- هزینه ماموریت مازاد
@@ -214,6 +216,7 @@ async function saveDriverCalculation(req, res) {
           ADD COLUMN IF NOT EXISTS bill_of_lading_date VARCHAR(10),
           ADD COLUMN IF NOT EXISTS bill_of_lading_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS return_cargo_cost INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS return_inter_branch_cargo_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS return_bill_of_lading_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS multi_unload_cost INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS excess_mission_cost INTEGER DEFAULT 0,
@@ -284,43 +287,44 @@ async function saveDriverCalculation(req, res) {
           toll_cost = $8,
           loading_cost = 0,
           return_cargo_cost = $9,
-          return_bill_of_lading_cost = $10,
-          multi_unload_cost = $11,
-          excess_mission_cost = $12,
-          helper_driver_cost = $13,
-          fixed_allowance = $14,
-          helper_driver_id = NULLIF($15, ''),
-          helper_driver_employee_id = NULLIF($16, ''),
-          helper_driver_name = NULLIF($17, ''),
-          helper_driver_allowance = $18,
-          helper_driver_food_cost = $19,
-          helper_driver_excess_mission_days = $20,
-          helper_driver_excess_mission_cost = $21,
-          helper_driver_excess_kilometers = $22,
-          food_cost = $23,
-          fuel_cost = $24,
-          tour_cost = $25,
-          total_cost = $26,
-          notes = NULLIF($27, ''),
-          queue_type = NULLIF($28, ''),
-          calculation_date = NULLIF($29, ''),
-          vehicle_code = NULLIF($30, ''),
-          vehicle_plate = NULLIF($31, ''),
-          destinations = NULLIF($32, ''),
-          multi_unload_count = $33,
-          advance_payment = $34,
-          depot_total_mileage = $35,
-          depot_shipment_count = $36,
-          depot_cargo_handling_cost = $37,
-          depot_mission_days = $38,
-          depot_kilometer_rate = $39,
-          depot_food_cost = $40,
-          depot_mission_cost = $41,
-          depot_rows = CASE WHEN $42::text = '' THEN NULL ELSE $42::jsonb END,
-          updated_by = NULLIF($43, ''),
+          return_inter_branch_cargo_cost = $10,
+          return_bill_of_lading_cost = $11,
+          multi_unload_cost = $12,
+          excess_mission_cost = $13,
+          helper_driver_cost = $14,
+          fixed_allowance = $15,
+          helper_driver_id = NULLIF($16, ''),
+          helper_driver_employee_id = NULLIF($17, ''),
+          helper_driver_name = NULLIF($18, ''),
+          helper_driver_allowance = $19,
+          helper_driver_food_cost = $20,
+          helper_driver_excess_mission_days = $21,
+          helper_driver_excess_mission_cost = $22,
+          helper_driver_excess_kilometers = $23,
+          food_cost = $24,
+          fuel_cost = $25,
+          tour_cost = $26,
+          total_cost = $27,
+          notes = NULLIF($28, ''),
+          queue_type = NULLIF($29, ''),
+          calculation_date = NULLIF($30, ''),
+          vehicle_code = NULLIF($31, ''),
+          vehicle_plate = NULLIF($32, ''),
+          destinations = NULLIF($33, ''),
+          multi_unload_count = $34,
+          advance_payment = $35,
+          depot_total_mileage = $36,
+          depot_shipment_count = $37,
+          depot_cargo_handling_cost = $38,
+          depot_mission_days = $39,
+          depot_kilometer_rate = $40,
+          depot_food_cost = $41,
+          depot_mission_cost = $42,
+          depot_rows = CASE WHEN $43::text = '' THEN NULL ELSE $43::jsonb END,
+          updated_by = NULLIF($44, ''),
           updated_at = NOW()
           -- is_paid حفظ می‌شود (اگر قبلاً TRUE بود، همچنان TRUE می‌ماند)
-        WHERE driver_id = $44 AND announcement_id = $45
+        WHERE driver_id = $45 AND announcement_id = $46
       `;
       
       const updateParams = [
@@ -333,6 +337,7 @@ async function saveDriverCalculation(req, res) {
         excessMissionDays || 0,
         validatedTollCost,
         parseNumber(returnCargoCost, 0),
+        parseNumber(returnInterBranchCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
         (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(),
@@ -560,7 +565,7 @@ async function saveDriverCalculation(req, res) {
         INSERT INTO driver_calculations (
           id, driver_id, announcement_id, bill_of_lading_number, bill_of_lading_date, bill_of_lading_cost,
           approved_kilometers, excess_kilometers, approved_mission_days, excess_mission_days,
-          toll_cost, loading_cost, return_cargo_cost, return_bill_of_lading_cost, multi_unload_cost, excess_mission_cost, helper_driver_cost, fixed_allowance,
+          toll_cost, loading_cost, return_cargo_cost, return_inter_branch_cargo_cost, return_bill_of_lading_cost, multi_unload_cost, excess_mission_cost, helper_driver_cost, fixed_allowance,
           helper_driver_id, helper_driver_employee_id, helper_driver_name, helper_driver_allowance, helper_driver_food_cost, helper_driver_excess_mission_days, helper_driver_excess_mission_cost, helper_driver_excess_kilometers,
           food_cost, fuel_cost, tour_cost, total_cost,
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, 
@@ -568,12 +573,12 @@ async function saveDriverCalculation(req, res) {
           created_by, updated_by
         ) VALUES (
           $1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8, $9, $10, 
-          $11, $12, $13, $14, $15, $16, $17, $18, 
-          NULLIF($19, ''), NULLIF($20, ''), NULLIF($21, ''), $22, $23, $24, $25, $26, 
-          $27, $28, $29, $30, 
-          NULLIF($31, ''), NULLIF($32, ''), NULLIF($33, ''), NULLIF($34, ''), NULLIF($35, ''), NULLIF($36, ''), $37, $38, 
-          $39, $40, $41, $42, $43, $44, $45, CASE WHEN $46::text = '' THEN NULL ELSE $46::jsonb END, 
-          NULLIF($47, ''), NULLIF($48, '')
+          $11, $12, $13, $14, $15, $16, $17, $18, $19, 
+          NULLIF($20, ''), NULLIF($21, ''), NULLIF($22, ''), $23, $24, $25, $26, $27, 
+          $28, $29, $30, $31, 
+          NULLIF($32, ''), NULLIF($33, ''), NULLIF($34, ''), NULLIF($35, ''), NULLIF($36, ''), NULLIF($37, ''), $38, $39, 
+          $40, $41, $42, $43, $44, $45, $46, CASE WHEN $47::text = '' THEN NULL ELSE $47::jsonb END,
+          NULLIF($48, ''), NULLIF($49, '')
         )
       `;
       
@@ -591,6 +596,7 @@ async function saveDriverCalculation(req, res) {
         validatedTollCost,
         0, // loading_cost (مقدار ثابت - در VALUES هم 0 است)
         parseNumber(returnCargoCost, 0),
+        parseNumber(returnInterBranchCargoCost, 0),
         parseNumber(returnBillOfLadingCost, 0),
         parseNumber(multiUnloadCost, 0),
         (() => { const val = Math.round(parseNumber(excessMissionCost || 0, 0)); return isNaN(val) ? 0 : val; })(),

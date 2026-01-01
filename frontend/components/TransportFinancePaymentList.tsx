@@ -2480,9 +2480,10 @@ const renderInvoiceLayout3 = (
 };
 
 // ============================================================================
-// Helper function برای تبدیل داده‌ها به فرمت افقی (مشابه TransportFinancePaidInvoices)
+// این تابع محلی حذف شده و از InvoiceImageHelper استفاده می‌شود
 // ============================================================================
-const convertToInvoiceDataFormatHorizontal = (
+// DEPRECATED: این تابع دیگر استفاده نمی‌شود - از convertToInvoiceDataFormatHorizontal از InvoiceImageHelper استفاده کنید
+const convertToInvoiceDataFormatHorizontal_DEPRECATED = (
     selectedInvoiceRecord: PaymentRecord,
     calculations: any[],
     announcementsMap: Map<string, any>,
@@ -5044,8 +5045,16 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
                             {/* انتخاب نوع ساختار صورتحساب */}
                             {invoiceLayout === InvoiceLayoutType.HORIZONTAL && (() => {
+                                // استفاده از InvoiceImageHelper برای یکپارچه‌سازی
+                                const invoicePaymentRecord: InvoicePaymentRecord = {
+                                    employeeId: selectedInvoiceRecord.employeeId,
+                                    driverName: selectedInvoiceRecord.driverName,
+                                    accountNumber: selectedInvoiceRecord.accountNumber || '',
+                                    startDate: startDate,
+                                    endDate: endDate
+                                };
                                 const invoiceData = convertToInvoiceDataFormatHorizontal(
-                                    selectedInvoiceRecord,
+                                    invoicePaymentRecord,
                                     invoiceCalculations,
                                     invoiceAnnouncements,
                                     startDate,

@@ -16,6 +16,7 @@ import {
     exportInvoiceToImage as exportInvoiceToImageHelper,
     PaymentRecord 
 } from './InvoiceImageHelper';
+import CityManagement from './CityManagement';
 
 interface TransportFinanceCalculationProps {
     currentUser: User;
@@ -75,6 +76,7 @@ interface AllowanceInputDialogData {
     fuelCost: number; // هزینه سوخت (ریال) - محاسبه خودکار
     loadingCost: number; // هزینه بارگیری اصلی
     returnCargoCost: number; // هزینه بار برگشتی (ریال)
+    returnInterBranchCargoCost: number; // هزینه بار برگشتی بین شعب (ریال)
     returnBillOfLadingCost: number; // هزینه بارنامه برگشتی (ریال)
     multiUnloadCost: number; // هزینه چندجا تخلیه (ریال)
     excessMissionCost: number; // حق ماموریت (ماموریت مازاد) (ریال)
@@ -202,6 +204,23 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [invoiceCalculations, setInvoiceCalculations] = useState<any[]>([]);
     const [invoiceAnnouncements, setInvoiceAnnouncements] = useState<Map<string, any>>(new Map());
     const invoiceRef = useRef<HTMLDivElement>(null);
+    
+    // State برای دیالوگ ویرایش شماره حساب
+    const [accountNumberDialogOpen, setAccountNumberDialogOpen] = useState(false);
+    const [accountNumberSearchTerm, setAccountNumberSearchTerm] = useState('');
+    const [accountNumberSearchResults, setAccountNumberSearchResults] = useState<Driver[]>([]);
+    const [selectedDriverForAccountEdit, setSelectedDriverForAccountEdit] = useState<Driver | null>(null);
+    const [accountNumberValue, setAccountNumberValue] = useState('');
+    const [accountNumberLoading, setAccountNumberLoading] = useState(false);
+    const [accountNumberSaving, setAccountNumberSaving] = useState(false);
+    const [accountNumberSortColumn, setAccountNumberSortColumn] = useState<'employeeId' | 'name' | 'accountNumber' | null>(null);
+    const [accountNumberSortDirection, setAccountNumberSortDirection] = useState<'asc' | 'desc'>('asc');
+    
+    // State برای دیالوگ مدیریت شهرها
+    const [cityManagementDialogOpen, setCityManagementDialogOpen] = useState(false);
+    
+    // بررسی نقش کاربر (فقط برای مالی ترابری)
+    const isTransportFinance = currentUser?.role === 'مالی ترابری' || currentUser?.role === 'TransportationFinance';
     
     // بخشنامه‌ها
     const [allowanceRegulations, setAllowanceRegulations] = useState<any[]>([]);
@@ -877,6 +896,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         loadingCost: saved.loading_cost || saved.loadingCost || 0,
                                         billOfLadingCost: saved.bill_of_lading_cost || saved.billOfLadingCost || 0,
                                         returnCargoCost: saved.return_cargo_cost || saved.returnCargoCost || 0,
+                                        returnInterBranchCargoCost: saved.return_inter_branch_cargo_cost || saved.returnInterBranchCargoCost || 0,
                                         returnBillOfLadingCost: saved.return_bill_of_lading_cost || saved.returnBillOfLadingCost || 0,
                                         multiUnloadCost: saved.multi_unload_cost || saved.multiUnloadCost || 0,
                                         excessMissionCost: saved.excess_mission_cost || saved.excessMissionCost || 0,
@@ -977,6 +997,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             loadingCost: saved.loading_cost || 0,
                             billOfLadingCost: saved.bill_of_lading_cost || 0,
                             returnCargoCost: saved.return_cargo_cost || 0,
+                            returnInterBranchCargoCost: saved.return_inter_branch_cargo_cost || 0,
                             returnBillOfLadingCost: saved.return_bill_of_lading_cost || 0,
                             multiUnloadCost: saved.multi_unload_cost || 0,
                             excessMissionCost: saved.excess_mission_cost || 0,
@@ -1789,6 +1810,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     loadingCost: saved.loading_cost || 0,
                                     billOfLadingCost: saved.bill_of_lading_cost || 0,
                                     returnCargoCost: saved.return_cargo_cost || 0,
+                                    returnInterBranchCargoCost: saved.return_inter_branch_cargo_cost || 0,
                                     returnBillOfLadingCost: saved.return_bill_of_lading_cost || 0,
                                     multiUnloadCost: saved.multi_unload_cost || 0,
                                     excessMissionCost: saved.excess_mission_cost || 0,
@@ -1934,6 +1956,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: initialFuelCost,
                 loadingCost: tour.loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 returnBillOfLadingCost: (tour as any).returnBillOfLadingCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
@@ -2025,6 +2048,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: 0,
                 loadingCost: 0,
                 returnCargoCost: 0,
+                returnInterBranchCargoCost: 0,
                 returnBillOfLadingCost: 0,
                 multiUnloadCost: 0,
                 excessMissionCost: 0,
@@ -2098,6 +2122,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
                 return_cargo_cost: (tour as any).returnCargoCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                return_inter_branch_cargo_cost: (tour as any).returnInterBranchCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 multi_unload_cost: (tour as any).multiUnloadCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excess_mission_cost: (tour as any).excessMissionCost || 0,
@@ -2181,6 +2207,100 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         exportInvoiceToImageHelper(invoiceRef.current);
     };
     
+    // جستجوی راننده برای ویرایش شماره حساب
+    const handleAccountNumberSearch = async () => {
+        if (!accountNumberSearchTerm.trim()) {
+            setAccountNumberSearchResults([]);
+            return;
+        }
+        
+        setAccountNumberLoading(true);
+        try {
+            // جستجو در لیست drivers موجود (که قبلاً fetch شده‌اند)
+            const searchLower = accountNumberSearchTerm.toLowerCase().trim();
+            const filtered = drivers.filter(driver => {
+                const employeeId = (driver.employeeId || '').toLowerCase();
+                const name = (driver.name || '').toLowerCase();
+                return employeeId.includes(searchLower) || name.includes(searchLower);
+            });
+            
+            setAccountNumberSearchResults(filtered);
+        } catch (err: any) {
+            console.error('❌ [handleAccountNumberSearch] Error:', err);
+            alert(`خطا در جستجو: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        } finally {
+            setAccountNumberLoading(false);
+        }
+    };
+    
+    // انتخاب راننده برای ویرایش شماره حساب
+    const handleSelectDriverForAccountEdit = (driver: Driver) => {
+        setSelectedDriverForAccountEdit(driver);
+        setAccountNumberValue((driver as any).accountNumber || (driver as any).account_number || '');
+    };
+    
+    // ذخیره شماره حساب
+    const handleSaveAccountNumber = async () => {
+        if (!selectedDriverForAccountEdit) {
+            alert('لطفاً یک راننده انتخاب کنید');
+            return;
+        }
+        
+        setAccountNumberSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+            
+            const response = await fetch(
+                getApiUrl(`drivers/${selectedDriverForAccountEdit.id}/account-number`),
+                {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({ accountNumber: accountNumberValue })
+                }
+            );
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'خطا در ذخیره شماره حساب');
+            }
+            
+            const updatedDriver = await response.json();
+            
+            // به‌روزرسانی لیست drivers
+            setDrivers(prevDrivers => 
+                prevDrivers.map(d => d.id === updatedDriver.id ? { ...d, accountNumber: updatedDriver.accountNumber } : d)
+            );
+            
+            alert('شماره حساب با موفقیت ذخیره شد');
+            setSelectedDriverForAccountEdit(null);
+            setAccountNumberValue('');
+            setAccountNumberSearchTerm('');
+            setAccountNumberSearchResults([]);
+        } catch (err: any) {
+            console.error('❌ [handleSaveAccountNumber] Error:', err);
+            alert(`خطا در ذخیره شماره حساب: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        } finally {
+            setAccountNumberSaving(false);
+        }
+    };
+    
+    // useEffect برای جستجوی خودکار هنگام تغییر searchTerm
+    useEffect(() => {
+        if (accountNumberSearchTerm.trim()) {
+            const timeoutId = setTimeout(() => {
+                handleAccountNumberSearch();
+            }, 300);
+            return () => clearTimeout(timeoutId);
+        } else {
+            setAccountNumberSearchResults([]);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [accountNumberSearchTerm, drivers]);
+    
     const handleExportTourInvoiceImage = async (calc: DriverCalculationRow, tour: DriverTourDetailWithCalculation) => {
         console.log('🚀🚀🚀 [handleExportTourInvoiceImage] ========== تابع اجرا شد! ==========');
         console.log('🔍 [handleExportTourInvoiceImage] tour object:', {
@@ -2230,6 +2350,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
                 return_cargo_cost: (tour as any).returnCargoCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                return_inter_branch_cargo_cost: (tour as any).returnInterBranchCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 multi_unload_cost: (tour as any).multiUnloadCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excess_mission_cost: (tour as any).excessMissionCost || 0,
@@ -2731,6 +2853,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingNumber: billOfLading,
                 billOfLadingDate: billOfLadingDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 approvedKilometers: approvedKm,
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: approvedDays,
@@ -2740,6 +2864,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 returnBillOfLadingCost: (tour as any).returnBillOfLadingCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
@@ -2819,6 +2944,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
+                returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 approvedKilometers: tour.approvedKilometers || tour.roundTripKm || 0,
                 excessKilometers: tour.excessKilometers || 0,
                 approvedMissionDays: tour.approvedMissionDays || 1,
@@ -2828,6 +2955,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelCost: initialFuelCost,
                 loadingCost: (tour as any).loadingCost || 0,
                 returnCargoCost: (tour as any).returnCargoCost || 0,
+                returnInterBranchCargoCost: (tour as any).returnInterBranchCargoCost || 0,
                 returnBillOfLadingCost: (tour as any).returnBillOfLadingCost || 0,
                 multiUnloadCost: (tour as any).multiUnloadCost || 0,
                 excessMissionCost: (tour as any).excessMissionCost || 0,
@@ -3137,6 +3265,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 tollCost: tollCostNum,
                 loadingCost: 0,
                 returnCargoCost: returnCargoCostNum,
+                returnInterBranchCargoCost: returnInterBranchCargoCostNum,
                 returnBillOfLadingCost: returnBillOfLadingCostNum,
                 multiUnloadCost: multiUnloadCostNum,
                 excessMissionCost: excessMissionCostNum,
@@ -3229,6 +3358,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             loadingCost: loadingCostNum,
                             billOfLadingCost: billOfLadingCostNum,
                             returnCargoCost: returnCargoCostNum,
+                            returnInterBranchCargoCost: returnInterBranchCargoCostNum,
                             returnBillOfLadingCost: returnBillOfLadingCostNum,
                             multiUnloadCost: multiUnloadCostNum,
                             excessMissionCost: excessMissionCostNum,
@@ -3480,6 +3610,26 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 </button>
                             )}
                         </div>
+                        
+                        {/* دکمه‌های مدیریت (فقط برای مالی ترابری) */}
+                        {isTransportFinance && (
+                            <div className="flex gap-1 items-end">
+                                <button
+                                    onClick={() => setAccountNumberDialogOpen(true)}
+                                    className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 font-medium whitespace-nowrap"
+                                    title="ویرایش شماره حساب رانندگان"
+                                >
+                                    ✏️ ویرایش شماره حساب
+                                </button>
+                                <button
+                                    onClick={() => setCityManagementDialogOpen(true)}
+                                    className="px-3 py-1.5 bg-teal-600 text-white rounded text-xs hover:bg-teal-700 font-medium whitespace-nowrap"
+                                    title="مدیریت شهرها"
+                                >
+                                    🏙️ مدیریت شهرها
+                                </button>
+                            </div>
+                        )}
                         
                         {/* دکمه toggle برای Excel */}
                         <div className="flex gap-1 items-end">
@@ -4340,6 +4490,76 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="0"
                                     />
                                 </div>
+                                            </td>
+                                            <td className="p-2 border-l border-slate-200 font-medium text-xs">هزینه بار برگشتی بین شعب</td>
+                                            <td className="p-2">
+                                                <div className="flex gap-1 items-center">
+                                                    <select
+                                                        value={(() => {
+                                                            // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
+                                                            const vehicleType = inputDialogData.vehicleType || '';
+                                                            const isTrailer = vehicleType.includes('تریلی');
+                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            
+                                                            const selectedReg = returnCargoRegulations.find(reg => 
+                                                                reg.vehicleType === vehicleTypeForApi &&
+                                                                reg.cost === (inputDialogData.returnInterBranchCargoCost || 0) &&
+                                                                reg.isActive !== false
+                                                            );
+                                                            
+                                                            return selectedReg ? `${vehicleTypeForApi}-${selectedReg.cargoType}-${selectedReg.cost}` : '';
+                                                        })()}
+                                                        onChange={(e) => {
+                                                            const selectedValue = e.target.value;
+                                                            if (selectedValue) {
+                                                                const [vehicleType, cargoType, cost] = selectedValue.split('-');
+                                                                const numValue = Number(cost) || 0;
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    returnInterBranchCargoCost: numValue
+                                                                });
+                                                            } else {
+                                                                setInputDialogData({
+                                                                    ...inputDialogData,
+                                                                    returnInterBranchCargoCost: 0
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="flex-1 min-w-0 px-1.5 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left text-xs"
+                                                    >
+                                                        <option value="">انتخاب</option>
+                                                        {(() => {
+                                                            const vehicleType = inputDialogData.vehicleType || '';
+                                                            const isTrailer = vehicleType.includes('تریلی');
+                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            
+                                                            // فیلتر کردن بر اساس نوع خودرو
+                                                            const filteredRegs = returnCargoRegulations.filter(reg => 
+                                                                reg.vehicleType === vehicleTypeForApi && reg.isActive !== false
+                                                            );
+                                                            
+                                                            // گروه‌بندی بر اساس cargoType
+                                                            const cargoTypeLabels: { [key: string]: string } = {
+                                                                'full_product': 'بار کامل محصول',
+                                                                'full_box_pallet_basket': 'بار کامل باکس/پالت/سید',
+                                                                'half': 'نیم بار'
+                                                            };
+                                                            
+                                                            return filteredRegs.map((reg, idx) => (
+                                                                <option key={idx} value={`${reg.vehicleType}-${reg.cargoType}-${reg.cost}`}>
+                                                                    {cargoTypeLabels[reg.cargoType] || reg.cargoType}
+                                                                </option>
+                                                            ));
+                                                        })()}
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={(inputDialogData.returnInterBranchCargoCost || 0) ? String(inputDialogData.returnInterBranchCargoCost).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                                                        className="w-20 px-1.5 py-1 border border-slate-300 rounded bg-slate-100 text-left cursor-not-allowed text-xs"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
                                             </td>
                                         </tr>
                                         {/* ردیف 11: هزینه بارنامه، پیش پرداخت */}
@@ -5690,6 +5910,220 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         cellPadding
                                     );
                                 })()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* دیالوگ ویرایش شماره حساب */}
+            {accountNumberDialogOpen && isTransportFinance && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="sticky top-0 bg-indigo-800 border-b border-indigo-700 p-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-white">
+                                ویرایش شماره حساب راننده
+                            </h2>
+                            <button
+                                onClick={() => {
+                                    setAccountNumberDialogOpen(false);
+                                    setAccountNumberSearchTerm('');
+                                    setAccountNumberSearchResults([]);
+                                    setSelectedDriverForAccountEdit(null);
+                                    setAccountNumberValue('');
+                                }}
+                                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {/* جستجو */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    جستجو با کد پرسنلی یا نام و نام خانوادگی:
+                                </label>
+                                <input
+                                    type="text"
+                                    value={accountNumberSearchTerm}
+                                    onChange={(e) => setAccountNumberSearchTerm(e.target.value)}
+                                    placeholder="کد پرسنلی یا نام..."
+                                    className="block w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                />
+                                {accountNumberLoading && (
+                                    <p className="text-xs text-slate-500 mt-1">در حال جستجو...</p>
+                                )}
+                            </div>
+                            
+                            {/* نتایج جستجو */}
+                            {sortedAccountNumberResults.length > 0 && !selectedDriverForAccountEdit && (
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        نتایج جستجو ({sortedAccountNumberResults.length} مورد):
+                                    </label>
+                                    <div className="max-h-60 overflow-y-auto border border-slate-300 rounded-md">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-100 sticky top-0">
+                                                <tr>
+                                                    <th 
+                                                        className="p-2 text-right border-b border-slate-300 cursor-pointer hover:bg-slate-200 select-none"
+                                                        onClick={() => handleAccountNumberSort('employeeId')}
+                                                    >
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            کد پرسنلی
+                                                            {accountNumberSortColumn === 'employeeId' && (
+                                                                <span>{accountNumberSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                            )}
+                                                            {accountNumberSortColumn !== 'employeeId' && <span className="text-gray-400">⇅</span>}
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        className="p-2 text-right border-b border-slate-300 cursor-pointer hover:bg-slate-200 select-none"
+                                                        onClick={() => handleAccountNumberSort('name')}
+                                                    >
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            نام
+                                                            {accountNumberSortColumn === 'name' && (
+                                                                <span>{accountNumberSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                            )}
+                                                            {accountNumberSortColumn !== 'name' && <span className="text-gray-400">⇅</span>}
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        className="p-2 text-right border-b border-slate-300 cursor-pointer hover:bg-slate-200 select-none"
+                                                        onClick={() => handleAccountNumberSort('accountNumber')}
+                                                    >
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            شماره حساب فعلی
+                                                            {accountNumberSortColumn === 'accountNumber' && (
+                                                                <span>{accountNumberSortDirection === 'asc' ? '↑' : '↓'}</span>
+                                                            )}
+                                                            {accountNumberSortColumn !== 'accountNumber' && <span className="text-gray-400">⇅</span>}
+                                                        </div>
+                                                    </th>
+                                                    <th className="p-2 text-center border-b border-slate-300">عملیات</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {sortedAccountNumberResults.map((driver) => (
+                                                    <tr key={driver.id} className="hover:bg-slate-50 border-b border-slate-200">
+                                                        <td className="p-2">{driver.employeeId}</td>
+                                                        <td className="p-2 font-semibold">{driver.name}</td>
+                                                        <td className="p-2 text-slate-600">
+                                                            {(driver as any).accountNumber || (driver as any).account_number || '-'}
+                                                        </td>
+                                                        <td className="p-2 text-center">
+                                                            <button
+                                                                onClick={() => handleSelectDriverForAccountEdit(driver)}
+                                                                className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700"
+                                                            >
+                                                                انتخاب
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* فرم ویرایش شماره حساب */}
+                            {selectedDriverForAccountEdit && (
+                                <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                                        ویرایش شماره حساب: {selectedDriverForAccountEdit.name}
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                کد پرسنلی:
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={selectedDriverForAccountEdit.employeeId || ''}
+                                                disabled
+                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-slate-100 text-slate-600"
+                                            />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                نام:
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={selectedDriverForAccountEdit.name || ''}
+                                                disabled
+                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-slate-100 text-slate-600"
+                                            />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                شماره حساب: <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={accountNumberValue}
+                                                onChange={(e) => setAccountNumberValue(e.target.value)}
+                                                placeholder="شماره حساب را وارد کنید..."
+                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                            />
+                                        </div>
+                                        
+                                        <div className="flex gap-2 pt-2">
+                                            <button
+                                                onClick={handleSaveAccountNumber}
+                                                disabled={accountNumberSaving}
+                                                className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {accountNumberSaving ? 'در حال ذخیره...' : 'ذخیره'}
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedDriverForAccountEdit(null);
+                                                    setAccountNumberValue('');
+                                                }}
+                                                className="px-4 py-2 bg-slate-500 text-white rounded-md text-sm hover:bg-slate-600"
+                                            >
+                                                لغو
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {!selectedDriverForAccountEdit && sortedAccountNumberResults.length === 0 && accountNumberSearchTerm && !accountNumberLoading && (
+                                <div className="text-center text-slate-500 py-8">
+                                    هیچ نتیجه‌ای یافت نشد
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* دیالوگ مدیریت شهرها */}
+            {cityManagementDialogOpen && isTransportFinance && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col">
+                        <div className="sticky top-0 bg-teal-800 border-b border-teal-700 p-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-white">
+                                مدیریت شهرها (مسیرها)
+                            </h2>
+                            <button
+                                onClick={() => setCityManagementDialogOpen(false)}
+                                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto" style={{ padding: 0 }}>
+                            <div style={{ padding: '1.5rem', minHeight: 'auto' }}>
+                                <CityManagement />
                             </div>
                         </div>
                     </div>

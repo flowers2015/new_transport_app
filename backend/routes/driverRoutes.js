@@ -4,7 +4,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { authenticateToken } = require('../middleware/authMiddleware');
-const { getDrivers, getDriverById, createDriver, updateDriver, deleteDriver, importCompanyDriversFromExcel } = require('../controllers/driverController');
+const { getDrivers, getDriverById, createDriver, updateDriver, deleteDriver, importCompanyDriversFromExcel, updateDriverAccountNumber } = require('../controllers/driverController');
+const { authorizeRole } = require('../middleware/authMiddleware');
 
 // تنظیمات multer برای آپلود فایل اکسل
 const excelStorage = multer.diskStorage({
@@ -42,6 +43,9 @@ router.post('/', authenticateToken, createDriver);
 router.post('/import-excel', authenticateToken, excelUpload.single('file'), importCompanyDriversFromExcel);
 router.put('/:id', authenticateToken, updateDriver);
 router.delete('/:id', authenticateToken, deleteDriver);
+
+// Route برای به‌روزرسانی فقط شماره حساب (فقط برای مالی ترابری)
+router.patch('/:id/account-number', authenticateToken, authorizeRole(['transport_finance']), updateDriverAccountNumber);
 
 module.exports = router;
 

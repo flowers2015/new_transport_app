@@ -18,7 +18,8 @@ async function getDrivers(req, res) {
         license_number AS "licenseNumber",
         license_type AS "licenseType",
         current_vehicle_type AS "currentVehicleType",
-        current_vehicle_plate AS "currentVehiclePlate"
+        current_vehicle_plate AS "currentVehiclePlate",
+        account_number AS "accountNumber"
       FROM drivers 
       WHERE is_deleted = false 
       ORDER BY name
@@ -63,6 +64,7 @@ async function getDriverById(req, res) {
         license_expiry_date AS "licenseExpiryDate",
         current_vehicle_type AS "currentVehicleType",
         current_vehicle_plate AS "currentVehiclePlate",
+        account_number AS "accountNumber",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM drivers 
@@ -105,7 +107,8 @@ async function createDriver(req, res) {
       licenseType,
       licenseIssueDate,
       licenseIssuePlace,
-      licenseExpiryDate
+      licenseExpiryDate,
+      accountNumber
     } = req.body;
 
     if (!employeeId || !name) {
@@ -119,9 +122,9 @@ async function createDriver(req, res) {
         birth_place, issue_place, home_phone, work_phone, mobile, postal_code,
         home_address, work_location, job_title, hire_date, termination_date,
         license_number, license_type, license_issue_date, license_issue_place,
-        license_expiry_date, created_at, updated_at
+        license_expiry_date, account_number, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW()
       ) RETURNING *`,
       [
         id, employeeId, name, fatherName || null, nationalId,
@@ -131,7 +134,8 @@ async function createDriver(req, res) {
         homeAddress || null, workLocation || null, jobTitle || null,
         hireDate ? new Date(hireDate) : null, terminationDate ? new Date(terminationDate) : null,
         licenseNumber || null, licenseType || null, licenseIssueDate ? new Date(licenseIssueDate) : null,
-        licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null
+        licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null,
+        accountNumber || null
       ]
     );
 
@@ -170,7 +174,8 @@ async function updateDriver(req, res) {
       licenseType,
       licenseIssueDate,
       licenseIssuePlace,
-      licenseExpiryDate
+      licenseExpiryDate,
+      accountNumber
     } = req.body;
 
     if (!employeeId || !name) {
@@ -183,8 +188,8 @@ async function updateDriver(req, res) {
         birth_place = $7, issue_place = $8, home_phone = $9, work_phone = $10, mobile = $11, postal_code = $12,
         home_address = $13, work_location = $14, job_title = $15, hire_date = $16, termination_date = $17,
         license_number = $18, license_type = $19, license_issue_date = $20, license_issue_place = $21,
-        license_expiry_date = $22, updated_at = NOW()
-      WHERE id = $23 AND is_deleted = false RETURNING *`,
+        license_expiry_date = $22, account_number = $23, updated_at = NOW()
+      WHERE id = $24 AND is_deleted = false RETURNING *`,
       [
         employeeId, name, fatherName || null, nationalId,
         birthDate ? new Date(birthDate) : null, idNumber || null,
@@ -193,7 +198,8 @@ async function updateDriver(req, res) {
         homeAddress || null, workLocation || null, jobTitle || null,
         hireDate ? new Date(hireDate) : null, terminationDate ? new Date(terminationDate) : null,
         licenseNumber || null, licenseType || null, licenseIssueDate ? new Date(licenseIssueDate) : null,
-        licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null, id
+        licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null,
+        accountNumber || null, id
       ]
     );
 
@@ -537,6 +543,48 @@ async function importCompanyDriversFromExcel(req, res) {
   }
 }
 
+/**
+ * Updates only the account number of a driver (for transport finance users only)
+ */
+async function updateDriverAccountNumber(req, res) {
+  try {
+    const { id } = req.params;
+    const { accountNumber } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ message: 'Driver ID is required.' });
+    }
+
+    // بررسی وجود راننده
+    const checkDriver = await pool.query(
+      `SELECT id FROM drivers WHERE id = $1 AND is_deleted = false`,
+      [id]
+    );
+
+    if (checkDriver.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found.' });
+    }
+
+    // فقط account_number را update می‌کنیم
+    const { rows } = await pool.query(
+      `UPDATE drivers 
+       SET account_number = $1, updated_at = NOW()
+       WHERE id = $2 AND is_deleted = false 
+       RETURNING id, employee_id AS "employeeId", name, account_number AS "accountNumber"`,
+      [accountNumber || null, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found or update failed.' });
+    }
+
+    res.json(rows[0]);
+  } catch (error) {
+    console.error(`Failed to update driver account number ${req.params.id}:`, error);
+    res.status(500).json({ message: 'Internal server error while updating driver account number.' });
+  }
+}
+
 module.exports = {
   getDrivers,
   getDriverById,
@@ -544,6 +592,7 @@ module.exports = {
   updateDriver,
   deleteDriver,
   importCompanyDriversFromExcel,
+  updateDriverAccountNumber
 };
 
 

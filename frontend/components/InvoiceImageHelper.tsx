@@ -30,6 +30,7 @@ export const calculateMainDriverCostGlobal = (calc: any): number => {
     const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || '0') || 0;
     const toll = parseFloat(calc.toll_cost || calc.tollCost || '0') || 0;
     const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || '0') || 0;
+    const returnInterBranchCargo = parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || '0') || 0;
     const returnBillOfLading = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0;
     const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0;
     const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || '0') || 0;
@@ -37,7 +38,7 @@ export const calculateMainDriverCostGlobal = (calc: any): number => {
     const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0;
     const depotAllowance = parseFloat(calc.depot_kilometer_rate || calc.depotKilometerRate || '0') || 0;
     const depotMission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || '0') || 0;
-    const total = billOfLading + food + fuel + toll + returnCargo + returnBillOfLading + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotAllowance + depotMission;
+    const total = billOfLading + food + fuel + toll + returnCargo + returnInterBranchCargo + returnBillOfLading + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotAllowance + depotMission;
     return isNaN(total) ? 0 : total;
 };
 
@@ -97,6 +98,7 @@ export interface InvoiceData {
         tollCost?: number;
         fixedAllowance?: number;
         returnCargoCost?: number;
+        returnInterBranchCargoCost?: number;
         excessMissionCost?: number;
         depotMissionDays?: number;
         depotCargoHandling?: number;
@@ -131,6 +133,7 @@ export const convertToInvoiceDataFormatHorizontal = (
             fuel_cost: firstCalc.fuel_cost || firstCalc.fuelCost,
             toll_cost: firstCalc.toll_cost || firstCalc.tollCost,
             return_cargo_cost: firstCalc.return_cargo_cost || firstCalc.returnCargoCost,
+            return_inter_branch_cargo_cost: firstCalc.return_inter_branch_cargo_cost || firstCalc.returnInterBranchCargoCost,
             multi_unload_cost: firstCalc.multi_unload_cost || firstCalc.multiUnloadCost,
             excess_mission_cost: firstCalc.excess_mission_cost || firstCalc.excessMissionCost,
             fixed_allowance: firstCalc.fixed_allowance || firstCalc.fixedAllowance,
@@ -236,6 +239,17 @@ export const convertToInvoiceDataFormatHorizontal = (
         unitAmount: returnCargoTotal,
         totalAmount: returnCargoTotal,
         tourValues: returnCargoValues
+    });
+
+    const returnInterBranchCargoValues = calculations.map((calc: any) => parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || '0') || 0);
+    const returnInterBranchCargoTotal = returnInterBranchCargoValues.reduce((sum, val) => sum + val, 0);
+    mainDriverRows.push({
+        kind: 'cost',
+        category: 'هزینه‌های مستقیم',
+        description: 'بار برگشتی بین شعب',
+        unitAmount: returnInterBranchCargoTotal,
+        totalAmount: returnInterBranchCargoTotal,
+        tourValues: returnInterBranchCargoValues
     });
 
     const returnBillOfLadingValues = calculations.map((calc: any) => parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0);
@@ -399,10 +413,11 @@ export const convertToInvoiceDataFormatHorizontal = (
         const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || '0') || 0;
         const toll = parseFloat(calc.toll_cost || calc.tollCost || '0') || 0;
         const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || '0') || 0;
+        const returnInterBranchCargo = parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || '0') || 0;
         const returnBillOfLading = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0;
         const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0;
         const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0;
-        return billOfLading + food + fuel + toll + returnCargo + returnBillOfLading + multiUnload + depotCargoHandling;
+        return billOfLading + food + fuel + toll + returnCargo + returnInterBranchCargo + returnBillOfLading + multiUnload + depotCargoHandling;
     });
     const nonAllowanceCost = nonAllowanceCostValues.reduce((sum, val) => sum + val, 0);
     mainDriverRows.push({
@@ -572,6 +587,7 @@ export const convertToInvoiceDataFormatHorizontal = (
         const multiUnloadCost = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
         const tollCost = parseFloat(calc.toll_cost || calc.tollCost || 0);
         const returnCargoCost = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
+        const returnInterBranchCargoCost = parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0);
         const excessMissionCost = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
         
         const tourObj = {
@@ -594,6 +610,7 @@ export const convertToInvoiceDataFormatHorizontal = (
             tollCost,
             fixedAllowance,
             returnCargoCost,
+            returnInterBranchCargoCost,
             excessMissionCost,
             // هزینه‌های دپو
             depotMissionDays,
@@ -777,6 +794,7 @@ export const renderInvoiceLayoutHorizontal = (
         { label: 'هزینه عوارض آزاد راهی', getValue: (tour: any) => (tour?.tollCost || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.tollCost || 0), 0).toLocaleString('fa-IR') || '0' },
         { label: 'اجرت ثابت', getValue: (tour: any) => (tour?.fixedAllowance || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.fixedAllowance || 0), 0).toLocaleString('fa-IR') || '0' },
         { label: 'هزینه بار برگشتی', getValue: (tour: any) => (tour?.returnCargoCost || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.returnCargoCost || 0), 0).toLocaleString('fa-IR') || '0' },
+        { label: 'هزینه بار برگشتی بین شعب', getValue: (tour: any) => (tour?.returnInterBranchCargoCost || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.returnInterBranchCargoCost || 0), 0).toLocaleString('fa-IR') || '0' },
         { label: 'ماموریت مازاد', getValue: (tour: any) => (tour?.excessMissionCost || 0).toLocaleString('fa-IR'), getTotal: () => invoiceData.tourData?.reduce((sum, t) => sum + (t.excessMissionCost || 0), 0).toLocaleString('fa-IR') || '0' },
     ];
     

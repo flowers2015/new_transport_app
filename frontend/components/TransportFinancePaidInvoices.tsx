@@ -7,6 +7,13 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
+import { 
+    convertToInvoiceDataFormatHorizontal, 
+    renderInvoiceLayoutHorizontal,
+    calculateMainDriverCostGlobal,
+    calculateHelperDriverCostGlobal,
+    PaymentRecord as InvoicePaymentRecord
+} from './InvoiceImageHelper';
 
 // انواع ساختار صورتحساب
 enum InvoiceLayoutType {
@@ -56,27 +63,8 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.STANDARD_ACCOUNTING);
 
     // توابع محاسبه هزینه‌ها (مشترک برای همه layoutها)
-    const calculateMainDriverCostGlobal = (calc: any): number => {
-        const food = parseFloat(calc.food_cost || calc.foodCost || 0);
-        const fuel = parseFloat(calc.fuel_cost || calc.fuelCost || 0);
-        const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
-        const bill = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || 0);
-        const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
-        const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
-        const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
-        const fixedAllowance = parseFloat(calc.fixed_allowance || calc.fixedAllowance || 0);
-        // هزینه‌های دپو
-        const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
-        const depotMissionCost = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
-        return food + fuel + toll + bill + returnCargo + multiUnload + excessMission + fixedAllowance + depotCargoHandling + depotMissionCost;
-    };
-
-    const calculateHelperDriverCostGlobal = (calc: any): number => {
-        const helperAllowance = parseFloat(calc.helper_driver_allowance || calc.helperDriverAllowance || 0);
-        const helperFoodCost = parseFloat(calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0);
-        const helperExcessMissionCost = parseFloat(calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0);
-        return helperAllowance + helperFoodCost + helperExcessMissionCost;
-    };
+    // استفاده از توابع از InvoiceImageHelper برای یکپارچه‌سازی
+    // calculateMainDriverCostGlobal و calculateHelperDriverCostGlobal از InvoiceImageHelper استفاده می‌شوند
 
     useEffect(() => {
         fetchData();
@@ -1992,10 +1980,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             const helperId = calc.helper_driver_id || calc.helperDriverId;
             const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
             const helperName = calc.helper_driver_name || calc.helperDriverName || '';
-            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
-            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
-            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
-            const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+            const helperTotal = calculateHelperDriverCostGlobal(calc);
             
             if (helperId && helperEmployeeId && helperTotal > 0) {
                 if (!helperCostsByEmployee.has(helperEmployeeId)) {
@@ -4730,10 +4715,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         calculations.forEach((calc: any) => {
             const helperId = calc.helper_driver_id || calc.helperDriverId;
             const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
-            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
-            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
-            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
-            const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+            const helperTotal = calculateHelperDriverCostGlobal(calc);
             
             if (helperId && helperEmployeeId && helperTotal > 0) {
                 if (!helperCostsByEmployee.has(helperEmployeeId)) {
@@ -4783,6 +4765,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             { key: 'fuel', category: 'هزینه‌های مستقیم', label: 'سوخت', getValue: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.fuel_cost || calc.fuelCost || 0) },
             { key: 'toll', category: 'هزینه‌های مستقیم', label: 'عوارض', getValue: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.toll_cost || calc.tollCost || 0) },
             { key: 'return_cargo', category: 'هزینه‌های مستقیم', label: 'بار برگشتی', getValue: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0) },
+            { key: 'return_inter_branch_cargo', category: 'هزینه‌های مستقیم', label: 'بار برگشتی بین شعب', getValue: (calc: any) => parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0) },
             { key: 'multi_unload', category: 'هزینه‌های مستقیم', label: 'چندجا تخلیه', getValue: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0) },
             { key: 'excess_mission', category: 'هزینه‌های مستقیم', label: 'ماموریت مازاد', getValue: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0), getUnitPrice: (calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0) },
             { key: 'depot_shipment_count', category: 'هزینه‌های دپو', label: 'تعداد بار دپو', getValue: (calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0), getUnitPrice: (calc: any) => parseFloat(calc.depot_shipment_count || calc.depotShipmentCount || 0) },
@@ -4917,10 +4900,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             const helperId = calc.helper_driver_id || calc.helperDriverId;
             const helperEmployeeId = calc.helper_driver_employee_id || calc.helperDriverEmployeeId || '';
             const helperName = calc.helper_driver_name || calc.helperDriverName || '';
-            const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
-            const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
-            const helperExcessMissionCost = calc.helper_driver_excess_mission_cost || calc.helperDriverExcessMissionCost || 0;
-            const helperTotal = helperAllowance + helperFoodCost + helperExcessMissionCost;
+            const helperTotal = calculateHelperDriverCostGlobal(calc);
             
             if (helperId && helperEmployeeId && helperTotal > 0) {
                 if (!helperDriversMap.has(helperEmployeeId)) {

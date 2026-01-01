@@ -35,16 +35,18 @@ const upload = multer({
 // همه route ها نیاز به احراز هویت دارند
 router.use(authenticateToken);
 
-// CRUD routes
+const { authorizeRole } = require('../middleware/authMiddleware');
+
+// CRUD routes - فقط admin و transport_finance دسترسی دارند
 router.get('/', getCities);
 router.get('/:id', getCityById);
-router.post('/', createCity);
-router.put('/:id', updateCity);
-router.delete('/:id', deleteCity);
+router.post('/', authorizeRole(['admin', 'transport_finance']), createCity);
+router.put('/:id', authorizeRole(['admin', 'transport_finance']), updateCity);
+router.delete('/:id', authorizeRole(['admin', 'transport_finance']), deleteCity);
 
-// Import routes
-router.post('/import-excel', upload.single('file'), importCitiesFromExcel);
-router.post('/import-json', importCitiesFromJson);
+// Import routes - فقط admin و transport_finance دسترسی دارند
+router.post('/import-excel', authorizeRole(['admin', 'transport_finance']), upload.single('file'), importCitiesFromExcel);
+router.post('/import-json', authorizeRole(['admin', 'transport_finance']), importCitiesFromJson);
 
 // Export routes
 router.get('/export/json', exportCitiesToJson);
