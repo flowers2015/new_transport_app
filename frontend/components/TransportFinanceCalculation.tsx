@@ -13,7 +13,6 @@ import ReactDOMServer from 'react-dom/server';
 import { 
     convertToInvoiceDataFormatHorizontal, 
     renderInvoiceLayoutHorizontal, 
-    exportInvoiceToImage as exportInvoiceToImageHelper,
     PaymentRecord 
 } from './InvoiceImageHelper';
 import CityManagement from './CityManagement';
@@ -2241,13 +2240,123 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
     };
     
-    // دانلود عکس از دیالوگ
+    // دانلود عکس از دیالوگ - استفاده از همان روش TransportFinancePaymentList
     const exportInvoiceToImage = async () => {
         if (!invoiceRef.current || !selectedInvoiceRecord) {
             alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
             return;
         }
-        await exportInvoiceToImageHelper(invoiceRef.current, selectedInvoiceRecord.driverName);
+
+        try {
+            console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با روش DOM');
+            
+            // ایجاد temp div برای render کردن محتوا
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.top = '0';
+            tempDiv.style.opacity = '1';
+            tempDiv.style.visibility = 'visible';
+            tempDiv.style.backgroundColor = '#ffffff';
+            document.body.appendChild(tempDiv);
+
+            try {
+                // Clone کردن محتوای invoiceRef به temp div
+                const clonedContent = invoiceRef.current.cloneNode(true) as HTMLElement;
+                tempDiv.appendChild(clonedContent);
+                
+                // تنظیم استایل‌های temp div
+                const invoiceElement = tempDiv.querySelector('[data-invoice-ref="true"]') as HTMLElement;
+                if (invoiceElement) {
+                    invoiceElement.style.width = '100%';
+                    invoiceElement.style.maxWidth = '100%';
+                    invoiceElement.style.margin = '0 auto';
+                    invoiceElement.style.overflow = 'visible';
+                    invoiceElement.style.visibility = 'visible';
+                    invoiceElement.style.opacity = '1';
+                }
+                
+                // انتظار برای render کامل
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // محاسبه ارتفاع دینامیک
+                const calculatedHeight = tempDiv.scrollHeight || 2000;
+                
+                // گرفتن تصویر با html2canvas
+                const canvas = await html2canvas(tempDiv, {
+                    scale: 1.5,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    logging: false,
+                    width: tempDiv.scrollWidth,
+                    height: calculatedHeight,
+                    onclone: (clonedDoc) => {
+                        // اضافه کردن style tag
+                        const styleTag = clonedDoc.createElement('style');
+                        styleTag.textContent = `
+                            * {
+                                box-sizing: border-box;
+                                font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif !important;
+                            }
+                            tbody tr td:first-child {
+                                color: #000000 !important;
+                            }
+                            tbody tr td:first-child * {
+                                color: #000000 !important;
+                            }
+                            tbody tr[style*="background-color: rgb(59, 130, 246)"] td:first-child,
+                            tbody tr[style*="background-color: #3b82f6"] td:first-child {
+                                color: #ffffff !important;
+                            }
+                        `;
+                        clonedDoc.head.appendChild(styleTag);
+                        
+                        // اعمال استایل‌های نهایی در cloned document
+                        const clonedInvoice = clonedDoc.querySelector('[data-invoice-ref="true"]') as HTMLElement || 
+                                             clonedDoc.querySelector('[dir="rtl"]') as HTMLElement;
+                        if (clonedInvoice) {
+                            clonedInvoice.style.width = 'auto';
+                            clonedInvoice.style.maxWidth = '90%';
+                            clonedInvoice.style.margin = '0 auto';
+                            clonedInvoice.style.overflow = 'visible';
+                            clonedInvoice.style.visibility = 'visible';
+                            clonedInvoice.style.opacity = '1';
+                        }
+                    }
+                });
+
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    console.error('❌ [exportInvoiceToImage] Canvas خالی');
+                    document.body.removeChild(tempDiv);
+                    alert('خطا در تولید عکس. لطفاً دوباره تلاش کنید.');
+                    return;
+                }
+
+                // تبدیل به PNG با کیفیت بالا
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                
+                // پاک کردن temp div
+                document.body.removeChild(tempDiv);
+                
+                // ایجاد لینک دانلود
+                const link = document.createElement('a');
+                link.download = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.png`;
+                link.href = imgData;
+                link.click();
+                
+                console.log('✅ [exportInvoiceToImage] عکس با موفقیت تولید شد');
+            } catch (err: any) {
+                console.error('❌ [exportInvoiceToImage] Error:', err);
+                if (document.body.contains(tempDiv)) {
+                    document.body.removeChild(tempDiv);
+                }
+                throw err;
+            }
+        } catch (err: any) {
+            console.error('❌ [exportInvoiceToImage] Error:', err);
+            alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
     };
     
     // جستجوی راننده برای ویرایش شماره حساب
