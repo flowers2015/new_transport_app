@@ -2242,12 +2242,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     };
     
     // دانلود عکس از دیالوگ
-    const exportInvoiceToImage = () => {
-        if (!invoiceRef.current) {
+    const exportInvoiceToImage = async () => {
+        if (!invoiceRef.current || !selectedInvoiceRecord) {
             alert('خطا: محتوای صورتحساب یافت نشد. لطفاً ابتدا صورتحساب را باز کنید.');
             return;
         }
-        exportInvoiceToImageHelper(invoiceRef.current);
+        await exportInvoiceToImageHelper(invoiceRef.current, selectedInvoiceRecord.driverName);
     };
     
     // جستجوی راننده برای ویرایش شماره حساب
@@ -4534,8 +4534,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     />
                                 </div>
                                             </td>
+                                        </tr>
+                                        {/* ردیف 11: هزینه بار برگشتی بین شعب */}
+                                        <tr className="border-b border-slate-200 hover:bg-slate-50">
                                             <td className="p-2 border-l border-slate-200 font-medium text-xs">هزینه بار برگشتی بین شعب</td>
-                                            <td className="p-2">
+                                            <td className="p-2 border-l border-slate-200">
                                                 <div className="flex gap-1 items-center">
                                                     <select
                                                         value={(() => {
@@ -4604,8 +4607,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     />
                                                 </div>
                                             </td>
+                                            <td className="p-2 border-l border-slate-200"></td>
+                                            <td className="p-2"></td>
                                         </tr>
-                                        {/* ردیف 11: هزینه بارنامه، پیش پرداخت */}
+                                        {/* ردیف 12: هزینه بارنامه، پیش پرداخت */}
                                         <tr className="border-b border-slate-200 hover:bg-slate-50">
                                             <td className="p-2 border-l border-slate-200 font-medium">هزینه بارنامه (لندی گراف و ..) (ریال)</td>
                                             <td className="p-2 border-l border-slate-200">
@@ -5562,24 +5567,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                             title="نمایش تصویر صورتحساب"
                                                                         >
                                                                             تصویر صورتحساب
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={async () => {
-                                                                                try {
-                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                                    if (!calc) return;
-                                                                                    
-                                                                                    // تولید تصویر صورتحساب برای این تور (دانلود مستقیم)
-                                                                                    await handleExportTourInvoiceImage(calc, tour);
-                                                                                } catch (err) {
-                                                                                    console.error('خطا در تولید تصویر صورتحساب:', err);
-                                                                                    alert('خطا در تولید تصویر صورتحساب');
-                                                                                }
-                                                                            }}
-                                                                            className="px-3 py-1.5 rounded-md text-xs transition-colors bg-purple-600 text-white hover:bg-purple-700"
-                                                                            title="دانلود تصویر صورتحساب"
-                                                                        >
-                                                                            📄 تصویر
                                                                         </button>
                                                                     </>
                                                                 )}

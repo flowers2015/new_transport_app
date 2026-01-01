@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
+import * as domtoimage from 'dom-to-image';
 import { 
     convertToInvoiceDataFormatHorizontal, 
     renderInvoiceLayoutHorizontal,
@@ -699,9 +700,9 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         }
     };
 
-    // تولید ZIP از تصاویر صورتحساب‌های پرداخت شده (تک به تک)
+    // تولید ZIP از تصاویر صورتحساب‌های پرداخت شده (یک تصویر برای هر تور)
     const exportAllInvoicesToImagesZip = async () => {
-        console.log('🖼️ [ZIP_IMAGES] ========== شروع تولید ZIP تصاویر ==========');
+        console.log('🖼️ [ZIP_IMAGES] ========== شروع تولید ZIP تصاویر (یک تصویر برای هر تور) ==========');
         console.log('🖼️ [ZIP_IMAGES] filteredRecords.length:', filteredRecords.length);
         
         if (filteredRecords.length === 0) {
@@ -716,6 +717,12 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 'Content-Type': 'application/json',
             };
 
+            // دریافت اطلاعات رانندگان برای accountNumber
+            const driversRes = await fetch(getApiUrl('drivers'), { headers });
+            const driversData = await driversRes.json();
+            const driversArray = Array.isArray(driversData) ? driversData : [];
+            const driversMap = new Map(driversArray.map((d: Driver) => [d.id, d]));
+
             // ایجاد ZIP
             const zip = new JSZip();
             let successCount = 0;
@@ -729,14 +736,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                 console.log(`🖼️ [ZIP_IMAGES] Driver: ${record.driverName}, Employee ID: ${record.employeeId}`);
                 
                 try {
-                    // دریافت محاسبات پرداخت شده مربوط به این راننده با retry logic
+                    // دریافت محاسبات پرداخت شده مربوط به این راننده
                     const calcDateFrom = record.calculationDateFrom || '';
                     const calcDateTo = record.calculationDateTo || '';
                     let calculationsUrl = `driver-calculations/paid?driverId=${record.driverId}`;
                     if (calcDateFrom) calculationsUrl += `&startDate=${calcDateFrom}`;
                     if (calcDateTo) calculationsUrl += `&endDate=${calcDateTo}`;
                     
-                    // Retry logic برای خطاهای شبکه
+                    // Retry logic
                     let calculationsResponse;
                     let retries = 3;
                     let lastError: any = null;
@@ -744,7 +751,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         try {
                             calculationsResponse = await fetch(getApiUrl(calculationsUrl), { 
                                 headers,
-                                signal: AbortSignal.timeout(30000) // 30 second timeout
+                                signal: AbortSignal.timeout(30000)
                             });
                             if (calculationsResponse && calculationsResponse.ok) {
                                 lastError = null;
@@ -757,7 +764,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         }
                         retries--;
                         if (retries > 0 && lastError) {
-                            await new Promise(resolve => setTimeout(resolve, 2000)); // صبر 2 ثانیه
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                         }
                     }
                     
@@ -775,7 +782,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         continue;
                     }
                     
-                    // دریافت اطلاعات اعلام بار با timeout و retry
+                    // دریافت اطلاعات اعلام بار
                     const announcementsMap = new Map<string, any>();
                     await Promise.all(calculationsArray.map(async (calc: any) => {
                         const announcementId = calc.announcement_id || calc.announcementId;
@@ -785,7 +792,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                 try {
                                     const annRes = await fetch(getApiUrl(`freight-announcements/${announcementId}`), { 
                                         headers,
-                                        signal: AbortSignal.timeout(15000) // 15 second timeout
+                                        signal: AbortSignal.timeout(15000)
                                     });
                                     if (annRes.ok) {
                                         const annData = await annRes.json();
@@ -804,602 +811,205 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         }
                     }));
 
-                    // تولید HTML صورتحساب
-                    const invoiceLayout = InvoiceLayoutType.STANDARD_ACCOUNTING;
-                    const htmlContent = renderInvoiceHTML(record, calculationsArray, announcementsMap, calcDateFrom, calcDateTo, invoiceLayout);
+                    // تاریخ پرداخت (شمسی بدون /)
+                    const paymentDateClean = record.paymentDate.replace(/\//g, '');
                     
-                    // ایجاد div موقت برای render کردن HTML - با ارتفاع دینامیک
-                    const tempDiv = document.createElement('div');
-                    tempDiv.id = `temp-invoice-image-${i}`;
-                    tempDiv.style.position = 'fixed';
-                    tempDiv.style.top = '0';
-                    tempDiv.style.left = '-9999px'; // خارج از viewport اما قابل مشاهده
-                    tempDiv.style.width = 'auto'; // عرض دینامیک
-                    tempDiv.style.maxWidth = 'none'; // بدون محدودیت
-                    tempDiv.style.height = 'auto'; // ارتفاع دینامیک
-                    tempDiv.style.minHeight = 'auto';
-                    tempDiv.style.backgroundColor = '#ffffff';
-                    tempDiv.style.padding = '30px 40px 20px 40px'; // padding کمتر در پایین برای کاهش فاصله
-                    tempDiv.style.margin = '0';
-                    tempDiv.style.boxSizing = 'border-box';
-                    tempDiv.style.overflow = 'visible'; // مهم: visible برای render کامل
-                    tempDiv.style.zIndex = '999999';
-                    tempDiv.style.visibility = 'visible';
-                    tempDiv.style.opacity = '1';
-                    tempDiv.style.pointerEvents = 'none';
-                    tempDiv.style.display = 'block'; // تغییر از flex به block برای محاسبه دقیق‌تر
-                    document.body.appendChild(tempDiv);
+                    // برای هر تور (calculation) یک تصویر جداگانه تولید می‌کنیم
+                    for (let tourIndex = 0; tourIndex < calculationsArray.length; tourIndex++) {
+                        const calc = calculationsArray[tourIndex];
+                        const tourNumber = tourIndex + 1;
+                        
+                        console.log(`🖼️ [ZIP_IMAGES] ========== تولید تصویر تور ${tourNumber}/${calculationsArray.length} برای ${record.driverName} ==========`);
+                        
+                        try {
+                            // ساخت PaymentRecord برای این تور
+                            const driver = driversMap.get(record.driverId);
+                            const invoicePaymentRecord: InvoicePaymentRecord = {
+                                employeeId: record.employeeId,
+                                driverName: record.driverName,
+                                accountNumber: record.accountNumber || (driver as any)?.account_number || (driver as any)?.accountNumber || '',
+                                startDate: calcDateFrom,
+                                endDate: calcDateTo
+                            };
+                            
+                            // فقط این تور را در array قرار می‌دهیم
+                            const singleCalcArray = [calc];
+                            
+                            // تبدیل به فرمت InvoiceData
+                            const invoiceData = convertToInvoiceDataFormatHorizontal(
+                                invoicePaymentRecord,
+                                singleCalcArray,
+                                announcementsMap,
+                                calcDateFrom,
+                                calcDateTo
+                            );
+                            
+                            // رندر کردن JSX
+                            const invoiceJSX = renderInvoiceLayoutHorizontal(
+                                invoiceData,
+                                invoicePaymentRecord,
+                                announcementsMap,
+                                1600,
+                                13,
+                                '14px 12px'
+                            );
+                            
+                            // تبدیل JSX به HTML string با استفاده از React.createElement
+                            const headerHTML = `
+                                <div style="margin-bottom: 20px; border-bottom: 2px solid #1e293b; padding-bottom: 10px;">
+                                    <h1 style="font-size: 20px; font-weight: bold; margin-bottom: 10px; text-align: right;">صورتحساب هزینه</h1>
+                                    <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                                        <div>
+                                            <p style="margin: 5px 0;">کد پرسنلی: ${record.employeeId}</p>
+                                            <p style="margin: 5px 0;">نام: ${record.driverName}</p>
+                                            <p style="margin: 5px 0;">شماره حساب: ${invoicePaymentRecord.accountNumber || '-'}</p>
+                                        </div>
+                                        <div style="text-align: left;">
+                                            <p style="margin: 5px 0;">تاریخ تهیه: ${formatJalali(new Date())}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            const invoiceJSXString = ReactDOMServer.renderToStaticMarkup(invoiceJSX);
+                            
+                            // ساخت HTML کامل
+                            const htmlContent = `
+                                <div dir="rtl" data-invoice-ref="true" style="width: 100%; max-width: 100%; padding: 20px; background-color: #ffffff; font-family: 'Vazirmatn', 'Tahoma', sans-serif;">
+                                    ${headerHTML}
+                                    ${invoiceJSXString}
+                                </div>
+                            `;
                     
-                    tempDiv.innerHTML = htmlContent;
-                    
-                    // بررسی اینکه محتوا اضافه شده است
-                    if (!tempDiv.innerHTML || tempDiv.innerHTML.length < 100) {
-                        console.error(`❌ [ZIP_IMAGES] HTML content is empty for ${record.driverName}`);
-                        document.body.removeChild(tempDiv);
-                        continue;
-                    }
+                            // ایجاد div موقت برای render کردن HTML
+                            const tempDivId = `temp-invoice-image-${i}-${tourIndex}`;
+                            const tempDiv = document.createElement('div');
+                            tempDiv.id = tempDivId;
+                            tempDiv.style.position = 'fixed';
+                            tempDiv.style.top = '0';
+                            tempDiv.style.left = '-9999px';
+                            tempDiv.style.width = 'auto';
+                            tempDiv.style.maxWidth = 'none';
+                            tempDiv.style.height = 'auto';
+                            tempDiv.style.minHeight = 'auto';
+                            tempDiv.style.backgroundColor = '#ffffff';
+                            tempDiv.style.padding = '30px 40px 20px 40px';
+                            tempDiv.style.margin = '0';
+                            tempDiv.style.boxSizing = 'border-box';
+                            tempDiv.style.overflow = 'visible';
+                            tempDiv.style.zIndex = '999999';
+                            tempDiv.style.visibility = 'visible';
+                            tempDiv.style.opacity = '1';
+                            tempDiv.style.pointerEvents = 'none';
+                            tempDiv.style.display = 'block';
+                            document.body.appendChild(tempDiv);
+                            
+                            tempDiv.innerHTML = htmlContent;
+                            
+                            // بررسی اینکه محتوا اضافه شده است
+                            if (!tempDiv.innerHTML || tempDiv.innerHTML.length < 100) {
+                                console.error(`❌ [ZIP_IMAGES] HTML content is empty for ${record.driverName} tour ${tourNumber}`);
+                                document.body.removeChild(tempDiv);
+                                continue;
+                            }
                     
                     // صبر برای render شدن محتوا و لود شدن فونت‌ها
                     await new Promise(resolve => setTimeout(resolve, 1500));
                     
-                    // پیدا کردن div اصلی صورتحساب
-                    const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.querySelector('[data-invoice-ref="true"]') || tempDiv.firstElementChild;
-                    
-                    if (!invoiceDiv || invoiceDiv === tempDiv) {
-                        console.error(`❌ [ZIP_IMAGES] Cannot find invoice div for ${record.driverName}`);
-                        document.body.removeChild(tempDiv);
-                        continue;
-                    }
-                    
-                    // بررسی اینکه محتوا واقعاً render شده است
-                    const hasContent = invoiceDiv.textContent && invoiceDiv.textContent.trim().length > 0;
-                    const tables = tempDiv.querySelectorAll('table');
-                    const hasTables = tables.length > 0;
-                    
-                    if (!hasContent || !hasTables) {
-                        console.error(`❌ [ZIP_IMAGES] Content not rendered properly for ${record.driverName}`);
-                        document.body.removeChild(tempDiv);
-                        continue;
-                    }
-                    
-                    // بررسی اینکه همه جداول کامل هستند
-                    let allTablesComplete = true;
-                    tables.forEach((table, idx) => {
-                        const tableEl = table as HTMLElement;
-                        const tableHeight = tableEl.scrollHeight || tableEl.offsetHeight;
-                        const hasRows = tableEl.querySelectorAll('tr').length > 0;
-                        if (!hasRows || tableHeight === 0) {
-                            console.warn(`⚠️ [ZIP_IMAGES] Table ${idx + 1} may be incomplete`);
-                            allTablesComplete = false;
-                        }
-                    });
-                    
-                    console.log(`✅ [ZIP_IMAGES] Content rendered: ${hasContent}, Tables: ${hasTables}, All complete: ${allTablesComplete}`);
-                    
-                    // اعمال استایل‌های موقت - دقیقاً مثل exportInvoiceToImage
-                    const invoiceElement = invoiceDiv as HTMLElement;
-                    const originalMaxWidth = invoiceElement.style.maxWidth;
-                    const originalWidth = invoiceElement.style.width;
-                    const originalMargin = invoiceElement.style.margin;
-                    
-                    // اعمال محدودیت عرض موقت - مثل exportInvoiceToImage
-                    invoiceElement.style.maxWidth = '90%';
-                    invoiceElement.style.width = 'auto';
-                    invoiceElement.style.margin = '0 auto';
-                    invoiceElement.style.overflow = 'visible';
-                    invoiceElement.style.visibility = 'visible';
-                    invoiceElement.style.opacity = '1';
-                    
-                    // صبر برای اعمال استایل‌ها
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    
-                    // محاسبه ابعاد واقعی - با بررسی کامل همه عناصر
-                    // Force reflow برای اطمینان از محاسبه صحیح ابعاد
-                    tempDiv.offsetHeight;
-                    invoiceElement.offsetHeight;
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                    
-                    // محاسبه ارتفاع کامل - شامل همه جداول و footer با دقت بیشتر
-                    let totalHeight = 0;
-                    let totalWidth = 0;
-                    
-                    // ارتفاع همه جداول - با بررسی دقیق‌تر
-                    tables.forEach((table, idx) => {
-                        const tableEl = table as HTMLElement;
-                        // محاسبه ارتفاع از scrollHeight و offsetHeight
-                        const tableHeight = Math.max(
-                            tableEl.scrollHeight || 0,
-                            tableEl.offsetHeight || 0,
-                            tableEl.clientHeight || 0,
-                            tableEl.getBoundingClientRect().height || 0
-                        );
-                        const tableWidth = Math.max(
-                            tableEl.scrollWidth || 0,
-                            tableEl.offsetWidth || 0,
-                            tableEl.clientWidth || 0
-                        );
-                        
-                        // محاسبه ارتفاع واقعی ردیف‌ها
-                        const rows = tableEl.querySelectorAll('tr');
-                        let rowsHeight = 0;
-                        rows.forEach((row) => {
-                            const rowEl = row as HTMLElement;
-                            rowsHeight += Math.max(
-                                rowEl.scrollHeight || 0,
-                                rowEl.offsetHeight || 0,
-                                rowEl.getBoundingClientRect().height || 0
-                            );
-                        });
-                        
-                        // استفاده از بیشترین مقدار
-                        const finalTableHeight = Math.max(tableHeight, rowsHeight);
-                        totalHeight += finalTableHeight;
-                        if (tableWidth > totalWidth) {
-                            totalWidth = tableWidth;
-                        }
-                        
-                        console.log(`🖼️ [ZIP_IMAGES] Table ${idx + 1} height: ${finalTableHeight} (scroll: ${tableHeight}, rows: ${rowsHeight})`);
-                    });
-                    
-                    // ارتفاع footer و سایر عناصر
-                    const footerDivs = invoiceElement.querySelectorAll('div[style*="background-color"]');
-                    footerDivs.forEach((footer, idx) => {
-                        const footerEl = footer as HTMLElement;
-                        const footerHeight = Math.max(
-                            footerEl.scrollHeight || 0,
-                            footerEl.offsetHeight || 0,
-                            footerEl.clientHeight || 0,
-                            footerEl.getBoundingClientRect().height || 0
-                        );
-                        totalHeight += footerHeight;
-                        console.log(`🖼️ [ZIP_IMAGES] Footer ${idx + 1} height: ${footerHeight}`);
-                    });
-                    
-                    // ارتفاع سایر عناصر (h3, div و غیره) - فقط عناصری که واقعاً محتوا دارند
-                    const otherElements = invoiceElement.querySelectorAll('h3');
-                    otherElements.forEach((h3, idx) => {
-                        const h3El = h3 as HTMLElement;
-                        const h3Height = Math.max(
-                            h3El.scrollHeight || 0,
-                            h3El.offsetHeight || 0,
-                            h3El.getBoundingClientRect().height || 0
-                        );
-                        if (h3Height > 0) {
-                            totalHeight += h3Height;
-                            console.log(`🖼️ [ZIP_IMAGES] H3 ${idx + 1} height: ${h3Height}`);
-                        }
-                    });
-                    
-                    // استفاده از scrollHeight واقعی - اول tempDiv، بعد invoiceElement
-                    let scrollHeight = tempDiv.scrollHeight || 0;
-                    let scrollWidth = tempDiv.scrollWidth || 0;
-                    
-                    // اگر tempDiv height نداشت، از invoiceElement استفاده کن
-                    if (scrollHeight === 0 || scrollHeight < totalHeight) {
-                        scrollHeight = invoiceElement.scrollHeight || invoiceElement.offsetHeight || totalHeight;
-                    }
-                    if (scrollWidth === 0) {
-                        scrollWidth = invoiceElement.scrollWidth || invoiceElement.offsetWidth || 1200;
-                    }
-                    
-                    // استفاده از scrollWidth و scrollHeight دقیق - از tempDiv برای محاسبه کامل
-                    // اضافه کردن padding و margin بین عناصر
-                    const paddingTop = 30;
-                    const paddingBottom = 20;
-                    const paddingSides = 40;
-                    const marginBetweenTables = 15 * (tables.length > 1 ? tables.length - 1 : 0); // فاصله بین جداول
-                    const marginForH3 = 23 * otherElements.length; // margin برای h3 ها (15 + 8)
-                    const marginForFooter = 10 * footerDivs.length;
-                    
-                    // محاسبه ارتفاع نهایی شامل همه margin ها
-                    const calculatedHeight = totalHeight + paddingTop + paddingBottom + marginBetweenTables + marginForH3 + marginForFooter;
-                    
-                    const finalWidth = Math.max(tempDiv.scrollWidth, scrollWidth, totalWidth + (paddingSides * 2), 1200);
-                    const finalHeight = Math.max(tempDiv.scrollHeight, scrollHeight, calculatedHeight, invoiceElement.scrollHeight + paddingTop + paddingBottom);
-                    
-                    console.log(`🖼️ [ZIP_IMAGES] Element dimensions: ${finalWidth}x${finalHeight}`);
-                    console.log(`🖼️ [ZIP_IMAGES] tempDiv scroll: ${tempDiv.scrollWidth}x${tempDiv.scrollHeight}`);
-                    console.log(`🖼️ [ZIP_IMAGES] invoice scroll: ${invoiceElement.scrollWidth}x${invoiceElement.scrollHeight}`);
-                    console.log(`🖼️ [ZIP_IMAGES] calculated: ${totalWidth}x${totalHeight}`);
-                    console.log(`🖼️ [ZIP_IMAGES] Tables count: ${tables.length}, Footer count: ${footerDivs.length}`);
-                    
-                    if (finalHeight === 0 || finalWidth === 0) {
-                        console.error(`❌ [ZIP_IMAGES] Element has zero dimensions for ${record.driverName}`);
-                        document.body.removeChild(tempDiv);
-                        continue;
-                    }
-                    
-                    // تنظیم ارتفاع tempDiv برای render کامل - باید ارتفاع کافی باشد
-                    tempDiv.style.height = `${finalHeight}px`;
-                    tempDiv.style.minHeight = `${finalHeight}px`;
-                    tempDiv.style.maxHeight = 'none';
-                    
-                    // صبر برای اعمال ارتفاع
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    // تبدیل به canvas - استفاده از tempDiv برای render کامل همه محتوا
-                    const canvas = await html2canvas(tempDiv as HTMLElement, {
-                        scale: 2, // scale بالاتر برای کیفیت بهتر عکس
-                        useCORS: true,
-                        logging: false,
-                        backgroundColor: '#ffffff',
-                        width: finalWidth,
-                        height: finalHeight,
-                        windowWidth: finalWidth,
-                        windowHeight: finalHeight,
-                        allowTaint: true,
-                        removeContainer: false,
-                        onclone: (clonedDoc) => {
-                            // محاسبه ابعاد در cloned document
-                            const clonedTempDivQuery = clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
-                            let clonedFinalWidth = finalWidth;
-                            let clonedFinalHeight = finalHeight;
+                            // صبر برای render شدن محتوا
+                            await new Promise(resolve => setTimeout(resolve, 1500));
                             
-                            if (clonedTempDivQuery) {
-                                // محاسبه ارتفاع واقعی در cloned document
-                                const clonedScrollHeight = clonedTempDivQuery.scrollHeight || clonedTempDivQuery.offsetHeight || finalHeight;
-                                const clonedScrollWidth = clonedTempDivQuery.scrollWidth || clonedTempDivQuery.offsetWidth || finalWidth;
-                                clonedFinalHeight = Math.max(clonedScrollHeight, finalHeight);
-                                clonedFinalWidth = Math.max(clonedScrollWidth, finalWidth);
+                            // پیدا کردن div اصلی صورتحساب
+                            const invoiceDiv = tempDiv.querySelector('div[dir="rtl"]') || tempDiv.querySelector('[data-invoice-ref="true"]') || tempDiv.firstElementChild;
+                            
+                            if (!invoiceDiv || invoiceDiv === tempDiv) {
+                                console.error(`❌ [ZIP_IMAGES] Cannot find invoice div for ${record.driverName} tour ${tourNumber}`);
+                                document.body.removeChild(tempDiv);
+                                continue;
                             }
                             
-                            // اضافه کردن style tag برای اطمینان از فرمت یکسان و منظم
-                            const styleTag = clonedDoc.createElement('style');
-                            styleTag.textContent = `
-                                * {
-                                    box-sizing: border-box;
-                                }
-                                body {
-                                    margin: 0;
-                                    padding: 0;
-                                    font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif;
-                                }
-                                tbody tr td:first-child {
-                                    color: #000000 !important;
-                                    text-align: right !important;
-                                    font-weight: bold !important;
-                                }
-                                tbody tr td:first-child * {
-                                    color: #000000 !important;
-                                }
-                                tbody tr[style*="background-color: rgb(59, 130, 246)"] td:first-child,
-                                tbody tr[style*="background-color: #3b82f6"] td:first-child {
-                                    color: #ffffff !important;
-                                }
-                                table {
-                                    font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif !important;
-                                    border-collapse: collapse !important;
-                                    table-layout: fixed !important;
-                                    font-size: 20px !important;
-                                    display: table !important;
-                                }
-                                th {
-                                    text-align: center !important;
-                                    font-weight: bold !important;
-                                    padding: 16px 18px !important;
-                                    font-size: 20px !important;
-                                }
-                                td {
-                                    padding: 14px 16px !important;
-                                    vertical-align: middle !important;
-                                    word-wrap: break-word !important;
-                                    line-height: 1.5 !important;
-                                    font-size: 18px !important;
-                                    white-space: normal !important;
-                                }
-                                table {
-                                    margin: 0 auto !important;
-                                }
-                                h3 {
-                                    margin: 15px auto 8px auto !important;
-                                    text-align: center !important;
-                                }
-                                div[style*="background-color"] {
-                                    margin: 10px auto 0 auto !important;
-                                }
-                            `;
-                            clonedDoc.head.appendChild(styleTag);
+                            // محاسبه ابعاد
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                            const finalWidth = Math.max(tempDiv.scrollWidth, invoiceDiv.scrollWidth || 0, 1600);
+                            const finalHeight = Math.max(tempDiv.scrollHeight, invoiceDiv.scrollHeight || 0, 1000);
                             
-                            // اعمال استایل‌های نهایی در cloned document - با ارتفاع کامل
-                            const clonedTempDiv = clonedTempDivQuery || clonedDoc.querySelector(`#temp-invoice-image-${i}`) as HTMLElement;
-                            if (clonedTempDiv) {
-                                clonedTempDiv.style.width = `${clonedFinalWidth}px`;
-                                clonedTempDiv.style.maxWidth = 'none';
-                                clonedTempDiv.style.padding = '30px 40px 20px 40px'; // padding کمتر در پایین
-                                clonedTempDiv.style.margin = '0';
-                                clonedTempDiv.style.display = 'block';
-                                clonedTempDiv.style.visibility = 'visible';
-                                clonedTempDiv.style.opacity = '1';
-                                clonedTempDiv.style.position = 'relative';
-                                clonedTempDiv.style.left = '0';
-                                clonedTempDiv.style.top = '0';
-                                clonedTempDiv.style.overflow = 'visible';
-                                clonedTempDiv.style.height = `${clonedFinalHeight}px`; // ارتفاع ثابت برای render کامل
-                                clonedTempDiv.style.minHeight = `${clonedFinalHeight}px`;
-                                clonedTempDiv.style.maxHeight = 'none';
-                            }
+                            tempDiv.style.width = `${finalWidth}px`;
+                            tempDiv.style.height = `${finalHeight}px`;
+                            tempDiv.style.minHeight = `${finalHeight}px`;
                             
-                                const clonedInvoice = clonedDoc.querySelector(`#temp-invoice-image-${i} [data-invoice-ref="true"]`) as HTMLElement || 
-                                                 clonedDoc.querySelector(`#temp-invoice-image-${i} div[dir="rtl"]`) as HTMLElement;
-                            if (clonedInvoice) {
-                                // دقیقاً مثل exportInvoiceToImage - بدون تغییر padding و margin
-                                clonedInvoice.style.width = 'auto';
-                                clonedInvoice.style.maxWidth = '90%';
-                                clonedInvoice.style.margin = '0 auto';
-                                clonedInvoice.style.overflow = 'visible';
-                                clonedInvoice.style.visibility = 'visible';
-                                clonedInvoice.style.opacity = '1';
-                                clonedInvoice.style.setProperty('opacity', '1', 'important');
-                                clonedInvoice.style.boxSizing = 'border-box';
-                                clonedInvoice.style.padding = '0'; // بدون padding اضافی
-                                
-                                // اطمینان از اینکه همه عناصر داخل قابل مشاهده هستند
-                                const allElements = clonedInvoice.querySelectorAll('*');
-                                allElements.forEach((el) => {
-                                    const elEl = el as HTMLElement;
-                                    if (elEl.style.opacity === '0') {
-                                        elEl.style.opacity = '1';
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                            
+                            // تبدیل به canvas
+                            const canvas = await html2canvas(tempDiv as HTMLElement, {
+                                scale: 2,
+                                useCORS: true,
+                                logging: false,
+                                backgroundColor: '#ffffff',
+                                width: finalWidth,
+                                height: finalHeight,
+                                windowWidth: finalWidth,
+                                windowHeight: finalHeight,
+                                allowTaint: true,
+                                removeContainer: false,
+                                onclone: (clonedDoc) => {
+                                    const clonedTempDivQuery = clonedDoc.querySelector(`#${tempDivId}`) as HTMLElement;
+                                    if (clonedTempDivQuery) {
+                                        clonedTempDivQuery.style.width = `${finalWidth}px`;
+                                        clonedTempDivQuery.style.height = `${finalHeight}px`;
+                                        clonedTempDivQuery.style.minHeight = `${finalHeight}px`;
                                     }
-                                    if (elEl.style.visibility === 'hidden') {
-                                        elEl.style.visibility = 'visible';
-                                    }
-                                });
-                                
-                                // اعمال استایل‌های جدول - وسط چین و spacing درست
-                                const clonedTables = clonedInvoice.querySelectorAll('table');
-                                clonedTables.forEach((table, tableIdx) => {
-                                    const tableEl = table as HTMLElement;
-                                    // حفظ استایل‌های inline موجود - override نکن
-                                    if (!tableEl.style.width || tableEl.style.width === '100%') {
-                                        tableEl.style.width = 'auto';
-                                    }
-                                    if (!tableEl.style.maxWidth) {
-                                        tableEl.style.maxWidth = '90%';
-                                    }
-                                    tableEl.style.margin = '0 auto'; // فقط وسط چین - بدون margin-bottom اضافی
-                                    tableEl.style.setProperty('margin', '0 auto', 'important');
-                                    tableEl.style.tableLayout = 'auto';
-                                    tableEl.style.borderCollapse = 'collapse';
                                     
-                                    // فقط برای آخرین جدول margin-bottom کم
-                                    const isLastTable = tableIdx === clonedTables.length - 1;
-                                    if (!isLastTable) {
-                                        tableEl.style.marginBottom = '15px';
-                                        tableEl.style.setProperty('margin-bottom', '15px', 'important');
-                                    } else {
-                                        tableEl.style.marginBottom = '10px';
-                                        tableEl.style.setProperty('margin-bottom', '10px', 'important');
-                                    }
-                                    // حفظ fontSize و fontFamily از JSX
-                                    if (!tableEl.style.fontSize) {
-                                        tableEl.style.fontSize = '20px'; // فونت بزرگتر
-                                    }
-                                    tableEl.style.setProperty('font-size', '20px', 'important');
-                                    if (!tableEl.style.fontFamily) {
-                                        tableEl.style.fontFamily = 'Vazirmatn, Tahoma, Arial, sans-serif';
-                                    }
-                                    tableEl.style.boxSizing = 'border-box';
-                                    tableEl.style.display = 'table'; // اطمینان از نمایش کامل
-                                    
-                                    
-                                    // اعمال استایل‌های سلول‌ها برای منظم بودن - padding بیشتر
-                                    const allCells = tableEl.querySelectorAll('td, th');
-                                    allCells.forEach((cell) => {
-                                        const cellEl = cell as HTMLElement;
-                                        cellEl.style.boxSizing = 'border-box';
-                                        cellEl.style.padding = '14px 16px'; // padding بیشتر برای فاصله از border
-                                        cellEl.style.setProperty('padding', '14px 16px', 'important');
-                                        cellEl.style.verticalAlign = 'middle';
-                                        cellEl.style.wordWrap = 'break-word';
-                                        cellEl.style.overflow = 'visible'; // visible برای نمایش کامل
-                                        cellEl.style.lineHeight = '1.5'; // فاصله خطوط کمتر برای جلوگیری از تو رفتن
-                                        cellEl.style.whiteSpace = 'normal'; // اجازه wrap شدن
-                                        
-                                        // تنظیم text-align بر اساس نوع محتوا - فونت بزرگتر
-                                        if (cellEl.tagName === 'TH') {
-                                            cellEl.style.textAlign = 'center';
-                                            cellEl.style.setProperty('text-align', 'center', 'important');
-                                            cellEl.style.fontWeight = 'bold';
-                                            cellEl.style.fontSize = '20px'; // فونت بزرگتر
-                                            cellEl.style.setProperty('font-size', '20px', 'important');
-                                            cellEl.style.padding = '16px 18px'; // padding بیشتر
-                                            cellEl.style.setProperty('padding', '16px 18px', 'important');
-                                        } else {
-                                            // برای td ها: همه center به جز ستون اول (دسته‌بندی)
-                                            const cellIdx = Array.from(cellEl.parentElement?.children || []).indexOf(cellEl);
-                                            cellEl.style.fontSize = '18px'; // فونت بزرگتر
-                                            cellEl.style.setProperty('font-size', '18px', 'important');
-                                            cellEl.style.padding = '14px 16px';
-                                            cellEl.style.setProperty('padding', '14px 16px', 'important');
-                                            
-                                            // ستون اول (دسته‌بندی): right، بقیه center
-                                            if (cellIdx === 0) {
-                                                cellEl.style.textAlign = 'right';
-                                                cellEl.style.setProperty('text-align', 'right', 'important');
-                                            } else {
-                                                // همه ستون‌های دیگر center
-                                                cellEl.style.textAlign = 'center';
-                                                cellEl.style.setProperty('text-align', 'center', 'important');
-                                            }
+                                    const styleTag = clonedDoc.createElement('style');
+                                    styleTag.textContent = `
+                                        * {
+                                            box-sizing: border-box;
+                                            font-family: 'Vazirmatn', 'Tahoma', Arial, sans-serif !important;
                                         }
-                                    });
-                                    
-                                    // اطمینان از اینکه هدر جدول رنگ سفید دارد و منظم است
-                                    const theadRows = tableEl.querySelectorAll('thead tr');
-                                    theadRows.forEach((row) => {
-                                        const rowEl = row as HTMLElement;
-                                        const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
-                                        if (rowBg.includes('rgb(30, 64, 175)') || rowBg.includes('#1e40af')) {
-                                            const headerCells = rowEl.querySelectorAll('th');
-                                            headerCells.forEach((th) => {
-                                                const thEl = th as HTMLElement;
-                                                thEl.style.color = '#ffffff';
-                                                thEl.style.setProperty('color', '#ffffff', 'important');
-                                                thEl.style.textAlign = 'center';
-                                                thEl.style.setProperty('text-align', 'center', 'important');
-                                                thEl.style.fontWeight = 'bold';
-                                                thEl.style.fontSize = '20px'; // فونت بزرگتر
-                                                thEl.style.setProperty('font-size', '20px', 'important');
-                                                thEl.style.padding = '16px 18px';
-                                                thEl.style.setProperty('padding', '16px 18px', 'important');
-                                            });
-                                        }
-                                    });
-                                    
-                                    // اطمینان از اینکه سلول‌های ستون دسته‌بندی رنگ مشکی دارند و منظم هستند
-                                    const tbodyRows = tableEl.querySelectorAll('tbody tr');
-                                    tbodyRows.forEach((row) => {
-                                        const rowEl = row as HTMLElement;
-                                        const firstCell = rowEl.querySelector('td:first-child') as HTMLElement;
-                                        if (firstCell) {
-                                            const cellText = (firstCell.textContent || '').trim();
-                                            const rowBg = rowEl.style.backgroundColor || window.getComputedStyle(rowEl).backgroundColor;
-                                            const isTotalRow = cellText.includes('جمع کل') || rowBg.includes('rgb(59, 130, 246)') || rowBg.includes('#3b82f6');
-                                            if (!isTotalRow && cellText.length > 0) {
-                                                firstCell.style.color = '#000000';
-                                                firstCell.style.setProperty('color', '#000000', 'important');
-                                                firstCell.style.textAlign = 'right';
-                                                firstCell.style.fontWeight = 'bold';
-                                            }
-                                        }
-                                        
-                                        // تنظیم text-align برای همه سلول‌های ردیف
-                                        const cells = rowEl.querySelectorAll('td');
-                                        cells.forEach((cell, cellIdx) => {
-                                            const cellEl = cell as HTMLElement;
-                                            const cellText = (cellEl.textContent || '').trim();
-                                            const isNumber = /^[\d,\-]+$/.test(cellText.replace(/[^\d,\-]/g, ''));
-                                            
-                                            // ستون اول (دسته‌بندی): right، بقیه center
-                                            if (cellIdx === 0) {
-                                                cellEl.style.textAlign = 'right';
-                                                cellEl.style.setProperty('text-align', 'right', 'important');
-                                            } else {
-                                                // همه ستون‌های دیگر center
-                                                cellEl.style.textAlign = 'center';
-                                                cellEl.style.setProperty('text-align', 'center', 'important');
-                                            }
-                                            
-                                            // اطمینان از padding و font size
-                                            cellEl.style.padding = '14px 16px';
-                                            cellEl.style.setProperty('padding', '14px 16px', 'important');
-                                            cellEl.style.fontSize = '18px';
-                                            cellEl.style.setProperty('font-size', '18px', 'important');
-                                            cellEl.style.lineHeight = '1.5';
-                                        });
-                                    });
-                                    
-                                    // اطمینان از اینکه جدول کامل render می‌شود
-                                    tableEl.style.display = 'table';
-                                    tableEl.style.visibility = 'visible';
-                                    tableEl.style.opacity = '1';
-                                    tableEl.style.height = 'auto'; // ارتفاع دینامیک
-                                    tableEl.style.overflow = 'visible';
-                                });
-                                
-                                // اطمینان از اینکه همه footer ها کامل render می‌شوند و وسط چین هستند
-                                const footerElements = clonedInvoice.querySelectorAll('div[style*="background-color"]');
-                                footerElements.forEach((footer) => {
-                                    const footerEl = footer as HTMLElement;
-                                    footerEl.style.display = 'block';
-                                    footerEl.style.visibility = 'visible';
-                                    footerEl.style.opacity = '1';
-                                    footerEl.style.height = 'auto';
-                                    footerEl.style.overflow = 'visible';
-                                    footerEl.style.margin = '15px auto 0 auto'; // وسط چین + margin بیشتر
-                                    footerEl.style.setProperty('margin', '15px auto 0 auto', 'important');
-                                    footerEl.style.width = '90%';
-                                    footerEl.style.maxWidth = '90%';
-                                    
-                                    // بهبود visibility متن‌های داخل footer
-                                    const footerSpans = footerEl.querySelectorAll('span');
-                                    footerSpans.forEach((span) => {
-                                        const spanEl = span as HTMLElement;
-                                        spanEl.style.opacity = '1';
-                                        spanEl.style.visibility = 'visible';
-                                        spanEl.style.color = spanEl.style.color || '#1e293b';
-                                        spanEl.style.fontSize = spanEl.style.fontSize || '16px';
-                                        spanEl.style.setProperty('color', spanEl.style.color || '#1e293b', 'important');
-                                        spanEl.style.setProperty('font-size', spanEl.style.fontSize || '16px', 'important');
-                                        spanEl.style.whiteSpace = 'nowrap';
-                                    });
-                                });
-                                
-                                // تنظیم spacing برای h3 ها (عنوان جداول) - وسط چین
-                                const h3Elements = clonedInvoice.querySelectorAll('h3');
-                                h3Elements.forEach((h3) => {
-                                    const h3El = h3 as HTMLElement;
-                                    h3El.style.margin = '15px auto 8px auto'; // وسط چین + margin کم
-                                    h3El.style.setProperty('margin', '15px auto 8px auto', 'important');
-                                    h3El.style.textAlign = 'center';
-                                    h3El.style.setProperty('text-align', 'center', 'important');
-                                    h3El.style.width = 'auto';
-                                    h3El.style.maxWidth = '90%';
-                                });
-                                
-                                // تنظیم رنگ برای سلول‌های "مبلغ کل"
-                                const totalAmountCells = clonedInvoice.querySelectorAll('td[data-total-amount="true"]');
-                                totalAmountCells.forEach((cell) => {
-                                    const cellEl = cell as HTMLElement;
-                                    const cellBg = cellEl.style.backgroundColor || window.getComputedStyle(cellEl).backgroundColor;
-                                    const isTotalRow = cellBg.includes('rgb(59, 130, 246)') || cellBg.includes('#3b82f6');
-                                    if (isTotalRow) {
-                                        cellEl.style.color = '#ffffff';
-                                        cellEl.style.setProperty('color', '#ffffff', 'important');
-                                    } else {
-                                        cellEl.style.color = '#1e293b';
-                                        cellEl.style.setProperty('color', '#1e293b', 'important');
-                                    }
-                                });
-                            }
+                                    `;
+                                    clonedDoc.head.appendChild(styleTag);
+                                }
                         }
                     });
                     
-                    // بررسی اینکه canvas خالی نیست
-                    if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                        console.error(`❌ [ZIP_IMAGES] Canvas is empty for ${record.driverName}`);
-                        document.body.removeChild(tempDiv);
-                        continue;
+                            // بررسی canvas
+                            if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                                console.error(`❌ [ZIP_IMAGES] Canvas is empty for ${record.driverName} tour ${tourNumber}`);
+                                document.body.removeChild(tempDiv);
+                                continue;
+                            }
+                            
+                            // تبدیل به PNG
+                            const imgData = canvas.toDataURL('image/png', 1.0);
+                            
+                            if (!imgData || imgData.length < 100) {
+                                console.error(`❌ [ZIP_IMAGES] Image data is too small for ${record.driverName} tour ${tourNumber}`);
+                                document.body.removeChild(tempDiv);
+                                continue;
+                            }
+                            
+                            // حذف div موقت
+                            document.body.removeChild(tempDiv);
+                            
+                            // تبدیل به binary
+                            const base64Data = imgData.split(',')[1];
+                            const binaryString = atob(base64Data);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let j = 0; j < binaryString.length; j++) {
+                                bytes[j] = binaryString.charCodeAt(j);
+                            }
+                            
+                            // نام فایل: نام راننده-تاریخ پرداخت(شمسی بدون /)-شماره تور
+                            const fileName = `${record.driverName}-${paymentDateClean}-${tourNumber}.png`;
+                            zip.file(fileName, bytes);
+                            successCount++;
+                            
+                            console.log(`✅ [ZIP_IMAGES] تصویر تور ${tourNumber} اضافه شد: ${fileName} (${bytes.length} bytes)`);
+                        } catch (err: any) {
+                            failCount++;
+                            console.error(`❌ [ZIP_IMAGES] Error processing tour ${tourNumber} for ${record.driverName}:`, err);
+                            // ادامه به تور بعدی
+                        }
                     }
-                    
-                    console.log(`🖼️ [ZIP_IMAGES] Canvas size: ${canvas.width}x${canvas.height}`);
-                    
-                    // تبدیل به PNG با کیفیت بالا
-                    const imgData = canvas.toDataURL('image/png', 1.0);
-                    
-                    if (!imgData || imgData.length < 100) {
-                        console.error(`❌ [ZIP_IMAGES] Image data is too small for ${record.driverName}`);
-                        document.body.removeChild(tempDiv);
-                        continue;
-                    }
-                    
-                    // بازگرداندن استایل‌های اصلی - مثل exportInvoiceToImage
-                    invoiceElement.style.maxWidth = originalMaxWidth;
-                    invoiceElement.style.width = originalWidth;
-                    invoiceElement.style.margin = originalMargin;
-                    
-                    // حذف div موقت
-                    document.body.removeChild(tempDiv);
-                    
-                    // اضافه کردن تصویر به ZIP - استفاده از blob به جای base64
-                    const base64Data = imgData.split(',')[1];
-                    if (!base64Data || base64Data.length < 100) {
-                        console.error(`❌ [ZIP_IMAGES] Base64 data is invalid for ${record.driverName}`);
-                        continue;
-                    }
-                    
-                    // تبدیل base64 به binary string برای JSZip
-                    const binaryString = atob(base64Data);
-                    const bytes = new Uint8Array(binaryString.length);
-                    for (let j = 0; j < binaryString.length; j++) {
-                        bytes[j] = binaryString.charCodeAt(j);
-                    }
-                    
-                    const fileName = `صورتحساب_${record.driverName}_${record.employeeId}_${record.paymentDate.replace(/\//g, '-')}.png`;
-                    zip.file(fileName, bytes);
-                    successCount++;
-                    
-                    console.log(`✅ [ZIP_IMAGES] تصویر ${i + 1} اضافه شد: ${fileName} (${bytes.length} bytes)`);
                 } catch (err: any) {
                     failCount++;
                     console.error(`❌ [ZIP_IMAGES] Error processing record ${i + 1}:`, err);

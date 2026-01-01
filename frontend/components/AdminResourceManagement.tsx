@@ -46,6 +46,7 @@ interface CompanyDriver {
   licenseExpiryDate?: string;
   currentVehicleType?: string;
   currentVehiclePlate?: string;
+  accountNumber?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -301,7 +302,8 @@ const AdminResourceManagement: React.FC = () => {
           d.name?.toLowerCase().includes(query) ||
           d.employeeId?.toLowerCase().includes(query) ||
           d.nationalId?.includes(query) ||
-          d.mobile?.includes(query)
+          d.mobile?.includes(query) ||
+          d.accountNumber?.includes(query)
         );
       case 'company-vehicles':
         return companyVehicles.filter(v => 
@@ -382,6 +384,7 @@ const AdminResourceManagement: React.FC = () => {
             <th className="px-3 py-2 text-right font-medium text-gray-500">تاریخ انقضا</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">تاریخ استخدام</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">عنوان شغلی</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-500">شماره حساب</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">عملیات</th>
           </tr>
         </thead>
@@ -399,6 +402,7 @@ const AdminResourceManagement: React.FC = () => {
               <td className="px-3 py-2">{formatDate(driver.licenseExpiryDate)}</td>
               <td className="px-3 py-2">{formatDate(driver.hireDate)}</td>
               <td className="px-3 py-2">{driver.jobTitle || '-'}</td>
+              <td className="px-3 py-2 font-mono" dir="ltr">{driver.accountNumber || '-'}</td>
               <td className="px-3 py-2">
                 <div className="flex gap-1">
                   <button
@@ -791,6 +795,7 @@ const CompanyDriverForm: React.FC<{
     licenseIssueDate: initialData?.licenseIssueDate?.split('T')[0] || '',
     licenseIssuePlace: initialData?.licenseIssuePlace || '',
     licenseExpiryDate: initialData?.licenseExpiryDate?.split('T')[0] || '',
+    accountNumber: initialData?.accountNumber || '',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -924,6 +929,10 @@ const CompanyDriverForm: React.FC<{
       <div>
         <label className={labelClass}>تاریخ انقضا گواهینامه</label>
         <input type="date" value={form.licenseExpiryDate} onChange={e => setForm({...form, licenseExpiryDate: e.target.value})} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>شماره حساب</label>
+        <input type="text" value={form.accountNumber} onChange={e => setForm({...form, accountNumber: e.target.value})} className={inputClass} dir="ltr" />
       </div>
 
       <div className="md:col-span-3 flex justify-end gap-3 pt-4 border-t mt-4">
