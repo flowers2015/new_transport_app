@@ -968,47 +968,47 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     `;
                                     clonedDoc.head.appendChild(styleTag);
                                 }
-                        }
-                    });
+                            }
+                        );
                     
-                            // بررسی canvas
-                            if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                                console.error(`❌ [ZIP_IMAGES] Canvas is empty for ${record.driverName} tour ${tourNumber}`);
-                                document.body.removeChild(tempDiv);
-                                continue;
-                            }
-                            
-                            // تبدیل به PNG
-                            const imgData = canvas.toDataURL('image/png', 1.0);
-                            
-                            if (!imgData || imgData.length < 100) {
-                                console.error(`❌ [ZIP_IMAGES] Image data is too small for ${record.driverName} tour ${tourNumber}`);
-                                document.body.removeChild(tempDiv);
-                                continue;
-                            }
-                            
-                            // حذف div موقت
+                        // بررسی canvas
+                        if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                            console.error(`❌ [ZIP_IMAGES] Canvas is empty for ${record.driverName} tour ${tourNumber}`);
                             document.body.removeChild(tempDiv);
-                            
-                            // تبدیل به binary
-                            const base64Data = imgData.split(',')[1];
-                            const binaryString = atob(base64Data);
-                            const bytes = new Uint8Array(binaryString.length);
-                            for (let j = 0; j < binaryString.length; j++) {
-                                bytes[j] = binaryString.charCodeAt(j);
-                            }
-                            
-                            // نام فایل: نام راننده-تاریخ پرداخت(شمسی بدون /)-شماره تور
-                            const fileName = `${record.driverName}-${paymentDateClean}-${tourNumber}.png`;
-                            zip.file(fileName, bytes);
-                            successCount++;
-                            
-                            console.log(`✅ [ZIP_IMAGES] تصویر تور ${tourNumber} اضافه شد: ${fileName} (${bytes.length} bytes)`);
-                        } catch (err: any) {
-                            failCount++;
-                            console.error(`❌ [ZIP_IMAGES] Error processing tour ${tourNumber} for ${record.driverName}:`, err);
-                            // ادامه به تور بعدی
+                            continue;
                         }
+                        
+                        // تبدیل به PNG
+                        const imgData = canvas.toDataURL('image/png', 1.0);
+                        
+                        if (!imgData || imgData.length < 100) {
+                            console.error(`❌ [ZIP_IMAGES] Image data is too small for ${record.driverName} tour ${tourNumber}`);
+                            document.body.removeChild(tempDiv);
+                            continue;
+                        }
+                        
+                        // حذف div موقت
+                        document.body.removeChild(tempDiv);
+                        
+                        // تبدیل به binary
+                        const base64Data = imgData.split(',')[1];
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let j = 0; j < binaryString.length; j++) {
+                            bytes[j] = binaryString.charCodeAt(j);
+                        }
+                        
+                        // نام فایل: نام راننده-تاریخ پرداخت(شمسی بدون /)-شماره تور
+                        const fileName = `${record.driverName}-${paymentDateClean}-${tourNumber}.png`;
+                        zip.file(fileName, bytes);
+                        successCount++;
+                        
+                        console.log(`✅ [ZIP_IMAGES] تصویر تور ${tourNumber} اضافه شد: ${fileName} (${bytes.length} bytes)`);
+                    } catch (err: any) {
+                        failCount++;
+                        console.error(`❌ [ZIP_IMAGES] Error processing tour ${tourNumber} for ${record.driverName}:`, err);
+                        // ادامه به تور بعدی
+                    }
                     }
                 } catch (err: any) {
                     failCount++;
