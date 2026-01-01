@@ -6,8 +6,20 @@ const crypto = require('crypto');
  */
 async function getDrivers(req, res) {
   try {
+    // بررسی وجود ستون account_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'account_number'
+    `);
+    const hasAccountNumber = columnCheck.rows.length > 0;
+    
     // فقط فیلدهای ضروری برای dropdown/select را برگردان
     // حذف فیلدهای غیرضروری برای کاهش حجم داده
+    const accountNumberSelect = hasAccountNumber 
+      ? 'account_number AS "accountNumber"'
+      : 'NULL AS "accountNumber"';
+    
     const { rows } = await pool.query(`
       SELECT 
         id,
@@ -19,7 +31,7 @@ async function getDrivers(req, res) {
         license_type AS "licenseType",
         current_vehicle_type AS "currentVehicleType",
         current_vehicle_plate AS "currentVehiclePlate",
-        account_number AS "accountNumber"
+        ${accountNumberSelect}
       FROM drivers 
       WHERE is_deleted = false 
       ORDER BY name
@@ -37,6 +49,18 @@ async function getDrivers(req, res) {
 async function getDriverById(req, res) {
   const { id } = req.params;
   try {
+    // بررسی وجود ستون account_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'account_number'
+    `);
+    const hasAccountNumber = columnCheck.rows.length > 0;
+    
+    const accountNumberSelect = hasAccountNumber 
+      ? 'account_number AS "accountNumber"'
+      : 'NULL AS "accountNumber"';
+    
     const { rows } = await pool.query(`
       SELECT 
         id,
@@ -64,7 +88,7 @@ async function getDriverById(req, res) {
         license_expiry_date AS "licenseExpiryDate",
         current_vehicle_type AS "currentVehicleType",
         current_vehicle_plate AS "currentVehiclePlate",
-        account_number AS "accountNumber",
+        ${accountNumberSelect},
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM drivers 
@@ -115,28 +139,47 @@ async function createDriver(req, res) {
       return res.status(400).json({ message: 'Employee ID and name are required.' });
     }
 
+    // بررسی وجود ستون account_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'account_number'
+    `);
+    const hasAccountNumber = columnCheck.rows.length > 0;
+
     const id = crypto.randomUUID();
-    const { rows } = await pool.query(
-      `INSERT INTO drivers (
-        id, employee_id, name, father_name, national_id, birth_date, id_number,
+    
+    // ساخت query بر اساس وجود ستون
+    let insertColumns = `id, employee_id, name, father_name, national_id, birth_date, id_number,
         birth_place, issue_place, home_phone, work_phone, mobile, postal_code,
         home_address, work_location, job_title, hire_date, termination_date,
         license_number, license_type, license_issue_date, license_issue_place,
-        license_expiry_date, account_number, created_at, updated_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW()
-      ) RETURNING *`,
-      [
-        id, employeeId, name, fatherName || null, nationalId,
-        birthDate ? new Date(birthDate) : null, idNumber || null,
-        birthPlace || null, issuePlace || null, homePhone || null,
-        workPhone || null, mobile || null, postalCode || null,
-        homeAddress || null, workLocation || null, jobTitle || null,
-        hireDate ? new Date(hireDate) : null, terminationDate ? new Date(terminationDate) : null,
-        licenseNumber || null, licenseType || null, licenseIssueDate ? new Date(licenseIssueDate) : null,
-        licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null,
-        accountNumber || null
-      ]
+        license_expiry_date, created_at, updated_at`;
+    let insertValues = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW()`;
+    let insertParams = [
+      id, employeeId, name, fatherName || null, nationalId,
+      birthDate ? new Date(birthDate) : null, idNumber || null,
+      birthPlace || null, issuePlace || null, homePhone || null,
+      workPhone || null, mobile || null, postalCode || null,
+      homeAddress || null, workLocation || null, jobTitle || null,
+      hireDate ? new Date(hireDate) : null, terminationDate ? new Date(terminationDate) : null,
+      licenseNumber || null, licenseType || null, licenseIssueDate ? new Date(licenseIssueDate) : null,
+      licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null
+    ];
+    
+    if (hasAccountNumber) {
+      insertColumns = `id, employee_id, name, father_name, national_id, birth_date, id_number,
+        birth_place, issue_place, home_phone, work_phone, mobile, postal_code,
+        home_address, work_location, job_title, hire_date, termination_date,
+        license_number, license_type, license_issue_date, license_issue_place,
+        license_expiry_date, account_number, created_at, updated_at`;
+      insertValues = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW()`;
+      insertParams.push(accountNumber || null);
+    }
+    
+    const { rows } = await pool.query(
+      `INSERT INTO drivers (${insertColumns}) VALUES (${insertValues}) RETURNING *`,
+      insertParams
     );
 
     res.status(201).json(rows[0]);
@@ -182,15 +225,43 @@ async function updateDriver(req, res) {
       return res.status(400).json({ message: 'Employee ID and name are required.' });
     }
 
-    const { rows } = await pool.query(
-      `UPDATE drivers SET 
+    // بررسی وجود ستون account_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'account_number'
+    `);
+    const hasAccountNumber = columnCheck.rows.length > 0;
+
+    // ساخت query بر اساس وجود ستون
+    let updateQuery = `UPDATE drivers SET 
+        employee_id = $1, name = $2, father_name = $3, national_id = $4, birth_date = $5, id_number = $6,
+        birth_place = $7, issue_place = $8, home_phone = $9, work_phone = $10, mobile = $11, postal_code = $12,
+        home_address = $13, work_location = $14, job_title = $15, hire_date = $16, termination_date = $17,
+        license_number = $18, license_type = $19, license_issue_date = $20, license_issue_place = $21,
+        license_expiry_date = $22, updated_at = NOW()
+      WHERE id = $23 AND is_deleted = false RETURNING *`;
+    let updateParams = [
+      employeeId, name, fatherName || null, nationalId,
+      birthDate ? new Date(birthDate) : null, idNumber || null,
+      birthPlace || null, issuePlace || null, homePhone || null,
+      workPhone || null, mobile || null, postalCode || null,
+      homeAddress || null, workLocation || null, jobTitle || null,
+      hireDate ? new Date(hireDate) : null, terminationDate ? new Date(terminationDate) : null,
+      licenseNumber || null, licenseType || null, licenseIssueDate ? new Date(licenseIssueDate) : null,
+      licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null,
+      id
+    ];
+    
+    if (hasAccountNumber) {
+      updateQuery = `UPDATE drivers SET 
         employee_id = $1, name = $2, father_name = $3, national_id = $4, birth_date = $5, id_number = $6,
         birth_place = $7, issue_place = $8, home_phone = $9, work_phone = $10, mobile = $11, postal_code = $12,
         home_address = $13, work_location = $14, job_title = $15, hire_date = $16, termination_date = $17,
         license_number = $18, license_type = $19, license_issue_date = $20, license_issue_place = $21,
         license_expiry_date = $22, account_number = $23, updated_at = NOW()
-      WHERE id = $24 AND is_deleted = false RETURNING *`,
-      [
+      WHERE id = $24 AND is_deleted = false RETURNING *`;
+      updateParams = [
         employeeId, name, fatherName || null, nationalId,
         birthDate ? new Date(birthDate) : null, idNumber || null,
         birthPlace || null, issuePlace || null, homePhone || null,
@@ -200,8 +271,10 @@ async function updateDriver(req, res) {
         licenseNumber || null, licenseType || null, licenseIssueDate ? new Date(licenseIssueDate) : null,
         licenseIssuePlace || null, licenseExpiryDate ? new Date(licenseExpiryDate) : null,
         accountNumber || null, id
-      ]
-    );
+      ];
+    }
+
+    const { rows } = await pool.query(updateQuery, updateParams);
 
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Driver not found.' });
@@ -553,6 +626,20 @@ async function updateDriverAccountNumber(req, res) {
 
     if (!id) {
       return res.status(400).json({ message: 'Driver ID is required.' });
+    }
+
+    // بررسی وجود ستون account_number
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'account_number'
+    `);
+    const hasAccountNumber = columnCheck.rows.length > 0;
+
+    if (!hasAccountNumber) {
+      return res.status(400).json({ 
+        message: 'Column account_number does not exist. Please run the migration first.' 
+      });
     }
 
     // بررسی وجود راننده
