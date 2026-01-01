@@ -5540,6 +5540,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             // loadingCost حذف شده - این فیلد در سیستم وجود ندارد
                                             const loadingCost = 0;
                                             const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
+                                            const returnInterBranchCargo = Number((tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0);
                                             const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
                                             const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
                                             // بررسی نوع صف راننده برای این تور - از queueType تور استفاده می‌کنیم
@@ -5567,8 +5568,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
                                             
                                             // محاسبه سایر هزینه‌های راننده اصلی (بدون اجرت/پورسانت):
-                                            // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
-                                            const otherMainDriverCosts = multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost + fixedAllowance;
+                                            // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + بار برگشتی بین شعب + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
+                                            const otherMainDriverCosts = multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + returnInterBranchCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost + fixedAllowance;
                                             
                                             // محاسبه totalCost: سایر هزینه‌ها + اجرت/پورسانت (tourCost) + هزینه راننده کمکی
                                             // اگر fixedAllowance > 0 باشد، یعنی راننده اجرت ثابت است و اجرت قبلاً در otherMainDriverCosts اضافه شده
@@ -5835,7 +5836,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             )}
                                                             
                                                             {/* ردیف جزئیات هزینه‌ها */}
-                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || depotCargoHandlingCost > 0 || tourCost > 0 || isFixedAllowance) && (
+                                                            {(foodCost > 0 || fuelCost > 0 || tollCost > 0 || billOfLadingCost > 0 || returnCargo > 0 || returnInterBranchCargo > 0 || multiUnloadCost > 0 || excessMissionCost > 0 || fixedAllowance > 0 || depotMissionCost > 0 || depotAllowance > 0 || depotCargoHandlingCost > 0 || tourCost > 0 || isFixedAllowance) && (
                                                                 <tr className="bg-slate-50 border-b-2 border-slate-300">
                                                                     <td colSpan={7} className="p-2 text-xs border-l border-slate-200"></td>
                                                                     <td className="p-2 text-xs text-slate-600 font-semibold border-l border-slate-200">
@@ -5871,6 +5872,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-slate-600 whitespace-nowrap">هزینه بار برگشتی:</span>
                                                                                     <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{returnCargo.toLocaleString('fa-IR')} ریال</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {returnInterBranchCargo > 0 && (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">هزینه بار برگشتی بین شعب:</span>
+                                                                                    <span className={tour.isDataRecorded ? 'text-slate-800 font-semibold' : 'text-slate-400'}>{returnInterBranchCargo.toLocaleString('fa-IR')} ریال</span>
                                                                                 </div>
                                                                             )}
                                                                             {multiUnloadCost > 0 && (

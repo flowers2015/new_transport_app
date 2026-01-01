@@ -407,6 +407,7 @@ export const convertToInvoiceDataFormatHorizontal = (
     });
     
     // هزینه‌های غیر اجرت (همه هزینه‌ها به جز اجرت)
+    // اجرت شامل: fixedAllowance (اجرت ثابت) و depotAllowance (اجرت دپو) و tourCost (پورسانتی)
     const nonAllowanceCostValues = calculations.map((calc: any) => {
         const billOfLading = parseFloat(calc.bill_of_lading_cost || calc.billOfLadingCost || '0') || 0;
         const food = parseFloat(calc.food_cost || calc.foodCost || '0') || 0;
@@ -416,8 +417,10 @@ export const convertToInvoiceDataFormatHorizontal = (
         const returnInterBranchCargo = parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || '0') || 0;
         const returnBillOfLading = parseFloat(calc.return_bill_of_lading_cost || calc.returnBillOfLadingCost || '0') || 0;
         const multiUnload = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || '0') || 0;
+        const excessMission = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || '0') || 0;
         const depotCargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || '0') || 0;
-        return billOfLading + food + fuel + toll + returnCargo + returnInterBranchCargo + returnBillOfLading + multiUnload + depotCargoHandling;
+        const depotMission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || '0') || 0;
+        return billOfLading + food + fuel + toll + returnCargo + returnInterBranchCargo + returnBillOfLading + multiUnload + excessMission + depotCargoHandling + depotMission;
     });
     const nonAllowanceCost = nonAllowanceCostValues.reduce((sum, val) => sum + val, 0);
     mainDriverRows.push({
@@ -1413,6 +1416,36 @@ export const renderInvoiceLayoutHorizontal = (
                                         مبلغ قابل پرداخت: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
                                     </td>
                                 </tr>
+                                {/* هزینه‌های راننده کمکی */}
+                                {helperBlocks.map((helperBlock, helperIdx) => {
+                                    // فرمت title: "راننده کمکی - کدپرسنلی: ${employeeId} - ${name}"
+                                    const helperEmployeeIdMatch = helperBlock.title.match(/کدپرسنلی:\s*(\d+)/);
+                                    const helperEmployeeId = helperEmployeeIdMatch?.[1] || '';
+                                    // استخراج نام که بعد از آخرین " - " می‌آید
+                                    const nameMatch = helperBlock.title.match(/-\s*([^-]+)$/);
+                                    const helperName = nameMatch?.[1]?.trim() || '';
+                                    const helperCost = helperBlock.summary?.totalTripCost || 0;
+                                    if (helperCost === 0) return null;
+                                    return (
+                                        <tr key={helperIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                            <td style={{
+                                                border: '2px solid #1e3a8a',
+                                                borderTop: 'none',
+                                                padding: '12px 20px',
+                                                backgroundColor: '#bfdbfe',
+                                                textAlign: 'center',
+                                                direction: 'rtl',
+                                                unicodeBidi: 'isolate',
+                                                fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontSize: '14px',
+                                                color: '#1e3a8a',
+                                                lineHeight: '1.8',
+                                            }}>
+                                                هزینه راننده کمکی: {helperName} - {helperEmployeeId} - <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperCost.toLocaleString('fa-IR')}</span> ریال
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -1915,102 +1948,6 @@ export const renderInvoiceLayoutHorizontal = (
                     );
                 })}
                 
-                {/* خلاصه تور - زیر جدول راننده کمکی */}
-                <div 
-                    data-tour-summary="true"
-                    style={{
-                        width: '100%',
-                        maxWidth: '100%',
-                        borderRadius: '12px',
-                        overflow: 'visible',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                        marginTop: '50px',
-                        marginBottom: '50px',
-                        paddingBottom: '30px',
-                        textAlign: 'center',
-                        position: 'relative' as const,
-                        zIndex: 1,
-                        display: 'block',
-                        visibility: 'visible',
-                    }}>
-                    <h3 style={{
-                        fontSize: '18px',
-                        fontWeight: 'bold',
-                        marginBottom: '10px',
-                        textAlign: 'center',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
-                        color: '#1e3a8a',
-                        padding: '12px',
-                        backgroundColor: '#f0f9ff',
-                        borderBottom: '2px solid #1e3a8a',
-                    }}>
-                        خلاصه تور
-                    </h3>
-                    <table style={{
-                        width: '100%',
-                        maxWidth: '100%',
-                        borderCollapse: 'collapse',
-                        direction: 'rtl',
-                        unicodeBidi: 'isolate',
-                        fontSize: '14px',
-                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
-                        boxSizing: 'border-box',
-                        margin: '0 auto',
-                    }}>
-                        <tbody>
-                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                <td style={{
-                                    border: '1px solid #cccccc',
-                                    padding: '12px 20px',
-                                    backgroundColor: '#ffffff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
-                                    lineHeight: '1.8',
-                                }}>
-                                    تعداد تور راننده اصلی: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{invoiceData.tourData?.length || 0}</span>
-                                </td>
-                            </tr>
-                            <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                <td style={{
-                                    border: '1px solid #cccccc',
-                                    borderTop: 'none',
-                                    padding: '12px 20px',
-                                    backgroundColor: '#f8fbff',
-                                    textAlign: 'center',
-                                    direction: 'rtl',
-                                    unicodeBidi: 'isolate',
-                                    fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
-                                    lineHeight: '1.8',
-                                }}>
-                                    هزینه کل تورهای راننده اصلی: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
-                                </td>
-                            </tr>
-                            {helperBlocks.map((helperBlock, helperIdx) => {
-                                const helperEmployeeId = helperBlock.title.match(/کدپرسنلی[:\s]*(\d+)/)?.[1] || '';
-                                const helperName = helperBlock.title.match(/-\s*([^-]+)$/)?.[1]?.trim() || helperBlock.title.match(/:\s*\d+\s*-\s*(.+)$/)?.[1]?.trim() || '';
-                                return (
-                                    <tr key={helperIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
-                                        <td style={{
-                                            border: '1px solid #cccccc',
-                                            borderTop: 'none',
-                                            padding: '12px 20px',
-                                            backgroundColor: helperIdx % 2 === 0 ? '#ffffff' : '#f8fbff',
-                                            textAlign: 'center',
-                                            direction: 'rtl',
-                                            unicodeBidi: 'isolate',
-                                            fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
-                                            lineHeight: '1.8',
-                                        }}>
-                                            راننده کمکی {helperIdx + 1}: کد پرسنلی {helperEmployeeId} - {helperName} - هزینه: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperBlock?.summary?.totalTripCost?.toLocaleString('fa-IR') || '0'}</span> ریال
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
             </div>
         </div>
     );
