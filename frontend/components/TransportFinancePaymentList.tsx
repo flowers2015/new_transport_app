@@ -5115,36 +5115,99 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
                                 return invoiceJSX;
                             })()}
-                                            }}>
-                                                <h3 style={{
-                                                    fontSize: '18px',
-                                                    fontWeight: 'bold',
-                                                    marginBottom: '8px',
-                                                    textAlign: 'center',
-                                                    direction: 'rtl',
-                                                    unicodeBidi: 'isolate',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                }}>
-                                                    صورتحساب هزینه
-                                                </h3>
-                                                <div style={{
-                                                    fontSize: `${fontSize + 2}px`,
-                                                    lineHeight: '1.8',
-                                                    direction: 'rtl',
-                                                    unicodeBidi: 'isolate',
-                                                    fontFamily: "'Vazir', 'Tahoma', sans-serif",
-                                                }}>
-                                                    <p style={{ marginBottom: '4px' }}>کد پرسنلی: {selectedInvoiceRecord.employeeId}</p>
-                                                    <p style={{ marginBottom: '4px' }}>نام: {selectedInvoiceRecord.driverName}</p>
-                                                    <p>شماره حساب: {selectedInvoiceRecord.accountNumber || '-'}</p>
-                                                </div>
-                                            </div>
-                                            
-                                            {/* جدول افقی - راننده اصلی */}
-                                            <table style={{
-                                                width: '100%',
-                                                maxWidth: '100%',
-                                                borderCollapse: 'collapse',
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* دیالوگ قوانین کارتابل */}
+            {rulesDialogOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-10">
+                        <h2 className="text-xl font-bold text-slate-800">
+                            قوانین کارتابل لیست پرداخت
+                        </h2>
+                        <button
+                            onClick={() => setRulesDialogOpen(false)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                        >
+                            بستن
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-auto p-6">
+                        <div className="space-y-6 text-slate-700">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-3">📋 ورود به کارتابل لیست پرداخت</h3>
+                                <ul className="list-disc list-inside space-y-2 mr-4">
+                                    <li>بارها زمانی وارد لیست پرداخت می‌شوند که محاسبات راننده برای آنها ثبت شده باشد (یعنی مبلغ کل هزینه بیشتر از صفر باشد)</li>
+                                    <li>راننده اصلی و راننده کمکی به صورت جداگانه در لیست پرداخت نمایش داده می‌شوند</li>
+                                    <li>هر راننده (اصلی یا کمکی) یک رکورد در لیست پرداخت دارد که شامل مجموع هزینه‌های همه تورهای پرداخت نشده او می‌شود</li>
+                                    <li>فقط محاسباتی که <strong>پرداخت نشده</strong> هستند، در لیست پرداخت نمایش داده می‌شوند</li>
+                                </ul>
+                            </div>
+                            
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-3">✅ خروج از کارتابل لیست پرداخت</h3>
+                                <ul className="list-disc list-inside space-y-2 mr-4">
+                                    <li>پس از ثبت پرداخت برای یک راننده، وضعیت تمام محاسبات مربوط به آن راننده به <strong>پرداخت شده</strong> تغییر می‌کند</li>
+                                    <li>راننده‌هایی که همه محاسباتشان پرداخت شده است، از لیست پرداخت حذف می‌شوند و به کارتابل <strong>صورتحساب‌های پرداخت شده</strong> منتقل می‌شوند</li>
+                                    <li>پرداخت راننده اصلی و راننده کمکی کاملاً مستقل است:
+                                        <ul className="list-circle list-inside mr-6 mt-2 space-y-1">
+                                            <li>اگر برای راننده اصلی پرداخت ثبت شود، فقط راننده اصلی از لیست حذف می‌شود</li>
+                                            <li>راننده کمکی همچنان در لیست پرداخت باقی می‌ماند (مگر اینکه پرداخت او نیز ثبت شده باشد)</li>
+                                            <li>برای حذف راننده کمکی از لیست، باید پرداخت جداگانه‌ای برای او ثبت شود</li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </div>
+                            
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-3">💰 محاسبه هزینه راننده</h3>
+                                <ul className="list-disc list-inside space-y-2 mr-4">
+                                    <li><strong>هزینه راننده اصلی</strong> شامل: هزینه غذا، سوخت، عوارض، بارنامه، بار برگشتی، بارنامه برگشتی، چندجا تخلیه، ماموریت مازاد، اجرت ثابت، اجرت دپو، و حق ماموریت دپو</li>
+                                    <li>هزینه راننده کمکی شامل: اجرت راننده کمکی، هزینه غذا راننده کمکی، و هزینه ماموریت مازاد راننده کمکی</li>
+                                    <li>پیش پرداخت (کسور) فقط از هزینه راننده اصلی کم می‌شود، نه از هزینه راننده کمکی</li>
+                                    <li>مبلغ قابل پرداخت = (هزینه راننده اصلی - پیش پرداخت) + هزینه راننده کمکی</li>
+                                </ul>
+                            </div>
+                            
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-3">🔍 فیلتر و جستجو</h3>
+                                <ul className="list-disc list-inside space-y-2 mr-4">
+                                    <li>می‌توانید بر اساس کد پرسنلی یا نام راننده جستجو کنید</li>
+                                    <li>می‌توانید بر اساس بازه تاریخ محاسبه فیلتر کنید</li>
+                                    <li>خروجی اکسل برای بانک شامل: کد پرسنلی، نام، شماره حساب، مبلغ هزینه، کسور، و مبلغ قابل پرداخت است</li>
+                                </ul>
+                            </div>
+                            
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-3">📄 صورتحساب</h3>
+                                <ul className="list-disc list-inside space-y-2 mr-4">
+                                    <li>با کلیک روی دکمه "مشاهده صورتحساب" می‌توانید جزئیات کامل هزینه‌های راننده را مشاهده کنید</li>
+                                    <li>صورتحساب شامل تفکیک تورهای با راننده کمکی و بدون راننده کمکی است</li>
+                                    <li>می‌توانید صورتحساب را به صورت PDF یا عکس دانلود کنید</li>
+                                </ul>
+                            </div>
+                            
+                            <div className="bg-blue-50 border-r-4 border-blue-500 p-4 rounded">
+                                <p className="text-blue-800 font-semibold">
+                                    💡 نکته مهم: پرداخت راننده اصلی و راننده کمکی مستقل است. هر کدام باید جداگانه پرداخت شوند تا از لیست حذف شوند.
+                                </p>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default TransportFinancePaymentList;
+
                                                 tableLayout: 'auto',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
@@ -6242,8 +6305,8 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                             })()}
                                         </div>
                                     </div>
-                                // جدا کردن محاسبات با راننده کمکی و بدون راننده کمکی
-                                const calculationsWithoutHelper = invoiceCalculations.filter((calc: any) => {
+                                );
+                            })()}
                                     const helperId = calc.helper_driver_id || calc.helperDriverId;
                                     const helperAllowance = calc.helper_driver_allowance || calc.helperDriverAllowance || 0;
                                     const helperFoodCost = calc.helper_driver_food_cost || calc.helperDriverFoodCost || 0;
