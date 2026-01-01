@@ -6084,60 +6084,85 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 ویرایش شماره حساب راننده
                             </h2>
                             <div className="flex gap-2">
-                                {sortedAccountNumberResults.length > 0 && !selectedDriverForAccountEdit && (
+                                {!selectedDriverForAccountEdit && (
                                     <button
-                                        onClick={() => {
-                                            // Export to Excel
-                                            const wsData: any[][] = [];
-                                            
-                                            // Header
-                                            wsData.push(['کد پرسنلی', 'نام راننده', 'شماره حساب']);
-                                            
-                                            // Data rows
-                                            sortedAccountNumberResults.forEach((driver) => {
-                                                const accountNumber = (driver as any).accountNumber || (driver as any).account_number || '-';
-                                                wsData.push([
-                                                    driver.employeeId || '',
-                                                    driver.name || '',
-                                                    accountNumber
-                                                ]);
-                                            });
-                                            
-                                            const ws = XLSX.utils.aoa_to_sheet(wsData);
-                                            
-                                            // تنظیم راست‌چین برای تمام ستون‌ها
-                                            const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-                                            for (let R = range.s.r; R <= range.e.r; ++R) {
-                                                for (let C = range.s.c; C <= range.e.c; ++C) {
-                                                    const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-                                                    if (!ws[cellAddress]) continue;
-                                                    
-                                                    if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                                                    if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
-                                                    ws[cellAddress].s.alignment.horizontal = 'right';
-                                                    ws[cellAddress].s.alignment.vertical = 'center';
+                                        onClick={async () => {
+                                            try {
+                                                // دریافت همه راننده‌ها از API
+                                                const token = localStorage.getItem('token');
+                                                const headers = {
+                                                    'Authorization': `Bearer ${token}`,
+                                                    'Content-Type': 'application/json',
+                                                };
+                                                
+                                                const response = await fetch(getApiUrl('drivers'), { headers });
+                                                if (!response.ok) {
+                                                    throw new Error('خطا در دریافت لیست راننده‌ها');
                                                 }
+                                                
+                                                const allDrivers = await response.json();
+                                                
+                                                // Export to Excel
+                                                const wsData: any[][] = [];
+                                                
+                                                // Header
+                                                wsData.push(['کد پرسنلی', 'نام راننده', 'شماره حساب']);
+                                                
+                                                // Data rows - مرتب‌سازی بر اساس کد پرسنلی
+                                                const sortedDrivers = [...allDrivers].sort((a: any, b: any) => {
+                                                    const aId = (a.employeeId || '').toString();
+                                                    const bId = (b.employeeId || '').toString();
+                                                    return aId.localeCompare(bId, 'fa-IR');
+                                                });
+                                                
+                                                sortedDrivers.forEach((driver: any) => {
+                                                    const accountNumber = driver.accountNumber || driver.account_number || '-';
+                                                    wsData.push([
+                                                        driver.employeeId || '',
+                                                        driver.name || '',
+                                                        accountNumber
+                                                    ]);
+                                                });
+                                                
+                                                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                                                
+                                                // تنظیم راست‌چین برای تمام ستون‌ها
+                                                const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+                                                for (let R = range.s.r; R <= range.e.r; ++R) {
+                                                    for (let C = range.s.c; C <= range.e.c; ++C) {
+                                                        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                                                        if (!ws[cellAddress]) continue;
+                                                        
+                                                        if (!ws[cellAddress].s) ws[cellAddress].s = {};
+                                                        if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
+                                                        ws[cellAddress].s.alignment.horizontal = 'right';
+                                                        ws[cellAddress].s.alignment.vertical = 'center';
+                                                    }
+                                                }
+                                                
+                                                // تنظیم عرض ستون‌ها
+                                                ws['!cols'] = [
+                                                    { wch: 15 },  // کد پرسنلی
+                                                    { wch: 25 }, // نام راننده
+                                                    { wch: 20 }  // شماره حساب
+                                                ];
+                                                
+                                                const wb = XLSX.utils.book_new();
+                                                XLSX.utils.book_append_sheet(wb, ws, 'شماره حساب رانندگان');
+                                                
+                                                const fileName = `شماره_حساب_رانندگان_${new Date().toISOString().split('T')[0]}.xlsx`;
+                                                XLSX.writeFile(wb, fileName);
+                                            } catch (err: any) {
+                                                console.error('❌ [Export All Drivers] Error:', err);
+                                                alert(`خطا در دریافت یا ایجاد فایل Excel: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
                                             }
-                                            
-                                            // تنظیم عرض ستون‌ها
-                                            ws['!cols'] = [
-                                                { wch: 15 },  // کد پرسنلی
-                                                { wch: 25 }, // نام راننده
-                                                { wch: 20 }  // شماره حساب
-                                            ];
-                                            
-                                            const wb = XLSX.utils.book_new();
-                                            XLSX.utils.book_append_sheet(wb, ws, 'شماره حساب رانندگان');
-                                            
-                                            const fileName = `شماره_حساب_رانندگان_${new Date().toISOString().split('T')[0]}.xlsx`;
-                                            XLSX.writeFile(wb, fileName);
                                         }}
                                         className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 flex items-center gap-2"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                         </svg>
-                                        خروجی Excel
+                                        خروجی Excel (همه راننده‌ها)
                                     </button>
                                 )}
                                 <button
