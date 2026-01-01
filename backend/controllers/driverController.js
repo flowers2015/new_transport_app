@@ -7,12 +7,20 @@ const crypto = require('crypto');
 async function getDrivers(req, res) {
   try {
     // بررسی وجود ستون account_number
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'drivers' AND column_name = 'account_number'
-    `);
-    const hasAccountNumber = columnCheck.rows.length > 0;
+    let hasAccountNumber = false;
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'drivers' 
+        AND column_name = 'account_number'
+      `);
+      hasAccountNumber = columnCheck.rows.length > 0;
+    } catch (checkError) {
+      console.warn('⚠️ [getDrivers] Failed to check for account_number column, assuming it does not exist:', checkError.message);
+      hasAccountNumber = false;
+    }
     
     // فقط فیلدهای ضروری برای dropdown/select را برگردان
     // حذف فیلدهای غیرضروری برای کاهش حجم داده
@@ -50,12 +58,20 @@ async function getDriverById(req, res) {
   const { id } = req.params;
   try {
     // بررسی وجود ستون account_number
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'drivers' AND column_name = 'account_number'
-    `);
-    const hasAccountNumber = columnCheck.rows.length > 0;
+    let hasAccountNumber = false;
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'drivers' 
+        AND column_name = 'account_number'
+      `);
+      hasAccountNumber = columnCheck.rows.length > 0;
+    } catch (checkError) {
+      console.warn('⚠️ [getDriverById] Failed to check for account_number column, assuming it does not exist:', checkError.message);
+      hasAccountNumber = false;
+    }
     
     const accountNumberSelect = hasAccountNumber 
       ? 'account_number AS "accountNumber"'
@@ -140,12 +156,20 @@ async function createDriver(req, res) {
     }
 
     // بررسی وجود ستون account_number
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'drivers' AND column_name = 'account_number'
-    `);
-    const hasAccountNumber = columnCheck.rows.length > 0;
+    let hasAccountNumber = false;
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'drivers' 
+        AND column_name = 'account_number'
+      `);
+      hasAccountNumber = columnCheck.rows.length > 0;
+    } catch (checkError) {
+      console.warn('⚠️ [createDriver] Failed to check for account_number column, assuming it does not exist:', checkError.message);
+      hasAccountNumber = false;
+    }
 
     const id = crypto.randomUUID();
     
@@ -226,12 +250,20 @@ async function updateDriver(req, res) {
     }
 
     // بررسی وجود ستون account_number
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'drivers' AND column_name = 'account_number'
-    `);
-    const hasAccountNumber = columnCheck.rows.length > 0;
+    let hasAccountNumber = false;
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'drivers' 
+        AND column_name = 'account_number'
+      `);
+      hasAccountNumber = columnCheck.rows.length > 0;
+    } catch (checkError) {
+      console.warn('⚠️ [updateDriver] Failed to check for account_number column, assuming it does not exist:', checkError.message);
+      hasAccountNumber = false;
+    }
 
     // ساخت query بر اساس وجود ستون
     let updateQuery = `UPDATE drivers SET 
@@ -629,12 +661,22 @@ async function updateDriverAccountNumber(req, res) {
     }
 
     // بررسی وجود ستون account_number
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'drivers' AND column_name = 'account_number'
-    `);
-    const hasAccountNumber = columnCheck.rows.length > 0;
+    let hasAccountNumber = false;
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'drivers' 
+        AND column_name = 'account_number'
+      `);
+      hasAccountNumber = columnCheck.rows.length > 0;
+    } catch (checkError) {
+      console.error('❌ [updateDriverAccountNumber] Failed to check for account_number column:', checkError.message);
+      return res.status(500).json({ 
+        message: 'Failed to check for account_number column. Please ensure the database is accessible.' 
+      });
+    }
 
     if (!hasAccountNumber) {
       return res.status(400).json({ 

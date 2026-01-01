@@ -3348,6 +3348,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const billOfLadingCostNum = Math.round(Number(savedInputDialogData.billOfLadingCost) || 0) || 0;
         const loadingCostNum = Math.round(Number(savedInputDialogData.loadingCost) || 0) || 0;
         const returnCargoCostNum = Math.round(Number(savedInputDialogData.returnCargoCost) || 0) || 0;
+        const returnInterBranchCargoCostNum = Math.round(Number(savedInputDialogData.returnInterBranchCargoCost) || 0) || 0;
         const returnBillOfLadingCostNum = Math.round(Number(savedInputDialogData.returnBillOfLadingCost) || 0) || 0;
         
         // استفاده از مقادیر محاسبه شده خودکار
@@ -3372,8 +3373,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const depotAllowanceNum = Number(savedInputDialogData.depotKilometerRate) || 0;
         
         // محاسبه سایر هزینه‌های راننده اصلی (بدون اجرت/پورسانت):
-        // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
-        const otherMainDriverCosts = multiUnloadCostNum + fuelCost + excessMissionCostNum + foodCost + tollCostNum + billOfLadingCostNum + returnCargoCostNum + depotCargoHandlingCostNum + depotAllowanceNum + depotMissionCostNum + fixedAllowanceNum;
+        // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + بار برگشتی بین شعب + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
+        const otherMainDriverCosts = multiUnloadCostNum + fuelCost + excessMissionCostNum + foodCost + tollCostNum + billOfLadingCostNum + returnCargoCostNum + returnInterBranchCargoCostNum + depotCargoHandlingCostNum + depotAllowanceNum + depotMissionCostNum + fixedAllowanceNum;
         
         // هزینه کل سفر = سایر هزینه‌های راننده اصلی + اجرت/پورسانت (tourCost) + هزینه راننده کمکی
         // برای راننده پورسانتی: tourCost = پورسانت، fixedAllowanceNum = 0
