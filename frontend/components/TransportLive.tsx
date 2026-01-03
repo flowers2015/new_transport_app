@@ -1812,6 +1812,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [foundPersonalDriver, setFoundPersonalDriver] = useState<any | null | 'not_found'>(null);
     const [personalDriverDetails, setPersonalDriverDetails] = useState({ name: '', mobile: '', driverSmartId: '' });
     const [personalVehicleDetails, setPersonalVehicleDetails] = useState({ type: '', plate: '', truckSmartId: '' });
+    const [plateParts, setPlateParts] = useState({ part1: '', letter: 'ع', part2: '', cityCode: '' });
     const [foundPersonalVehicle, setFoundPersonalVehicle] = useState<any | null | 'not_found'>(null);
     const [destinations, setDestinations] = useState<Destination[]>([]);
     const [costMode, setCostMode] = useState<'manual' | 'auto'>('auto'); // پیش‌فرض: خودکار
@@ -1859,6 +1860,12 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         truckSmartId: vehicle.truckSmartId,
                         type: vehicle.vehicleType, 
                         plate: `${vehicle.platePart1}${vehicle.plateLetter}${vehicle.platePart2}-${vehicle.plateCityCode}`
+                    });
+                    setPlateParts({
+                        part1: vehicle.platePart1 || '',
+                        letter: vehicle.plateLetter || 'ع',
+                        part2: vehicle.platePart2 || '',
+                        cityCode: vehicle.plateCityCode || ''
                     });
                     setFoundPersonalVehicle(vehicle);
                 }
@@ -2100,6 +2107,12 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             type: vehicle.vehicleType,
             plate: `${vehicle.platePart1}${vehicle.plateLetter}${vehicle.platePart2}-${vehicle.plateCityCode}`
         }));
+        setPlateParts({
+            part1: vehicle.platePart1 || '',
+            letter: vehicle.plateLetter || 'ع',
+            part2: vehicle.platePart2 || '',
+            cityCode: vehicle.plateCityCode || ''
+        });
         setFoundPersonalVehicle(vehicle);
         setShowVehicleDropdown(false);
     };
@@ -2218,17 +2231,17 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             }
             
             // Format plate number for backend (ensure Iranian format)
-            // Remove spaces but keep the format: 12ع345-67 (two digits, Persian letter, three digits, dash, two digits)
-            const cleanedPlate = personalVehicleDetails.plate.replace(/\s/g, '');
+            // Build plate from parts: 12ع345-67 (two digits, Persian letter, three digits, dash, two digits)
+            const formattedPlate = `${plateParts.part1}${plateParts.letter}${plateParts.part2}-${plateParts.cityCode}`;
             
             // Validate plate format: must match Iranian plate format (12ع345-67)
-            const plateRegex = /^(\d{2})([آ-یا-ی])(\d{3})-(\d{2})$/;
-            if (!plateRegex.test(cleanedPlate)) {
-                alert('فرمت پلاک خودرو صحیح نیست. لطفاً به فرمت صحیح وارد کنید: 12ع345-67 (مثال: 43ع235-78)');
+            if (!plateParts.part1 || plateParts.part1.length !== 2 || 
+                !plateParts.letter || 
+                !plateParts.part2 || plateParts.part2.length !== 3 || 
+                !plateParts.cityCode || plateParts.cityCode.length !== 2) {
+                alert('لطفاً تمام قسمت‌های پلاک خودرو را به درستی وارد کنید (دو رقم - حرف - سه رقم - دو رقم)');
                 return;
             }
-            
-            const formattedPlate = cleanedPlate;
             
             // محاسبه totalFreightCost برای personal user
             let personalTotalCost = 0;
@@ -2525,7 +2538,105 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                                 <div><label className="text-xs">نوع خودرو*</label><input type="text" value={personalVehicleDetails.type} onChange={e => setPersonalVehicleDetails(s=>({...s, type: e.target.value}))} className="input-style" autoComplete="off"/></div>
-                                <div><label className="text-xs">شماره پلاک*</label><input type="text" placeholder="12ع345-67" value={personalVehicleDetails.plate} onChange={e => setPersonalVehicleDetails(s=>({...s, plate: e.target.value}))} className="input-style" autoComplete="off"/></div>
+                                <div>
+                                    <label className="text-xs">شماره پلاک*</label>
+                                    <div className="flex items-center gap-1.5">
+                                        <input 
+                                            type="text" 
+                                            value={plateParts.part1} 
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/\D/g, '').slice(0, 2);
+                                                setPlateParts(p => {
+                                                    const newParts = {...p, part1: val};
+                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
+                                                    return newParts;
+                                                });
+                                            }}
+                                            placeholder="12" 
+                                            className="input-style w-12 text-center" 
+                                            maxLength={2}
+                                            autoComplete="off"
+                                        />
+                                        <select 
+                                            value={plateParts.letter} 
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                setPlateParts(p => {
+                                                    const newParts = {...p, letter: val};
+                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
+                                                    return newParts;
+                                                });
+                                            }}
+                                            className="input-style w-12 text-center px-1"
+                                        >
+                                            <option value="الف">الف</option>
+                                            <option value="ب">ب</option>
+                                            <option value="پ">پ</option>
+                                            <option value="ت">ت</option>
+                                            <option value="ث">ث</option>
+                                            <option value="ج">ج</option>
+                                            <option value="چ">چ</option>
+                                            <option value="ح">ح</option>
+                                            <option value="خ">خ</option>
+                                            <option value="د">د</option>
+                                            <option value="ذ">ذ</option>
+                                            <option value="ر">ر</option>
+                                            <option value="ز">ز</option>
+                                            <option value="ژ">ژ</option>
+                                            <option value="س">س</option>
+                                            <option value="ش">ش</option>
+                                            <option value="ص">ص</option>
+                                            <option value="ض">ض</option>
+                                            <option value="ط">ط</option>
+                                            <option value="ظ">ظ</option>
+                                            <option value="ع">ع</option>
+                                            <option value="غ">غ</option>
+                                            <option value="ف">ف</option>
+                                            <option value="ق">ق</option>
+                                            <option value="ک">ک</option>
+                                            <option value="گ">گ</option>
+                                            <option value="ل">ل</option>
+                                            <option value="م">م</option>
+                                            <option value="ن">ن</option>
+                                            <option value="و">و</option>
+                                            <option value="ه">ه</option>
+                                            <option value="ی">ی</option>
+                                        </select>
+                                        <input 
+                                            type="text" 
+                                            value={plateParts.part2} 
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+                                                setPlateParts(p => {
+                                                    const newParts = {...p, part2: val};
+                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
+                                                    return newParts;
+                                                });
+                                            }}
+                                            placeholder="345" 
+                                            className="input-style w-14 text-center" 
+                                            maxLength={3}
+                                            autoComplete="off"
+                                        />
+                                        <span className="font-bold text-slate-600">-</span>
+                                        <input 
+                                            type="text" 
+                                            value={plateParts.cityCode} 
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/\D/g, '').slice(0, 2);
+                                                setPlateParts(p => {
+                                                    const newParts = {...p, cityCode: val};
+                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
+                                                    return newParts;
+                                                });
+                                            }}
+                                            placeholder="67" 
+                                            className="input-style w-12 text-center" 
+                                            maxLength={2}
+                                            autoComplete="off"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
