@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, FreightLineType } from '../types';
 import TransportDashboard from './TransportDashboard';
 import { getApiUrl } from '../utils/apiConfig';
+import { gregorianToJalali, jalaliToGregorian } from '../utils/jalali';
 
 interface TransportDashboardContainerProps {
     currentUser: User;
@@ -130,11 +131,62 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     const [lineAnalyticsLoading, setLineAnalyticsLoading] = useState(false);
     const [lineAnalyticsError, setLineAnalyticsError] = useState<string | null>(null);
     
-    // Filters
+    // Filters - برای خطوط (قدیمی)
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear() - 621);
     const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [timeRange, setTimeRange] = useState<'day' | 'month' | 'year'>('month');
+
+    // Helper function برای محاسبه اول و آخر ماه جاری (شمسی)
+    const getCurrentMonthJalaliRange = (): { startDate: string; endDate: string } => {
+        const today = new Date();
+        const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        const startDate = `${jy}/${String(jm).padStart(2, '0')}/01`;
+        // آخر ماه - محاسبه آخرین روز ماه شمسی
+        // ماه‌های 1-6: 31 روز، ماه‌های 7-11: 30 روز، ماه 12: 29 یا 30 روز (بسته به کبیسه بودن)
+        let lastDay = 30;
+        if (jm <= 6) {
+            lastDay = 31;
+        } else if (jm === 12) {
+            // سال کبیسه: ((year + 2346) % 128) < 29
+            const isLeap = ((jy + 2346) % 128) < 29;
+            lastDay = isLeap ? 30 : 29;
+        }
+        const endDate = `${jy}/${String(jm).padStart(2, '0')}/${String(lastDay).padStart(2, '0')}`;
+        return { startDate, endDate };
+    };
+
+    // State برای تاریخ‌های شمسی (representatives و analytics)
+    const [representativeStartDate, setRepresentativeStartDate] = useState<string>(() => getCurrentMonthJalaliRange().startDate);
+    const [representativeEndDate, setRepresentativeEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
+    const [analyticsStartDate, setAnalyticsStartDate] = useState<string>(() => getCurrentMonthJalaliRange().startDate);
+    const [analyticsEndDate, setAnalyticsEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
+
+    // Helper function برای تبدیل تاریخ شمسی به year/month/day برای API
+    const parseJalaliDateToAPI = (jalaliDate: string): { year: number; month: number; day: number } | null => {
+        const match = jalaliDate.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+        if (!match) return null;
+        return {
+            year: parseInt(match[1], 10),
+            month: parseInt(match[2], 10),
+            day: parseInt(match[3], 10)
+        };
+    };
+
+    // Helper function برای تشخیص timeRange از startDate و endDate
+    const detectTimeRange = (startDate: string, endDate: string): 'day' | 'month' | 'year' => {
+        const start = parseJalaliDateToAPI(startDate);
+        const end = parseJalaliDateToAPI(endDate);
+        if (!start || !end) return 'month';
+        
+        if (start.year === end.year && start.month === end.month && start.day === end.day) {
+            return 'day';
+        } else if (start.year === end.year && start.month === end.month) {
+            return 'month';
+        } else {
+            return 'year';
+        }
+    };
 
     const fetchStatisticsForLine = async (lineType: string) => {
         const token = localStorage.getItem('token');
@@ -247,14 +299,20 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 'Content-Type': 'application/json',
             };
 
+            // تبدیل تاریخ‌های شمسی به پارامترهای API
+            const start = parseJalaliDateToAPI(representativeStartDate);
+            const detectedTimeRange = detectTimeRange(representativeStartDate, representativeEndDate);
+
             const params = new URLSearchParams();
             params.append('representativeName', representativeName);
             params.append('city', city);
             if (lineType) params.append('lineType', lineType);
-            if (selectedYear) params.append('year', selectedYear.toString());
-            if (selectedMonth) params.append('month', selectedMonth.toString());
-            if (selectedDay) params.append('day', selectedDay.toString());
-            params.append('timeRange', timeRange);
+            if (start) {
+                params.append('year', start.year.toString());
+                params.append('month', start.month.toString());
+                params.append('day', start.day.toString());
+            }
+            params.append('timeRange', detectedTimeRange);
 
             const res = await fetch(getApiUrl(`freight-announcements/representative-details?${params.toString()}`), { headers });
             
@@ -271,7 +329,8 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     };
 
     const fetchLineAnalytics = async () => {
-        if (!selectedYear || !selectedMonth) {
+        const start = parseJalaliDateToAPI(analyticsStartDate);
+        if (!start) {
             setLineAnalytics([]);
             setLineAnalyticsMeta(null);
             setLineAnalyticsError(null);
@@ -289,8 +348,8 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             };
 
             const params = new URLSearchParams();
-            params.append('year', selectedYear.toString());
-            params.append('month', selectedMonth.toString());
+            params.append('year', start.year.toString());
+            params.append('month', start.month.toString());
             params.append('timeRange', 'month');
 
             const res = await fetch(getApiUrl(`freight-announcements/line-analytics?${params.toString()}`), { headers });
@@ -313,9 +372,15 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
 
     useEffect(() => {
         fetchStatistics();
-        fetchRepresentativeStatistics();
-        fetchLineAnalytics();
     }, [selectedYear, selectedMonth, selectedDay, timeRange]);
+
+    useEffect(() => {
+        fetchRepresentativeStatistics();
+    }, [representativeStartDate, representativeEndDate]);
+
+    useEffect(() => {
+        fetchLineAnalytics();
+    }, [analyticsStartDate, analyticsEndDate]);
 
     return (
         <TransportDashboard
@@ -342,6 +407,14 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 lineAnalyticsMeta={lineAnalyticsMeta}
                 lineAnalyticsLoading={lineAnalyticsLoading}
                 lineAnalyticsError={lineAnalyticsError}
+                representativeStartDate={representativeStartDate}
+                representativeEndDate={representativeEndDate}
+                onRepresentativeStartDateChange={setRepresentativeStartDate}
+                onRepresentativeEndDateChange={setRepresentativeEndDate}
+                analyticsStartDate={analyticsStartDate}
+                analyticsEndDate={analyticsEndDate}
+                onAnalyticsStartDateChange={setAnalyticsStartDate}
+                onAnalyticsEndDateChange={setAnalyticsEndDate}
             />
     );
 };

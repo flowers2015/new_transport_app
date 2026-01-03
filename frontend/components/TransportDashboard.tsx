@@ -142,6 +142,14 @@ interface TransportDashboardProps {
     lineAnalyticsMeta: LineAnalyticsMeta | null;
     lineAnalyticsLoading: boolean;
     lineAnalyticsError: string | null;
+    representativeStartDate: string;
+    representativeEndDate: string;
+    onRepresentativeStartDateChange: (date: string) => void;
+    onRepresentativeEndDateChange: (date: string) => void;
+    analyticsStartDate: string;
+    analyticsEndDate: string;
+    onAnalyticsStartDateChange: (date: string) => void;
+    onAnalyticsEndDateChange: (date: string) => void;
 }
 
 const COLORS = {
@@ -1037,6 +1045,14 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     lineAnalyticsMeta,
     lineAnalyticsLoading,
     lineAnalyticsError,
+    representativeStartDate,
+    representativeEndDate,
+    onRepresentativeStartDateChange,
+    onRepresentativeEndDateChange,
+    analyticsStartDate,
+    analyticsEndDate,
+    onAnalyticsStartDateChange,
+    onAnalyticsEndDateChange,
 }) => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [showDailyStats, setShowDailyStats] = useState(false);
@@ -1072,6 +1088,49 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
             dateStr: `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`
         };
     };
+
+    // Helper function برای استخراج month از تاریخ شمسی
+    const parseMonthFromJalaliDate = (jalaliDate: string): number | null => {
+        const match = jalaliDate.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+        if (!match) return null;
+        return parseInt(match[2], 10);
+    };
+
+    // Helper function برای استخراج year/month/day از تاریخ شمسی
+    const parseJalaliDate = (jalaliDate: string): { year: number; month: number; day: number } | null => {
+        const match = jalaliDate.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+        if (!match) return null;
+        return {
+            year: parseInt(match[1], 10),
+            month: parseInt(match[2], 10),
+            day: parseInt(match[3], 10)
+        };
+    };
+
+    // Helper function برای تشخیص timeRange
+    const detectTimeRange = (startDate: string, endDate: string): 'day' | 'month' | 'year' => {
+        const start = parseJalaliDate(startDate);
+        const end = parseJalaliDate(endDate);
+        if (!start || !end) return 'month';
+        
+        if (start.year === end.year && start.month === end.month && start.day === end.day) {
+            return 'day';
+        } else if (start.year === end.year && start.month === end.month) {
+            return 'month';
+        } else {
+            return 'year';
+        }
+    };
+
+    // استخراج month برای analytics
+    const analyticsMonth = parseMonthFromJalaliDate(analyticsStartDate);
+    
+    // استخراج props برای RepresentativeStatisticsTable
+    const representativeDateParsed = parseJalaliDate(representativeStartDate);
+    const representativeYear = representativeDateParsed?.year || selectedYear;
+    const representativeMonth = representativeDateParsed?.month || null;
+    const representativeDay = representativeDateParsed?.day || null;
+    const representativeTimeRange = detectTimeRange(representativeStartDate, representativeEndDate);
 
     // Fetch daily statistics - memoized to prevent re-creation
     const fetchDailyStats = React.useCallback(async () => {
@@ -1302,7 +1361,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                         }`}
                     >
-                        آمار نمایندگان
+                        آمار کرایه پخش/نماینده
                     </button>
                     <button
                         onClick={() => handleTabChange('analytics')}
@@ -1542,64 +1601,17 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                         <div className="space-y-6">
                             {/* Filters */}
                             <div className="bg-white rounded-lg shadow p-4">
-                                <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {/* Year Filter */}
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">آمار به تفکیک لاین</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                                    {/* Line Type Filter */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">سال اعلام بار</label>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">لاین</label>
                                         <select
-                                            value={selectedYear}
-                                            onChange={(e) => onYearChange(Number(e.target.value))}
                                             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            disabled
+                                            defaultValue="all"
                                         >
-                                            {yearOptions.map(year => (
-                                                <option key={year} value={year}>{year}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Month Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">ماه اعلام بار</label>
-                                        <select
-                                            value={selectedMonth || ''}
-                                            onChange={(e) => onMonthChange(e.target.value ? Number(e.target.value) : null)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                        >
-                                            <option value="">همه ماه‌ها</option>
-                                            {monthOptions.map(month => (
-                                                <option key={month} value={month}>{month}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Day Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">روز بارگیری</label>
-                                        <select
-                                            value={selectedDay || ''}
-                                            onChange={(e) => onDayChange(e.target.value ? Number(e.target.value) : null)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                            disabled={!selectedMonth}
-                                        >
-                                            <option value="">همه روزها</option>
-                                            {dayOptions.map(day => (
-                                                <option key={day} value={day}>{day}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Time Range Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">بازه زمانی</label>
-                                        <select
-                                            value={timeRange}
-                                            onChange={(e) => onTimeRangeChange(e.target.value as 'day' | 'month' | 'year')}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                        >
-                                            <option value="day">روزانه</option>
-                                            <option value="month">ماهانه</option>
-                                            <option value="year">سالانه</option>
+                                            <option value="all">همه لاین‌ها</option>
                                         </select>
                                     </div>
                                 </div>
@@ -1618,64 +1630,41 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             {/* Filters */}
                             <div className="bg-white rounded-lg shadow p-4">
                                 <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {/* Year Filter */}
+                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                                    {/* Start Date Filter */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">سال اعلام بار</label>
-                                        <select
-                                            value={selectedYear}
-                                            onChange={(e) => onYearChange(Number(e.target.value))}
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">از تاریخ (شمسی)</label>
+                                        <input
+                                            type="text"
+                                            value={representativeStartDate}
+                                            onChange={(e) => {
+                                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                                if (value.length <= 10) {
+                                                    onRepresentativeStartDateChange(value);
+                                                }
+                                            }}
+                                            placeholder="1404/05/01"
                                             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                        >
-                                            {yearOptions.map(year => (
-                                                <option key={year} value={year}>{year}</option>
-                                            ))}
-                                        </select>
+                                            dir="rtl"
+                                        />
                                     </div>
 
-                                    {/* Month Filter */}
+                                    {/* End Date Filter */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">ماه اعلام بار</label>
-                                        <select
-                                            value={selectedMonth || ''}
-                                            onChange={(e) => onMonthChange(e.target.value ? Number(e.target.value) : null)}
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">تا تاریخ (شمسی)</label>
+                                        <input
+                                            type="text"
+                                            value={representativeEndDate}
+                                            onChange={(e) => {
+                                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                                if (value.length <= 10) {
+                                                    onRepresentativeEndDateChange(value);
+                                                }
+                                            }}
+                                            placeholder="1404/05/31"
                                             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                        >
-                                            <option value="">همه ماه‌ها</option>
-                                            {monthOptions.map(month => (
-                                                <option key={month} value={month}>{month}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Day Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">روز بارگیری</label>
-                                        <select
-                                            value={selectedDay || ''}
-                                            onChange={(e) => onDayChange(e.target.value ? Number(e.target.value) : null)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                            disabled={!selectedMonth}
-                                        >
-                                            <option value="">همه روزها</option>
-                                            {dayOptions.map(day => (
-                                                <option key={day} value={day}>{day}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Time Range Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">بازه زمانی</label>
-                                        <select
-                                            value={timeRange}
-                                            onChange={(e) => onTimeRangeChange(e.target.value as 'day' | 'month' | 'year')}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                        >
-                                            <option value="day">روزانه</option>
-                                            <option value="month">ماهانه</option>
-                                            <option value="year">سالانه</option>
-                                        </select>
+                                            dir="rtl"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1686,10 +1675,10 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 loading={representativeStatsLoading}
                                 error={representativeStatsError}
                                 onFetchDetails={onFetchRepresentativeDetails}
-                                selectedYear={selectedYear}
-                                selectedMonth={selectedMonth}
-                                selectedDay={selectedDay}
-                                timeRange={timeRange}
+                                selectedYear={representativeYear}
+                                selectedMonth={representativeMonth}
+                                selectedDay={representativeDay}
+                                timeRange={representativeTimeRange}
                             />
                         </div>
                     )}
@@ -1697,13 +1686,71 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                     {/* Tab 4: Line Analytics */}
                     {activeTab === 'analytics' && loadedTabs.has('analytics') && (
                         <div className="space-y-6">
-                            <LineAnalyticsSection
-                                data={lineAnalytics}
-                                meta={lineAnalyticsMeta}
-                                loading={lineAnalyticsLoading}
-                                error={lineAnalyticsError}
-                                selectedMonth={selectedMonth}
-                            />
+                            {/* Filters */}
+                            <div className="bg-white rounded-lg shadow p-4">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
+                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                                    {/* Start Date Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                                            از تاریخ (شمسی) <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={analyticsStartDate}
+                                            onChange={(e) => {
+                                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                                if (value.length <= 10) {
+                                                    onAnalyticsStartDateChange(value);
+                                                }
+                                            }}
+                                            placeholder="1404/05/01"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            dir="rtl"
+                                        />
+                                    </div>
+
+                                    {/* End Date Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                                            تا تاریخ (شمسی) <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={analyticsEndDate}
+                                            onChange={(e) => {
+                                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                                if (value.length <= 10) {
+                                                    onAnalyticsEndDateChange(value);
+                                                }
+                                            }}
+                                            placeholder="1404/05/31"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            dir="rtl"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Content */}
+                            {!analyticsStartDate || !analyticsEndDate ? (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+                                    <div className="text-amber-800 text-lg font-semibold mb-2">
+                                        برای مشاهده آنالیز کرایه، ابتدا بازه تاریخی را مشخص کنید
+                                    </div>
+                                    <div className="text-amber-600 text-sm">
+                                        آنالیز کرایه به تفکیک لاین و خودرو برای بازه تاریخی انتخابی شما نمایش داده خواهد شد
+                                    </div>
+                                </div>
+                            ) : (
+                                <LineAnalyticsSection
+                                    data={lineAnalytics}
+                                    meta={lineAnalyticsMeta}
+                                    loading={lineAnalyticsLoading}
+                                    error={lineAnalyticsError}
+                                    selectedMonth={analyticsMonth}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
@@ -1733,7 +1780,6 @@ const RepresentativeStatisticsTable: React.FC<{
     selectedDay: number | null;
     timeRange: 'day' | 'month' | 'year';
 }> = ({ stats, loading, error, onFetchDetails, selectedYear, selectedMonth, selectedDay, timeRange }) => {
-    const [isTableOpen, setIsTableOpen] = useState(false);
     const [selectedRepresentative, setSelectedRepresentative] = useState<{ name: string; city: string; lineType?: string } | null>(null);
     const [details, setDetails] = useState<RepresentativeDetailData[]>([]);
     const [detailsLoading, setDetailsLoading] = useState(false);
@@ -1917,31 +1963,8 @@ const RepresentativeStatisticsTable: React.FC<{
         <>
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                 <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold text-slate-800">آمار کرایه نماینده/پخش</h2>
-                    <button
-                        onClick={() => setIsTableOpen(!isTableOpen)}
-                        className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1 flex-row-reverse"
-                        title={isTableOpen ? "بستن جدول" : "باز کردن جدول"}
-                    >
-                        {isTableOpen ? (
-                            <>
-                                بستن
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                </svg>
-                            </>
-                        ) : (
-                            <>
-                                باز کردن
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </>
-                        )}
-                    </button>
-                    </div>
-                    {isTableOpen && (
                         <button
                             onClick={() => {
                                 // خروجی اکسل
@@ -1955,7 +1978,7 @@ const RepresentativeStatisticsTable: React.FC<{
                             </svg>
                             خروجی اکسل
                         </button>
-                    )}
+                    </div>
                 </div>
 
                 {error && (
@@ -1964,8 +1987,7 @@ const RepresentativeStatisticsTable: React.FC<{
                     </div>
                 )}
 
-                {isTableOpen && (
-                    <div className="overflow-x-auto">
+                <div className="overflow-x-auto">
                         {/* فیلترهای جستجو */}
                         <div className="mb-4 space-y-3">
                             <div className="flex gap-4 items-end">
@@ -2190,8 +2212,7 @@ const RepresentativeStatisticsTable: React.FC<{
                                 </div>
                             </>
                         )}
-                    </div>
-                )}
+                </div>
             </div>
 
             {/* Details Modal */}
@@ -3116,16 +3137,6 @@ const LineAnalyticsSection: React.FC<{
                                 بستن
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
-            
-            {/* Dialog برای قوانین */}
-            {isRulesOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setIsRulesOpen(false)}>
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
-                        <WorkflowRules view={View.TransportDashboard} userRole={currentUser.role} />
-                        <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     </div>
                 </div>
             )}
