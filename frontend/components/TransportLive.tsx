@@ -1770,7 +1770,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     </table>
                 </div>
             </div>
-             {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog {...props} announcement={selectedAnnouncement} onClose={handleCloseDialog} />}
+             {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog announcement={selectedAnnouncement} drivers={drivers} vehicles={vehicles} personalDrivers={personalDrivers} personalVehicles={personalVehicles} onUpdateAssignment={onUpdateAssignment} currentUser={currentUser} onChangeRequest={onChangeRequest} onChangeVehicleType={onChangeVehicleType} onOpenHistory={onOpenHistory} onOpenAssignmentDialog={onOpenAssignmentDialog} activeLine={activeLine} setActiveLine={setActiveLine} finalizePermissions={finalizePermissions} onClose={handleCloseDialog} />}
              {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} activeLine={activeLine} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
              {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
              {isRulesOpen && (

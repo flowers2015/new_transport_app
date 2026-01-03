@@ -1041,6 +1041,8 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [showDailyStats, setShowDailyStats] = useState(false);
     const [dailyStatsIndex, setDailyStatsIndex] = useState(0);
+    const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics'>('daily');
+    const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics'>>(new Set(['daily']));
     const [dailyStats, setDailyStats] = useState<{
         iceCream: StatisticsData[];
         dairy: StatisticsData[];
@@ -1239,6 +1241,12 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
         );
     }
 
+    // Handle tab change with lazy loading
+    const handleTabChange = (tab: 'daily' | 'lines' | 'representatives' | 'analytics') => {
+        setActiveTab(tab);
+        setLoadedTabs(prev => new Set([...prev, tab]));
+    };
+
     return (
         <div className="p-6 space-y-8" ref={pdfExportRef}>
             {/* Header */}
@@ -1248,320 +1256,468 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                     <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین کارتابل">
                         <BookOpenIcon className="w-5 h-5 text-slate-600"/>
                     </button>
-                    <button
-                        onClick={() => {
-                            setShowDailyStats(!showDailyStats);
-                            if (!showDailyStats) {
-                                fetchDailyStats();
-                            }
-                        }}
-                        className="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 text-sm font-medium flex items-center gap-2"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                        {showDailyStats ? 'مخفی کردن آمار روزانه' : 'نمایش آمار روزانه'}
-                    </button>
-                    <button
-                        onClick={handleExportPDF}
-                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium flex items-center gap-2"
-                        title="خروجی PDF"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        خروجی PDF
-                    </button>
+                    {activeTab !== 'daily' && (
+                        <button
+                            onClick={handleExportPDF}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium flex items-center gap-2"
+                            title="خروجی PDF"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            خروجی PDF
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Daily Stats Teaser - Carousel */}
-            {!dailyStatsLoading && (
-                <div className="bg-gradient-to-r from-sky-500 to-blue-600 rounded-lg shadow-lg p-3 text-white relative overflow-hidden">
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1 relative" style={{ height: '60px' }}>
-                            {/* Carousel items with fade transition - render all items for smooth transition */}
-                            {[
-                                { name: 'بستنی', data: dailyStats.iceCream },
-                                { name: 'پاستوریزه', data: dailyStats.dairy },
-                                { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
-                            ].map((line, idx) => {
-                                const stat = line.data && line.data.length > 0 ? line.data[0] : null;
-                                const isActive = idx === dailyStatsIndex;
-                                const displayStat = stat || {
-                                    totalRequests: 0,
-                                    companyAssignments: 0,
-                                    personalAssignments: 0,
-                                    totalAssignments: 0,
-                                    successRate: 0
-                                };
-                                
-                                // Get colors for statistics
-                                const getRequestColor = (val: number) => {
-                                    if (val === 0) return 'text-yellow-100';
-                                    if (val >= 5) return 'text-green-200';
-                                    return 'text-white';
-                                };
-                                
-                                const getAssignmentColor = (val: number, total: number) => {
-                                    if (val === 0) return 'text-red-200';
-                                    if (val / total >= 0.7) return 'text-green-200';
-                                    return 'text-yellow-100';
-                                };
-                                
-                                const getSuccessColor = (rate: number) => {
-                                    if (rate >= 70) return 'text-green-200';
-                                    if (rate >= 50) return 'text-yellow-100';
-                                    return 'text-red-200';
-                                };
-                                
-                                // Render all items but control visibility with opacity for smooth transition
-                                return (
-                                    <div
-                                        key={`${line.name}-${idx}`}
-                                        className={`absolute inset-0 flex items-center transition-opacity duration-700 ease-in-out ${
-                                            isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-4 w-full">
-                                            <div className="text-xs opacity-90 whitespace-nowrap flex-shrink-0">
-                                                آمار عملکرد امروز - {getTodayJalali().dateStr}
-                                            </div>
-                                            <div className="flex-1 grid grid-cols-6 gap-3 text-center items-center">
-                                                <div className="flex flex-col">
-                                                    <div className="text-[10px] opacity-75 mb-0.5">لاین فروش</div>
-                                                    <div className="font-semibold text-sm">{line.name}</div>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <div className="text-[10px] opacity-75 mb-0.5">درخواست</div>
-                                                    <div className={`font-bold text-base ${getRequestColor(displayStat.totalRequests)}`}>
-                                                        {displayStat.totalRequests}
+            {/* Tabs Navigation */}
+            <div className="bg-white rounded-lg shadow">
+                <div className="flex border-b border-slate-200">
+                    <button
+                        onClick={() => handleTabChange('daily')}
+                        className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                            activeTab === 'daily'
+                                ? 'border-b-2 border-sky-600 text-sky-600 bg-sky-50'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                    >
+                        آمار روزانه
+                    </button>
+                    <button
+                        onClick={() => handleTabChange('lines')}
+                        className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                            activeTab === 'lines'
+                                ? 'border-b-2 border-sky-600 text-sky-600 bg-sky-50'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                    >
+                        آمار خطوط
+                    </button>
+                    <button
+                        onClick={() => handleTabChange('representatives')}
+                        className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                            activeTab === 'representatives'
+                                ? 'border-b-2 border-sky-600 text-sky-600 bg-sky-50'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                    >
+                        آمار نمایندگان
+                    </button>
+                    <button
+                        onClick={() => handleTabChange('analytics')}
+                        className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                            activeTab === 'analytics'
+                                ? 'border-b-2 border-sky-600 text-sky-600 bg-sky-50'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                    >
+                        تحلیل خطوط
+                    </button>
+                </div>
+
+                {/* Tab Content */}
+                <div className="p-6">
+                    {/* Tab 1: Daily Stats */}
+                    {activeTab === 'daily' && loadedTabs.has('daily') && (
+                        <div className="space-y-6">
+                            {/* Daily Stats Teaser - Carousel */}
+                            {!dailyStatsLoading && (
+                                <div className="bg-gradient-to-r from-sky-500 to-blue-600 rounded-lg shadow-lg p-3 text-white relative overflow-hidden">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex-1 relative" style={{ height: '60px' }}>
+                                            {/* Carousel items with fade transition - render all items for smooth transition */}
+                                            {[
+                                                { name: 'بستنی', data: dailyStats.iceCream },
+                                                { name: 'پاستوریزه', data: dailyStats.dairy },
+                                                { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                                            ].map((line, idx) => {
+                                                const stat = line.data && line.data.length > 0 ? line.data[0] : null;
+                                                const isActive = idx === dailyStatsIndex;
+                                                const displayStat = stat || {
+                                                    totalRequests: 0,
+                                                    companyAssignments: 0,
+                                                    personalAssignments: 0,
+                                                    totalAssignments: 0,
+                                                    successRate: 0
+                                                };
+                                                
+                                                // Get colors for statistics
+                                                const getRequestColor = (val: number) => {
+                                                    if (val === 0) return 'text-yellow-100';
+                                                    if (val >= 5) return 'text-green-200';
+                                                    return 'text-white';
+                                                };
+                                                
+                                                const getAssignmentColor = (val: number, total: number) => {
+                                                    if (val === 0) return 'text-red-200';
+                                                    if (val / total >= 0.7) return 'text-green-200';
+                                                    return 'text-yellow-100';
+                                                };
+                                                
+                                                const getSuccessColor = (rate: number) => {
+                                                    if (rate >= 70) return 'text-green-200';
+                                                    if (rate >= 50) return 'text-yellow-100';
+                                                    return 'text-red-200';
+                                                };
+                                                
+                                                // Render all items but control visibility with opacity for smooth transition
+                                                return (
+                                                    <div
+                                                        key={`${line.name}-${idx}`}
+                                                        className={`absolute inset-0 flex items-center transition-opacity duration-700 ease-in-out ${
+                                                            isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-4 w-full">
+                                                            <div className="text-xs opacity-90 whitespace-nowrap flex-shrink-0">
+                                                                آمار عملکرد امروز - {getTodayJalali().dateStr}
+                                                            </div>
+                                                            <div className="flex-1 grid grid-cols-6 gap-3 text-center items-center">
+                                                                <div className="flex flex-col">
+                                                                    <div className="text-[10px] opacity-75 mb-0.5">لاین فروش</div>
+                                                                    <div className="font-semibold text-sm">{line.name}</div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <div className="text-[10px] opacity-75 mb-0.5">درخواست</div>
+                                                                    <div className={`font-bold text-base ${getRequestColor(displayStat.totalRequests)}`}>
+                                                                        {displayStat.totalRequests}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <div className="text-[10px] opacity-75 mb-0.5">شرکتی</div>
+                                                                    <div className={`font-bold text-base ${getAssignmentColor(displayStat.companyAssignments, displayStat.totalRequests)}`}>
+                                                                        {displayStat.companyAssignments}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <div className="text-[10px] opacity-75 mb-0.5">شخصی</div>
+                                                                    <div className={`font-bold text-base ${getAssignmentColor(displayStat.personalAssignments, displayStat.totalRequests)}`}>
+                                                                        {displayStat.personalAssignments}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <div className="text-[10px] opacity-75 mb-0.5">کل</div>
+                                                                    <div className="font-bold text-base text-white">{displayStat.totalAssignments}</div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <div className="text-[10px] opacity-75 mb-0.5">موفقیت</div>
+                                                                    <div className={`font-bold text-base ${getSuccessColor(displayStat.successRate)}`}>
+                                                                        {displayStat.successRate}%
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <div className="text-[10px] opacity-75 mb-0.5">شرکتی</div>
-                                                    <div className={`font-bold text-base ${getAssignmentColor(displayStat.companyAssignments, displayStat.totalRequests)}`}>
-                                                        {displayStat.companyAssignments}
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <div className="text-[10px] opacity-75 mb-0.5">شخصی</div>
-                                                    <div className={`font-bold text-base ${getAssignmentColor(displayStat.personalAssignments, displayStat.totalRequests)}`}>
-                                                        {displayStat.personalAssignments}
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <div className="text-[10px] opacity-75 mb-0.5">کل</div>
-                                                    <div className="font-bold text-base text-white">{displayStat.totalAssignments}</div>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <div className="text-[10px] opacity-75 mb-0.5">موفقیت</div>
-                                                    <div className={`font-bold text-base ${getSuccessColor(displayStat.successRate)}`}>
-                                                        {displayStat.successRate}%
-                                                    </div>
-                                                </div>
-                                            </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex flex-col gap-1.5 flex-shrink-0">
+                                            {[0, 1, 2].map(i => {
+                                                const line = [
+                                                    { name: 'بستنی', data: dailyStats.iceCream },
+                                                    { name: 'پاستوریزه', data: dailyStats.dairy },
+                                                    { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                                                ][i];
+                                                const hasData = line.data && line.data.length > 0;
+                                                const isActive = dailyStatsIndex === i;
+                                                return (
+                                                    <button
+                                                        key={i}
+                                                        onClick={() => setDailyStatsIndex(i)}
+                                                        className={`relative w-2 h-2 rounded-full transition-all duration-300 flex items-center justify-center ${
+                                                            isActive 
+                                                                ? 'bg-white w-8' 
+                                                                : 'bg-white/50 hover:bg-white/75 cursor-pointer'
+                                                        }`}
+                                                        title={line.name}
+                                                    />
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                        <div className="flex flex-col gap-1.5 flex-shrink-0">
-                            {[0, 1, 2].map(i => {
-                                const line = [
-                                    { name: 'بستنی', data: dailyStats.iceCream },
-                                    { name: 'پاستوریزه', data: dailyStats.dairy },
-                                    { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
-                                ][i];
-                                const hasData = line.data && line.data.length > 0;
-                                const isActive = dailyStatsIndex === i;
-                                return (
-                                    <button
-                                        key={i}
-                                        onClick={() => setDailyStatsIndex(i)}
-                                        className={`relative w-2 h-2 rounded-full transition-all duration-300 flex items-center justify-center ${
-                                            isActive 
-                                                ? 'bg-white w-8' 
-                                                : 'bg-white/50 hover:bg-white/75 cursor-pointer'
-                                        }`}
-                                        title={line.name}
-                                    />
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-            )}
+                                </div>
+                            )}
 
-            {/* Daily Stats Full Table - Collapsible */}
-            {showDailyStats && (
-                <div className="bg-white rounded-lg shadow p-6">
-                    <h2 className="text-xl font-bold text-slate-800 mb-4">آمار عملکرد روزانه - {getTodayJalali().dateStr}</h2>
-                    {dailyStatsLoading ? (
-                        <div className="text-center py-8 text-slate-600">در حال بارگذاری...</div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-slate-300">
-                                        <th className="px-4 py-3 text-right text-slate-700">لاین فروش</th>
-                                        <th className="px-4 py-3 text-center text-slate-700">درخواست</th>
-                                        <th className="px-4 py-3 text-center text-slate-700">شرکتی</th>
-                                        <th className="px-4 py-3 text-center text-slate-700">شخصی</th>
-                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت جذب</th>
-                                        <th className="px-4 py-3 text-center text-slate-700">کل</th>
-                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {[
-                                        { name: 'بستنی', data: dailyStats.iceCream },
-                                        { name: 'پاستوریزه', data: dailyStats.dairy },
-                                        { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
-                                    ].map((line, idx) => {
-                                        const stat = line.data && line.data.length > 0 ? line.data[0] : null;
-                                        // Always show row, even if no data (show zeros)
-                                        const displayStat = stat || {
-                                            totalRequests: 0,
-                                            companyAssignments: 0,
-                                            personalAssignments: 0,
-                                            totalAssignments: 0,
-                                            successRate: 0
-                                        };
-                                        // For now, success rate for personal is the same as overall
-                                        // TODO: Calculate actual referral success rate from backend
-                                        const personalSuccessRate = displayStat.totalRequests > 0 
-                                            ? Math.round((displayStat.personalAssignments / displayStat.totalRequests) * 100)
-                                            : 0;
-                                        return (
-                                            <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                                                <td className="px-4 py-3 text-right font-semibold">{line.name}</td>
-                                                <td className="px-4 py-3 text-center">{displayStat.totalRequests}</td>
-                                                <td className="px-4 py-3 text-center">{displayStat.companyAssignments}</td>
-                                                <td className="px-4 py-3 text-center">{displayStat.personalAssignments}</td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <div className="flex flex-col items-center gap-1">
-                                                        <span className="text-xs text-slate-600">
-                                                            {displayStat.personalAssignments} از {displayStat.totalRequests}
-                                                        </span>
-                                                        <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
-                                                            personalSuccessRate >= 50 ? 'bg-green-100 text-green-800' :
-                                                            personalSuccessRate >= 30 ? 'bg-yellow-100 text-yellow-800' :
-                                                            'bg-red-100 text-red-800'
-                                                        }`}>
-                                                            {personalSuccessRate}%
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">{displayStat.totalAssignments}</td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                        displayStat.successRate >= 70 ? 'bg-green-100 text-green-800' :
-                                                        displayStat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-red-100 text-red-800'
-                                                    }`}>
-                                                        {displayStat.successRate}%
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                            {/* Daily Stats Full Table */}
+                            <div className="bg-white rounded-lg shadow p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-xl font-bold text-slate-800">آمار عملکرد روزانه - {getTodayJalali().dateStr}</h2>
+                                    <button
+                                        onClick={() => {
+                                            setShowDailyStats(!showDailyStats);
+                                            if (!showDailyStats) {
+                                                fetchDailyStats();
+                                            }
+                                        }}
+                                        className="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 text-sm font-medium flex items-center gap-2"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
+                                        {showDailyStats ? 'مخفی کردن جدول' : 'نمایش جدول کامل'}
+                                    </button>
+                                </div>
+                                {showDailyStats && (
+                                    dailyStatsLoading ? (
+                                        <div className="text-center py-8 text-slate-600">در حال بارگذاری...</div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-slate-300">
+                                                        <th className="px-4 py-3 text-right text-slate-700">لاین فروش</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700">درخواست</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700">شرکتی</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700">شخصی</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت جذب</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700">کل</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {[
+                                                        { name: 'بستنی', data: dailyStats.iceCream },
+                                                        { name: 'پاستوریزه', data: dailyStats.dairy },
+                                                        { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                                                    ].map((line, idx) => {
+                                                        const stat = line.data && line.data.length > 0 ? line.data[0] : null;
+                                                        // Always show row, even if no data (show zeros)
+                                                        const displayStat = stat || {
+                                                            totalRequests: 0,
+                                                            companyAssignments: 0,
+                                                            personalAssignments: 0,
+                                                            totalAssignments: 0,
+                                                            successRate: 0
+                                                        };
+                                                        // For now, success rate for personal is the same as overall
+                                                        // TODO: Calculate actual referral success rate from backend
+                                                        const personalSuccessRate = displayStat.totalRequests > 0 
+                                                            ? Math.round((displayStat.personalAssignments / displayStat.totalRequests) * 100)
+                                                            : 0;
+                                                        return (
+                                                            <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                                                                <td className="px-4 py-3 text-right font-semibold">{line.name}</td>
+                                                                <td className="px-4 py-3 text-center">{displayStat.totalRequests}</td>
+                                                                <td className="px-4 py-3 text-center">{displayStat.companyAssignments}</td>
+                                                                <td className="px-4 py-3 text-center">{displayStat.personalAssignments}</td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        <span className="text-xs text-slate-600">
+                                                                            {displayStat.personalAssignments} از {displayStat.totalRequests}
+                                                                        </span>
+                                                                        <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                                                                            personalSuccessRate >= 50 ? 'bg-green-100 text-green-800' :
+                                                                            personalSuccessRate >= 30 ? 'bg-yellow-100 text-yellow-800' :
+                                                                            'bg-red-100 text-red-800'
+                                                                        }`}>
+                                                                            {personalSuccessRate}%
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">{displayStat.totalAssignments}</td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                                        displayStat.successRate >= 70 ? 'bg-green-100 text-green-800' :
+                                                                        displayStat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                                                        'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                        {displayStat.successRate}%
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tab 2: Line Statistics */}
+                    {activeTab === 'lines' && loadedTabs.has('lines') && (
+                        <div className="space-y-6">
+                            {/* Filters */}
+                            <div className="bg-white rounded-lg shadow p-4">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* Year Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">سال اعلام بار</label>
+                                        <select
+                                            value={selectedYear}
+                                            onChange={(e) => onYearChange(Number(e.target.value))}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            {yearOptions.map(year => (
+                                                <option key={year} value={year}>{year}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Month Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">ماه اعلام بار</label>
+                                        <select
+                                            value={selectedMonth || ''}
+                                            onChange={(e) => onMonthChange(e.target.value ? Number(e.target.value) : null)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            <option value="">همه ماه‌ها</option>
+                                            {monthOptions.map(month => (
+                                                <option key={month} value={month}>{month}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Day Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">روز بارگیری</label>
+                                        <select
+                                            value={selectedDay || ''}
+                                            onChange={(e) => onDayChange(e.target.value ? Number(e.target.value) : null)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            disabled={!selectedMonth}
+                                        >
+                                            <option value="">همه روزها</option>
+                                            {dayOptions.map(day => (
+                                                <option key={day} value={day}>{day}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Time Range Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">بازه زمانی</label>
+                                        <select
+                                            value={timeRange}
+                                            onChange={(e) => onTimeRangeChange(e.target.value as 'day' | 'month' | 'year')}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            <option value="day">روزانه</option>
+                                            <option value="month">ماهانه</option>
+                                            <option value="year">سالانه</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Line Rows - Each line gets a full row */}
+                            <LineRow title="بستنی" stats={iceCreamStats} timeRange={timeRange} />
+                            <LineRow title="پاستوریزه" stats={dairyStats} timeRange={timeRange} />
+                            <LineRow title="لبنیات-فروتلند" stats={ambientStats} timeRange={timeRange} />
+                        </div>
+                    )}
+
+                    {/* Tab 3: Representative Statistics */}
+                    {activeTab === 'representatives' && loadedTabs.has('representatives') && (
+                        <div className="space-y-6">
+                            {/* Filters */}
+                            <div className="bg-white rounded-lg shadow p-4">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* Year Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">سال اعلام بار</label>
+                                        <select
+                                            value={selectedYear}
+                                            onChange={(e) => onYearChange(Number(e.target.value))}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            {yearOptions.map(year => (
+                                                <option key={year} value={year}>{year}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Month Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">ماه اعلام بار</label>
+                                        <select
+                                            value={selectedMonth || ''}
+                                            onChange={(e) => onMonthChange(e.target.value ? Number(e.target.value) : null)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            <option value="">همه ماه‌ها</option>
+                                            {monthOptions.map(month => (
+                                                <option key={month} value={month}>{month}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Day Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">روز بارگیری</label>
+                                        <select
+                                            value={selectedDay || ''}
+                                            onChange={(e) => onDayChange(e.target.value ? Number(e.target.value) : null)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            disabled={!selectedMonth}
+                                        >
+                                            <option value="">همه روزها</option>
+                                            {dayOptions.map(day => (
+                                                <option key={day} value={day}>{day}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Time Range Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">بازه زمانی</label>
+                                        <select
+                                            value={timeRange}
+                                            onChange={(e) => onTimeRangeChange(e.target.value as 'day' | 'month' | 'year')}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            <option value="day">روزانه</option>
+                                            <option value="month">ماهانه</option>
+                                            <option value="year">سالانه</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Representative Statistics Table */}
+                            <RepresentativeStatisticsTable
+                                stats={representativeStats}
+                                loading={representativeStatsLoading}
+                                error={representativeStatsError}
+                                onFetchDetails={onFetchRepresentativeDetails}
+                                selectedYear={selectedYear}
+                                selectedMonth={selectedMonth}
+                                selectedDay={selectedDay}
+                                timeRange={timeRange}
+                            />
+                        </div>
+                    )}
+
+                    {/* Tab 4: Line Analytics */}
+                    {activeTab === 'analytics' && loadedTabs.has('analytics') && (
+                        <div className="space-y-6">
+                            <LineAnalyticsSection
+                                data={lineAnalytics}
+                                meta={lineAnalyticsMeta}
+                                loading={lineAnalyticsLoading}
+                                error={lineAnalyticsError}
+                                selectedMonth={selectedMonth}
+                            />
                         </div>
                     )}
                 </div>
-            )}
-
-            {/* Filters */}
-            <div className="bg-white rounded-lg shadow p-4">
-                <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Year Filter */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">سال اعلام بار</label>
-                        <select
-                            value={selectedYear}
-                            onChange={(e) => onYearChange(Number(e.target.value))}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        >
-                            {yearOptions.map(year => (
-                                <option key={year} value={year}>{year}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Month Filter */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">ماه اعلام بار</label>
-                        <select
-                            value={selectedMonth || ''}
-                            onChange={(e) => onMonthChange(e.target.value ? Number(e.target.value) : null)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        >
-                            <option value="">همه ماه‌ها</option>
-                            {monthOptions.map(month => (
-                                <option key={month} value={month}>{month}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Day Filter */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">روز بارگیری</label>
-                        <select
-                            value={selectedDay || ''}
-                            onChange={(e) => onDayChange(e.target.value ? Number(e.target.value) : null)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                            disabled={!selectedMonth}
-                        >
-                            <option value="">همه روزها</option>
-                            {dayOptions.map(day => (
-                                <option key={day} value={day}>{day}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Time Range Filter */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">بازه زمانی</label>
-                        <select
-                            value={timeRange}
-                            onChange={(e) => onTimeRangeChange(e.target.value as 'day' | 'month' | 'year')}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        >
-                            <option value="day">روزانه</option>
-                            <option value="month">ماهانه</option>
-                            <option value="year">سالانه</option>
-                        </select>
-                    </div>
-                </div>
             </div>
 
-            {/* Line Rows - Each line gets a full row */}
-            <LineRow title="بستنی" stats={iceCreamStats} timeRange={timeRange} />
-            <LineRow title="پاستوریزه" stats={dairyStats} timeRange={timeRange} />
-            <LineRow title="لبنیات-فروتلند" stats={ambientStats} timeRange={timeRange} />
-
-            {/* Representative Statistics Table */}
-            <RepresentativeStatisticsTable
-                stats={representativeStats}
-                loading={representativeStatsLoading}
-                error={representativeStatsError}
-                onFetchDetails={onFetchRepresentativeDetails}
-                selectedYear={selectedYear}
-                selectedMonth={selectedMonth}
-                selectedDay={selectedDay}
-                timeRange={timeRange}
-            />
-
-            <LineAnalyticsSection
-                data={lineAnalytics}
-                meta={lineAnalyticsMeta}
-                loading={lineAnalyticsLoading}
-                error={lineAnalyticsError}
-                selectedMonth={selectedMonth}
-            />
+            {/* WorkflowRules Dialog */}
+            {isRulesOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setIsRulesOpen(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
+                        <WorkflowRules view={View.TransportDashboard} userRole={currentUser.role} />
+                        <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
