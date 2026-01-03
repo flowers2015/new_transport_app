@@ -687,7 +687,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 })
             });
             
-            const result = await response.json();
+            // خواندن response body قبل از بررسی status
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                console.error('❌ [TransportLiveContainer] Failed to parse finalize response:', parseError);
+                // Rollback
+                setAnnouncements(originalAnnouncements);
+                alert('خطا در پردازش پاسخ سرور. لطفاً دوباره تلاش کنید.');
+                return;
+            }
+            
             console.log('✅ [TransportLive] Finalize result:', result);
             
             if (!response.ok) {
