@@ -2218,7 +2218,17 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             }
             
             // Format plate number for backend (ensure Iranian format)
-            const formattedPlate = personalVehicleDetails.plate.replace(/\s/g, '').toLowerCase();
+            // Remove spaces but keep the format: 12ع345-67 (two digits, Persian letter, three digits, dash, two digits)
+            const cleanedPlate = personalVehicleDetails.plate.replace(/\s/g, '');
+            
+            // Validate plate format: must match Iranian plate format (12ع345-67)
+            const plateRegex = /^(\d{2})([آ-یا-ی])(\d{3})-(\d{2})$/;
+            if (!plateRegex.test(cleanedPlate)) {
+                alert('فرمت پلاک خودرو صحیح نیست. لطفاً به فرمت صحیح وارد کنید: 12ع345-67 (مثال: 43ع235-78)');
+                return;
+            }
+            
+            const formattedPlate = cleanedPlate;
             
             // محاسبه totalFreightCost برای personal user
             let personalTotalCost = 0;
