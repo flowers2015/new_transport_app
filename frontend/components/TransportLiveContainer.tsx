@@ -134,10 +134,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 if (shouldLoadPersonal) {
                     // فقط برای نمایش داده‌های موجود در جدول، personal resources را لود کن (با Pagination)
                     // برای dropdown ها از Search API استفاده می‌شود (در AssignmentDialog)
-                    // فقط 100 رکورد اول را لود کن (برای نمایش در جدول)
+                    // افزایش limit به 500 برای اطمینان از نمایش راننده‌ها/خودروهای جدید
                     fetchPromises.push(
-                        cachedFetch(getApiUrl('personal-drivers?page=1&limit=100'), { headers }, 10 * 60 * 1000), // 10 minutes
-                        cachedFetch(getApiUrl('personal-vehicles?page=1&limit=100'), { headers }, 10 * 60 * 1000) // 10 minutes
+                        cachedFetch(getApiUrl('personal-drivers?page=1&limit=500'), { headers }, 10 * 60 * 1000), // 10 minutes
+                        cachedFetch(getApiUrl('personal-vehicles?page=1&limit=500'), { headers }, 10 * 60 * 1000) // 10 minutes
                     );
                 } else {
                     // اگر لود نمی‌کنیم، empty arrays برگردان
@@ -608,14 +608,28 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // بعد از تخصیص موفق، داده‌ها را refresh کن تا تغییرات در UI نمایش داده شود
             // این برای اطمینان از نمایش صحیح در جدول و تابلو اعلام بار است
             console.log('🔄 [TransportLive] Refreshing data after assignment...');
+            // اگر assignment شخصی است، personal resources را هم refresh کن
+            const shouldIncludePersonal = assignment.assignmentType === 'personal' || 
+                currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
+                currentUser?.role === 'personal_transport_user' ||
+                currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
+            
+            // Invalidate cache برای personal resources اگر assignment شخصی است
+            if (shouldIncludePersonal) {
+                try {
+                    const { apiCache } = await import('../utils/apiCache');
+                    apiCache.invalidate(`GET:${getApiUrl('personal-drivers?page=1&limit=500')}`);
+                    apiCache.invalidate(`GET:${getApiUrl('personal-vehicles?page=1&limit=500')}`);
+                    console.log('🗑️ [onUpdateAssignment] Cache invalidated for personal resources');
+                } catch (err) {
+                    console.warn('⚠️ [onUpdateAssignment] Failed to invalidate cache:', err);
+                }
+            }
+            
+            // کاهش delay برای refresh سریع‌تر (از 500ms به 100ms)
             setTimeout(() => {
-                // اگر assignment شخصی است، personal resources را هم refresh کن
-                const shouldIncludePersonal = assignment.assignmentType === 'personal' || 
-                    currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
-                    currentUser?.role === 'personal_transport_user' ||
-                    currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
                 fetchDataRef.current(false, shouldIncludePersonal); // refresh کامل برای نمایش تغییرات
-            }, 500); // کمی delay برای اطمینان از commit شدن transaction در backend
+            }, 100); // delay کوتاه برای اطمینان از commit شدن transaction در backend
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             // در صورت خطا، rollback انجام شده است
