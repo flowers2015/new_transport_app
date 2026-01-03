@@ -609,7 +609,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // این برای اطمینان از نمایش صحیح در جدول و تابلو اعلام بار است
             console.log('🔄 [TransportLive] Refreshing data after assignment...');
             setTimeout(() => {
-                fetchData(false); // refresh کامل برای نمایش تغییرات
+                // اگر assignment شخصی است، personal resources را هم refresh کن
+                const shouldIncludePersonal = assignment.assignmentType === 'personal' || 
+                    currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
+                    currentUser?.role === 'personal_transport_user' ||
+                    currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
+                fetchDataRef.current(false, shouldIncludePersonal); // refresh کامل برای نمایش تغییرات
             }, 500); // کمی delay برای اطمینان از commit شدن transaction در backend
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);

@@ -1838,7 +1838,11 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             const driver = drivers.find(d => d.id === announcement.assignedDriverId);
             const vehicle = vehicles.find(v => v.id === announcement.assignedVehicleId);
             if (driver) { setDriverEmployeeId(driver.employeeId); setFoundCompanyDriver(driver); }
-            if (vehicle) { setVehicleInternalId(vehicle.id); setFoundVehicle(vehicle); }
+            if (vehicle) { 
+                // استفاده از vehicleCode اگر موجود باشد، وگرنه id
+                setVehicleInternalId(vehicle.vehicleCode || vehicle.id); 
+                setFoundVehicle(vehicle); 
+            }
         } else if (announcement.assignmentType === 'personal') {
             const driver = personalDrivers.find(d => d.id === announcement.assignedDriverId);
             if(driver) {
