@@ -626,10 +626,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 }
             }
             
-            // کاهش delay برای refresh سریع‌تر (از 500ms به 100ms)
-            setTimeout(() => {
-                fetchDataRef.current(false, shouldIncludePersonal); // refresh کامل برای نمایش تغییرات
-            }, 100); // delay کوتاه برای اطمینان از commit شدن transaction در backend
+            // حذف delay و استفاده از silent refresh برای تجربه کاربری بهتر
+            // backend transaction معمولاً سریع commit می‌شود و نیازی به delay نیست
+            // استفاده از silent: true برای جلوگیری از نمایش loading state در کل صفحه
+            fetchDataRef.current(true, shouldIncludePersonal); // silent refresh برای نمایش تغییرات بدون loading
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             // در صورت خطا، rollback انجام شده است

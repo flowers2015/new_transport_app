@@ -2282,8 +2282,85 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="p-4 border-b"><h3 className="text-lg font-bold">تخصیص به اعلام بار #{announcement.announcementCode}</h3></div>
+                
+                {/* بخش قوانین تخصیص */}
+                <div className="p-4 bg-blue-50 border-b">
+                    <div className="flex items-center gap-2 mb-3">
+                        <BookOpenIcon className="w-5 h-5 text-blue-600" />
+                        <h4 className="text-md font-bold text-blue-800">قوانین تخصیص</h4>
+                    </div>
+                    <div className="space-y-3 text-sm text-slate-700">
+                        {isCompanyUser ? (
+                            <>
+                                <div>
+                                    <strong className="text-slate-800">فیلدهای اجباری:</strong>
+                                    <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                        <li>راننده شرکتی: باید از طریق جستجو انتخاب شود</li>
+                                        <li>خودرو شرکتی: باید از طریق جستجو انتخاب شود</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <strong className="text-slate-800">فیلدهای اختیاری:</strong>
+                                    <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                        <li>شماره بارنامه</li>
+                                        <li>توضیحات</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <strong className="text-slate-800">نکات مهم:</strong>
+                                    <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                        <li>برای بارهای شرکت، کرایه ثبت نمی‌شود (محاسبه توسط سیستم انجام می‌شود)</li>
+                                        <li>پس از ذخیره، تخصیص به‌صورت خودکار در سیستم ثبت می‌شود</li>
+                                    </ul>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div>
+                                    <strong className="text-slate-800">فیلدهای اجباری:</strong>
+                                    <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                        <li>کد ملی راننده</li>
+                                        <li>نام راننده</li>
+                                        <li>شماره تماس راننده</li>
+                                        <li>هوشمند راننده</li>
+                                        <li>نوع خودرو</li>
+                                        <li>شماره پلاک خودرو (فرمت: 12ع345-67)</li>
+                                        <li>هوشمند کامیون</li>
+                                        <li>کرایه کل: باید بیشتر از صفر باشد</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <strong className="text-slate-800">فیلدهای اختیاری:</strong>
+                                    <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                        <li>شماره بارنامه</li>
+                                        <li>توضیحات</li>
+                                        <li>کرایه مقاصد (در صورت نیاز می‌توانید برای هر مقصد جداگانه وارد کنید)</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <strong className="text-slate-800">نکات مهم:</strong>
+                                    <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                        <li>اگر راننده با کد ملی وارد شده در سیستم موجود باشد، اطلاعات موجود نمایش داده می‌شود</li>
+                                        <li>اگر راننده جدید است، اطلاعات جدید به‌صورت خودکار در سیستم ثبت می‌شود</li>
+                                        <li>اگر خودرو با کد هوشمند وارد شده در سیستم موجود باشد، اطلاعات موجود نمایش داده می‌شود</li>
+                                        <li>اگر خودرو جدید است، اطلاعات جدید به‌صورت خودکار در سیستم ثبت می‌شود</li>
+                                        <li>کرایه می‌تواند به دو صورت «خودکار» (یک مبلغ کل) یا «دستی» (برای هر مقصد جداگانه) وارد شود</li>
+                                    </ul>
+                                </div>
+                            </>
+                        )}
+                        <div className="pt-2 border-t border-blue-200">
+                            <strong className="text-slate-800">قوانین اتمام تخصیص:</strong>
+                            <ul className="list-disc list-inside mr-4 mt-1 space-y-1">
+                                <li>عمل می‌کند: پس از تخصیص موفق همه بارها، می‌توانید با انتخاب چندین بار از دکمه «اتمام تخصیص» استفاده کنید</li>
+                                <li>عمل نمی‌کند: در صورت عدم تخصیص کامل یا وجود خطا در اطلاعات وارد شده</li>
+                                <li>پس از اتمام تخصیص، بارها به مرحله «در حال حمل» منتقل می‌شوند</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
                 
                 {isCompanyUser && (
                     <div className="p-6 space-y-4">
