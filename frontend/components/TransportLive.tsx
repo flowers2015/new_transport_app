@@ -1824,6 +1824,11 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [showDriverDropdown, setShowDriverDropdown] = useState(false);
     const [showVehicleDropdown, setShowVehicleDropdown] = useState(false);
     
+    // States for company driver search results
+    const [searchCompanyDriverResults, setSearchCompanyDriverResults] = useState<any[]>([]);
+    const [showCompanyDriverDropdown, setShowCompanyDriverDropdown] = useState(false);
+    const [companyDriverSearching, setCompanyDriverSearching] = useState(false);
+    
     // --- Common State ---
     const [blNumber, setBlNumber] = useState(announcement.billOfLadingNumber || '');
     const [notes, setNotes] = useState(announcement.notes || '');
@@ -1965,14 +1970,53 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         }
     }, [manualTotalCost, costMode]);
 
-    const handleCompanyDriverLookup = () => {
-        // Search by employeeId first, then by name (partial match)
-        const driver = drivers.find(d => 
-            d.employeeId.toLowerCase() === driverEmployeeId.toLowerCase() ||
-            d.name.toLowerCase().includes(driverEmployeeId.toLowerCase())
-        );
-        setFoundCompanyDriver(driver || null);
-        if (!driver) alert('راننده با این کد پرسنلی یا نام یافت نشد.');
+    const handleCompanyDriverLookup = async () => {
+        const query = driverEmployeeId.trim();
+        if (query.length < 2) {
+            alert('لطفاً حداقل 2 کاراکتر وارد کنید.');
+            return;
+        }
+        
+        setCompanyDriverSearching(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(getApiUrl(`dispatch/search/drivers?q=${encodeURIComponent(query)}`), {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            
+            if (response.ok) {
+                const drivers = await response.json();
+                setSearchCompanyDriverResults(drivers);
+                
+                if (drivers.length === 0) {
+                    setFoundCompanyDriver(null);
+                    setShowCompanyDriverDropdown(false);
+                    alert('راننده با این کد پرسنلی یا نام یافت نشد.');
+                } else {
+                    // همیشه dropdown نمایش بده تا کاربر انتخاب کند
+                    setShowCompanyDriverDropdown(true);
+                    setFoundCompanyDriver(null);
+                }
+            } else {
+                setFoundCompanyDriver(null);
+                setShowCompanyDriverDropdown(false);
+                alert('خطا در جستجوی راننده.');
+            }
+        } catch (error) {
+            console.error('Error searching company driver:', error);
+            setFoundCompanyDriver(null);
+            setShowCompanyDriverDropdown(false);
+            alert('خطا در جستجوی راننده.');
+        } finally {
+            setCompanyDriverSearching(false);
+        }
+    };
+    
+    const handleCompanyDriverSelection = (driver: any) => {
+        setDriverEmployeeId(driver.employeeId || driver.name || '');
+        setFoundCompanyDriver(driver);
+        setShowCompanyDriverDropdown(false);
+        setSearchCompanyDriverResults([]);
     };
 
     const handleVehicleLookup = () => {
@@ -2216,13 +2260,58 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 
                 {isCompanyUser && (
                     <div className="p-6 space-y-4">
-                        <div className="p-2 border rounded-md bg-slate-50">
+                        <div className="p-2 border rounded-md bg-slate-50 relative">
                             <label className="text-sm font-medium">راننده شرکتی*</label>
                             <div className="flex items-end gap-2 mt-1">
-                                <input placeholder="کد پرسنلی یا نام راننده..." value={driverEmployeeId} onChange={e => setDriverEmployeeId(e.target.value)} className="input-style flex-grow"/>
-                                <button onClick={handleCompanyDriverLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
+                                <input 
+                                    placeholder="کد پرسنلی یا نام راننده..." 
+                                    value={driverEmployeeId} 
+                                    onChange={e => {
+                                        setDriverEmployeeId(e.target.value);
+                                        if (e.target.value !== driverEmployeeId) {
+                                            setFoundCompanyDriver(null);
+                                            setShowCompanyDriverDropdown(false);
+                                        }
+                                    }}
+                                    className="input-style flex-grow"
+                                />
+                                <button 
+                                    onClick={handleCompanyDriverLookup} 
+                                    disabled={companyDriverSearching}
+                                    className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 disabled:opacity-60"
+                                >
+                                    {companyDriverSearching ? 'در حال جستجو...' : 'جستجو'}
+                                </button>
                             </div>
-                            {foundCompanyDriver && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>راننده:</strong> {foundCompanyDriver.name} | <strong>تماس:</strong> {foundCompanyDriver.mobile}</div>}
+                            
+                            {/* Dropdown for multiple driver results */}
+                            {showCompanyDriverDropdown && searchCompanyDriverResults.length > 0 && (
+                                <div className="mt-2 p-3 border rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto absolute z-10 w-full">
+                                    <div className="text-sm font-medium text-gray-700 mb-2">
+                                        {searchCompanyDriverResults.length} راننده یافت شد. یکی را انتخاب کنید:
+                                    </div>
+                                    {searchCompanyDriverResults.map((driver) => (
+                                        <div 
+                                            key={driver.id}
+                                            onClick={() => handleCompanyDriverSelection(driver)}
+                                            className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                        >
+                                            <div className="font-medium text-gray-900">{driver.name || 'راننده'}</div>
+                                            <div className="text-sm text-gray-600">
+                                                {driver.employeeId ? `کد پرسنلی: ${driver.employeeId}` : ''}
+                                                {driver.employeeId && driver.mobile ? ' | ' : ''}
+                                                {driver.mobile ? `تماس: ${driver.mobile}` : ''}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {foundCompanyDriver && (
+                                <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded">
+                                    <strong>راننده:</strong> {foundCompanyDriver.name} | <strong>تماس:</strong> {foundCompanyDriver.mobile || 'ندارد'}
+                                </div>
+                            )}
                         </div>
                         <div className="p-2 border rounded-md bg-slate-50">
                             <label className="text-sm font-medium">خودرو شرکتی*</label>
@@ -2268,7 +2357,65 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 </div>
                             )}
                             
-                            {foundPersonalDriver && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalDriver === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalDriver === 'not_found' ? 'راننده جدید. اطلاعات را وارد کنید.' : 'راننده یافت شد. می‌توانید اطلاعات را ویرایش کنید.'}</div>}
+                            {/* Status and Info Box for Driver */}
+                            {foundPersonalDriver && (
+                                <div className="mt-2 space-y-2">
+                                    {foundPersonalDriver === 'not_found' ? (
+                                        <div className="p-3 border-2 border-blue-300 rounded-lg bg-blue-50">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-lg">🆕</span>
+                                                <span className="font-semibold text-blue-900">وضعیت: راننده جدید</span>
+                                            </div>
+                                            <div className="text-sm text-blue-800 space-y-1">
+                                                <div className="font-medium">📋 اطلاعات راننده (الزامی):</div>
+                                                <div className="text-xs mt-1">💡 توجه: پس از ذخیره، راننده جدید به‌صورت خودکار در سیستم ثبت می‌شود.</div>
+                                            </div>
+                                        </div>
+                                    ) : typeof foundPersonalDriver === 'object' && foundPersonalDriver !== null ? (
+                                        (() => {
+                                            const hasName = foundPersonalDriver.name && foundPersonalDriver.name.trim() !== '';
+                                            const hasMobile = foundPersonalDriver.mobile && foundPersonalDriver.mobile.trim() !== '';
+                                            const hasSmartId = foundPersonalDriver.driverSmartId && foundPersonalDriver.driverSmartId.trim() !== '';
+                                            const isComplete = hasName && hasMobile && hasSmartId;
+                                            
+                                            return isComplete ? (
+                                                <div className="p-3 border-2 border-green-300 rounded-lg bg-green-50">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-lg">✅</span>
+                                                        <span className="font-semibold text-green-900">وضعیت: راننده موجود (کامل)</span>
+                                                    </div>
+                                                    <div className="text-sm text-green-800 space-y-1">
+                                                        <div className="font-medium">📊 اطلاعات راننده:</div>
+                                                        <div className="text-xs space-y-0.5">
+                                                            <div>• نام: {foundPersonalDriver.name}</div>
+                                                            <div>• موبایل: {foundPersonalDriver.mobile}</div>
+                                                            <div>• هوشمند: {foundPersonalDriver.driverSmartId}</div>
+                                                        </div>
+                                                        <div className="text-xs mt-2 text-green-700">💡 اطلاعات کامل است. می‌توانید اطلاعات را ویرایش کنید یا برای ادامه به قسمت خودرو بروید.</div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 border-2 border-amber-300 rounded-lg bg-amber-50">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-lg">✅</span>
+                                                        <span className="font-semibold text-amber-900">وضعیت: راننده موجود (اطلاعات ناقص)</span>
+                                                    </div>
+                                                    <div className="text-sm text-amber-800 space-y-1">
+                                                        <div className="font-medium">📊 اطلاعات موجود:</div>
+                                                        <div className="text-xs space-y-0.5">
+                                                            <div>• نام: {hasName ? foundPersonalDriver.name : '❌ ندارد'}</div>
+                                                            <div>• موبایل: {hasMobile ? foundPersonalDriver.mobile : '❌ ندارد'}</div>
+                                                            <div>• هوشمند: {hasSmartId ? foundPersonalDriver.driverSmartId : '❌ ندارد'}</div>
+                                                        </div>
+                                                        <div className="font-medium mt-2">📝 تکمیل/ویرایش اطلاعات:</div>
+                                                        <div className="text-xs mt-1 text-amber-700">💡 توجه: پس از ذخیره، اطلاعات راننده به‌روزرسانی می‌شود.</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()
+                                    ) : null}
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
                                 <div><label className="text-xs">نام و نام خانوادگی*</label><input value={personalDriverDetails.name || ''} onChange={e => setPersonalDriverDetails(s=>({...s, name: e.target.value}))} className="input-style"/></div>
                                 <div><label className="text-xs">شماره تماس*</label><input value={personalDriverDetails.mobile || ''} onChange={e => setPersonalDriverDetails(s=>({...s, mobile: e.target.value}))} className="input-style"/></div>
@@ -2300,7 +2447,68 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 </div>
                             )}
                             
-                            {foundPersonalVehicle && <div className={`mt-2 p-2 text-sm rounded ${foundPersonalVehicle === 'not_found' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>{foundPersonalVehicle === 'not_found' ? 'خودرو جدید. اطلاعات را وارد کنید.' : 'خودرو یافت شد. می‌توانید اطلاعات را ویرایش کنید.'}</div>}
+                            {/* Status and Info Box for Vehicle */}
+                            {foundPersonalVehicle && (
+                                <div className="mt-2 space-y-2">
+                                    {foundPersonalVehicle === 'not_found' ? (
+                                        <div className="p-3 border-2 border-blue-300 rounded-lg bg-blue-50">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-lg">🆕</span>
+                                                <span className="font-semibold text-blue-900">وضعیت: خودرو جدید</span>
+                                            </div>
+                                            <div className="text-sm text-blue-800 space-y-1">
+                                                <div className="font-medium">📋 اطلاعات خودرو (الزامی):</div>
+                                                <div className="text-xs mt-1">💡 توجه: پس از ذخیره، خودرو جدید به‌صورت خودکار در سیستم ثبت می‌شود.</div>
+                                            </div>
+                                        </div>
+                                    ) : typeof foundPersonalVehicle === 'object' && foundPersonalVehicle !== null ? (
+                                        (() => {
+                                            const vehicleType = foundPersonalVehicle.vehicleType || '';
+                                            const platePart1 = foundPersonalVehicle.platePart1 || '';
+                                            const plateLetter = foundPersonalVehicle.plateLetter || '';
+                                            const platePart2 = foundPersonalVehicle.platePart2 || '';
+                                            const plateCityCode = foundPersonalVehicle.plateCityCode || '';
+                                            const hasType = vehicleType && vehicleType.trim() !== '';
+                                            const hasPlate = platePart1 && plateLetter && platePart2 && plateCityCode;
+                                            const isComplete = hasType && hasPlate;
+                                            const formattedPlate = hasPlate ? `${platePart1}${plateLetter}${platePart2}-${plateCityCode}` : '';
+                                            
+                                            return isComplete ? (
+                                                <div className="p-3 border-2 border-green-300 rounded-lg bg-green-50">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-lg">✅</span>
+                                                        <span className="font-semibold text-green-900">وضعیت: خودرو موجود (کامل)</span>
+                                                    </div>
+                                                    <div className="text-sm text-green-800 space-y-1">
+                                                        <div className="font-medium">📊 اطلاعات خودرو:</div>
+                                                        <div className="text-xs space-y-0.5">
+                                                            <div>• نوع خودرو: {vehicleType}</div>
+                                                            <div>• پلاک: {formattedPlate}</div>
+                                                        </div>
+                                                        <div className="text-xs mt-2 text-green-700">💡 اطلاعات کامل است. می‌توانید اطلاعات را ویرایش کنید یا برای ادامه به قسمت کرایه بروید.</div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 border-2 border-amber-300 rounded-lg bg-amber-50">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-lg">✅</span>
+                                                        <span className="font-semibold text-amber-900">وضعیت: خودرو موجود (اطلاعات ناقص)</span>
+                                                    </div>
+                                                    <div className="text-sm text-amber-800 space-y-1">
+                                                        <div className="font-medium">📊 اطلاعات موجود:</div>
+                                                        <div className="text-xs space-y-0.5">
+                                                            <div>• نوع خودرو: {hasType ? vehicleType : '❌ ندارد'}</div>
+                                                            <div>• پلاک: {hasPlate ? formattedPlate : '❌ ندارد'}</div>
+                                                        </div>
+                                                        <div className="font-medium mt-2">📝 تکمیل/ویرایش اطلاعات:</div>
+                                                        <div className="text-xs mt-1 text-amber-700">💡 توجه: پس از ذخیره، اطلاعات خودرو به‌روزرسانی می‌شود.</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()
+                                    ) : null}
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                                 <div><label className="text-xs">نوع خودرو*</label><input type="text" value={personalVehicleDetails.type} onChange={e => setPersonalVehicleDetails(s=>({...s, type: e.target.value}))} className="input-style" autoComplete="off"/></div>
                                 <div><label className="text-xs">شماره پلاک*</label><input type="text" placeholder="12ع345-67" value={personalVehicleDetails.plate} onChange={e => setPersonalVehicleDetails(s=>({...s, plate: e.target.value}))} className="input-style" autoComplete="off"/></div>
