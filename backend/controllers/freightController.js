@@ -5563,25 +5563,114 @@ async function getAssignmentStatistics(req, res) {
       lastYearByVehicleType[row.vehicle_type || 'نامشخص'] = parseInt(row.total_count) || 0;
     });
     
-    // 5.7. محاسبه مقایسه برای هر نوع خودرو
-    const currentByVehicleType = {};
+    // 5.7. محاسبه مقایسه برای هر نوع خودرو (به تفکیک company, personal, total)
+    const currentByVehicleTypeCompany = {};
+    const currentByVehicleTypePersonal = {};
+    const currentByVehicleTypeTotal = {};
+    
     byVehicleType.forEach(item => {
-      if (!currentByVehicleType[item.vehicleType]) {
-        currentByVehicleType[item.vehicleType] = 0;
-      }
-      currentByVehicleType[item.vehicleType] += item.totalCount;
+      const vt = item.vehicleType;
+      if (!currentByVehicleTypeCompany[vt]) currentByVehicleTypeCompany[vt] = 0;
+      if (!currentByVehicleTypePersonal[vt]) currentByVehicleTypePersonal[vt] = 0;
+      if (!currentByVehicleTypeTotal[vt]) currentByVehicleTypeTotal[vt] = 0;
+      
+      currentByVehicleTypeCompany[vt] += item.companyCount;
+      currentByVehicleTypePersonal[vt] += item.personalCount;
+      currentByVehicleTypeTotal[vt] += item.totalCount;
     });
     
-    const vehicleTypeComparisons = {};
-    Object.keys(currentByVehicleType).forEach(vehicleType => {
-      const current = currentByVehicleType[vehicleType];
-      const prevMonth = prevMonthByVehicleType[vehicleType] || 0;
-      const lastYear = lastYearByVehicleType[vehicleType] || 0;
+    // محاسبه آمار ماه قبل و سال قبل برای company و personal
+    const prevMonthByVehicleTypeCompany = {};
+    const prevMonthByVehicleTypePersonal = {};
+    const lastYearByVehicleTypeCompany = {};
+    const lastYearByVehicleTypePersonal = {};
+    
+    // Query برای ماه قبل (company و personal)
+    const prevMonthVehicleTypeDetailQuery = `
+      SELECT 
+        COALESCE(fa.vehicle_type, 'نامشخص') as vehicle_type,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as company_count,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${prevMonthDateFilter}
+        ${prevMonthLineTypeFilter}
+        ${finalizedCondition}
+      GROUP BY fa.vehicle_type
+    `;
+    
+    const prevMonthVehicleTypeDetailResult = await pool.query(prevMonthVehicleTypeDetailQuery, prevMonthParams);
+    prevMonthVehicleTypeDetailResult.rows.forEach(row => {
+      const vt = row.vehicle_type || 'نامشخص';
+      prevMonthByVehicleTypeCompany[vt] = parseInt(row.company_count) || 0;
+      prevMonthByVehicleTypePersonal[vt] = parseInt(row.personal_count) || 0;
+    });
+    
+    // Query برای سال قبل (company و personal)
+    const lastYearVehicleTypeDetailQuery = `
+      SELECT 
+        COALESCE(fa.vehicle_type, 'نامشخص') as vehicle_type,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as company_count,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${lastYearDateFilter}
+        ${lastYearLineTypeFilter}
+        ${finalizedCondition}
+      GROUP BY fa.vehicle_type
+    `;
+    
+    const lastYearVehicleTypeDetailResult = await pool.query(lastYearVehicleTypeDetailQuery, lastYearParams);
+    lastYearVehicleTypeDetailResult.rows.forEach(row => {
+      const vt = row.vehicle_type || 'نامشخص';
+      lastYearByVehicleTypeCompany[vt] = parseInt(row.company_count) || 0;
+      lastYearByVehicleTypePersonal[vt] = parseInt(row.personal_count) || 0;
+    });
+    
+    // ساخت vehicleTypeComparisons به تفکیک company, personal, total
+    const allVehicleTypes = new Set([
+      ...Object.keys(currentByVehicleTypeCompany),
+      ...Object.keys(currentByVehicleTypePersonal),
+      ...Object.keys(currentByVehicleTypeTotal)
+    ]);
+    
+    const vehicleTypeComparisons = {
+      company: {},
+      personal: {},
+      total: {}
+    };
+    
+    allVehicleTypes.forEach(vehicleType => {
+      const companyCurrent = currentByVehicleTypeCompany[vehicleType] || 0;
+      const personalCurrent = currentByVehicleTypePersonal[vehicleType] || 0;
+      const totalCurrent = currentByVehicleTypeTotal[vehicleType] || 0;
       
-      vehicleTypeComparisons[vehicleType] = {
-        current,
-        comparisonWithPreviousMonth: calculateChange(current, prevMonth),
-        comparisonWithLastYear: calculateChange(current, lastYear)
+      const companyPrevMonth = prevMonthByVehicleTypeCompany[vehicleType] || 0;
+      const personalPrevMonth = prevMonthByVehicleTypePersonal[vehicleType] || 0;
+      const totalPrevMonth = prevMonthByVehicleType[vehicleType] || 0;
+      
+      const companyLastYear = lastYearByVehicleTypeCompany[vehicleType] || 0;
+      const personalLastYear = lastYearByVehicleTypePersonal[vehicleType] || 0;
+      const totalLastYear = lastYearByVehicleType[vehicleType] || 0;
+      
+      vehicleTypeComparisons.company[vehicleType] = {
+        current: companyCurrent,
+        comparisonWithPreviousMonth: calculateChange(companyCurrent, companyPrevMonth),
+        comparisonWithLastYear: calculateChange(companyCurrent, companyLastYear)
+      };
+      
+      vehicleTypeComparisons.personal[vehicleType] = {
+        current: personalCurrent,
+        comparisonWithPreviousMonth: calculateChange(personalCurrent, personalPrevMonth),
+        comparisonWithLastYear: calculateChange(personalCurrent, personalLastYear)
+      };
+      
+      vehicleTypeComparisons.total[vehicleType] = {
+        current: totalCurrent,
+        comparisonWithPreviousMonth: calculateChange(totalCurrent, totalPrevMonth),
+        comparisonWithLastYear: calculateChange(totalCurrent, totalLastYear)
       };
     });
     

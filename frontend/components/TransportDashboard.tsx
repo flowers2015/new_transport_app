@@ -948,11 +948,13 @@ const LineRow: React.FC<{
                 </div>
             </div>
 
-            {/* Statistics Summary Table */}
+            {/* Statistics Summary Table - Daily or Monthly based on timeRange */}
             {chartData.length > 0 && (
                 <div className="bg-slate-50 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-3">
-                        <h3 className="text-base font-semibold text-slate-700">خلاصه آمار</h3>
+                        <h3 className="text-base font-semibold text-slate-700">
+                            {timeRange === 'day' ? 'خلاصه آمار (روزانه)' : timeRange === 'month' ? 'خلاصه آمار (ماهانه)' : 'خلاصه آمار (سالانه)'}
+                        </h3>
                     </div>
                     {(
                     <div className="overflow-x-auto">
@@ -1851,28 +1853,96 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 </div>
                             )}
 
-                            {/* Vehicle Type Comparison Cards */}
-                            {assignmentStatistics && assignmentStatistics.vehicleTypeComparisons && Object.keys(assignmentStatistics.vehicleTypeComparisons).length > 0 && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                    {Object.entries(assignmentStatistics.vehicleTypeComparisons).map(([vehicleType, comparison]) => (
-                                        <div key={vehicleType} className="bg-white rounded-lg shadow p-4">
-                                            <div className="text-sm text-slate-600 mb-2">{vehicleType}</div>
-                                            <div className="text-2xl font-bold text-slate-800 mb-2">{comparison.current.toLocaleString('fa-IR')}</div>
-                                            <div className="flex items-center gap-2 text-xs">
-                                                <span className="text-slate-500">ماه قبل:</span>
-                                                <span className={comparison.comparisonWithPreviousMonth.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
-                                                    {comparison.comparisonWithPreviousMonth.percent >= 0 ? '+' : ''}{comparison.comparisonWithPreviousMonth.percent.toFixed(1)}%
-                                                </span>
+                            {/* Vehicle Type Comparison Cards - Three Cards: Company, Personal, Total */}
+                            {assignmentStatistics && assignmentStatistics.vehicleTypeComparisons && (
+                                (() => {
+                                    const companyData = assignmentStatistics.vehicleTypeComparisons.company || {};
+                                    const personalData = assignmentStatistics.vehicleTypeComparisons.personal || {};
+                                    const totalData = assignmentStatistics.vehicleTypeComparisons.total || {};
+                                    
+                                    const allVehicleTypes = new Set([
+                                        ...Object.keys(companyData),
+                                        ...Object.keys(personalData),
+                                        ...Object.keys(totalData)
+                                    ]);
+                                    
+                                    if (allVehicleTypes.size === 0) return null;
+                                    
+                                    // محاسبه مجموع برای هر کارت
+                                    const companyTotal = Object.values(companyData).reduce((sum, v: any) => sum + (v.current || 0), 0);
+                                    const personalTotal = Object.values(personalData).reduce((sum, v: any) => sum + (v.current || 0), 0);
+                                    const totalTotal = Object.values(totalData).reduce((sum, v: any) => sum + (v.current || 0), 0);
+                                    
+                                    return (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            {/* Company Card */}
+                                            <div className="bg-white rounded-lg shadow p-4">
+                                                <div className="text-sm font-semibold text-slate-700 mb-3">تخصیص شرکتی</div>
+                                                <div className="text-xl font-bold text-green-600 mb-3">{companyTotal.toLocaleString('fa-IR')}</div>
+                                                <div className="space-y-2 border-t pt-2">
+                                                    {Array.from(allVehicleTypes).map(vehicleType => {
+                                                        const comp = companyData[vehicleType];
+                                                        if (!comp || comp.current === 0) return null;
+                                                        const percent = companyTotal > 0 ? ((comp.current / companyTotal) * 100).toFixed(1) : '0';
+                                                        return (
+                                                            <div key={`company-${vehicleType}`} className="flex items-center justify-between text-xs">
+                                                                <span className="text-slate-600">{vehicleType}:</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-slate-800 font-medium">{comp.current.toLocaleString('fa-IR')}</span>
+                                                                    <span className="text-slate-500">({percent}%)</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2 text-xs mt-1">
-                                                <span className="text-slate-500">سال قبل:</span>
-                                                <span className={comparison.comparisonWithLastYear.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
-                                                    {comparison.comparisonWithLastYear.percent >= 0 ? '+' : ''}{comparison.comparisonWithLastYear.percent.toFixed(1)}%
-                                                </span>
+                                            
+                                            {/* Personal Card */}
+                                            <div className="bg-white rounded-lg shadow p-4">
+                                                <div className="text-sm font-semibold text-slate-700 mb-3">تخصیص شخصی</div>
+                                                <div className="text-xl font-bold text-orange-600 mb-3">{personalTotal.toLocaleString('fa-IR')}</div>
+                                                <div className="space-y-2 border-t pt-2">
+                                                    {Array.from(allVehicleTypes).map(vehicleType => {
+                                                        const comp = personalData[vehicleType];
+                                                        if (!comp || comp.current === 0) return null;
+                                                        const percent = personalTotal > 0 ? ((comp.current / personalTotal) * 100).toFixed(1) : '0';
+                                                        return (
+                                                            <div key={`personal-${vehicleType}`} className="flex items-center justify-between text-xs">
+                                                                <span className="text-slate-600">{vehicleType}:</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-slate-800 font-medium">{comp.current.toLocaleString('fa-IR')}</span>
+                                                                    <span className="text-slate-500">({percent}%)</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Total Card */}
+                                            <div className="bg-white rounded-lg shadow p-4">
+                                                <div className="text-sm font-semibold text-slate-700 mb-3">جمع کل</div>
+                                                <div className="text-xl font-bold text-blue-600 mb-3">{totalTotal.toLocaleString('fa-IR')}</div>
+                                                <div className="space-y-2 border-t pt-2">
+                                                    {Array.from(allVehicleTypes).map(vehicleType => {
+                                                        const comp = totalData[vehicleType];
+                                                        if (!comp || comp.current === 0) return null;
+                                                        const percent = totalTotal > 0 ? ((comp.current / totalTotal) * 100).toFixed(1) : '0';
+                                                        return (
+                                                            <div key={`total-${vehicleType}`} className="flex items-center justify-between text-xs">
+                                                                <span className="text-slate-600">{vehicleType}:</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-slate-800 font-medium">{comp.current.toLocaleString('fa-IR')}</span>
+                                                                    <span className="text-slate-500">({percent}%)</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
+                                    );
+                                })()
                             )}
 
                             {/* Vehicle Type Statistics Table */}
@@ -1956,13 +2026,22 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 );
                             })()}
 
-                            {/* Monthly Summary Table */}
+                            {/* Monthly Summary Table - Always Monthly */}
                             {assignmentStatistics && assignmentStatistics.timeBased && assignmentStatistics.timeBased.length > 0 && (() => {
+                                // فقط رکوردهای ماهانه را نمایش می‌دهیم (بازه زمانی که فقط YYYY/MM است)
+                                const monthlyData = assignmentStatistics.timeBased.filter(stat => {
+                                    const period = stat.timePeriod || '';
+                                    // اگر بازه زمانی فقط YYYY/MM باشد (7 کاراکتر)، ماهانه است
+                                    return period.length === 7 && /^\d{4}\/\d{2}$/.test(period);
+                                });
+                                
+                                if (monthlyData.length === 0) return null;
+                                
                                 const monthlySummaryPageSize = 15;
-                                const totalMonthlyPages = Math.ceil(assignmentStatistics.timeBased.length / monthlySummaryPageSize);
+                                const totalMonthlyPages = Math.ceil(monthlyData.length / monthlySummaryPageSize);
                                 const startMonthlyIndex = (monthlySummaryPage - 1) * monthlySummaryPageSize;
                                 const endMonthlyIndex = startMonthlyIndex + monthlySummaryPageSize;
-                                const paginatedMonthlyData = assignmentStatistics.timeBased.slice(startMonthlyIndex, endMonthlyIndex);
+                                const paginatedMonthlyData = monthlyData.slice(startMonthlyIndex, endMonthlyIndex);
                                 
                                 return (
                                     <div className="bg-white rounded-lg shadow p-6">
