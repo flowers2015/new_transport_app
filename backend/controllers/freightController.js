@@ -5344,17 +5344,15 @@ async function getAssignmentStatistics(req, res) {
         fa.loading_date,
         fa.assigned_driver_id,
         fa.assignment_type,
-        fh.created_at as assigned_at
+        (
+          SELECT MIN(fah.created_at) 
+          FROM freight_announcement_history fah 
+          WHERE fah.freight_announcement_id = fa.id 
+            AND fah.action = 'ASSIGNED'
+          LIMIT 1
+        ) as assigned_at
       FROM freight_announcements fa
       ${lateralJoin}
-      LEFT JOIN LATERAL (
-        SELECT created_at
-        FROM freight_history
-        WHERE freight_announcement_id = fa.id
-          AND (action = 'ASSIGNED' OR action = 'ASSIGNMENT_UPDATED' OR action = 'DRIVER_ASSIGNED' OR action = 'VEHICLE_ASSIGNED')
-        ORDER BY created_at DESC
-        LIMIT 1
-      ) fh ON true
       WHERE 1=1
         ${dateFilter}
         ${lineTypeFilter}
