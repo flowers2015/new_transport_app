@@ -642,7 +642,7 @@ async function exportCitiesToExcel(req, res) {
         city,
         province,
         round_trip_km::NUMERIC as "roundTripKm",
-        expected_days::INTEGER as "expectedDays",
+        expected_days::TEXT as "expectedDays",
         approved_allowance::NUMERIC as "approvedAllowance",
         route_category as "routeCategory",
         distance_category as "distanceCategory",

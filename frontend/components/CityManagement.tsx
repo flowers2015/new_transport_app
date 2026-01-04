@@ -637,11 +637,20 @@ const RouteFormModal: React.FC<{
             return;
         }
 
+        // تبدیل expectedDays: اگر string خالی است null، اگر عدد است به string عددی، اگر string غیرعدد است همان string
+        let expectedDaysValue: string | number | null = null;
+        if (form.expectedDays && form.expectedDays.trim() !== '') {
+            const trimmed = form.expectedDays.trim();
+            const numValue = parseFloat(trimmed);
+            // اگر عدد است، به string عددی تبدیل کن (نه parseInt)، وگرنه همان string را نگه دار
+            expectedDaysValue = isNaN(numValue) ? trimmed : numValue.toString();
+        }
+
         onSave({
             city: form.city,
             province: form.province,
             roundTripKm: form.roundTripKm ? parseFloat(form.roundTripKm) : null,
-            expectedDays: form.expectedDays ? parseInt(form.expectedDays) : null,
+            expectedDays: expectedDaysValue,
             approvedAllowance: form.approvedAllowance ? parseFloat(form.approvedAllowance) : null,
             routeCategory: form.routeCategory || null,
             distanceCategory: form.distanceCategory || null,
