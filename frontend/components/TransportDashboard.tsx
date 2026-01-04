@@ -1394,7 +1394,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                         }`}
                     >
-                        تحلیل خطوط
+                        آنالیز کرایه
                     </button>
                 </div>
 

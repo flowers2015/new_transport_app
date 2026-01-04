@@ -3508,8 +3508,11 @@ async function getTransportStatistics(req, res) {
     // نکته: status ها در دیتابیس به انگلیسی ذخیره می‌شوند (مگر برخی که فارسی هستند)
     let statusFilter = '';
     if (timeRange === 'day' && !isDailyHistorical) {
-      // برای آمار روزانه زنده: فقط statusهای فعال در کارتابل (زنده)
+      // برای آمار روزانه زنده: دقیقاً همان statusهایی که در TransportLive نمایش داده می‌شوند
+      // یعنی: PendingCompanyAssignment, PendingPersonalAssignment, Assigned, InTransit
       // و بارهایی که هنوز finalized نشده‌اند (assignment_finalized_at IS NULL)
+      // این منطق دقیقاً همان فیلتر TransportLive است (خط 575-584 و 503)
+      // نکته: statusCondition خودش Finalized, Leftover, Cancelled را شامل نمی‌کند، پس نیازی به excludedStatuses نیست
       const statusCondition = `fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
       const finalizedCondition = `fa.assignment_finalized_at IS NULL`;
       if (dateFilter || lineTypeFilter) {
