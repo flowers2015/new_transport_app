@@ -43,6 +43,10 @@ interface AssignmentStatisticsTimeBased {
     personalAssignments: number;
     totalAssignments: number;
     successRate: number;
+    leftoverFromPrevious?: number;
+    assignmentByDay?: { [key: string]: number };
+    assignmentPercentagesByDay?: { [key: string]: number };
+    totalAssigned?: number;
 }
 
 interface AssignmentStatisticsByVehicleType {
@@ -54,6 +58,12 @@ interface AssignmentStatisticsByVehicleType {
     totalCount: number;
 }
 
+interface AssignmentStatisticsVehicleTypeComparison {
+    current: number;
+    comparisonWithPreviousMonth: AssignmentStatisticsComparison['totalRequests'];
+    comparisonWithLastYear: AssignmentStatisticsComparison['totalRequests'];
+}
+
 interface AssignmentStatisticsMonthlyComparison {
     month: string;
     vehicleTypes: { [vehicleType: string]: { company: number; personal: number; total: number } };
@@ -63,6 +73,7 @@ interface AssignmentStatisticsResponse {
     summary: AssignmentStatisticsSummary;
     timeBased: AssignmentStatisticsTimeBased[];
     byVehicleType: AssignmentStatisticsByVehicleType[];
+    vehicleTypeComparisons?: { [vehicleType: string]: AssignmentStatisticsVehicleTypeComparison };
     monthlyComparison: AssignmentStatisticsMonthlyComparison[];
     dateRange: {
         start: string;
@@ -445,7 +456,6 @@ const LineRow: React.FC<{
     timeRange: 'day' | 'month' | 'year';
 }> = ({ title, stats, timeRange }) => {
     const [zoomChart, setZoomChart] = useState<{ type: 'line' | 'bar' | 'pie' | null; data: any; data2?: any }>({ type: null, data: null });
-    const [isSummaryTableOpen, setIsSummaryTableOpen] = useState(false); // State for summary table collapse/expand
     // Debug: Log stats received
     React.useEffect(() => {
         console.log(`📈 [LineRow:${title}] Stats:`, stats, 'Length:', stats?.length);
@@ -943,29 +953,8 @@ const LineRow: React.FC<{
                 <div className="bg-slate-50 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-3">
                         <h3 className="text-base font-semibold text-slate-700">خلاصه آمار</h3>
-                        <button
-                            onClick={() => setIsSummaryTableOpen(!isSummaryTableOpen)}
-                            className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1 flex-row-reverse"
-                            title={isSummaryTableOpen ? "بستن جدول" : "باز کردن جدول"}
-                        >
-                            {isSummaryTableOpen ? (
-                                <>
-                                    بستن
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                    </svg>
-                                </>
-                            ) : (
-                                <>
-                                    باز کردن
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </>
-                            )}
-                        </button>
                     </div>
-                    {isSummaryTableOpen && (
+                    {(
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
@@ -1140,6 +1129,9 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
 }) => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [dailyStatsIndex, setDailyStatsIndex] = useState(0);
+    const [vehicleTypePage, setVehicleTypePage] = useState(1);
+    const [vehicleTypeSearch, setVehicleTypeSearch] = useState('');
+    const [monthlySummaryPage, setMonthlySummaryPage] = useState(1);
     const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics'>('daily');
     const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics'>>(new Set(['daily']));
     const [dailyStats, setDailyStats] = useState<{
@@ -1859,38 +1851,250 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 </div>
                             )}
 
-                            {/* Vehicle Type Statistics Table */}
-                            {assignmentStatistics && assignmentStatistics.byVehicleType && assignmentStatistics.byVehicleType.length > 0 && (
-                                <div className="bg-white rounded-lg shadow p-6">
-                                    <h3 className="text-lg font-bold text-slate-800 mb-4">آمار بر اساس نوع خودرو</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full text-sm">
-                                            <thead>
-                                                <tr className="border-b border-slate-300 bg-slate-50">
-                                                    <th className="px-4 py-3 text-right text-slate-700 font-semibold">شهر</th>
-                                                    <th className="px-4 py-3 text-right text-slate-700 font-semibold">نماینده/پخش</th>
-                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">نوع خودرو</th>
-                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">شرکتی</th>
-                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">شخصی</th>
-                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">کل</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {assignmentStatistics.byVehicleType.map((item, idx) => (
-                                                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                                                        <td className="px-4 py-3 text-right">{item.city}</td>
-                                                        <td className="px-4 py-3 text-right">{item.representativeName}</td>
-                                                        <td className="px-4 py-3 text-center">{item.vehicleType}</td>
-                                                        <td className="px-4 py-3 text-center">{item.companyCount.toLocaleString('fa-IR')}</td>
-                                                        <td className="px-4 py-3 text-center">{item.personalCount.toLocaleString('fa-IR')}</td>
-                                                        <td className="px-4 py-3 text-center font-semibold">{item.totalCount.toLocaleString('fa-IR')}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                            {/* Vehicle Type Comparison Cards */}
+                            {assignmentStatistics && assignmentStatistics.vehicleTypeComparisons && Object.keys(assignmentStatistics.vehicleTypeComparisons).length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {Object.entries(assignmentStatistics.vehicleTypeComparisons).map(([vehicleType, comparison]) => (
+                                        <div key={vehicleType} className="bg-white rounded-lg shadow p-4">
+                                            <div className="text-sm text-slate-600 mb-2">{vehicleType}</div>
+                                            <div className="text-2xl font-bold text-slate-800 mb-2">{comparison.current.toLocaleString('fa-IR')}</div>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <span className="text-slate-500">ماه قبل:</span>
+                                                <span className={comparison.comparisonWithPreviousMonth.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                    {comparison.comparisonWithPreviousMonth.percent >= 0 ? '+' : ''}{comparison.comparisonWithPreviousMonth.percent.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs mt-1">
+                                                <span className="text-slate-500">سال قبل:</span>
+                                                <span className={comparison.comparisonWithLastYear.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                    {comparison.comparisonWithLastYear.percent >= 0 ? '+' : ''}{comparison.comparisonWithLastYear.percent.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
+
+                            {/* Vehicle Type Statistics Table */}
+                            {assignmentStatistics && assignmentStatistics.byVehicleType && assignmentStatistics.byVehicleType.length > 0 && (() => {
+                                const vehicleTypePageSize = 20;
+                                
+                                const filteredVehicleTypes = assignmentStatistics.byVehicleType.filter(item =>
+                                    !vehicleTypeSearch || item.city.toLowerCase().includes(vehicleTypeSearch.toLowerCase())
+                                );
+                                
+                                const totalVehicleTypePages = Math.ceil(filteredVehicleTypes.length / vehicleTypePageSize);
+                                const startVehicleTypeIndex = (vehicleTypePage - 1) * vehicleTypePageSize;
+                                const endVehicleTypeIndex = startVehicleTypeIndex + vehicleTypePageSize;
+                                const paginatedVehicleTypes = filteredVehicleTypes.slice(startVehicleTypeIndex, endVehicleTypeIndex);
+                                
+                                return (
+                                    <div className="bg-white rounded-lg shadow p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-lg font-bold text-slate-800">آمار بر اساس نوع خودرو</h3>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="جستجوی شهر..."
+                                                    value={vehicleTypeSearch}
+                                                    onChange={(e) => {
+                                                        setVehicleTypeSearch(e.target.value);
+                                                        setVehicleTypePage(1);
+                                                    }}
+                                                    className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-slate-300 bg-slate-50">
+                                                        <th className="px-4 py-3 text-right text-slate-700 font-semibold">شهر</th>
+                                                        <th className="px-4 py-3 text-right text-slate-700 font-semibold">نماینده/پخش</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">نوع خودرو</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">شرکتی</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">شخصی</th>
+                                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">کل</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {paginatedVehicleTypes.map((item, idx) => (
+                                                        <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                                                            <td className="px-4 py-3 text-right">{item.city}</td>
+                                                            <td className="px-4 py-3 text-right">{item.representativeName}</td>
+                                                            <td className="px-4 py-3 text-center">{item.vehicleType}</td>
+                                                            <td className="px-4 py-3 text-center">{item.companyCount.toLocaleString('fa-IR')}</td>
+                                                            <td className="px-4 py-3 text-center">{item.personalCount.toLocaleString('fa-IR')}</td>
+                                                            <td className="px-4 py-3 text-center font-semibold">{item.totalCount.toLocaleString('fa-IR')}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {totalVehicleTypePages > 1 && (
+                                            <div className="mt-4 flex justify-center items-center gap-2">
+                                                <button
+                                                    onClick={() => setVehicleTypePage(p => Math.max(1, p - 1))}
+                                                    disabled={vehicleTypePage === 1}
+                                                    className="px-3 py-1 border border-slate-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                                                >
+                                                    قبلی
+                                                </button>
+                                                <span className="text-sm text-slate-600">
+                                                    صفحه {vehicleTypePage} از {totalVehicleTypePages}
+                                                </span>
+                                                <button
+                                                    onClick={() => setVehicleTypePage(p => Math.min(totalVehicleTypePages, p + 1))}
+                                                    disabled={vehicleTypePage === totalVehicleTypePages}
+                                                    className="px-3 py-1 border border-slate-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                                                >
+                                                    بعدی
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Monthly Summary Table */}
+                            {assignmentStatistics && assignmentStatistics.timeBased && assignmentStatistics.timeBased.length > 0 && (() => {
+                                const monthlySummaryPageSize = 15;
+                                const totalMonthlyPages = Math.ceil(assignmentStatistics.timeBased.length / monthlySummaryPageSize);
+                                const startMonthlyIndex = (monthlySummaryPage - 1) * monthlySummaryPageSize;
+                                const endMonthlyIndex = startMonthlyIndex + monthlySummaryPageSize;
+                                const paginatedMonthlyData = assignmentStatistics.timeBased.slice(startMonthlyIndex, endMonthlyIndex);
+                                
+                                return (
+                                    <div className="bg-white rounded-lg shadow p-6">
+                                        <h3 className="text-lg font-bold text-slate-800 mb-4">خلاصه عملکرد ماهانه</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-slate-300 bg-slate-50">
+                                                        <th className="px-3 py-2 text-right text-slate-700">بازه زمانی</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">درخواست</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">شرکتی</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">شخصی</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">کل</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">موفقیت</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">مانده از قبل</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">یک روز</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">دو روز</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">سه روز</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">چهار روز</th>
+                                                        <th className="px-3 py-2 text-center text-slate-700">پنج روز به بالا</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {paginatedMonthlyData.map((stat, idx) => {
+                                                        const day1Percent = stat.assignmentPercentagesByDay?.['0'] || 0;
+                                                        const day2Percent = stat.assignmentPercentagesByDay?.['1'] || 0;
+                                                        const day3Percent = stat.assignmentPercentagesByDay?.['2'] || 0;
+                                                        const day4Percent = stat.assignmentPercentagesByDay?.['3'] || 0;
+                                                        const day5PlusPercent = Object.entries(stat.assignmentPercentagesByDay || {})
+                                                            .filter(([day]) => day !== '0' && day !== '1' && day !== '2' && day !== '3')
+                                                            .reduce((sum, [, percent]) => sum + (percent || 0), 0);
+                                                        
+                                                        return (
+                                                            <tr key={idx} className="border-b border-slate-200 hover:bg-slate-100">
+                                                                <td className="px-3 py-2 text-right">{stat.timePeriod}</td>
+                                                                <td className="px-3 py-2 text-center">{stat.totalRequests}</td>
+                                                                <td className="px-3 py-2 text-center">{stat.companyAssignments}</td>
+                                                                <td className="px-3 py-2 text-center">{stat.personalAssignments}</td>
+                                                                <td className="px-3 py-2 text-center">{stat.totalAssignments}</td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                                        stat.successRate >= 70 ? 'bg-green-100 text-green-800' :
+                                                                        stat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                                                        'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                        {stat.successRate}%
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {stat.leftoverFromPrevious > 0 ? (
+                                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-800">
+                                                                            {stat.leftoverFromPrevious}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">0</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {day1Percent > 0 ? (
+                                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">
+                                                                            {day1Percent}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {day2Percent > 0 ? (
+                                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                                                            {day2Percent}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {day3Percent > 0 ? (
+                                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-800">
+                                                                            {day3Percent}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {day4Percent > 0 ? (
+                                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">
+                                                                            {day4Percent}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {day5PlusPercent > 0 ? (
+                                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-red-200 text-red-900">
+                                                                            {day5PlusPercent}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {totalMonthlyPages > 1 && (
+                                            <div className="mt-4 flex justify-center items-center gap-2">
+                                                <button
+                                                    onClick={() => setMonthlySummaryPage(p => Math.max(1, p - 1))}
+                                                    disabled={monthlySummaryPage === 1}
+                                                    className="px-3 py-1 border border-slate-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                                                >
+                                                    قبلی
+                                                </button>
+                                                <span className="text-sm text-slate-600">
+                                                    صفحه {monthlySummaryPage} از {totalMonthlyPages}
+                                                </span>
+                                                <button
+                                                    onClick={() => setMonthlySummaryPage(p => Math.min(totalMonthlyPages, p + 1))}
+                                                    disabled={monthlySummaryPage === totalMonthlyPages}
+                                                    className="px-3 py-1 border border-slate-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                                                >
+                                                    بعدی
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {/* Line Row - Only show selected line */}
                             {selectedLine && lineStats.length > 0 && (

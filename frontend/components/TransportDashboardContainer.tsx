@@ -150,6 +150,12 @@ interface AssignmentStatisticsByVehicleType {
     totalCount: number;
 }
 
+interface AssignmentStatisticsVehicleTypeComparison {
+    current: number;
+    comparisonWithPreviousMonth: AssignmentStatisticsComparison['totalRequests'];
+    comparisonWithLastYear: AssignmentStatisticsComparison['totalRequests'];
+}
+
 interface AssignmentStatisticsMonthlyComparison {
     month: string;
     vehicleTypes: { [vehicleType: string]: { company: number; personal: number; total: number } };
@@ -159,6 +165,7 @@ interface AssignmentStatisticsResponse {
     summary: AssignmentStatisticsSummary;
     timeBased: AssignmentStatisticsTimeBased[];
     byVehicleType: AssignmentStatisticsByVehicleType[];
+    vehicleTypeComparisons?: { [vehicleType: string]: AssignmentStatisticsVehicleTypeComparison };
     monthlyComparison: AssignmentStatisticsMonthlyComparison[];
     dateRange: {
         start: string;

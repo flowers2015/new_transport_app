@@ -5336,14 +5336,163 @@ async function getAssignmentStatistics(req, res) {
     }
     
     const timeBasedResult = await pool.query(timeBasedQuery, dateParams);
-    const timeBased = timeBasedResult.rows.map(row => ({
-      timePeriod: row.time_period,
-      totalRequests: parseInt(row.total_requests) || 0,
-      companyAssignments: parseInt(row.company_assignments) || 0,
-      personalAssignments: parseInt(row.personal_assignments) || 0,
-      totalAssignments: parseInt(row.total_assignments) || 0,
-      successRate: parseInt(row.total_requests) > 0 ? Math.round((parseInt(row.total_assignments) / parseInt(row.total_requests)) * 100) : 0
-    }));
+    
+    // برای محاسبه assignmentByDay و assignmentPercentagesByDay، باید جزئیات تخصیص‌ها را بگیریم
+    const detailedQuery = `
+      SELECT 
+        fa.id,
+        fa.loading_date,
+        fa.assigned_driver_id,
+        fa.assignment_type,
+        fh.created_at as assigned_at
+      FROM freight_announcements fa
+      ${lateralJoin}
+      LEFT JOIN LATERAL (
+        SELECT created_at
+        FROM freight_history
+        WHERE freight_announcement_id = fa.id
+          AND (action = 'ASSIGNED' OR action = 'ASSIGNMENT_UPDATED' OR action = 'DRIVER_ASSIGNED' OR action = 'VEHICLE_ASSIGNED')
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) fh ON true
+      WHERE 1=1
+        ${dateFilter}
+        ${lineTypeFilter}
+        ${finalizedCondition}
+        AND fa.assigned_driver_id IS NOT NULL
+    `;
+    
+    const detailedResult = await pool.query(detailedQuery, dateParams);
+    
+    // محاسبه اطلاعات برای هر time_period
+    const periodDetailsMap = new Map();
+    
+    for (const record of detailedResult.rows) {
+      let recordTimePeriod = null;
+      
+      if (monthsDiff <= 1) {
+        // روزانه
+        recordTimePeriod = record.loading_date?.replace(/-/g, '/');
+      } else {
+        // ماهانه
+        const loadingDate = record.loading_date?.replace(/-/g, '/');
+        if (loadingDate) {
+          recordTimePeriod = loadingDate.substring(0, 7);
+        }
+      }
+      
+      if (!recordTimePeriod) continue;
+      
+      if (!periodDetailsMap.has(recordTimePeriod)) {
+        periodDetailsMap.set(recordTimePeriod, {
+          period: recordTimePeriod,
+          assignedRecords: [],
+          assignmentByDay: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, '11+': 0 },
+          leftoverFromPrevious: 0
+        });
+      }
+      
+      const periodDetails = periodDetailsMap.get(recordTimePeriod);
+      
+      if (record.assigned_driver_id && record.assigned_at) {
+        const assignedAtDate = new Date(record.assigned_at);
+        const assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
+        const loadingDateNormalized = record.loading_date?.replace(/-/g, '/');
+        
+        if (assignedAtJalali && loadingDateNormalized) {
+          let daysDiff = jalaliUtils.daysDifferenceJalali(loadingDateNormalized, assignedAtJalali);
+          
+          if (daysDiff < 0 && daysDiff >= -2) {
+            const loadingMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(loadingDateNormalized);
+            const assignedMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(assignedAtJalali);
+            if (loadingMatch && assignedMatch) {
+              const loadingYear = parseInt(loadingMatch[1], 10);
+              const loadingMonth = parseInt(loadingMatch[2], 10);
+              const loadingDay = parseInt(loadingMatch[3], 10);
+              const assignedYear = parseInt(assignedMatch[1], 10);
+              const assignedMonth = parseInt(assignedMatch[2], 10);
+              const assignedDay = parseInt(assignedMatch[3], 10);
+              if (loadingYear === assignedYear && loadingMonth === assignedMonth) {
+                if (loadingDay === assignedDay) {
+                  daysDiff = 0;
+                } else if (Math.abs(loadingDay - assignedDay) <= 1) {
+                  daysDiff = assignedDay > loadingDay ? 1 : 0;
+                }
+              }
+            }
+          }
+          
+          if (daysDiff !== null && daysDiff >= 0) {
+            periodDetails.assignedRecords.push({
+              daysDiff,
+              loadingDate: loadingDateNormalized,
+              assignedAt: assignedAtJalali
+            });
+            
+            if (daysDiff === 0) {
+              periodDetails.assignmentByDay[0]++;
+            } else if (daysDiff === 1) {
+              periodDetails.assignmentByDay[1]++;
+            } else if (daysDiff === 2) {
+              periodDetails.assignmentByDay[2]++;
+            } else if (daysDiff >= 3 && daysDiff <= 10) {
+              periodDetails.assignmentByDay[daysDiff]++;
+            } else if (daysDiff > 10) {
+              periodDetails.assignmentByDay['11+']++;
+            }
+          }
+        }
+      }
+    }
+    
+    const timeBased = timeBasedResult.rows.map(row => {
+      let timePeriod = row.time_period;
+      if (monthsDiff > 1) {
+        timePeriod = timePeriod.replace(/-/g, '/').substring(0, 7);
+      } else {
+        timePeriod = timePeriod.replace(/-/g, '/');
+      }
+      
+      const periodDetails = periodDetailsMap.get(timePeriod) || periodDetailsMap.get(timePeriod.replace(/\//g, '-'));
+      
+      const totalRequests = parseInt(row.total_requests) || 0;
+      const totalAssignments = parseInt(row.total_assignments) || 0;
+      const successRate = totalRequests > 0 ? Math.round((totalAssignments / totalRequests) * 100) : 0;
+      
+      // محاسبه درصد تخصیص در هر روز
+      const assignmentPercentagesByDay = {};
+      if (periodDetails && periodDetails.assignedRecords.length > 0) {
+        const totalAssigned = periodDetails.assignedRecords.length;
+        for (const [day, count] of Object.entries(periodDetails.assignmentByDay)) {
+          if (count > 0) {
+            assignmentPercentagesByDay[day] = Math.round((count / totalAssigned) * 100);
+          }
+        }
+      }
+      
+      const result = {
+        timePeriod,
+        totalRequests,
+        companyAssignments: parseInt(row.company_assignments) || 0,
+        personalAssignments: parseInt(row.personal_assignments) || 0,
+        totalAssignments,
+        successRate
+      };
+      
+      if (periodDetails) {
+        result.leftoverFromPrevious = periodDetails.leftoverFromPrevious;
+        result.assignmentByDay = periodDetails.assignmentByDay;
+        result.assignmentPercentagesByDay = assignmentPercentagesByDay;
+        result.totalAssigned = periodDetails.assignedRecords.length;
+      } else {
+        result.leftoverFromPrevious = 0;
+        result.assignmentByDay = {};
+        result.assignmentPercentagesByDay = {};
+        result.totalAssigned = 0;
+      }
+      
+      return result;
+    });
     
     // 5. آمار تفکیک شده بر اساس شهر + پخش/نماینده + نوع خودرو
     const vehicleTypeQuery = `
@@ -5375,6 +5524,68 @@ async function getAssignmentStatistics(req, res) {
       personalCount: parseInt(row.personal_count) || 0,
       totalCount: parseInt(row.total_count) || 0
     }));
+    
+    // 5.5. آمار نوع خودرو برای ماه قبل (برای مقایسه)
+    const prevMonthVehicleTypeQuery = `
+      SELECT 
+        COALESCE(fa.vehicle_type, 'نامشخص') as vehicle_type,
+        COUNT(DISTINCT fa.id) as total_count
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${prevMonthDateFilter}
+        ${prevMonthLineTypeFilter}
+        ${finalizedCondition}
+      GROUP BY fa.vehicle_type
+    `;
+    
+    const prevMonthVehicleTypeResult = await pool.query(prevMonthVehicleTypeQuery, prevMonthParams);
+    const prevMonthByVehicleType = {};
+    prevMonthVehicleTypeResult.rows.forEach(row => {
+      prevMonthByVehicleType[row.vehicle_type || 'نامشخص'] = parseInt(row.total_count) || 0;
+    });
+    
+    // 5.6. آمار نوع خودرو برای سال قبل (برای مقایسه)
+    const lastYearVehicleTypeQuery = `
+      SELECT 
+        COALESCE(fa.vehicle_type, 'نامشخص') as vehicle_type,
+        COUNT(DISTINCT fa.id) as total_count
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${lastYearDateFilter}
+        ${lastYearLineTypeFilter}
+        ${finalizedCondition}
+      GROUP BY fa.vehicle_type
+    `;
+    
+    const lastYearVehicleTypeResult = await pool.query(lastYearVehicleTypeQuery, lastYearParams);
+    const lastYearByVehicleType = {};
+    lastYearVehicleTypeResult.rows.forEach(row => {
+      lastYearByVehicleType[row.vehicle_type || 'نامشخص'] = parseInt(row.total_count) || 0;
+    });
+    
+    // 5.7. محاسبه مقایسه برای هر نوع خودرو
+    const currentByVehicleType = {};
+    byVehicleType.forEach(item => {
+      if (!currentByVehicleType[item.vehicleType]) {
+        currentByVehicleType[item.vehicleType] = 0;
+      }
+      currentByVehicleType[item.vehicleType] += item.totalCount;
+    });
+    
+    const vehicleTypeComparisons = {};
+    Object.keys(currentByVehicleType).forEach(vehicleType => {
+      const current = currentByVehicleType[vehicleType];
+      const prevMonth = prevMonthByVehicleType[vehicleType] || 0;
+      const lastYear = lastYearByVehicleType[vehicleType] || 0;
+      
+      vehicleTypeComparisons[vehicleType] = {
+        current,
+        comparisonWithPreviousMonth: calculateChange(current, prevMonth),
+        comparisonWithLastYear: calculateChange(current, lastYear)
+      };
+    });
     
     // 6. آمار مقایسه‌ای ماهانه (برای نمودار روند)
     // فقط اگر بازه >= 2 ماه باشد
@@ -5432,6 +5643,7 @@ async function getAssignmentStatistics(req, res) {
       },
       timeBased,
       byVehicleType,
+      vehicleTypeComparisons,
       monthlyComparison,
       dateRange: {
         start: startDateStr,
