@@ -17,6 +17,60 @@ interface StatisticsData {
     successRate: number;
 }
 
+// Interface برای آمار تفصیلی تخصیص (assignment statistics)
+interface AssignmentStatisticsComparison {
+    totalRequests: { count: number; percent: number };
+    companyAssignments: { count: number; percent: number };
+    personalAssignments: { count: number; percent: number };
+    totalAssignments: { count: number; percent: number };
+    successRate: { count: number; percent: number };
+}
+
+interface AssignmentStatisticsSummary {
+    totalRequests: number;
+    companyAssignments: number;
+    personalAssignments: number;
+    totalAssignments: number;
+    successRate: number;
+    comparisonWithPreviousMonth: AssignmentStatisticsComparison;
+    comparisonWithLastYear: AssignmentStatisticsComparison;
+}
+
+interface AssignmentStatisticsTimeBased {
+    timePeriod: string;
+    totalRequests: number;
+    companyAssignments: number;
+    personalAssignments: number;
+    totalAssignments: number;
+    successRate: number;
+}
+
+interface AssignmentStatisticsByVehicleType {
+    city: string;
+    representativeName: string;
+    vehicleType: string;
+    companyCount: number;
+    personalCount: number;
+    totalCount: number;
+}
+
+interface AssignmentStatisticsMonthlyComparison {
+    month: string;
+    vehicleTypes: { [vehicleType: string]: { company: number; personal: number; total: number } };
+}
+
+interface AssignmentStatisticsResponse {
+    summary: AssignmentStatisticsSummary;
+    timeBased: AssignmentStatisticsTimeBased[];
+    byVehicleType: AssignmentStatisticsByVehicleType[];
+    monthlyComparison: AssignmentStatisticsMonthlyComparison[];
+    dateRange: {
+        start: string;
+        end: string;
+        monthsDiff: number;
+    };
+}
+
 interface RepresentativeStatisticsData {
     representativeName: string;
     city: string;
@@ -160,6 +214,9 @@ interface TransportDashboardProps {
     lineStats: StatisticsData[];
     lineStatsLoading: boolean;
     lineStatsError: string | null;
+    assignmentStatistics: AssignmentStatisticsResponse | null;
+    assignmentStatisticsLoading: boolean;
+    assignmentStatisticsError: string | null;
     onFetchLineStatistics: (lineType: string, startDate: string, endDate: string) => Promise<void>;
     onFetchRepresentativeStatistics: () => Promise<void>;
 }
@@ -1074,6 +1131,9 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     lineStats,
     lineStatsLoading,
     lineStatsError,
+    assignmentStatistics,
+    assignmentStatisticsLoading,
+    assignmentStatisticsError,
     onFetchLineStatistics,
     onFetchRepresentativeStatistics,
     onFetchLineAnalytics,
@@ -1143,6 +1203,20 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
         } else {
             return 'year';
         }
+    };
+
+    // Helper function برای محاسبه تعداد ماه بین دو تاریخ شمسی
+    const calculateMonthsDiff = (startDate: string, endDate: string): number => {
+        const start = parseJalaliDate(startDate);
+        const end = parseJalaliDate(endDate);
+        if (!start || !end) return 0;
+        
+        const monthsDiff = (end.year - start.year) * 12 + (end.month - start.month);
+        // اگر end.day < start.day، یک ماه کمتر در نظر بگیر
+        if (end.day < start.day) {
+            return Math.max(0, monthsDiff - 1);
+        }
+        return monthsDiff;
     };
 
     // استخراج month برای analytics
@@ -1374,7 +1448,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                         }`}
                     >
-                        آمار به تفکیک لاین
+                        آمار تخصیص
                     </button>
                     <button
                         onClick={() => handleTabChange('representatives')}
@@ -1665,6 +1739,11 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                         <button
                                             onClick={() => {
                                                 if (selectedLine && lineStartDate && lineEndDate) {
+                                                    const monthsDiff = calculateMonthsDiff(lineStartDate, lineEndDate);
+                                                    if (monthsDiff > 12) {
+                                                        alert('بازه زمانی انتخاب شده بیش از 12 ماه است. لطفاً بازه کوچک‌تری انتخاب کنید.');
+                                                        return;
+                                                    }
                                                     onFetchLineStatistics(selectedLine, lineStartDate, lineEndDate);
                                                 } else {
                                                     alert('لطفاً تاریخ‌ها و لاین را انتخاب کنید');
@@ -1679,10 +1758,137 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 </div>
                             </div>
 
+                            {/* 12 Month Warning */}
+                            {lineStartDate && lineEndDate && (() => {
+                                const monthsDiff = calculateMonthsDiff(lineStartDate, lineEndDate);
+                                return monthsDiff > 12 ? (
+                                    <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-yellow-800">
+                                        <div className="flex items-center gap-2">
+                                            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                            <div>
+                                                <strong>هشدار:</strong> بازه زمانی انتخاب شده ({monthsDiff} ماه) بیش از 12 ماه است. لطفاً بازه کوچک‌تری انتخاب کنید.
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : null;
+                            })()}
+
                             {/* Error Display */}
-                            {lineStatsError && (
+                            {(assignmentStatisticsError || lineStatsError) && (
                                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
-                                    {lineStatsError}
+                                    {assignmentStatisticsError || lineStatsError}
+                                </div>
+                            )}
+
+                            {/* Summary Cards with Comparisons */}
+                            {assignmentStatistics && assignmentStatistics.summary && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {/* Total Requests Card */}
+                                    <div className="bg-white rounded-lg shadow p-4">
+                                        <div className="text-sm text-slate-600 mb-2">کل درخواست‌ها</div>
+                                        <div className="text-2xl font-bold text-slate-800 mb-2">{assignmentStatistics.summary.totalRequests.toLocaleString('fa-IR')}</div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-slate-500">ماه قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithPreviousMonth.totalRequests.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithPreviousMonth.totalRequests.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithPreviousMonth.totalRequests.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs mt-1">
+                                            <span className="text-slate-500">سال قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithLastYear.totalRequests.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithLastYear.totalRequests.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithLastYear.totalRequests.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Company Assignments Card */}
+                                    <div className="bg-white rounded-lg shadow p-4">
+                                        <div className="text-sm text-slate-600 mb-2">تخصیص شرکتی</div>
+                                        <div className="text-2xl font-bold text-green-600 mb-2">{assignmentStatistics.summary.companyAssignments.toLocaleString('fa-IR')}</div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-slate-500">ماه قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithPreviousMonth.companyAssignments.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithPreviousMonth.companyAssignments.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithPreviousMonth.companyAssignments.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs mt-1">
+                                            <span className="text-slate-500">سال قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithLastYear.companyAssignments.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithLastYear.companyAssignments.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithLastYear.companyAssignments.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Personal Assignments Card */}
+                                    <div className="bg-white rounded-lg shadow p-4">
+                                        <div className="text-sm text-slate-600 mb-2">تخصیص شخصی</div>
+                                        <div className="text-2xl font-bold text-orange-600 mb-2">{assignmentStatistics.summary.personalAssignments.toLocaleString('fa-IR')}</div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-slate-500">ماه قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithPreviousMonth.personalAssignments.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithPreviousMonth.personalAssignments.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithPreviousMonth.personalAssignments.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs mt-1">
+                                            <span className="text-slate-500">سال قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithLastYear.personalAssignments.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithLastYear.personalAssignments.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithLastYear.personalAssignments.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Success Rate Card */}
+                                    <div className="bg-white rounded-lg shadow p-4">
+                                        <div className="text-sm text-slate-600 mb-2">نرخ موفقیت</div>
+                                        <div className="text-2xl font-bold text-blue-600 mb-2">{assignmentStatistics.summary.successRate.toFixed(1)}%</div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-slate-500">ماه قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithPreviousMonth.successRate.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithPreviousMonth.successRate.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithPreviousMonth.successRate.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs mt-1">
+                                            <span className="text-slate-500">سال قبل:</span>
+                                            <span className={assignmentStatistics.summary.comparisonWithLastYear.successRate.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                {assignmentStatistics.summary.comparisonWithLastYear.successRate.percent >= 0 ? '+' : ''}{assignmentStatistics.summary.comparisonWithLastYear.successRate.percent.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Vehicle Type Statistics Table */}
+                            {assignmentStatistics && assignmentStatistics.byVehicleType && assignmentStatistics.byVehicleType.length > 0 && (
+                                <div className="bg-white rounded-lg shadow p-6">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">آمار بر اساس نوع خودرو</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-300 bg-slate-50">
+                                                    <th className="px-4 py-3 text-right text-slate-700 font-semibold">شهر</th>
+                                                    <th className="px-4 py-3 text-right text-slate-700 font-semibold">نماینده/پخش</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">نوع خودرو</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">شرکتی</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">شخصی</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700 font-semibold">کل</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {assignmentStatistics.byVehicleType.map((item, idx) => (
+                                                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                                                        <td className="px-4 py-3 text-right">{item.city}</td>
+                                                        <td className="px-4 py-3 text-right">{item.representativeName}</td>
+                                                        <td className="px-4 py-3 text-center">{item.vehicleType}</td>
+                                                        <td className="px-4 py-3 text-center">{item.companyCount.toLocaleString('fa-IR')}</td>
+                                                        <td className="px-4 py-3 text-center">{item.personalCount.toLocaleString('fa-IR')}</td>
+                                                        <td className="px-4 py-3 text-center font-semibold">{item.totalCount.toLocaleString('fa-IR')}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             )}
 

@@ -113,6 +113,60 @@ interface LineAnalyticsResponse {
     data: LineAnalyticsItem[];
 }
 
+// Interface برای آمار تفصیلی تخصیص (assignment statistics)
+interface AssignmentStatisticsComparison {
+    totalRequests: { count: number; percent: number };
+    companyAssignments: { count: number; percent: number };
+    personalAssignments: { count: number; percent: number };
+    totalAssignments: { count: number; percent: number };
+    successRate: { count: number; percent: number };
+}
+
+interface AssignmentStatisticsSummary {
+    totalRequests: number;
+    companyAssignments: number;
+    personalAssignments: number;
+    totalAssignments: number;
+    successRate: number;
+    comparisonWithPreviousMonth: AssignmentStatisticsComparison;
+    comparisonWithLastYear: AssignmentStatisticsComparison;
+}
+
+interface AssignmentStatisticsTimeBased {
+    timePeriod: string;
+    totalRequests: number;
+    companyAssignments: number;
+    personalAssignments: number;
+    totalAssignments: number;
+    successRate: number;
+}
+
+interface AssignmentStatisticsByVehicleType {
+    city: string;
+    representativeName: string;
+    vehicleType: string;
+    companyCount: number;
+    personalCount: number;
+    totalCount: number;
+}
+
+interface AssignmentStatisticsMonthlyComparison {
+    month: string;
+    vehicleTypes: { [vehicleType: string]: { company: number; personal: number; total: number } };
+}
+
+interface AssignmentStatisticsResponse {
+    summary: AssignmentStatisticsSummary;
+    timeBased: AssignmentStatisticsTimeBased[];
+    byVehicleType: AssignmentStatisticsByVehicleType[];
+    monthlyComparison: AssignmentStatisticsMonthlyComparison[];
+    dateRange: {
+        start: string;
+        end: string;
+        monthsDiff: number;
+    };
+}
+
 const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = ({ currentUser }) => {
     // Statistics for each line separately
     const [iceCreamStats, setIceCreamStats] = useState<StatisticsData[]>([]);
@@ -162,13 +216,18 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     const [analyticsStartDate, setAnalyticsStartDate] = useState<string>(() => getCurrentMonthJalaliRange().startDate);
     const [analyticsEndDate, setAnalyticsEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
     
-    // State برای lines tab
+    // State برای lines tab (آمار تخصیص)
     const [lineStartDate, setLineStartDate] = useState<string>(() => getCurrentMonthJalaliRange().startDate);
     const [lineEndDate, setLineEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
     const [selectedLine, setSelectedLine] = useState<string | null>(null);
     const [lineStats, setLineStats] = useState<StatisticsData[]>([]);
     const [lineStatsLoading, setLineStatsLoading] = useState(false);
     const [lineStatsError, setLineStatsError] = useState<string | null>(null);
+    
+    // State برای آمار تفصیلی تخصیص (assignment statistics)
+    const [assignmentStatistics, setAssignmentStatistics] = useState<AssignmentStatisticsResponse | null>(null);
+    const [assignmentStatisticsLoading, setAssignmentStatisticsLoading] = useState(false);
+    const [assignmentStatisticsError, setAssignmentStatisticsError] = useState<string | null>(null);
 
     // Helper function برای تبدیل تاریخ شمسی به year/month/day برای API
     const parseJalaliDateToAPI = (jalaliDate: string): { year: number; month: number; day: number } | null => {
@@ -348,12 +407,16 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         if (!start || !end) {
             setLineStats([]);
             setLineStatsError(null);
+            setAssignmentStatistics(null);
+            setAssignmentStatisticsError(null);
             return;
         }
 
         try {
             setLineStatsLoading(true);
             setLineStatsError(null);
+            setAssignmentStatisticsLoading(true);
+            setAssignmentStatisticsError(null);
 
             const token = localStorage.getItem('token');
             const headers: HeadersInit = {
@@ -361,28 +424,52 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 'Content-Type': 'application/json',
             };
 
-            const detectedTimeRange = detectTimeRange(startDate, endDate);
-
-            const params = new URLSearchParams();
-            params.append('year', start.year.toString());
-            params.append('month', start.month.toString());
-            if (start.day) params.append('day', start.day.toString());
-            params.append('lineType', lineType);
-            params.append('timeRange', detectedTimeRange);
-
-            const res = await fetch(getApiUrl(`freight-announcements/statistics?${params.toString()}`), { headers });
-
-            if (!res.ok) {
-                throw new Error('خطا در دریافت آمار خط');
+            // Fetch from assignment-statistics endpoint (new endpoint for finalized assignments)
+            const assignmentParams = new URLSearchParams();
+            assignmentParams.append('startYear', start.year.toString());
+            assignmentParams.append('startMonth', start.month.toString());
+            assignmentParams.append('startDay', start.day.toString());
+            assignmentParams.append('endYear', end.year.toString());
+            assignmentParams.append('endMonth', end.month.toString());
+            assignmentParams.append('endDay', end.day.toString());
+            if (lineType && lineType !== 'all') {
+                assignmentParams.append('lineType', lineType);
             }
 
-            const data = await res.json();
-            setLineStats(Array.isArray(data) ? data : []);
+            const assignmentRes = await fetch(getApiUrl(`freight-announcements/assignment-statistics?${assignmentParams.toString()}`), { headers });
+            
+            if (!assignmentRes.ok) {
+                const errorData = await assignmentRes.json().catch(() => ({}));
+                if (assignmentRes.status === 400 && errorData.message?.includes('12 ماه')) {
+                    throw new Error(errorData.message || 'بازه زمانی انتخاب شده بیش از 12 ماه است');
+                }
+                throw new Error('خطا در دریافت آمار تفصیلی تخصیص');
+            }
+
+            const assignmentData: AssignmentStatisticsResponse = await assignmentRes.json();
+            setAssignmentStatistics(assignmentData);
+            
+            // Convert assignment statistics timeBased to StatisticsData format for backward compatibility
+            const convertedStats: StatisticsData[] = assignmentData.timeBased.map(item => ({
+                timePeriod: item.timePeriod,
+                totalRequests: item.totalRequests,
+                companyAssignments: item.companyAssignments,
+                personalAssignments: item.personalAssignments,
+                totalAssignments: item.totalAssignments,
+                successRate: item.successRate
+            }));
+            setLineStats(convertedStats);
+
         } catch (err: any) {
             console.error('❌ [LineStatistics] Failed to fetch:', err);
-            setLineStatsError(err.message || 'خطا در دریافت آمار خط');
+            const errorMessage = err.message || 'خطا در دریافت آمار خط';
+            setLineStatsError(errorMessage);
+            setAssignmentStatisticsError(errorMessage);
+            setLineStats([]);
+            setAssignmentStatistics(null);
         } finally {
             setLineStatsLoading(false);
+            setAssignmentStatisticsLoading(false);
         }
     };
 
@@ -483,6 +570,9 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 lineStats={lineStats}
                 lineStatsLoading={lineStatsLoading}
                 lineStatsError={lineStatsError}
+                assignmentStatistics={assignmentStatistics}
+                assignmentStatisticsLoading={assignmentStatisticsLoading}
+                assignmentStatisticsError={assignmentStatisticsError}
                 onFetchLineStatistics={fetchLineStatistics}
                 onFetchRepresentativeStatistics={fetchRepresentativeStatistics}
                 onFetchLineAnalytics={fetchLineAnalytics}

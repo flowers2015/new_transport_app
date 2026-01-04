@@ -118,6 +118,59 @@ function timestampToJalaliDate(timestamp) {
     return `${jy}/${pad2(jm)}/${pad2(jd)}`;
 }
 
+/**
+ * تبدیل تاریخ شمسی به Date object
+ * @param {string} jalaliDate - تاریخ شمسی (فرمت YYYY/MM/DD یا YYYY-MM-DD)
+ * @returns {Date} - Date object
+ */
+function jalaliDateToDate(jalaliDate) {
+    const parsed = parseJalaliDateString(jalaliDate);
+    if (!parsed) return null;
+    return parsed;
+}
+
+/**
+ * محاسبه ماه قبل یا بعد در تاریخ شمسی
+ * @param {number} jy - سال شمسی
+ * @param {number} jm - ماه شمسی (1-12)
+ * @param {number} monthsToShift - تعداد ماه‌هایی که باید جابجا شود (مثبت = بعد، منفی = قبل)
+ * @returns {object} - {year: number, month: number}
+ */
+function shiftJalaliMonth(jy, jm, monthsToShift) {
+    let newYear = jy;
+    let newMonth = jm + monthsToShift;
+    
+    while (newMonth > 12) {
+        newMonth -= 12;
+        newYear += 1;
+    }
+    
+    while (newMonth < 1) {
+        newMonth += 12;
+        newYear -= 1;
+    }
+    
+    return { year: newYear, month: newMonth };
+}
+
+/**
+ * محاسبه محدوده ماه شمسی (اول و آخر ماه)
+ * @param {number} jy - سال شمسی
+ * @param {number} jm - ماه شمسی (1-12)
+ * @returns {object} - {startDate: string, endDate: string} - فرمت YYYY/MM/DD
+ */
+function getJalaliMonthRange(jy, jm) {
+    const jalaali = require('jalaali-js');
+    
+    // محاسبه تعداد روزهای ماه
+    const daysInMonth = jalaali.jalaaliMonthLength(jy, jm);
+    
+    const startDate = `${jy}/${pad2(jm)}/01`;
+    const endDate = `${jy}/${pad2(jm)}/${pad2(daysInMonth)}`;
+    
+    return { startDate, endDate };
+}
+
 module.exports = {
     formatJalali,
     formatJalaliDateTime,
@@ -125,5 +178,8 @@ module.exports = {
     gregorianToJalali,
     jalaliToGregorian,
     daysDifferenceJalali,
-    timestampToJalaliDate
+    timestampToJalaliDate,
+    jalaliDateToDate,
+    shiftJalaliMonth,
+    getJalaliMonthRange
 };

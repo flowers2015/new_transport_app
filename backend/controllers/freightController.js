@@ -3513,8 +3513,9 @@ async function getTransportStatistics(req, res) {
       // و بارهایی که هنوز finalized نشده‌اند (assignment_finalized_at IS NULL)
       // این منطق دقیقاً همان فیلتر TransportLive است (خط 575-584 و 503)
       // نکته: statusCondition خودش Finalized, Leftover, Cancelled را شامل نمی‌کند، پس نیازی به excludedStatuses نیست
+      // استفاده از COALESCE برای چک کردن assignment_finalized_at از dispatch_assignments هم (همانند getFreightAnnouncements)
       const statusCondition = `fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
-      const finalizedCondition = `fa.assignment_finalized_at IS NULL`;
+      const finalizedCondition = `COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) IS NULL`;
       if (dateFilter || lineTypeFilter) {
         statusFilter = ` AND ${statusCondition} AND ${finalizedCondition}`;
       } else {
@@ -3597,6 +3598,8 @@ async function getTransportStatistics(req, res) {
       `;
     } else if (timeRange === 'day') {
       // برای آمار روزانه زنده: بدون GROUP BY، فقط یک ردیف برمی‌گردد
+      // اضافه کردن LEFT JOIN LATERAL برای dispatch_assignments (همانند getFreightAnnouncements)
+      // تا assignment_finalized_at از dispatch_assignments هم چک شود
       query = `
       SELECT 
           ${dateFormat} as time_period,
@@ -3605,6 +3608,14 @@ async function getTransportStatistics(req, res) {
         COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
         COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
       FROM freight_announcements fa
+      LEFT JOIN LATERAL (
+        SELECT assignment_finalized_at
+        FROM dispatch_assignments
+        WHERE freight_announcement_id = fa.id 
+          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) da ON true
       ${whereClause}
       `;
     } else {
@@ -5076,6 +5087,373 @@ async function searchDispatchRoutes(req, res) {
   }
 }
 
+/**
+ * GET /assignment-statistics - آمار تفصیلی تخصیص (فقط finalized assignments)
+ * Query params: startYear, startMonth, startDay, endYear, endMonth, endDay, lineType
+ */
+async function getAssignmentStatistics(req, res) {
+  try {
+    const { startYear, startMonth, startDay, endYear, endMonth, endDay, lineType } = req.query;
+    
+    if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
+      return res.status(400).json({ message: 'startYear, startMonth, startDay, endYear, endMonth, endDay are required' });
+    }
+    
+    const jalaliUtils = require('../utils/jalali');
+    
+    // ساخت تاریخ شروع و پایان
+    const startDateStr = `${startYear}/${String(startMonth).padStart(2, '0')}/${String(startDay).padStart(2, '0')}`;
+    const endDateStr = `${endYear}/${String(endMonth).padStart(2, '0')}/${String(endDay).padStart(2, '0')}`;
+    
+    console.log('📊 [AssignmentStatistics] Request:', { startDateStr, endDateStr, lineType });
+    
+    // محدودیت 12 ماهه
+    const startDate = jalaliUtils.jalaliDateToDate(startDateStr);
+    const endDate = jalaliUtils.jalaliDateToDate(endDateStr);
+    const daysDiff = Math.abs(Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)));
+    const monthsDiff = Math.ceil(daysDiff / 30);
+    
+    if (monthsDiff > 12) {
+      return res.status(400).json({ 
+        message: 'بازه زمانی انتخاب شده بیش از 12 ماه است. لطفاً بازه کوچکتری انتخاب کنید.',
+        maxMonths: 12,
+        selectedMonths: monthsDiff
+      });
+    }
+    
+    // ساخت dateFilter برای بازه زمانی
+    // استفاده از CAST به TEXT و مقایسه string برای پشتیبانی از هر دو فرمت (با / و با -)
+    const startDateStrDash = startDateStr.replace(/\//g, '-');
+    const endDateStrDash = endDateStr.replace(/\//g, '-');
+    const dateFilter = `AND (
+      (CAST(fa.loading_date AS TEXT) >= $1 AND CAST(fa.loading_date AS TEXT) <= $2) OR
+      (CAST(fa.loading_date AS TEXT) >= $3 AND CAST(fa.loading_date AS TEXT) <= $4)
+    )`;
+    const dateParams = [
+      startDateStr,
+      endDateStr,
+      startDateStrDash,
+      endDateStrDash
+    ];
+    
+    // فیلتر lineType
+    let lineTypeFilter = '';
+    let paramIdx = dateParams.length + 1;
+    if (lineType && lineType !== 'all') {
+      lineTypeFilter = `AND fa.line_type = $${paramIdx++}`;
+      dateParams.push(lineType);
+    }
+    
+    // فقط finalized assignments (از freight_announcements یا dispatch_assignments)
+    const finalizedCondition = `AND COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) IS NOT NULL`;
+    
+    // LEFT JOIN LATERAL برای dispatch_assignments
+    const lateralJoin = `
+      LEFT JOIN LATERAL (
+        SELECT assignment_finalized_at
+        FROM dispatch_assignments
+        WHERE freight_announcement_id = fa.id 
+          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) da ON true
+    `;
+    
+    // 1. آمار کلی (جمع کل)
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+        COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+        COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${dateFilter}
+        ${lineTypeFilter}
+        ${finalizedCondition}
+    `;
+    
+    const summaryResult = await pool.query(summaryQuery, dateParams);
+    const summary = summaryResult.rows[0];
+    
+    const totalRequests = parseInt(summary.total_requests) || 0;
+    const companyAssignments = parseInt(summary.company_assignments) || 0;
+    const personalAssignments = parseInt(summary.personal_assignments) || 0;
+    const totalAssignments = parseInt(summary.total_assignments) || 0;
+    const successRate = totalRequests > 0 ? Math.round((totalAssignments / totalRequests) * 100) : 0;
+    
+    // 2. محاسبه مقایسه با ماه قبل
+    const prevMonth = jalaliUtils.shiftJalaliMonth(parseInt(startYear), parseInt(startMonth), -1);
+    const prevMonthRange = jalaliUtils.getJalaliMonthRange(prevMonth.year, prevMonth.month);
+    
+    const prevMonthStartDash = prevMonthRange.startDate.replace(/\//g, '-');
+    const prevMonthEndDash = prevMonthRange.endDate.replace(/\//g, '-');
+    let prevMonthParamIdx = 1;
+    const prevMonthDateFilter = `AND (
+      (CAST(fa.loading_date AS TEXT) >= $${prevMonthParamIdx++} AND CAST(fa.loading_date AS TEXT) <= $${prevMonthParamIdx++}) OR
+      (CAST(fa.loading_date AS TEXT) >= $${prevMonthParamIdx++} AND CAST(fa.loading_date AS TEXT) <= $${prevMonthParamIdx++})
+    )`;
+    const prevMonthLineTypeFilter = lineType && lineType !== 'all' ? `AND fa.line_type = $${prevMonthParamIdx++}` : '';
+    
+    const prevMonthQuery = `
+      SELECT 
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+        COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+        COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${prevMonthDateFilter}
+        ${prevMonthLineTypeFilter}
+        ${finalizedCondition}
+    `;
+    
+    const prevMonthParams = [
+      prevMonthRange.startDate,
+      prevMonthRange.endDate,
+      prevMonthStartDash,
+      prevMonthEndDash,
+      ...(lineType && lineType !== 'all' ? [lineType] : [])
+    ];
+    
+    const prevMonthResult = await pool.query(prevMonthQuery, prevMonthParams);
+    const prevMonthData = prevMonthResult.rows[0];
+    
+    const prevMonthTotalRequests = parseInt(prevMonthData.total_requests) || 0;
+    const prevMonthCompany = parseInt(prevMonthData.company_assignments) || 0;
+    const prevMonthPersonal = parseInt(prevMonthData.personal_assignments) || 0;
+    const prevMonthTotal = parseInt(prevMonthData.total_assignments) || 0;
+    
+    // 3. محاسبه مقایسه با همان ماه سال قبل
+    const lastYearMonthRange = jalaliUtils.getJalaliMonthRange(parseInt(startYear) - 1, parseInt(startMonth));
+    
+    const lastYearStartDash = lastYearMonthRange.startDate.replace(/\//g, '-');
+    const lastYearEndDash = lastYearMonthRange.endDate.replace(/\//g, '-');
+    let lastYearParamIdx = 1;
+    const lastYearDateFilter = `AND (
+      (CAST(fa.loading_date AS TEXT) >= $${lastYearParamIdx++} AND CAST(fa.loading_date AS TEXT) <= $${lastYearParamIdx++}) OR
+      (CAST(fa.loading_date AS TEXT) >= $${lastYearParamIdx++} AND CAST(fa.loading_date AS TEXT) <= $${lastYearParamIdx++})
+    )`;
+    const lastYearLineTypeFilter = lineType && lineType !== 'all' ? `AND fa.line_type = $${lastYearParamIdx++}` : '';
+    
+    const lastYearQuery = `
+      SELECT 
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+        COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+        COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${lastYearDateFilter}
+        ${lastYearLineTypeFilter}
+        ${finalizedCondition}
+    `;
+    
+    const lastYearParams = [
+      lastYearMonthRange.startDate,
+      lastYearMonthRange.endDate,
+      lastYearStartDash,
+      lastYearEndDash,
+      ...(lineType && lineType !== 'all' ? [lineType] : [])
+    ];
+    
+    const lastYearResult = await pool.query(lastYearQuery, lastYearParams);
+    const lastYearData = lastYearResult.rows[0];
+    
+    const lastYearTotalRequests = parseInt(lastYearData.total_requests) || 0;
+    const lastYearCompany = parseInt(lastYearData.company_assignments) || 0;
+    const lastYearPersonal = parseInt(lastYearData.personal_assignments) || 0;
+    const lastYearTotal = parseInt(lastYearData.total_assignments) || 0;
+    
+    // محاسبه درصد تغییر
+    const calculateChange = (current, previous) => {
+      if (previous === 0) return current > 0 ? { count: current, percent: 100 } : { count: 0, percent: 0 };
+      const count = current - previous;
+      const percent = Math.round((count / previous) * 100);
+      return { count, percent };
+    };
+    
+    const comparisonWithPreviousMonth = {
+      totalRequests: calculateChange(totalRequests, prevMonthTotalRequests),
+      companyAssignments: calculateChange(companyAssignments, prevMonthCompany),
+      personalAssignments: calculateChange(personalAssignments, prevMonthPersonal),
+      totalAssignments: calculateChange(totalAssignments, prevMonthTotal),
+      successRate: calculateChange(successRate, prevMonthTotal > 0 ? Math.round((prevMonthTotal / prevMonthTotalRequests) * 100) : 0)
+    };
+    
+    const comparisonWithLastYear = {
+      totalRequests: calculateChange(totalRequests, lastYearTotalRequests),
+      companyAssignments: calculateChange(companyAssignments, lastYearCompany),
+      personalAssignments: calculateChange(personalAssignments, lastYearPersonal),
+      totalAssignments: calculateChange(totalAssignments, lastYearTotal),
+      successRate: calculateChange(successRate, lastYearTotal > 0 ? Math.round((lastYearTotal / lastYearTotalRequests) * 100) : 0)
+    };
+    
+    // 4. آمار تفکیک شده بر اساس زمان (روزانه/ماهانه بر اساس اندازه بازه)
+    let timeBasedQuery = '';
+    let groupBy = '';
+    if (monthsDiff <= 1) {
+      // روزانه
+      groupBy = "CAST(fa.loading_date AS TEXT)";
+      timeBasedQuery = `
+        SELECT 
+          CAST(fa.loading_date AS TEXT) as time_period,
+          COUNT(*) as total_requests,
+          COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+          COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+          COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+        FROM freight_announcements fa
+        ${lateralJoin}
+        WHERE 1=1
+          ${dateFilter}
+          ${lineTypeFilter}
+          ${finalizedCondition}
+        GROUP BY CAST(fa.loading_date AS TEXT)
+        ORDER BY time_period ASC
+      `;
+    } else {
+      // ماهانه
+      groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7)";
+      timeBasedQuery = `
+        SELECT 
+          SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7) as time_period,
+          COUNT(*) as total_requests,
+          COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+          COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+          COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+        FROM freight_announcements fa
+        ${lateralJoin}
+        WHERE 1=1
+          ${dateFilter}
+          ${lineTypeFilter}
+          ${finalizedCondition}
+        GROUP BY SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7)
+        ORDER BY time_period ASC
+      `;
+    }
+    
+    const timeBasedResult = await pool.query(timeBasedQuery, dateParams);
+    const timeBased = timeBasedResult.rows.map(row => ({
+      timePeriod: row.time_period,
+      totalRequests: parseInt(row.total_requests) || 0,
+      companyAssignments: parseInt(row.company_assignments) || 0,
+      personalAssignments: parseInt(row.personal_assignments) || 0,
+      totalAssignments: parseInt(row.total_assignments) || 0,
+      successRate: parseInt(row.total_requests) > 0 ? Math.round((parseInt(row.total_assignments) / parseInt(row.total_requests)) * 100) : 0
+    }));
+    
+    // 5. آمار تفکیک شده بر اساس شهر + پخش/نماینده + نوع خودرو
+    const vehicleTypeQuery = `
+      SELECT 
+        fd.city,
+        COALESCE(fd.representative_name, '') as representative_name,
+        COALESCE(fa.vehicle_type, 'نامشخص') as vehicle_type,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as company_count,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count,
+        COUNT(DISTINCT fa.id) as total_count
+      FROM freight_announcements fa
+      ${lateralJoin}
+      INNER JOIN freight_destinations fd ON fd.freight_announcement_id = fa.id
+      WHERE 1=1
+        ${dateFilter}
+        ${lineTypeFilter}
+        ${finalizedCondition}
+        AND fd.city IS NOT NULL AND fd.city != ''
+      GROUP BY fd.city, fd.representative_name, fa.vehicle_type
+      ORDER BY fd.city ASC, fd.representative_name ASC, fa.vehicle_type ASC
+    `;
+    
+    const vehicleTypeResult = await pool.query(vehicleTypeQuery, dateParams);
+    const byVehicleType = vehicleTypeResult.rows.map(row => ({
+      city: row.city,
+      representativeName: row.representative_name || '',
+      vehicleType: row.vehicle_type || 'نامشخص',
+      companyCount: parseInt(row.company_count) || 0,
+      personalCount: parseInt(row.personal_count) || 0,
+      totalCount: parseInt(row.total_count) || 0
+    }));
+    
+    // 6. آمار مقایسه‌ای ماهانه (برای نمودار روند)
+    // فقط اگر بازه >= 2 ماه باشد
+    const monthlyComparison = [];
+    if (monthsDiff >= 2) {
+      const monthlyQuery = `
+        SELECT 
+          SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7) as month,
+          fa.vehicle_type,
+          COUNT(DISTINCT CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as company_count,
+          COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count,
+          COUNT(DISTINCT fa.id) as total_count
+        FROM freight_announcements fa
+        ${lateralJoin}
+        WHERE 1=1
+          ${dateFilter}
+          ${lineTypeFilter}
+          ${finalizedCondition}
+        GROUP BY SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7), fa.vehicle_type
+        ORDER BY month ASC, fa.vehicle_type ASC
+      `;
+      
+      const monthlyResult = await pool.query(monthlyQuery, dateParams);
+      const monthlyMap = new Map();
+      
+      monthlyResult.rows.forEach(row => {
+        const month = row.month;
+        if (!monthlyMap.has(month)) {
+          monthlyMap.set(month, {});
+        }
+        monthlyMap.get(month)[row.vehicle_type || 'نامشخص'] = {
+          company: parseInt(row.company_count) || 0,
+          personal: parseInt(row.personal_count) || 0,
+          total: parseInt(row.total_count) || 0
+        };
+      });
+      
+      monthlyMap.forEach((vehicleTypes, month) => {
+        monthlyComparison.push({
+          month,
+          vehicleTypes
+        });
+      });
+    }
+    
+    const response = {
+      summary: {
+        totalRequests,
+        companyAssignments,
+        personalAssignments,
+        totalAssignments,
+        successRate,
+        comparisonWithPreviousMonth,
+        comparisonWithLastYear
+      },
+      timeBased,
+      byVehicleType,
+      monthlyComparison,
+      dateRange: {
+        start: startDateStr,
+        end: endDateStr,
+        monthsDiff
+      }
+    };
+    
+    console.log('✅ [AssignmentStatistics] Response:', {
+      summary: response.summary,
+      timeBasedCount: timeBased.length,
+      vehicleTypeCount: byVehicleType.length,
+      monthlyComparisonCount: monthlyComparison.length
+    });
+    
+    res.json(response);
+  } catch (error) {
+    console.error('❌ [AssignmentStatistics] Error:', error);
+    res.status(500).json({ message: 'Internal server error while fetching assignment statistics.', error: error.message });
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -5096,6 +5474,7 @@ module.exports = {
   getCityDetails,
   getLineAnalytics,
   searchDispatchRoutes,
+  getAssignmentStatistics,
 };
 
 /**

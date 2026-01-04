@@ -15,6 +15,7 @@ const {
   getFreightHistory,
   finalizeAssignments,
   getTransportStatistics,
+  getAssignmentStatistics,
   getRepresentativeStatistics,
   getRepresentativeDetails,
   getCityStatistics,
@@ -44,6 +45,9 @@ router.get('/history', authenticateToken, getFreightHistory);
 
 // Get transport statistics for dashboard
 router.get('/statistics', authenticateToken, getTransportStatistics);
+
+// Get assignment statistics (detailed statistics for finalized assignments)
+router.get('/assignment-statistics', authenticateToken, getAssignmentStatistics);
 
 // Get representative statistics (for transport dashboard)
 router.get('/representative-statistics', authenticateToken, getRepresentativeStatistics);
