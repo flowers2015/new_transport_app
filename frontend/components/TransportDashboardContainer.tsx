@@ -161,6 +161,14 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     const [representativeEndDate, setRepresentativeEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
     const [analyticsStartDate, setAnalyticsStartDate] = useState<string>(() => getCurrentMonthJalaliRange().startDate);
     const [analyticsEndDate, setAnalyticsEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
+    
+    // State برای lines tab
+    const [lineStartDate, setLineStartDate] = useState<string>(() => getCurrentMonthJalaliRange().startDate);
+    const [lineEndDate, setLineEndDate] = useState<string>(() => getCurrentMonthJalaliRange().endDate);
+    const [selectedLine, setSelectedLine] = useState<string | null>(null);
+    const [lineStats, setLineStats] = useState<StatisticsData[]>([]);
+    const [lineStatsLoading, setLineStatsLoading] = useState(false);
+    const [lineStatsError, setLineStatsError] = useState<string | null>(null);
 
     // Helper function برای تبدیل تاریخ شمسی به year/month/day برای API
     const parseJalaliDateToAPI = (jalaliDate: string): { year: number; month: number; day: number } | null => {
@@ -269,11 +277,17 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 'Content-Type': 'application/json',
             };
 
+            // تبدیل تاریخ‌های شمسی به پارامترهای API
+            const start = parseJalaliDateToAPI(representativeStartDate);
+            const detectedTimeRange = detectTimeRange(representativeStartDate, representativeEndDate);
+
             const params = new URLSearchParams();
-            if (selectedYear) params.append('year', selectedYear.toString());
-            if (selectedMonth) params.append('month', selectedMonth.toString());
-            if (selectedDay) params.append('day', selectedDay.toString());
-            params.append('timeRange', timeRange);
+            if (start) {
+                params.append('year', start.year.toString());
+                params.append('month', start.month.toString());
+                params.append('day', start.day.toString());
+            }
+            params.append('timeRange', detectedTimeRange);
 
             const res = await fetch(getApiUrl(`freight-announcements/representative-statistics?${params.toString()}`), { headers });
             
@@ -330,7 +344,8 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
 
     const fetchLineAnalytics = async () => {
         const start = parseJalaliDateToAPI(analyticsStartDate);
-        if (!start) {
+        const end = parseJalaliDateToAPI(analyticsEndDate);
+        if (!start || !end) {
             setLineAnalytics([]);
             setLineAnalyticsMeta(null);
             setLineAnalyticsError(null);
@@ -347,10 +362,16 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 'Content-Type': 'application/json',
             };
 
+            const detectedTimeRange = detectTimeRange(analyticsStartDate, analyticsEndDate);
+
             const params = new URLSearchParams();
-            params.append('year', start.year.toString());
-            params.append('month', start.month.toString());
-            params.append('timeRange', 'month');
+            params.append('startYear', start.year.toString());
+            params.append('startMonth', start.month.toString());
+            params.append('startDay', start.day.toString());
+            params.append('endYear', end.year.toString());
+            params.append('endMonth', end.month.toString());
+            params.append('endDay', end.day.toString());
+            params.append('timeRange', detectedTimeRange);
 
             const res = await fetch(getApiUrl(`freight-announcements/line-analytics?${params.toString()}`), { headers });
 
@@ -374,13 +395,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         fetchStatistics();
     }, [selectedYear, selectedMonth, selectedDay, timeRange]);
 
-    useEffect(() => {
-        fetchRepresentativeStatistics();
-    }, [representativeStartDate, representativeEndDate]);
-
-    useEffect(() => {
-        fetchLineAnalytics();
-    }, [analyticsStartDate, analyticsEndDate]);
+    // Remove auto-fetch - only fetch on search button click
 
     return (
         <TransportDashboard
@@ -415,6 +430,18 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 analyticsEndDate={analyticsEndDate}
                 onAnalyticsStartDateChange={setAnalyticsStartDate}
                 onAnalyticsEndDateChange={setAnalyticsEndDate}
+                lineStartDate={lineStartDate}
+                lineEndDate={lineEndDate}
+                onLineStartDateChange={setLineStartDate}
+                onLineEndDateChange={setLineEndDate}
+                selectedLine={selectedLine}
+                onSelectedLineChange={setSelectedLine}
+                lineStats={lineStats}
+                lineStatsLoading={lineStatsLoading}
+                lineStatsError={lineStatsError}
+                onFetchLineStatistics={fetchLineStatistics}
+                onFetchRepresentativeStatistics={fetchRepresentativeStatistics}
+                onFetchLineAnalytics={fetchLineAnalytics}
             />
     );
 };

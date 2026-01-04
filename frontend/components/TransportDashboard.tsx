@@ -150,6 +150,18 @@ interface TransportDashboardProps {
     analyticsEndDate: string;
     onAnalyticsStartDateChange: (date: string) => void;
     onAnalyticsEndDateChange: (date: string) => void;
+    onFetchLineAnalytics: () => Promise<void>;
+    lineStartDate: string;
+    lineEndDate: string;
+    onLineStartDateChange: (date: string) => void;
+    onLineEndDateChange: (date: string) => void;
+    selectedLine: string | null;
+    onSelectedLineChange: (line: string | null) => void;
+    lineStats: StatisticsData[];
+    lineStatsLoading: boolean;
+    lineStatsError: string | null;
+    onFetchLineStatistics: (lineType: string, startDate: string, endDate: string) => Promise<void>;
+    onFetchRepresentativeStatistics: () => Promise<void>;
 }
 
 const COLORS = {
@@ -1053,6 +1065,17 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     analyticsEndDate,
     onAnalyticsStartDateChange,
     onAnalyticsEndDateChange,
+    lineStartDate,
+    lineEndDate,
+    onLineStartDateChange,
+    onLineEndDateChange,
+    selectedLine,
+    onSelectedLineChange,
+    lineStats,
+    lineStatsLoading,
+    lineStatsError,
+    onFetchLineStatistics,
+    onFetchRepresentativeStatistics,
 }) => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [showDailyStats, setShowDailyStats] = useState(false);
@@ -1351,7 +1374,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                         }`}
                     >
-                        آمار خطوط
+                        آمار به تفکیک لاین
                     </button>
                     <button
                         onClick={() => handleTabChange('representatives')}
@@ -1601,46 +1624,17 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                         <div className="space-y-6">
                             {/* Filters */}
                             <div className="bg-white rounded-lg shadow p-4">
-                                <h2 className="text-lg font-semibold text-slate-700 mb-4">آمار به تفکیک لاین</h2>
-                                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                                    {/* Line Type Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">لاین</label>
-                                        <select
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                            disabled
-                                            defaultValue="all"
-                                        >
-                                            <option value="all">همه لاین‌ها</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Line Rows - Each line gets a full row */}
-                            <LineRow title="بستنی" stats={iceCreamStats} timeRange={timeRange} />
-                            <LineRow title="پاستوریزه" stats={dairyStats} timeRange={timeRange} />
-                            <LineRow title="لبنیات-فروتلند" stats={ambientStats} timeRange={timeRange} />
-                        </div>
-                    )}
-
-                    {/* Tab 3: Representative Statistics */}
-                    {activeTab === 'representatives' && loadedTabs.has('representatives') && (
-                        <div className="space-y-6">
-                            {/* Filters */}
-                            <div className="bg-white rounded-lg shadow p-4">
-                                <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                                     {/* Start Date Filter */}
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-2">از تاریخ (شمسی)</label>
                                         <input
                                             type="text"
-                                            value={representativeStartDate}
+                                            value={lineStartDate}
                                             onChange={(e) => {
                                                 let value = e.target.value.replace(/[^\d\/]/g, '');
                                                 if (value.length <= 10) {
-                                                    onRepresentativeStartDateChange(value);
+                                                    onLineStartDateChange(value);
                                                 }
                                             }}
                                             placeholder="1404/05/01"
@@ -1654,11 +1648,11 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                         <label className="block text-sm font-medium text-slate-700 mb-2">تا تاریخ (شمسی)</label>
                                         <input
                                             type="text"
-                                            value={representativeEndDate}
+                                            value={lineEndDate}
                                             onChange={(e) => {
                                                 let value = e.target.value.replace(/[^\d\/]/g, '');
                                                 if (value.length <= 10) {
-                                                    onRepresentativeEndDateChange(value);
+                                                    onLineEndDateChange(value);
                                                 }
                                             }}
                                             placeholder="1404/05/31"
@@ -1666,9 +1660,73 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                             dir="rtl"
                                         />
                                     </div>
+
+                                    {/* Line Type Filter */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">لاین</label>
+                                        <select
+                                            value={selectedLine || ''}
+                                            onChange={(e) => onSelectedLineChange(e.target.value || null)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        >
+                                            <option value="">لطفاً یک لاین انتخاب کنید</option>
+                                            <option value={FreightLineType.IceCream}>بستنی</option>
+                                            <option value={FreightLineType.Dairy}>پاستوریزه</option>
+                                            <option value={FreightLineType.Ambient}>لبنیات-فروتلند</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Search Button */}
+                                    <div>
+                                        <button
+                                            onClick={() => {
+                                                if (selectedLine && lineStartDate && lineEndDate) {
+                                                    onFetchLineStatistics(selectedLine, lineStartDate, lineEndDate);
+                                                } else {
+                                                    alert('لطفاً تاریخ‌ها و لاین را انتخاب کنید');
+                                                }
+                                            }}
+                                            disabled={!selectedLine || !lineStartDate || !lineEndDate || lineStatsLoading}
+                                            className="w-full px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-sm font-medium"
+                                        >
+                                            {lineStatsLoading ? 'در حال جستجو...' : 'جستجو'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
+                            {/* Error Display */}
+                            {lineStatsError && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+                                    {lineStatsError}
+                                </div>
+                            )}
+
+                            {/* Line Row - Only show selected line */}
+                            {selectedLine && lineStats.length > 0 && (
+                                <LineRow 
+                                    title={
+                                        selectedLine === FreightLineType.IceCream ? 'بستنی' :
+                                        selectedLine === FreightLineType.Dairy ? 'پاستوریزه' :
+                                        'لبنیات-فروتلند'
+                                    } 
+                                    stats={lineStats} 
+                                    timeRange={detectTimeRange(lineStartDate, lineEndDate)} 
+                                />
+                            )}
+
+                            {/* No Data Message */}
+                            {selectedLine && !lineStatsLoading && lineStats.length === 0 && !lineStatsError && (
+                                <div className="bg-white rounded-lg shadow p-8 text-center text-slate-500">
+                                    داده‌ای برای این لاین یافت نشد
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Tab 3: Representative Statistics */}
+                    {activeTab === 'representatives' && loadedTabs.has('representatives') && (
+                        <div className="space-y-4">
                             {/* Representative Statistics Table */}
                             <RepresentativeStatisticsTable
                                 stats={representativeStats}
@@ -1679,19 +1737,24 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                 selectedMonth={representativeMonth}
                                 selectedDay={representativeDay}
                                 timeRange={representativeTimeRange}
+                                representativeStartDate={representativeStartDate}
+                                representativeEndDate={representativeEndDate}
+                                onRepresentativeStartDateChange={onRepresentativeStartDateChange}
+                                onRepresentativeEndDateChange={onRepresentativeEndDateChange}
+                                onFetchRepresentativeStatistics={onFetchRepresentativeStatistics}
                             />
                         </div>
                     )}
 
                     {/* Tab 4: Line Analytics */}
                     {activeTab === 'analytics' && loadedTabs.has('analytics') && (
-                        <div className="space-y-6">
+                        <div className="space-y-4">
                             {/* Filters */}
                             <div className="bg-white rounded-lg shadow p-4">
                                 <h2 className="text-lg font-semibold text-slate-700 mb-4">فیلترها</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                                <div className="flex flex-wrap gap-3 items-end">
                                     {/* Start Date Filter */}
-                                    <div>
+                                    <div className="flex-1 min-w-[140px]">
                                         <label className="block text-sm font-medium text-slate-700 mb-2">
                                             از تاریخ (شمسی) <span className="text-red-500">*</span>
                                         </label>
@@ -1705,13 +1768,13 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                                 }
                                             }}
                                             placeholder="1404/05/01"
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
                                             dir="rtl"
                                         />
                                     </div>
 
                                     {/* End Date Filter */}
-                                    <div>
+                                    <div className="flex-1 min-w-[140px]">
                                         <label className="block text-sm font-medium text-slate-700 mb-2">
                                             تا تاریخ (شمسی) <span className="text-red-500">*</span>
                                         </label>
@@ -1725,16 +1788,40 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                                 }
                                             }}
                                             placeholder="1404/05/31"
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
                                             dir="rtl"
                                         />
+                                    </div>
+
+                                    {/* Search Button */}
+                                    <div>
+                                        <button
+                                            onClick={() => {
+                                                if (analyticsStartDate && analyticsEndDate) {
+                                                    onFetchLineAnalytics();
+                                                } else {
+                                                    alert('لطفاً تاریخ‌ها را وارد کنید');
+                                                }
+                                            }}
+                                            disabled={!analyticsStartDate || !analyticsEndDate || lineAnalyticsLoading}
+                                            className="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-sm font-medium h-[38px]"
+                                        >
+                                            {lineAnalyticsLoading ? 'در حال جستجو...' : 'جستجو'}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
 
+                            {/* Error Display */}
+                            {lineAnalyticsError && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                                    {lineAnalyticsError}
+                                </div>
+                            )}
+
                             {/* Content */}
                             {!analyticsStartDate || !analyticsEndDate ? (
-                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
                                     <div className="text-amber-800 text-lg font-semibold mb-2">
                                         برای مشاهده آنالیز کرایه، ابتدا بازه تاریخی را مشخص کنید
                                     </div>
@@ -1742,6 +1829,10 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                         آنالیز کرایه به تفکیک لاین و خودرو برای بازه تاریخی انتخابی شما نمایش داده خواهد شد
                                     </div>
                                 </div>
+                            ) : lineAnalyticsLoading ? (
+                                <div className="text-center py-8 text-slate-500">در حال بارگذاری آنالیز...</div>
+                            ) : lineAnalytics.length === 0 ? (
+                                <div className="text-center py-8 text-slate-500">داده‌ای برای نمایش وجود ندارد</div>
                             ) : (
                                 <LineAnalyticsSection
                                     data={lineAnalytics}
@@ -1779,7 +1870,12 @@ const RepresentativeStatisticsTable: React.FC<{
     selectedMonth: number | null;
     selectedDay: number | null;
     timeRange: 'day' | 'month' | 'year';
-}> = ({ stats, loading, error, onFetchDetails, selectedYear, selectedMonth, selectedDay, timeRange }) => {
+    representativeStartDate: string;
+    representativeEndDate: string;
+    onRepresentativeStartDateChange: (date: string) => void;
+    onRepresentativeEndDateChange: (date: string) => void;
+    onFetchRepresentativeStatistics: () => Promise<void>;
+}> = ({ stats, loading, error, onFetchDetails, selectedYear, selectedMonth, selectedDay, timeRange, representativeStartDate, representativeEndDate, onRepresentativeStartDateChange, onRepresentativeEndDateChange, onFetchRepresentativeStatistics }) => {
     const [selectedRepresentative, setSelectedRepresentative] = useState<{ name: string; city: string; lineType?: string } | null>(null);
     const [details, setDetails] = useState<RepresentativeDetailData[]>([]);
     const [detailsLoading, setDetailsLoading] = useState(false);
@@ -1961,17 +2057,118 @@ const RepresentativeStatisticsTable: React.FC<{
 
     return (
         <>
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold text-slate-800">آمار کرایه نماینده/پخش</h2>
+            <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+                {/* Filters in one row */}
+                <div className="flex flex-wrap gap-3 items-end mb-4">
+                    {/* Start Date Filter */}
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">از تاریخ (شمسی)</label>
+                        <input
+                            type="text"
+                            value={representativeStartDate}
+                            onChange={(e) => {
+                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                if (value.length <= 10) {
+                                    onRepresentativeStartDateChange(value);
+                                }
+                            }}
+                            placeholder="1404/05/01"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                            dir="rtl"
+                        />
+                    </div>
+
+                    {/* End Date Filter */}
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">تا تاریخ (شمسی)</label>
+                        <input
+                            type="text"
+                            value={representativeEndDate}
+                            onChange={(e) => {
+                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                if (value.length <= 10) {
+                                    onRepresentativeEndDateChange(value);
+                                }
+                            }}
+                            placeholder="1404/05/31"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                            dir="rtl"
+                        />
+                    </div>
+
+                    {/* جستجوی نماینده/پخش */}
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">جستجوی نماینده/پخش</label>
+                        <input
+                            type="text"
+                            value={filterRepresentative}
+                            onChange={(e) => {
+                                setFilterRepresentative(e.target.value);
+                                setStatsPage(1);
+                            }}
+                            placeholder="جستجو نماینده..."
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                        />
+                    </div>
+
+                    {/* جستجوی شهر */}
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">جستجوی شهر</label>
+                        <input
+                            type="text"
+                            value={filterCity}
+                            onChange={(e) => {
+                                setFilterCity(e.target.value);
+                                setStatsPage(1);
+                            }}
+                            placeholder="جستجو شهر..."
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                        />
+                    </div>
+
+                    {/* فیلتر لاین */}
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">فیلتر لاین</label>
+                        <select
+                            value={filterLine}
+                            onChange={(e) => {
+                                setFilterLine(e.target.value);
+                                setStatsPage(1);
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                        >
+                            <option value="">همه لاین‌ها</option>
+                            {uniqueLines.map(line => (
+                                <option key={line} value={line}>{line}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* تعداد ردیف */}
+                    <div className="min-w-[100px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">تعداد ردیف</label>
+                        <select
+                            value={statsPageSize}
+                            onChange={(e) => {
+                                setStatsPageSize(Number(e.target.value));
+                                setStatsPage(1);
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                        >
+                            <option value={10}>10</option>
+                            <option value={30}>30</option>
+                            <option value={100}>100</option>
+                        </select>
+                    </div>
+
+                    {/* خروجی اکسل */}
+                    <div>
                         <button
                             onClick={() => {
-                                // خروجی اکسل
                                 const csvContent = generateExcelContent(filteredStats, getTimeRangeLabel());
                                 downloadCSV(csvContent, `آمار_کرایه_نماینده_${getTimeRangeLabel()}.csv`);
                             }}
-                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium flex items-center gap-2 flex-row-reverse"
+                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium flex items-center gap-2 flex-row-reverse h-[38px]"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1979,6 +2176,34 @@ const RepresentativeStatisticsTable: React.FC<{
                             خروجی اکسل
                         </button>
                     </div>
+
+                    {/* جستجو */}
+                    <div>
+                        <button
+                            onClick={onFetchRepresentativeStatistics}
+                            disabled={loading}
+                            className="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-sm font-medium h-[38px]"
+                        >
+                            {loading ? 'در حال جستجو...' : 'جستجو'}
+                        </button>
+                    </div>
+
+                    {/* پاک کردن فیلترها */}
+                    {(filterRepresentative || filterCity || filterLine) && (
+                        <div>
+                            <button
+                                onClick={() => {
+                                    setFilterRepresentative('');
+                                    setFilterCity('');
+                                    setFilterLine('');
+                                    setStatsPage(1);
+                                }}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 text-sm font-medium h-[38px]"
+                            >
+                                پاک کردن فیلترها
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {error && (
@@ -1988,81 +2213,6 @@ const RepresentativeStatisticsTable: React.FC<{
                 )}
 
                 <div className="overflow-x-auto">
-                        {/* فیلترهای جستجو */}
-                        <div className="mb-4 space-y-3">
-                            <div className="flex gap-4 items-end">
-                                <div className="flex-1">
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">جستجوی نماینده/پخش</label>
-                                    <input
-                                        type="text"
-                                        value={filterRepresentative}
-                                        onChange={(e) => {
-                                            setFilterRepresentative(e.target.value);
-                                            setStatsPage(1);
-                                        }}
-                                        placeholder="جستجو نماینده..."
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">جستجوی شهر</label>
-                                    <input
-                                        type="text"
-                                        value={filterCity}
-                                        onChange={(e) => {
-                                            setFilterCity(e.target.value);
-                                            setStatsPage(1);
-                                        }}
-                                        placeholder="جستجو شهر..."
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">فیلتر لاین</label>
-                                    <select
-                                        value={filterLine}
-                                        onChange={(e) => {
-                                            setFilterLine(e.target.value);
-                                            setStatsPage(1);
-                                        }}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                    >
-                                        <option value="">همه لاین‌ها</option>
-                                        {uniqueLines.map(line => (
-                                            <option key={line} value={line}>{line}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">تعداد ردیف</label>
-                                    <select
-                                        value={statsPageSize}
-                                        onChange={(e) => {
-                                            setStatsPageSize(Number(e.target.value));
-                                            setStatsPage(1);
-                                        }}
-                                        className="px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                    >
-                                        <option value={10}>10</option>
-                                        <option value={30}>30</option>
-                                        <option value={100}>100</option>
-                                    </select>
-                                </div>
-                                {(filterRepresentative || filterCity || filterLine) && (
-                                    <button
-                                        onClick={() => {
-                                            setFilterRepresentative('');
-                                            setFilterCity('');
-                                            setFilterLine('');
-                                            setStatsPage(1);
-                                        }}
-                                        className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 text-sm font-medium"
-                                    >
-                                        پاک کردن فیلترها
-                                    </button>
-                                )}
-                            </div>
-                        </div>
 
                         {loading ? (
                             <div className="text-center py-8 text-slate-500">در حال بارگذاری...</div>
