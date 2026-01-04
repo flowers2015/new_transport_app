@@ -1076,6 +1076,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     lineStatsError,
     onFetchLineStatistics,
     onFetchRepresentativeStatistics,
+    onFetchLineAnalytics,
 }) => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [showDailyStats, setShowDailyStats] = useState(false);
