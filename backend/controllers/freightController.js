@@ -4591,35 +4591,76 @@ async function getCityDetails(req, res) {
 async function getLineAnalytics(req, res) {
   try {
     const supportedLineTypes = ['بستنی', 'پاستوریزه', 'لبنیات-فروتلند'];
-    const { year, month, timeRange = 'month' } = req.query;
-    const parsedYear = parseInt(year, 10);
-    const parsedMonth = parseInt(month, 10);
+    
+    // پشتیبانی از فرمت جدید (بازه تاریخ) یا فرمت قدیمی (year/month)
+    const { year, month, timeRange = 'month', startYear, startMonth, startDay, endYear, endMonth, endDay } = req.query;
+    
+    let parsedYear, parsedMonth, earliestStart, latestEndExclusive, periods;
+    
+    // اگر پارامترهای جدید موجود باشند، از آنها استفاده کن
+    if (startYear && startMonth && endYear && endMonth) {
+      const startY = parseInt(startYear, 10);
+      const startM = parseInt(startMonth, 10);
+      const startD = parseInt(startDay || '1', 10);
+      const endY = parseInt(endYear, 10);
+      const endM = parseInt(endMonth, 10);
+      const endD = parseInt(endDay || '30', 10);
+      
+      if (!startY || !startM || !endY || !endM) {
+        return res.status(400).json({ message: 'startYear, startMonth, endYear, endMonth are required for line analytics with date range.' });
+      }
+      
+      earliestStart = jalaliDateToDate(startY, startM, startD);
+      // آخرین روز ماه را محاسبه کن
+      const lastDayOfMonth = endM <= 6 ? 31 : (endM === 12 ? 30 : 30);
+      const actualEndDay = endD || lastDayOfMonth;
+      const endDate = jalaliDateToDate(endY, endM, actualEndDay);
+      // یک روز بعد برای endExclusive
+      latestEndExclusive = new Date(endDate);
+      latestEndExclusive.setDate(latestEndExclusive.getDate() + 1);
+      
+      parsedYear = startY;
+      parsedMonth = startM;
+      
+      // فقط یک period برای دوره انتخابی
+      periods = [{
+        key: 'current',
+        label: 'دوره انتخابی',
+        start: earliestStart,
+        endExclusive: latestEndExclusive,
+        jalali: { year: startY, month: startM }
+      }];
+    } else {
+      // فرمت قدیمی (backward compatibility)
+      parsedYear = parseInt(year, 10);
+      parsedMonth = parseInt(month, 10);
 
-    if (!parsedYear || !parsedMonth) {
-      return res.status(400).json({ message: 'year and month are required for line analytics.' });
+      if (!parsedYear || !parsedMonth) {
+        return res.status(400).json({ message: 'year and month are required for line analytics (or use startYear/startMonth/endYear/endMonth).' });
+      }
+
+      const periodDefinitions = [
+        { key: 'current', label: 'دوره انتخابی', offset: 0 },
+        { key: 'm1', label: '۱ ماه قبل', offset: -1 },
+        { key: 'm3', label: '۳ ماه قبل', offset: -3 },
+        { key: 'm6', label: '۶ ماه قبل', offset: -6 },
+        { key: 'm9', label: '۹ ماه قبل', offset: -9 },
+        { key: 'm12', label: '۱۲ ماه قبل', offset: -12 }
+      ];
+
+      periods = periodDefinitions.map(def => {
+        const range = getJalaliMonthRange(parsedYear, parsedMonth, def.offset);
+        return {
+          ...def,
+          start: range.start,
+          endExclusive: range.endExclusive,
+          jalali: range.jalali
+        };
+      });
+
+      earliestStart = periods.reduce((min, period) => (period.start < min ? period.start : min), periods[0].start);
+      latestEndExclusive = periods[0].endExclusive;
     }
-
-    const periodDefinitions = [
-      { key: 'current', label: 'دوره انتخابی', offset: 0 },
-      { key: 'm1', label: '۱ ماه قبل', offset: -1 },
-      { key: 'm3', label: '۳ ماه قبل', offset: -3 },
-      { key: 'm6', label: '۶ ماه قبل', offset: -6 },
-      { key: 'm9', label: '۹ ماه قبل', offset: -9 },
-      { key: 'm12', label: '۱۲ ماه قبل', offset: -12 }
-    ];
-
-    const periods = periodDefinitions.map(def => {
-      const range = getJalaliMonthRange(parsedYear, parsedMonth, def.offset);
-      return {
-        ...def,
-        start: range.start,
-        endExclusive: range.endExclusive,
-        jalali: range.jalali
-      };
-    });
-
-    const earliestStart = periods.reduce((min, period) => (period.start < min ? period.start : min), periods[0].start);
-    const latestEndExclusive = periods[0].endExclusive;
 
     console.log('📊 [getLineAnalytics] Periods:', periods.map(p => ({
       key: p.key,
@@ -4902,7 +4943,7 @@ async function getLineAnalytics(req, res) {
         lineTypes: supportedLineTypes,
         year: parsedYear,
         month: parsedMonth,
-        timeRange,
+        timeRange: timeRange || 'month',
         periods: periods.map(period => ({
           key: period.key,
           label: period.label,
