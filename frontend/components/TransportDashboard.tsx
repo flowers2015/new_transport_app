@@ -1079,7 +1079,6 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     onFetchLineAnalytics,
 }) => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
-    const [showDailyStats, setShowDailyStats] = useState(false);
     const [dailyStatsIndex, setDailyStatsIndex] = useState(0);
     const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics'>('daily');
     const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics'>>(new Set(['daily']));
@@ -1526,95 +1525,79 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             <div className="bg-white rounded-lg shadow p-6">
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="text-xl font-bold text-slate-800">آمار عملکرد روزانه - {getTodayJalali().dateStr}</h2>
-                                    <button
-                                        onClick={() => {
-                                            setShowDailyStats(!showDailyStats);
-                                            if (!showDailyStats) {
-                                                fetchDailyStats();
-                                            }
-                                        }}
-                                        className="px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 text-sm font-medium flex items-center gap-2"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                        </svg>
-                                        {showDailyStats ? 'مخفی کردن جدول' : 'نمایش جدول کامل'}
-                                    </button>
                                 </div>
-                                {showDailyStats && (
-                                    dailyStatsLoading ? (
-                                        <div className="text-center py-8 text-slate-600">در حال بارگذاری...</div>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full text-sm">
-                                                <thead>
-                                                    <tr className="border-b border-slate-300">
-                                                        <th className="px-4 py-3 text-right text-slate-700">لاین فروش</th>
-                                                        <th className="px-4 py-3 text-center text-slate-700">درخواست</th>
-                                                        <th className="px-4 py-3 text-center text-slate-700">شرکتی</th>
-                                                        <th className="px-4 py-3 text-center text-slate-700">شخصی</th>
-                                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت جذب</th>
-                                                        <th className="px-4 py-3 text-center text-slate-700">کل</th>
-                                                        <th className="px-4 py-3 text-center text-slate-700">موفقیت</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {[
-                                                        { name: 'بستنی', data: dailyStats.iceCream },
-                                                        { name: 'پاستوریزه', data: dailyStats.dairy },
-                                                        { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
-                                                    ].map((line, idx) => {
-                                                        const stat = line.data && line.data.length > 0 ? line.data[0] : null;
-                                                        // Always show row, even if no data (show zeros)
-                                                        const displayStat = stat || {
-                                                            totalRequests: 0,
-                                                            companyAssignments: 0,
-                                                            personalAssignments: 0,
-                                                            totalAssignments: 0,
-                                                            successRate: 0
-                                                        };
-                                                        // For now, success rate for personal is the same as overall
-                                                        // TODO: Calculate actual referral success rate from backend
-                                                        const personalSuccessRate = displayStat.totalRequests > 0 
-                                                            ? Math.round((displayStat.personalAssignments / displayStat.totalRequests) * 100)
-                                                            : 0;
-                                                        return (
-                                                            <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                                                                <td className="px-4 py-3 text-right font-semibold">{line.name}</td>
-                                                                <td className="px-4 py-3 text-center">{displayStat.totalRequests}</td>
-                                                                <td className="px-4 py-3 text-center">{displayStat.companyAssignments}</td>
-                                                                <td className="px-4 py-3 text-center">{displayStat.personalAssignments}</td>
-                                                                <td className="px-4 py-3 text-center">
-                                                                    <div className="flex flex-col items-center gap-1">
-                                                                        <span className="text-xs text-slate-600">
-                                                                            {displayStat.personalAssignments} از {displayStat.totalRequests}
-                                                                        </span>
-                                                                        <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
-                                                                            personalSuccessRate >= 50 ? 'bg-green-100 text-green-800' :
-                                                                            personalSuccessRate >= 30 ? 'bg-yellow-100 text-yellow-800' :
-                                                                            'bg-red-100 text-red-800'
-                                                                        }`}>
-                                                                            {personalSuccessRate}%
-                                                                        </span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-4 py-3 text-center">{displayStat.totalAssignments}</td>
-                                                                <td className="px-4 py-3 text-center">
-                                                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                                        displayStat.successRate >= 70 ? 'bg-green-100 text-green-800' :
-                                                                        displayStat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                {dailyStatsLoading ? (
+                                    <div className="text-center py-8 text-slate-600">در حال بارگذاری...</div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-300">
+                                                    <th className="px-4 py-3 text-right text-slate-700">لاین فروش</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700">درخواست</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700">شرکتی</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700">شخصی</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700">موفقیت جذب</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700">کل</th>
+                                                    <th className="px-4 py-3 text-center text-slate-700">موفقیت</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {[
+                                                    { name: 'بستنی', data: dailyStats.iceCream },
+                                                    { name: 'پاستوریزه', data: dailyStats.dairy },
+                                                    { name: 'لبنیات-فروتلند', data: dailyStats.ambient }
+                                                ].map((line, idx) => {
+                                                    const stat = line.data && line.data.length > 0 ? line.data[0] : null;
+                                                    // Always show row, even if no data (show zeros)
+                                                    const displayStat = stat || {
+                                                        totalRequests: 0,
+                                                        companyAssignments: 0,
+                                                        personalAssignments: 0,
+                                                        totalAssignments: 0,
+                                                        successRate: 0
+                                                    };
+                                                    // For now, success rate for personal is the same as overall
+                                                    // TODO: Calculate actual referral success rate from backend
+                                                    const personalSuccessRate = displayStat.totalRequests > 0 
+                                                        ? Math.round((displayStat.personalAssignments / displayStat.totalRequests) * 100)
+                                                        : 0;
+                                                    return (
+                                                        <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                                                            <td className="px-4 py-3 text-right font-semibold">{line.name}</td>
+                                                            <td className="px-4 py-3 text-center">{displayStat.totalRequests}</td>
+                                                            <td className="px-4 py-3 text-center">{displayStat.companyAssignments}</td>
+                                                            <td className="px-4 py-3 text-center">{displayStat.personalAssignments}</td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span className="text-xs text-slate-600">
+                                                                        {displayStat.personalAssignments} از {displayStat.totalRequests}
+                                                                    </span>
+                                                                    <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                                                                        personalSuccessRate >= 50 ? 'bg-green-100 text-green-800' :
+                                                                        personalSuccessRate >= 30 ? 'bg-yellow-100 text-yellow-800' :
                                                                         'bg-red-100 text-red-800'
                                                                     }`}>
-                                                                        {displayStat.successRate}%
+                                                                        {personalSuccessRate}%
                                                                     </span>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">{displayStat.totalAssignments}</td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                                    displayStat.successRate >= 70 ? 'bg-green-100 text-green-800' :
+                                                                    displayStat.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                                                    'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    {displayStat.successRate}%
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
                         </div>

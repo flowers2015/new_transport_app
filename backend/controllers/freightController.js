@@ -3439,25 +3439,53 @@ async function getTransportStatistics(req, res) {
       }
     } else if (timeRange !== 'day') {
       // برای آمار ماهانه/سالانه
-      if (year && month && day) {
-        // روز خاص: فیلتر بر اساس YYYY-MM-DD یا YYYY/MM/DD (فرمت شمسی)
-        const jalaliDate1 = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const jalaliDate2 = `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
-        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) = $1 OR CAST(fa.loading_date AS TEXT) = $2)";
-        dateParams = [jalaliDate1, jalaliDate2];
-        console.log(`📊 [TransportStatistics] Date filter: Specific day (${jalaliDate1} or ${jalaliDate2})`);
-      } else if (year && month) {
-        // ماه خاص: فیلتر بر اساس YYYY-MM یا YYYY/MM
-        const jalaliMonth1 = `${year}-${String(month).padStart(2, '0')}`;
-        const jalaliMonth2 = `${year}/${String(month).padStart(2, '0')}`;
-        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
-        dateParams = [`${jalaliMonth1}-%`, `${jalaliMonth2}/%`];
-        console.log(`📊 [TransportStatistics] Date filter: Specific month (${jalaliMonth1} or ${jalaliMonth2})`);
-      } else if (year) {
-        // سال خاص: فیلتر بر اساس YYYY
-        dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
-        dateParams = [`${year}-%`, `${year}/%`];
-        console.log(`📊 [TransportStatistics] Date filter: All months of year ${year}`);
+      // اگر timeRange = 'month' است، day را نادیده بگیر (فقط year و month مهم است)
+      // اگر timeRange = 'year' است، month و day را نادیده بگیر (فقط year مهم است)
+      if (timeRange === 'month') {
+        // برای آمار ماهانه: فقط year و month را در نظر بگیر، day را نادیده بگیر
+        if (year && month) {
+          // ماه خاص: فیلتر بر اساس YYYY-MM یا YYYY/MM
+          const jalaliMonth1 = `${year}-${String(month).padStart(2, '0')}`;
+          const jalaliMonth2 = `${year}/${String(month).padStart(2, '0')}`;
+          dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+          dateParams = [`${jalaliMonth1}-%`, `${jalaliMonth2}/%`];
+          console.log(`📊 [TransportStatistics] Date filter: Specific month (${jalaliMonth1} or ${jalaliMonth2}) - ignoring day parameter`);
+        } else if (year) {
+          // فقط year داده شده: همه ماه‌های سال
+          dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+          dateParams = [`${year}-%`, `${year}/%`];
+          console.log(`📊 [TransportStatistics] Date filter: All months of year ${year}`);
+        }
+      } else if (timeRange === 'year') {
+        // برای آمار سالانه: فقط year را در نظر بگیر، month و day را نادیده بگیر
+        if (year) {
+          // سال خاص: فیلتر بر اساس YYYY
+          dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+          dateParams = [`${year}-%`, `${year}/%`];
+          console.log(`📊 [TransportStatistics] Date filter: All months of year ${year} - ignoring month and day parameters`);
+        }
+      } else {
+        // برای سایر timeRange ها (اگر در آینده اضافه شوند): منطق قدیمی
+        if (year && month && day) {
+          // روز خاص: فیلتر بر اساس YYYY-MM-DD یا YYYY/MM/DD (فرمت شمسی)
+          const jalaliDate1 = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const jalaliDate2 = `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+          dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) = $1 OR CAST(fa.loading_date AS TEXT) = $2)";
+          dateParams = [jalaliDate1, jalaliDate2];
+          console.log(`📊 [TransportStatistics] Date filter: Specific day (${jalaliDate1} or ${jalaliDate2})`);
+        } else if (year && month) {
+          // ماه خاص: فیلتر بر اساس YYYY-MM یا YYYY/MM
+          const jalaliMonth1 = `${year}-${String(month).padStart(2, '0')}`;
+          const jalaliMonth2 = `${year}/${String(month).padStart(2, '0')}`;
+          dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+          dateParams = [`${jalaliMonth1}-%`, `${jalaliMonth2}/%`];
+          console.log(`📊 [TransportStatistics] Date filter: Specific month (${jalaliMonth1} or ${jalaliMonth2})`);
+        } else if (year) {
+          // سال خاص: فیلتر بر اساس YYYY
+          dateFilter = "WHERE (CAST(fa.loading_date AS TEXT) LIKE $1 OR CAST(fa.loading_date AS TEXT) LIKE $2)";
+          dateParams = [`${year}-%`, `${year}/%`];
+          console.log(`📊 [TransportStatistics] Date filter: All months of year ${year}`);
+        }
       }
     }
     
