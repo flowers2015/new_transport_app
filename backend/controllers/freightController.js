@@ -3509,10 +3509,13 @@ async function getTransportStatistics(req, res) {
     let statusFilter = '';
     if (timeRange === 'day' && !isDailyHistorical) {
       // برای آمار روزانه زنده: فقط statusهای فعال در کارتابل (زنده)
+      // و بارهایی که هنوز finalized نشده‌اند (assignment_finalized_at IS NULL)
+      const statusCondition = `fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
+      const finalizedCondition = `fa.assignment_finalized_at IS NULL`;
       if (dateFilter || lineTypeFilter) {
-        statusFilter = ` AND fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
+        statusFilter = ` AND ${statusCondition} AND ${finalizedCondition}`;
       } else {
-        statusFilter = `WHERE fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned', 'InTransit')`;
+        statusFilter = `WHERE ${statusCondition} AND ${finalizedCondition}`;
       }
     } else {
       // برای آمار روزانه تاریخچه یا آمار ماهانه/سالانه: حذف فقط Draft, PendingManagerApproval, Rejected
