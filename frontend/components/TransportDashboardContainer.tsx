@@ -342,6 +342,50 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         }
     };
 
+    const fetchLineStatistics = async (lineType: string, startDate: string, endDate: string) => {
+        const start = parseJalaliDateToAPI(startDate);
+        const end = parseJalaliDateToAPI(endDate);
+        if (!start || !end) {
+            setLineStats([]);
+            setLineStatsError(null);
+            return;
+        }
+
+        try {
+            setLineStatsLoading(true);
+            setLineStatsError(null);
+
+            const token = localStorage.getItem('token');
+            const headers: HeadersInit = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+
+            const detectedTimeRange = detectTimeRange(startDate, endDate);
+
+            const params = new URLSearchParams();
+            params.append('year', start.year.toString());
+            params.append('month', start.month.toString());
+            if (start.day) params.append('day', start.day.toString());
+            params.append('lineType', lineType);
+            params.append('timeRange', detectedTimeRange);
+
+            const res = await fetch(getApiUrl(`freight-announcements/statistics?${params.toString()}`), { headers });
+
+            if (!res.ok) {
+                throw new Error('خطا در دریافت آمار خط');
+            }
+
+            const data = await res.json();
+            setLineStats(Array.isArray(data) ? data : []);
+        } catch (err: any) {
+            console.error('❌ [LineStatistics] Failed to fetch:', err);
+            setLineStatsError(err.message || 'خطا در دریافت آمار خط');
+        } finally {
+            setLineStatsLoading(false);
+        }
+    };
+
     const fetchLineAnalytics = async () => {
         const start = parseJalaliDateToAPI(analyticsStartDate);
         const end = parseJalaliDateToAPI(analyticsEndDate);
