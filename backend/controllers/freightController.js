@@ -5341,7 +5341,7 @@ async function getAssignmentStatistics(req, res) {
     const detailedQuery = `
       SELECT 
         fa.id,
-        fa.loading_date,
+        CAST(fa.loading_date AS TEXT) as loading_date,
         fa.assigned_driver_id,
         fa.assignment_type,
         (
