@@ -27,6 +27,7 @@ interface VehicleSpec {
 interface VehicleSpecsDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onSelectSpec?: (spec: VehicleSpec) => void; // Callback برای انتخاب مشخصات
 }
 
 // دسته‌بندی‌های پیش‌فرض
@@ -56,7 +57,7 @@ const vehicleTypes = [
 
 const fuelTypes = ['بنزینی', 'گازوییلی', 'برقی', 'هیبریدی', 'گازی', 'دوگانه‌سوز'];
 
-const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose }) => {
+const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose, onSelectSpec }) => {
   // States
   const [specs, setSpecs] = useState<VehicleSpec[]>([]);
   const [loading, setLoading] = useState(false);
@@ -533,6 +534,18 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
                       <td className="px-3 py-2">{spec.capacity || '-'}</td>
                       <td className="px-3 py-2 text-center">
                         <div className="flex justify-center gap-2">
+                          {onSelectSpec && (
+                            <button
+                              onClick={() => {
+                                onSelectSpec(spec);
+                                onClose();
+                              }}
+                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                              title="انتخاب برای فرم خودرو"
+                            >
+                              ✓ انتخاب
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEdit(spec)}
                             className="p-1 text-blue-600 hover:bg-blue-100 rounded"

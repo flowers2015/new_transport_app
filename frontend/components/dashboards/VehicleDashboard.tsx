@@ -5,6 +5,7 @@ import { TruckIcon } from '../icons/CarIcon';
 import { formatJalali, formatPlateNumber } from '../../utils/jalali';
 import { ChevronDownIcon } from '../icons/ChevronDownIcon';
 import VehicleSpecsDialog from '../VehicleSpecsDialog';
+import VehicleFormDialog from '../VehicleFormDialog';
 import { getApiUrl } from '../../utils/apiConfig';
 
 interface VehicleManagementProps {
@@ -519,48 +520,35 @@ const vehicleDatabase: any = {
 
 
 const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle, onUpdateVehicle }) => {
-    const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: 'الف', part2: '', cityCode: '' });
-    const [serialNumber, setSerialNumber] = useState('');
-    const [vehicleCode, setVehicleCode] = useState('');
-    const [isPlate, setIsPlate] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
-    const [editingId, setEditingId] = useState<string | null>(null);
-    
-    // States برای دیالوگ مشخصات و داده‌های API
+    const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+    const [showFormDialog, setShowFormDialog] = useState(false);
     const [showSpecsDialog, setShowSpecsDialog] = useState(false);
-    const [apiVehicleTypes, setApiVehicleTypes] = useState<string[]>([]);
-    const [apiBrands, setApiBrands] = useState<string[]>([]);
-    const [apiModels, setApiModels] = useState<string[]>([]);
-    const [apiTips, setApiTips] = useState<any[]>([]);
     
-    const initialFormState = {
-        holdingCompany: '' as 'mihan' | 'other' | '',
-        mihanCompany: '',
-        vehicleCategory: '' as VehicleCategory | '',
-        vehicleType: '',
-        brand: '',
-        model: '',
-        vehicleTip: '',
-        type: '',
-        branchId: '',
-        color: '',
-        ownerName: '',
-        cardId: '',
-        vin: '',
-        usageType: '',
-        engineNumber: '',
-        chassisNumber: '',
-        capacity: '',
-        year: '',
-        wheelCount: '',
-        axleCount: '',
-        cylinderCount: '',
-        domainName: '',
-        fuelType: '',
-        status: VehicleStatus.Active,
+    const handleEdit = (v: Vehicle) => {
+        setEditingVehicle(v);
+        setShowFormDialog(true);
     };
-    const [formState, setFormState] = useState(initialFormState);
+    
+    const handleAddNew = () => {
+        setEditingVehicle(null);
+        setShowFormDialog(true);
+    };
+    
+    const handleSaveVehicle = async (vehicle: Omit<Vehicle, 'id'>) => {
+        if (editingVehicle) {
+            if (onUpdateVehicle) {
+                await onUpdateVehicle(editingVehicle.id, vehicle);
+            }
+        } else {
+            await onAddVehicle(vehicle);
+        }
+        setShowFormDialog(false);
+        setEditingVehicle(null);
+    };
+    
+    // Removed old form state and handlers - now using VehicleFormDialog
 
     // --- دریافت انواع خودرو از API بر اساس دسته‌بندی ---
     useEffect(() => {
@@ -841,55 +829,25 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
 
     const getBranchName = (branchId: string) => branches.find(b => b.id === branchId)?.name || 'نامشخص';
     const handleEdit = (v: Vehicle) => {
-        setEditingId(v.id);
-        const baseModel = (v.model || '').trim();
-        const knownTips = ['TU5','TU3','EF7','EF7T','K4M'];
-        let modelName = baseModel;
-        let tip = '';
-        for (const t of knownTips) {
-            if (baseModel.toLowerCase().includes(t.toLowerCase())) {
-                modelName = baseModel.replace(new RegExp(t, 'i'), '').trim();
-                tip = t;
-                break;
+        setEditingVehicle(v);
+        setShowFormDialog(true);
+    };
+    
+    const handleAddNew = () => {
+        setEditingVehicle(null);
+        setShowFormDialog(true);
+    };
+    
+    const handleSaveVehicle = async (vehicle: Omit<Vehicle, 'id'>) => {
+        if (editingVehicle) {
+            if (onUpdateVehicle) {
+                await onUpdateVehicle(editingVehicle.id, vehicle);
             }
-        }
-        setFormState({
-            holdingCompany: (v.holdingCompany as any) || '',
-            mihanCompany: (v.mihanCompany as any) || '',
-            vehicleCategory: (v.vehicleCategory as any) || '',
-            vehicleType: (v as any).vehicleType || '',
-            brand: v.brand || '',
-            model: modelName,
-            vehicleTip: tip,
-            type: v.type || '',
-            branchId: v.branchId || '',
-            color: (v as any).color || '',
-            ownerName: v.ownerName || '',
-            cardId: (v as any).cardId || '',
-            vin: v.vin || '',
-            usageType: (v as any).usageType || '',
-            engineNumber: (v as any).engineNumber || '',
-            chassisNumber: (v as any).chassisNumber || '',
-            capacity: (v as any).capacity || '',
-            year: v.year ? String(v.year) : '',
-            wheelCount: (v as any).wheelCount ? String((v as any).wheelCount) : '',
-            axleCount: (v as any).axleCount ? String((v as any).axleCount) : '',
-            cylinderCount: (v as any).cylinderCount ? String((v as any).cylinderCount) : '',
-            domainName: (v as any).domainName || '',
-            fuelType: (v as any).fuelType || '',
-            status: v.status || VehicleStatus.Active,
-        } as any);
-        if (v.plateNumber) {
-            setIsPlate(true);
-            setPlate(v.plateNumber);
-            setSerialNumber('');
         } else {
-            setIsPlate(false);
-            setSerialNumber(v.serialNumber || '');
-            setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+            await onAddVehicle(vehicle);
         }
-        setVehicleCode(v.vehicleCode || '');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setShowFormDialog(false);
+        setEditingVehicle(null);
     };
 
     const exportCsv = (list: Vehicle[]) => {
@@ -944,18 +902,28 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-slate-800 flex items-center">
                         <TruckIcon className="w-6 h-6 mr-2 text-sky-600" />
-                        افزودن خودرو جدید
+                        مدیریت خودروها
                     </h2>
-                    <button
-                        type="button"
-                        onClick={() => setShowSpecsDialog(true)}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 text-sm"
-                    >
-                        <span>⚙️</span>
-                        <span>مدیریت مشخصات خودرو</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setShowSpecsDialog(true)}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 text-sm"
+                        >
+                            <span>⚙️</span>
+                            <span>مدیریت مشخصات خودرو</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleAddNew}
+                            className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 flex items-center gap-2 text-sm"
+                        >
+                            <span>➕</span>
+                            <span>افزودن خودرو جدید</span>
+                        </button>
+                    </div>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Form removed - now using VehicleFormDialog */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700">۱. انتخاب هلدینگ <span className="text-red-500">*</span></label>
@@ -1241,6 +1209,19 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                 </div>
             </div>
             <style>{`.input-style { direction: ltr; text-align: right; display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; }`}</style>
+            
+            {/* دیالوگ فرم خودرو */}
+            <VehicleFormDialog
+                isOpen={showFormDialog}
+                onClose={() => {
+                    setShowFormDialog(false);
+                    setEditingVehicle(null);
+                }}
+                onSave={handleSaveVehicle}
+                initialData={editingVehicle}
+                branches={branches}
+                showSpecsButton={true}
+            />
             
             {/* دیالوگ مدیریت مشخصات خودرو */}
             <VehicleSpecsDialog 
