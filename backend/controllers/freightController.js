@@ -3545,10 +3545,11 @@ async function getTransportStatistics(req, res) {
     let groupBy = '';
     let dateFormat = '';
     if (timeRange === 'day' && isDailyHistorical) {
-      // برای آمار روزانه تاریخچه: گروه‌بندی بر اساس روز (YYYY-MM-DD)
-      groupBy = "CAST(fa.loading_date AS TEXT)";
-      dateFormat = "CAST(fa.loading_date AS TEXT)";
-      console.log(`📊 [TransportStatistics] Daily historical stats - grouping by day`);
+      // برای آمار روزانه تاریخچه: گروه‌بندی بر اساس روز (YYYY/MM/DD)
+      // تبدیل فرمت تاریخ از YYYY-MM-DD به YYYY/MM/DD برای سازگاری با frontend
+      groupBy = "REPLACE(CAST(fa.loading_date AS TEXT), '-', '/')";
+      dateFormat = "REPLACE(CAST(fa.loading_date AS TEXT), '-', '/')";
+      console.log(`📊 [TransportStatistics] Daily historical stats - grouping by day (format: YYYY/MM/DD)`);
     } else if (timeRange === 'day') {
       // برای آمار روزانه زنده: چون تاریخ فیلتر نمی‌شود، فقط یک ردیف برای همه بارهای کارتابل برمی‌گردانیم
       // از یک مقدار ثابت برای time_period استفاده می‌کنیم (تاریخ امروز شمسی برای نمایش)

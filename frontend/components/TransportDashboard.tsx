@@ -951,12 +951,18 @@ const LineRow: React.FC<{
 
             {/* Statistics Summary Table - Daily with Pagination (31 rows per page) */}
             {(() => {
-                // فیلتر کردن فقط داده‌های روزانه (بازه زمانی که به فرمت YYYY/MM/DD است)
+                // فیلتر کردن فقط داده‌های روزانه (بازه زمانی که به فرمت YYYY/MM/DD یا YYYY-MM-DD است)
                 const dailyData = chartData.filter(stat => {
                     const period = stat.timePeriod || '';
-                    // اگر بازه زمانی به فرمت YYYY/MM/DD باشد (10 کاراکتر)، روزانه است
-                    return period.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(period);
-                });
+                    // اگر بازه زمانی به فرمت YYYY/MM/DD یا YYYY-MM-DD باشد (10 کاراکتر)، روزانه است
+                    // تبدیل - به / برای سازگاری
+                    const normalizedPeriod = period.replace(/-/g, '/');
+                    return normalizedPeriod.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(normalizedPeriod);
+                }).map(stat => ({
+                    ...stat,
+                    // نرمال‌سازی timePeriod برای نمایش یکنواخت
+                    timePeriod: stat.timePeriod?.replace(/-/g, '/') || stat.timePeriod
+                }));
                 
                 const dailySummaryPageSize = 31; // 31 روز = یک ماه
                 const totalDailyPages = Math.ceil(dailyData.length / dailySummaryPageSize);

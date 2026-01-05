@@ -1178,7 +1178,11 @@ const CompanyVehicleForm: React.FC<{
             <input 
               type="text" 
               value={form.vehicleType} 
-              onChange={e => setForm({...form, vehicleType: e.target.value, brand: '', model: '', vehicleTip: ''})} 
+              onChange={e => {
+                const newVehicleType = e.target.value;
+                // فقط vehicleTip را reset کنیم، brand و model را نگه داریم (برای ویرایش)
+                setForm({...form, vehicleType: newVehicleType, vehicleTip: ''});
+              }} 
               className={inputClass} 
               placeholder="انتخاب یا تایپ کنید..."
               list="vehicle-type-list"
@@ -1192,7 +1196,11 @@ const CompanyVehicleForm: React.FC<{
             <input 
               type="text" 
               value={form.brand} 
-              onChange={e => setForm({...form, brand: e.target.value, model: '', vehicleTip: ''})} 
+              onChange={e => {
+                const newBrand = e.target.value;
+                // فقط model و vehicleTip را reset کنیم (brand را نگه داریم)
+                setForm({...form, brand: newBrand, model: '', vehicleTip: ''});
+              }} 
               className={inputClass} 
               placeholder="انتخاب یا تایپ کنید..."
               list="brand-list"
@@ -1207,10 +1215,15 @@ const CompanyVehicleForm: React.FC<{
             <input 
               type="text" 
               value={form.model} 
-              onChange={e => setForm({...form, model: e.target.value, vehicleTip: ''})} 
+              onChange={e => {
+                const newModel = e.target.value;
+                // فقط vehicleTip را reset کنیم (model را نگه داریم)
+                setForm({...form, model: newModel, vehicleTip: ''});
+              }} 
               className={inputClass} 
               placeholder="انتخاب یا تایپ کنید..."
               list="model-list"
+              required
             />
             <datalist id="model-list">
               {Object.keys(getModelsForBrand(form.type, form.brand)).map(m => <option key={m} value={m} />)}
