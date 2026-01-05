@@ -170,6 +170,128 @@ async function login(req, res) {
   }
 }
 
+/**
+ * تغییر رمز عبور توسط کاربر
+ * POST /auth/change-password
+ * Body: { currentPassword, newPassword }
+ */
+async function changePassword(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'رمز عبور فعلی و جدید الزامی است' });
+    }
+
+    // بررسی حداقل طول رمز عبور
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'رمز عبور جدید باید حداقل 6 کاراکتر باشد' });
+    }
+
+    // دریافت کاربر
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: 'کاربر یافت نشد' });
+    }
+
+    // بررسی رمز عبور فعلی
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'رمز عبور فعلی اشتباه است' });
+    }
+
+    // بررسی اینکه رمز جدید با رمز فعلی متفاوت باشد
+    const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
+    if (isSamePassword) {
+      return res.status(400).json({ message: 'رمز عبور جدید باید با رمز عبور فعلی متفاوت باشد' });
+    }
+
+    // Hash کردن رمز جدید
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // به‌روزرسانی رمز عبور
+    await pool.query(
+      'UPDATE users SET password_hash = $1, password_changed_at = NOW(), failed_login_attempts = 0, account_locked_until = NULL WHERE id = $2',
+      [passwordHash, userId]
+    );
+
+    res.json({ message: 'رمز عبور با موفقیت تغییر یافت' });
+  } catch (error) {
+    console.error('❌ [changePassword] Error:', error);
+    res.status(500).json({ message: 'خطا در تغییر رمز عبور: ' + error.message });
+  }
+}
+
+/**
+ * ریست رمز عبور توسط ادمین
+ * POST /auth/reset-password
+ * Body: { userId, newPassword, reason }
+ */
+async function resetPassword(req, res) {
+  try {
+    const adminId = req.user?.userId || req.user?.id;
+    const { userId, newPassword, reason } = req.body;
+
+    if (!userId || !newPassword) {
+      return res.status(400).json({ message: 'شناسه کاربر و رمز عبور جدید الزامی است' });
+    }
+
+    if (!reason) {
+      return res.status(400).json({ message: 'دلیل ریست رمز عبور الزامی است' });
+    }
+
+    // بررسی حداقل طول رمز عبور
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'رمز عبور جدید باید حداقل 6 کاراکتر باشد' });
+    }
+
+    // دریافت کاربر
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: 'کاربر یافت نشد' });
+    }
+
+    // Hash کردن رمز جدید
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // به‌روزرسانی رمز عبور
+    await pool.query(
+      'UPDATE users SET password_hash = $1, password_changed_at = NOW(), failed_login_attempts = 0, account_locked_until = NULL WHERE id = $2',
+      [passwordHash, userId]
+    );
+
+    // ثبت در audit trail
+    const { logAdminAction } = require('./userManagementController');
+    if (logAdminAction) {
+      await logAdminAction(
+        req,
+        'reset_password',
+        'users',
+        userId,
+        { password_hash: '***' },
+        { password_hash: '***', password_changed_at: new Date() },
+        reason
+      );
+    }
+
+    res.json({ message: 'رمز عبور با موفقیت ریست شد' });
+  } catch (error) {
+    console.error('❌ [resetPassword] Error:', error);
+    res.status(500).json({ message: 'خطا در ریست رمز عبور: ' + error.message });
+  }
+}
+
 module.exports = {
   login,
+  changePassword,
+  resetPassword,
 };
