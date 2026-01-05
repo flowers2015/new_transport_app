@@ -6,7 +6,21 @@ const crypto = require('crypto');
  */
 async function getVehicles(req, res) {
   try {
-    const extendedSql = `
+    // بررسی وجود ستون current_vehicle_type
+    let hasVehicleTypeColumn = false;
+    try {
+      const checkColumn = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'vehicles' AND column_name = 'current_vehicle_type'
+      `);
+      hasVehicleTypeColumn = checkColumn.rows.length > 0;
+    } catch (e) {
+      // اگر خطا داد، فرض می‌کنیم ستون وجود ندارد
+      hasVehicleTypeColumn = false;
+    }
+    
+    const sql = hasVehicleTypeColumn ? `
       SELECT 
         v.id,
         json_build_object(
@@ -47,48 +61,50 @@ async function getVehicles(req, res) {
       FROM vehicles v 
       LEFT JOIN branches b ON v.branch_id = b.id 
       ORDER BY v.created_at DESC
+    ` : `
+      SELECT 
+        v.id,
+        json_build_object(
+          'part1', v.plate_part1,
+          'letter', v.plate_letter,
+          'part2', v.plate_part2,
+          'cityCode', v.plate_city_code
+        ) AS "plateNumber",
+        v.serial_number AS "serialNumber",
+        v.model,
+        v.type,
+        v.branch_id AS "branchId",
+        v.holding_company AS "holdingCompany",
+        v.mihan_company AS "mihanCompany",
+        v.vehicle_category AS "vehicleCategory",
+        NULL AS "vehicleType",
+        v.brand,
+        v.owner_name AS "ownerName",
+        v.color,
+        v.usage_type AS "usageType",
+        v.engine_number AS "engineNumber",
+        v.vehicle_tip AS "vehicleTip",
+        v.chassis_number AS "chassisNumber",
+        v.capacity,
+        v.vin,
+        v.year,
+        v.wheel_count AS "wheelCount",
+        v.axle_count AS "axleCount",
+        v.cylinder_count AS "cylinderCount",
+        v.domain_name AS "domainName",
+        v.fuel_type AS "fuelType",
+        v.status,
+        v.vehicle_code AS "vehicleCode",
+        v.created_at AS "createdAt",
+        v.updated_at AS "updatedAt",
+        b.name as "branchName",
+        b.location as "branchLocation"
+      FROM vehicles v 
+      LEFT JOIN branches b ON v.branch_id = b.id 
+      ORDER BY v.created_at DESC
     `;
-    let rows;
-    try {
-      rows = (await pool.query(extendedSql)).rows;
-    } catch (err) {
-      if (err && err.code === '42703') {
-        // ستون current_vehicle_type وجود ندارد، از fallback استفاده می‌کنیم
-        const fallbackSql = `
-          SELECT 
-            v.id,
-            json_build_object(
-              'part1', v.plate_part1,
-              'letter', v.plate_letter,
-              'part2', v.plate_part2,
-              'cityCode', v.plate_city_code
-            ) AS "plateNumber",
-            v.serial_number AS "serialNumber",
-            v.model,
-            v.type,
-            v.branch_id AS "branchId",
-            v.holding_company AS "holdingCompany",
-            v.mihan_company AS "mihanCompany",
-            v.vehicle_category AS "vehicleCategory",
-            NULL AS "vehicleType",
-            v.brand,
-            v.owner_name AS "ownerName",
-            v.vin,
-            v.year,
-            v.status,
-            v.created_at AS "createdAt",
-            v.updated_at AS "updatedAt",
-            b.name as "branchName",
-            b.location as "branchLocation"
-          FROM vehicles v 
-          LEFT JOIN branches b ON v.branch_id = b.id 
-          ORDER BY v.created_at DESC
-        `;
-        rows = (await pool.query(fallbackSql)).rows;
-      } else {
-        throw err;
-      }
-    }
+    
+    const rows = (await pool.query(sql)).rows;
     res.json(rows);
   } catch (error) {
     console.error('Failed to get vehicles:', error);
@@ -102,7 +118,20 @@ async function getVehicles(req, res) {
 async function getVehicleById(req, res) {
   const { id } = req.params;
   try {
-    const extendedSql = `
+    // بررسی وجود ستون current_vehicle_type
+    let hasVehicleTypeColumn = false;
+    try {
+      const checkColumn = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'vehicles' AND column_name = 'current_vehicle_type'
+      `);
+      hasVehicleTypeColumn = checkColumn.rows.length > 0;
+    } catch (e) {
+      hasVehicleTypeColumn = false;
+    }
+    
+    const sql = hasVehicleTypeColumn ? `
       SELECT 
         v.id,
         json_build_object(
@@ -140,45 +169,47 @@ async function getVehicleById(req, res) {
         v.updated_at AS "updatedAt"
       FROM vehicles v 
       WHERE v.id = $1
+    ` : `
+      SELECT 
+        v.id,
+        json_build_object(
+          'part1', v.plate_part1,
+          'letter', v.plate_letter,
+          'part2', v.plate_part2,
+          'cityCode', v.plate_city_code
+        ) AS "plateNumber",
+        v.serial_number AS "serialNumber",
+        v.model,
+        v.type,
+        v.branch_id AS "branchId",
+        v.holding_company AS "holdingCompany",
+        v.mihan_company AS "mihanCompany",
+        v.vehicle_category AS "vehicleCategory",
+        NULL AS "vehicleType",
+        v.brand,
+        v.owner_name AS "ownerName",
+        v.color,
+        v.usage_type AS "usageType",
+        v.engine_number AS "engineNumber",
+        v.vehicle_tip AS "vehicleTip",
+        v.chassis_number AS "chassisNumber",
+        v.capacity,
+        v.vin,
+        v.year,
+        v.wheel_count AS "wheelCount",
+        v.axle_count AS "axleCount",
+        v.cylinder_count AS "cylinderCount",
+        v.domain_name AS "domainName",
+        v.fuel_type AS "fuelType",
+        v.status,
+        v.vehicle_code AS "vehicleCode",
+        v.created_at AS "createdAt",
+        v.updated_at AS "updatedAt"
+      FROM vehicles v 
+      WHERE v.id = $1
     `;
-    let rows;
-    try {
-      rows = (await pool.query(extendedSql, [id])).rows;
-    } catch (err) {
-      if (err && err.code === '42703') {
-        // ستون current_vehicle_type وجود ندارد، از fallback استفاده می‌کنیم
-        const fallbackSql = `
-          SELECT 
-            v.id,
-            json_build_object(
-              'part1', v.plate_part1,
-              'letter', v.plate_letter,
-              'part2', v.plate_part2,
-              'cityCode', v.plate_city_code
-            ) AS "plateNumber",
-            v.serial_number AS "serialNumber",
-            v.model,
-            v.type,
-            v.branch_id AS "branchId",
-            v.holding_company AS "holdingCompany",
-            v.mihan_company AS "mihanCompany",
-            v.vehicle_category AS "vehicleCategory",
-            NULL AS "vehicleType",
-            v.brand,
-            v.owner_name AS "ownerName",
-            v.vin,
-            v.year,
-            v.status,
-            v.created_at AS "createdAt",
-            v.updated_at AS "updatedAt"
-          FROM vehicles v 
-          WHERE v.id = $1
-        `;
-        rows = (await pool.query(fallbackSql, [id])).rows;
-      } else {
-        throw err;
-      }
-    }
+    
+    const rows = (await pool.query(sql, [id])).rows;
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Vehicle not found.' });
     }
