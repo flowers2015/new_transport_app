@@ -949,16 +949,14 @@ const LineRow: React.FC<{
                 </div>
             </div>
 
-            {/* Statistics Summary Table - Always Daily with Pagination (31 rows per page) */}
-            {chartData.length > 0 && (() => {
+            {/* Statistics Summary Table - Daily with Pagination (31 rows per page) */}
+            {(() => {
                 // فیلتر کردن فقط داده‌های روزانه (بازه زمانی که به فرمت YYYY/MM/DD است)
                 const dailyData = chartData.filter(stat => {
                     const period = stat.timePeriod || '';
                     // اگر بازه زمانی به فرمت YYYY/MM/DD باشد (10 کاراکتر)، روزانه است
                     return period.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(period);
                 });
-                
-                if (dailyData.length === 0) return null;
                 
                 const dailySummaryPageSize = 31; // 31 روز = یک ماه
                 const totalDailyPages = Math.ceil(dailyData.length / dailySummaryPageSize);
@@ -969,7 +967,7 @@ const LineRow: React.FC<{
                 return (
                 <div className="bg-slate-50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-base font-semibold text-slate-700">خلاصه آمار (روزانه)</h3>
+                        <h3 className="text-base font-semibold text-slate-700">خلاصه عملکرد روزانه</h3>
                         {totalDailyPages > 1 && (
                             <div className="flex items-center gap-2">
                                 <button
@@ -1097,6 +1095,11 @@ const LineRow: React.FC<{
                             </tbody>
                         </table>
                     </div>
+                    {dailyData.length === 0 && (
+                        <div className="text-center py-4 text-slate-500 text-sm">
+                            داده روزانه برای نمایش وجود ندارد.
+                        </div>
+                    )}
                 </div>
                 );
             })()}
