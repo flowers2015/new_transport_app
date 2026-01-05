@@ -53,6 +53,7 @@ async function getVehicles(req, res) {
       rows = (await pool.query(extendedSql)).rows;
     } catch (err) {
       if (err && err.code === '42703') {
+        // ستون current_vehicle_type وجود ندارد، از fallback استفاده می‌کنیم
         const fallbackSql = `
           SELECT 
             v.id,
@@ -69,7 +70,7 @@ async function getVehicles(req, res) {
             v.holding_company AS "holdingCompany",
             v.mihan_company AS "mihanCompany",
             v.vehicle_category AS "vehicleCategory",
-            v.current_vehicle_type AS "vehicleType",
+            NULL AS "vehicleType",
             v.brand,
             v.owner_name AS "ownerName",
             v.vin,
@@ -145,6 +146,7 @@ async function getVehicleById(req, res) {
       rows = (await pool.query(extendedSql, [id])).rows;
     } catch (err) {
       if (err && err.code === '42703') {
+        // ستون current_vehicle_type وجود ندارد، از fallback استفاده می‌کنیم
         const fallbackSql = `
           SELECT 
             v.id,
@@ -161,6 +163,7 @@ async function getVehicleById(req, res) {
             v.holding_company AS "holdingCompany",
             v.mihan_company AS "mihanCompany",
             v.vehicle_category AS "vehicleCategory",
+            NULL AS "vehicleType",
             v.brand,
             v.owner_name AS "ownerName",
             v.vin,
@@ -267,7 +270,6 @@ async function createVehicle(req, res) {
           v.holdingCompany || null,
           v.mihanCompany || null,
           v.vehicleCategory || null,
-          v.vehicleType || null,
           v.brand || null,
           v.model || null,
           v.type || null,
@@ -283,13 +285,13 @@ async function createVehicle(req, res) {
         ];
         const insertSql = `
           INSERT INTO vehicles (
-            id, branch_id, holding_company, mihan_company, vehicle_category, current_vehicle_type, brand, model, type,
+            id, branch_id, holding_company, mihan_company, vehicle_category, brand, model, type,
             plate_part1, plate_letter, plate_part2, plate_city_code, serial_number,
             owner_name, vin, year, status, created_at, updated_at
           ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,
-            $10,$11,$12,$13,$14,
-            $15,$16,$17,$18, NOW(), NOW()
+            $1,$2,$3,$4,$5,$6,$7,$8,
+            $9,$10,$11,$12,$13,
+            $14,$15,$16,$17, NOW(), NOW()
           )
           RETURNING id;
         `;
@@ -305,33 +307,71 @@ async function createVehicle(req, res) {
     }
     const newId = result.rows[0].id;
     // Return the created record in the same shape as getVehicleById
-    const { rows } = await pool.query(`
-      SELECT 
-        v.id,
-        json_build_object(
-          'part1', v.plate_part1,
-          'letter', v.plate_letter,
-          'part2', v.plate_part2,
-          'cityCode', v.plate_city_code
-        ) AS "plateNumber",
-        v.serial_number AS "serialNumber",
-        v.model,
-        v.type,
-        v.branch_id AS "branchId",
-        v.holding_company AS "holdingCompany",
-        v.mihan_company AS "mihanCompany",
-        v.vehicle_category AS "vehicleCategory",
-        v.current_vehicle_type AS "vehicleType",
-        v.brand,
-        v.owner_name AS "ownerName",
-        v.vin,
-        v.year,
-        v.status,
-        v.created_at AS "createdAt",
-        v.updated_at AS "updatedAt"
-      FROM vehicles v 
-      WHERE v.id = $1
-    `, [newId]);
+    let rows;
+    try {
+      const { rows: queryRows } = await pool.query(`
+        SELECT 
+          v.id,
+          json_build_object(
+            'part1', v.plate_part1,
+            'letter', v.plate_letter,
+            'part2', v.plate_part2,
+            'cityCode', v.plate_city_code
+          ) AS "plateNumber",
+          v.serial_number AS "serialNumber",
+          v.model,
+          v.type,
+          v.branch_id AS "branchId",
+          v.holding_company AS "holdingCompany",
+          v.mihan_company AS "mihanCompany",
+          v.vehicle_category AS "vehicleCategory",
+          v.current_vehicle_type AS "vehicleType",
+          v.brand,
+          v.owner_name AS "ownerName",
+          v.vin,
+          v.year,
+          v.status,
+          v.created_at AS "createdAt",
+          v.updated_at AS "updatedAt"
+        FROM vehicles v 
+        WHERE v.id = $1
+      `, [newId]);
+      rows = queryRows;
+    } catch (selectErr) {
+      // اگر ستون current_vehicle_type وجود ندارد، از fallback استفاده می‌کنیم
+      if (selectErr && selectErr.code === '42703') {
+        const { rows: fallbackRows } = await pool.query(`
+          SELECT 
+            v.id,
+            json_build_object(
+              'part1', v.plate_part1,
+              'letter', v.plate_letter,
+              'part2', v.plate_part2,
+              'cityCode', v.plate_city_code
+            ) AS "plateNumber",
+            v.serial_number AS "serialNumber",
+            v.model,
+            v.type,
+            v.branch_id AS "branchId",
+            v.holding_company AS "holdingCompany",
+            v.mihan_company AS "mihanCompany",
+            v.vehicle_category AS "vehicleCategory",
+            NULL AS "vehicleType",
+            v.brand,
+            v.owner_name AS "ownerName",
+            v.vin,
+            v.year,
+            v.status,
+            v.created_at AS "createdAt",
+            v.updated_at AS "updatedAt"
+          FROM vehicles v 
+          WHERE v.id = $1
+        `, [newId]);
+        rows = fallbackRows;
+      } else {
+        throw selectErr;
+      }
+    }
     res.status(201).json(rows[0]);
   } catch (error) {
     console.error('Failed to create vehicle:', error);
@@ -499,7 +539,6 @@ async function updateVehicle(req, res) {
           v.holdingCompany || null,
           v.mihanCompany || null,
           v.vehicleCategory || null,
-          v.vehicleType || null,
           v.brand || null,
           fallbackModelValue || 'نامشخص', // Ensure model is never null
           v.type || null,
@@ -520,21 +559,20 @@ async function updateVehicle(req, res) {
             holding_company = $2,
             mihan_company = $3,
             vehicle_category = $4,
-            current_vehicle_type = $5,
-            brand = $6,
-            model = $7,
-            type = $8,
-            plate_part1 = $9,
-            plate_letter = $10,
-            plate_part2 = $11,
-            plate_city_code = $12,
-            serial_number = $13,
-            owner_name = $14,
-            vin = $15,
-            year = $16,
-            status = $17,
+            brand = $5,
+            model = $6,
+            type = $7,
+            plate_part1 = $8,
+            plate_letter = $9,
+            plate_part2 = $10,
+            plate_city_code = $11,
+            serial_number = $12,
+            owner_name = $13,
+            vin = $14,
+            year = $15,
+            status = $16,
             updated_at = NOW()
-          WHERE id = $18
+          WHERE id = $17
           RETURNING id;
         `;
         result = await pool.query(updateSql, params);
