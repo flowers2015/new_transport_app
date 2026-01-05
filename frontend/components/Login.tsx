@@ -11,6 +11,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+    const [accountLocked, setAccountLocked] = useState(false);
+    const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,12 +31,38 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || 'نام کاربری یا رمز عبور اشتباه است.');
+                // بررسی قفل بودن حساب
+                if (response.status === 423) {
+                    setAccountLocked(true);
+                    if (data.lockedUntil) {
+                        setLockedUntil(new Date(data.lockedUntil));
+                    }
+                    setError(data.message || 'حساب کاربری شما قفل شده است.');
+                } else if (data.remainingAttempts !== undefined) {
+                    setRemainingAttempts(data.remainingAttempts);
+                    setError(data.message || 'نام کاربری یا رمز عبور اشتباه است.');
+                } else {
+                    setError(data.message || 'نام کاربری یا رمز عبور اشتباه است.');
+                }
+                return;
             }
+
+            // ریست کردن state های خطا
+            setRemainingAttempts(null);
+            setAccountLocked(false);
+            setLockedUntil(null);
 
             // Assuming the backend returns a token and user info
             // You might need to adjust this based on the actual API response
             if (data.token && data.user) {
+                // بررسی انقضای رمز عبور
+                if (data.passwordExpired) {
+                    // نمایش هشدار اما اجازه ورود
+                    alert('⚠️ رمز عبور شما منقضی شده است. لطفاً در اسرع وقت رمز خود را تغییر دهید.');
+                } else if (data.passwordExpiresIn !== null && data.passwordExpiresIn <= 7) {
+                    // هشدار 7 روز قبل از انقضا
+                    alert(`⚠️ رمز عبور شما در ${Math.ceil(data.passwordExpiresIn)} روز دیگر منقضی می‌شود. لطفاً رمز خود را تغییر دهید.`);
+                }
                 onLogin(data.user, data.token);
             } else {
                  // If the backend only returns a token, you might need to decode it
@@ -79,30 +109,75 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </div>
                     <div>
                         <label htmlFor="password" className="block text-sm font-medium text-slate-700">رمز عبور</label>
-                        <input
-                            id="password"
-                            name="password"
-                            type="password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            placeholder="●●●●●●●●"
-                            autoComplete="current-password"
-                        />
+                        <div className="mt-1 relative">
+                            <input
+                                id="password"
+                                name="password"
+                                type={showPassword ? 'text' : 'password'}
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="block w-full px-3 py-2 pr-10 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                placeholder="●●●●●●●●"
+                                autoComplete="current-password"
+                                disabled={accountLocked}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                                disabled={accountLocked}
+                            >
+                                {showPassword ? (
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                ) : (
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
                     </div>
-                    {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+                    {error && (
+                        <div className="text-sm text-red-600 text-center">
+                            <p>{error}</p>
+                            {remainingAttempts !== null && remainingAttempts > 0 && (
+                                <p className="mt-1 text-orange-600">تعداد تلاش‌های باقی‌مانده: {remainingAttempts}</p>
+                            )}
+                            {accountLocked && lockedUntil && (
+                                <p className="mt-1 text-orange-600">
+                                    حساب کاربری تا {new Date(lockedUntil).toLocaleTimeString('fa-IR')} قفل است.
+                                </p>
+                            )}
+                        </div>
+                    )}
                     <div>
                         <button
                             type="submit"
-                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-sky-600 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500"
+                            disabled={accountLocked}
+                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-sky-600 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:bg-slate-400 disabled:cursor-not-allowed"
                         >
-                            ورود
+                            {accountLocked ? 'حساب کاربری قفل است' : 'ورود'}
                         </button>
                     </div>
                 </form>
                 <div className="text-center text-xs text-slate-400">
                     <p>Enter your credentials to log in.</p>
+                </div>
+                <div className="text-center mt-4">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            // TODO: پیاده‌سازی فراموشی رمز عبور
+                            alert('قابلیت فراموشی رمز عبور به زودی اضافه خواهد شد.');
+                        }}
+                        className="text-sm text-sky-600 hover:text-sky-800 hover:underline"
+                    >
+                        رمز عبور را فراموش کرده‌ام
+                    </button>
                 </div>
             </div>
         </div>

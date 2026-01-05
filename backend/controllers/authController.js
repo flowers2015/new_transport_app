@@ -18,10 +18,66 @@ async function login(req, res) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
+    // بررسی قفل بودن حساب کاربری
+    const now = new Date();
+    if (user.account_locked_until && new Date(user.account_locked_until) > now) {
+      const lockUntil = new Date(user.account_locked_until);
+      const minutesLeft = Math.ceil((lockUntil - now) / 1000 / 60);
+      return res.status(423).json({ 
+        message: `حساب کاربری شما به دلیل تلاش‌های ناموفق به مدت ${minutesLeft} دقیقه قفل شده است. لطفاً بعداً تلاش کنید.`,
+        lockedUntil: user.account_locked_until
+      });
+    }
+
+    // اگر قفل منقضی شده، آن را بردار
+    if (user.account_locked_until && new Date(user.account_locked_until) <= now) {
+      await pool.query(
+        'UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = $1',
+        [user.id]
+      );
+      user.failed_login_attempts = 0;
+      user.account_locked_until = null;
+    }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
+      // افزایش تعداد تلاش‌های ناموفق
+      const failedAttempts = (user.failed_login_attempts || 0) + 1;
+      const MAX_ATTEMPTS = 5;
+      const LOCK_DURATION_MINUTES = 15;
+
+      if (failedAttempts >= MAX_ATTEMPTS) {
+        // قفل کردن حساب برای 15 دقیقه
+        const lockUntil = new Date(now.getTime() + LOCK_DURATION_MINUTES * 60 * 1000);
+        await pool.query(
+          'UPDATE users SET failed_login_attempts = $1, account_locked_until = $2 WHERE id = $3',
+          [failedAttempts, lockUntil, user.id]
+        );
+        return res.status(423).json({ 
+          message: `به دلیل ${MAX_ATTEMPTS} تلاش ناموفق، حساب کاربری شما به مدت ${LOCK_DURATION_MINUTES} دقیقه قفل شد.`,
+          lockedUntil: lockUntil
+        });
+      } else {
+        // فقط افزایش تعداد تلاش‌های ناموفق
+        await pool.query(
+          'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
+          [failedAttempts, user.id]
+        );
+        const remainingAttempts = MAX_ATTEMPTS - failedAttempts;
+        return res.status(401).json({ 
+          message: `نام کاربری یا رمز عبور اشتباه است. ${remainingAttempts} تلاش باقی مانده.`,
+          remainingAttempts
+        });
+      }
+    }
+
+    // ورود موفق: ریست کردن تلاش‌های ناموفق
+    if (user.failed_login_attempts > 0 || user.account_locked_until) {
+      await pool.query(
+        'UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = $1',
+        [user.id]
+      );
     }
 
     // گرفتن branch name اگر branch_id یا branch_city وجود دارد
@@ -62,6 +118,21 @@ async function login(req, res) {
       }
     }
 
+    // بررسی انقضای رمز عبور (اختیاری - 90 روز)
+    const PASSWORD_EXPIRY_DAYS = 90;
+    let passwordExpired = false;
+    let passwordExpiresIn = null;
+    
+    if (user.password_changed_at) {
+      const passwordChangedDate = new Date(user.password_changed_at);
+      const daysSinceChange = Math.floor((now - passwordChangedDate) / (1000 * 60 * 60 * 24));
+      passwordExpiresIn = PASSWORD_EXPIRY_DAYS - daysSinceChange;
+      
+      if (daysSinceChange >= PASSWORD_EXPIRY_DAYS) {
+        passwordExpired = true;
+      }
+    }
+
     const payload = {
       userId: user.id,
       username: user.username,
@@ -82,7 +153,9 @@ async function login(req, res) {
         fullName: user.full_name || user.name || null,
         email: user.email || null,
         branchCity: branchCityValue
-      }
+      },
+      passwordExpired,
+      passwordExpiresIn: passwordExpiresIn !== null ? Math.max(0, passwordExpiresIn) : null
     });
 
   } catch (error) {

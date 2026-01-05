@@ -56,6 +56,13 @@ if [ $? -ne 0 ]; then
     echo -e "${YELLOW}⚠️ هشدار: Migration finalize_permissions اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
 fi
 
+echo -e "${YELLOW}🔄 در حال اجرای Migration برای افزودن ستون‌های امنیتی به جدول users...${NC}"
+node migrations/add_user_security_columns.js
+
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}⚠️ هشدار: Migration add_user_security_columns اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
+fi
+
 echo -e "${YELLOW}📦 در حال نصب وابستگی‌های Frontend...${NC}"
 cd ../frontend
 npm install

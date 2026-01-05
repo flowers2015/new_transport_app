@@ -1097,9 +1097,9 @@ const LineRow: React.FC<{
                             </tbody>
                         </table>
                     </div>
-                    )}
                 </div>
-            )}
+                );
+            })()}
 
             {/* Chart Zoom Dialog */}
             <ChartZoomDialog

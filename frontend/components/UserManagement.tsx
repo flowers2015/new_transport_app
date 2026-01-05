@@ -54,8 +54,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [auditActions, setAuditActions] = useState<AdminAction[]>([]);
+  const [resetPasswordData, setResetPasswordData] = useState({ newPassword: '', reason: '' });
 
   // Form states
   const [formData, setFormData] = useState({
@@ -274,6 +276,52 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
     setShowAuditTrail(true);
   };
 
+  // باز کردن دیالوگ ریست رمز عبور
+  const openResetPasswordDialog = (user: UserData) => {
+    setSelectedUser(user);
+    setResetPasswordData({ newPassword: '', reason: '' });
+    setShowResetPasswordDialog(true);
+  };
+
+  // ریست رمز عبور
+  const handleResetPassword = async () => {
+    try {
+      if (!resetPasswordData.reason) {
+        alert('لطفاً دلیل ریست رمز عبور را وارد کنید');
+        return;
+      }
+
+      if (!resetPasswordData.newPassword || resetPasswordData.newPassword.length < 6) {
+        alert('رمز عبور جدید باید حداقل 6 کاراکتر باشد');
+        return;
+      }
+
+      if (!selectedUser) return;
+
+      const res = await fetch(getApiUrl('auth/reset-password'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          newPassword: resetPasswordData.newPassword,
+          reason: resetPasswordData.reason,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'خطا در ریست رمز عبور');
+      }
+
+      alert('رمز عبور با موفقیت ریست شد');
+      setShowResetPasswordDialog(false);
+      setSelectedUser(null);
+      setResetPasswordData({ newPassword: '', reason: '' });
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   if (loading && users.length === 0) {
     return <div className="p-4">در حال بارگذاری...</div>;
   }
@@ -363,6 +411,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
                       className="text-blue-600 hover:text-blue-900"
                     >
                       ویرایش
+                    </button>
+                    <button
+                      onClick={() => openResetPasswordDialog(user)}
+                      className="text-orange-600 hover:text-orange-900"
+                    >
+                      ریست رمز
                     </button>
                     <button
                       onClick={() => openDeleteDialog(user)}
@@ -631,6 +685,56 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
               >
                 حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* دیالوگ ریست رمز عبور */}
+      {showResetPasswordDialog && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">ریست رمز عبور: {selectedUser.username}</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">رمز عبور جدید *</label>
+                <input
+                  type="password"
+                  value={resetPasswordData.newPassword}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder="حداقل 6 کاراکتر"
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">دلیل ریست رمز عبور *</label>
+                <textarea
+                  value={resetPasswordData.reason}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, reason: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                  rows={3}
+                  placeholder="لطفاً دلیل ریست رمز عبور را وارد کنید"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowResetPasswordDialog(false);
+                  setSelectedUser(null);
+                  setResetPasswordData({ newPassword: '', reason: '' });
+                }}
+                className="px-4 py-2 border rounded"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleResetPassword}
+                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+              >
+                ریست رمز عبور
               </button>
             </div>
           </div>

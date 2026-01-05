@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, UserRole, User } from '../types';
 import { WrenchScrewdriverIcon } from './icons/WrenchScrewdriverIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import ChangePasswordDialog from './ChangePasswordDialog';
 
 interface HeaderProps {
     onNavigate: (view: View) => void;
@@ -14,6 +15,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, onLogout, defaultDashboardView }) => {
     const [isMgmtDropdownOpen, setMgmtDropdownOpen] = useState(false);
     const [isAdminDropdownOpen, setAdminDropdownOpen] = useState(false);
+    const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
     const mgmtDropdownRef = useRef<HTMLDivElement>(null);
     const adminDropdownRef = useRef<HTMLDivElement>(null);
 
