@@ -1001,6 +1001,42 @@ const CompanyVehicleForm: React.FC<{
   const [apiModels, setApiModels] = useState<string[]>([]);
   const [apiTips, setApiTips] = useState<any[]>([]);
 
+  // Sync form with initialData when it changes (for edit mode)
+  useEffect(() => {
+    if (initialData) {
+      setForm({
+        vehicleCode: initialData.vehicleCode || '',
+        platePart1: initialData.plateNumber?.part1 || '',
+        plateLetter: initialData.plateNumber?.letter || '',
+        platePart2: initialData.plateNumber?.part2 || '',
+        plateCityCode: initialData.plateNumber?.cityCode || '',
+        vehicleType: initialData.vehicleType || '',
+        brand: initialData.brand || '',
+        model: initialData.model || '',
+        type: initialData.type || initialData.vehicleCategory || '',
+        color: initialData.color || '',
+        year: initialData.year?.toString() || '',
+        vin: initialData.vin || '',
+        chassisNumber: initialData.chassisNumber || '',
+        engineNumber: initialData.engineNumber || '',
+        serialNumber: initialData.serialNumber || '',
+        ownerName: initialData.ownerName || '',
+        holdingCompany: initialData.holdingCompany || '',
+        mihanCompany: initialData.mihanCompany || '',
+        vehicleCategory: initialData.vehicleCategory || initialData.type || '',
+        usageType: initialData.usageType || '',
+        vehicleTip: initialData.vehicleTip || '',
+        capacity: initialData.capacity || '',
+        wheelCount: initialData.wheelCount?.toString() || '',
+        axleCount: initialData.axleCount?.toString() || '',
+        cylinderCount: initialData.cylinderCount?.toString() || '',
+        domainName: initialData.domainName || '',
+        fuelType: initialData.fuelType || '',
+        status: initialData.status || 'Active',
+      });
+    }
+  }, [initialData]);
+
   // Fetch vehicle types from API
   useEffect(() => {
     const fetchVehicleTypes = async () => {
@@ -1115,9 +1151,14 @@ const CompanyVehicleForm: React.FC<{
     // Ensure model is not empty (required field)
     const finalModel = form.model?.trim() || form.vehicleTip?.trim() || 'نامشخص';
     
+    // Ensure vehicleCategory is set (use type if vehicleCategory is empty)
+    const finalVehicleCategory = form.vehicleCategory || form.type || '';
+    
     onSave({
       ...form,
       model: finalModel,
+      vehicleCategory: finalVehicleCategory,
+      type: form.type || finalVehicleCategory, // Keep type for backward compatibility
       plateNumber: {
         part1: form.platePart1,
         letter: form.plateLetter,

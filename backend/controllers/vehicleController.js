@@ -22,6 +22,7 @@ async function getVehicles(req, res) {
         v.holding_company AS "holdingCompany",
         v.mihan_company AS "mihanCompany",
         v.vehicle_category AS "vehicleCategory",
+        v.current_vehicle_type AS "vehicleType",
         v.brand,
         v.owner_name AS "ownerName",
         v.color,
@@ -68,6 +69,7 @@ async function getVehicles(req, res) {
             v.holding_company AS "holdingCompany",
             v.mihan_company AS "mihanCompany",
             v.vehicle_category AS "vehicleCategory",
+            v.current_vehicle_type AS "vehicleType",
             v.brand,
             v.owner_name AS "ownerName",
             v.vin,
@@ -115,6 +117,7 @@ async function getVehicleById(req, res) {
         v.holding_company AS "holdingCompany",
         v.mihan_company AS "mihanCompany",
         v.vehicle_category AS "vehicleCategory",
+        v.current_vehicle_type AS "vehicleType",
         v.brand,
         v.owner_name AS "ownerName",
         v.color,
@@ -205,6 +208,7 @@ async function createVehicle(req, res) {
       v.holdingCompany || null,
       v.mihanCompany || null,
       v.vehicleCategory || null,
+      v.vehicleType || null,
       v.brand || null,
       v.model || null,
       v.type || null,
@@ -232,18 +236,18 @@ async function createVehicle(req, res) {
     ];
     const extInsertSql = `
       INSERT INTO vehicles (
-        id, branch_id, holding_company, mihan_company, vehicle_category, brand, model, type,
+        id, branch_id, holding_company, mihan_company, vehicle_category, current_vehicle_type, brand, model, type,
         plate_part1, plate_letter, plate_part2, plate_city_code, serial_number,
         owner_name, vin, year, status,
         color, usage_type, engine_number, vehicle_tip, chassis_number, capacity,
         wheel_count, axle_count, cylinder_count, domain_name, fuel_type, vehicle_code,
         created_at, updated_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,
-        $9,$10,$11,$12,$13,
-        $14,$15,$16,$17,
-        $18,$19,$20,$21,$22,$23,
-        $24,$25,$26,$27,$28,$29,
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,
+        $10,$11,$12,$13,$14,
+        $15,$16,$17,$18,
+        $19,$20,$21,$22,$23,$24,
+        $25,$26,$27,$28,$29,$30,
         NOW(), NOW()
       ) RETURNING id;
     `;
@@ -263,6 +267,7 @@ async function createVehicle(req, res) {
           v.holdingCompany || null,
           v.mihanCompany || null,
           v.vehicleCategory || null,
+          v.vehicleType || null,
           v.brand || null,
           v.model || null,
           v.type || null,
@@ -278,13 +283,13 @@ async function createVehicle(req, res) {
         ];
         const insertSql = `
           INSERT INTO vehicles (
-            id, branch_id, holding_company, mihan_company, vehicle_category, brand, model, type,
+            id, branch_id, holding_company, mihan_company, vehicle_category, current_vehicle_type, brand, model, type,
             plate_part1, plate_letter, plate_part2, plate_city_code, serial_number,
             owner_name, vin, year, status, created_at, updated_at
           ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,
-            $9,$10,$11,$12,$13,
-            $14,$15,$16,$17, NOW(), NOW()
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,
+            $10,$11,$12,$13,$14,
+            $15,$16,$17,$18, NOW(), NOW()
           )
           RETURNING id;
         `;
@@ -316,6 +321,7 @@ async function createVehicle(req, res) {
         v.holding_company AS "holdingCompany",
         v.mihan_company AS "mihanCompany",
         v.vehicle_category AS "vehicleCategory",
+        v.current_vehicle_type AS "vehicleType",
         v.brand,
         v.owner_name AS "ownerName",
         v.vin,
@@ -402,6 +408,7 @@ async function updateVehicle(req, res) {
       v.holdingCompany || null,
       v.mihanCompany || null,
       v.vehicleCategory || null,
+      v.vehicleType || null,
       v.brand || null,
       modelValue || 'نامشخص', // Ensure model is never null
       v.type || null,
@@ -434,32 +441,33 @@ async function updateVehicle(req, res) {
         holding_company = $2,
         mihan_company = $3,
         vehicle_category = $4,
-        brand = $5,
-        model = $6,
-        type = $7,
-        plate_part1 = $8,
-        plate_letter = $9,
-        plate_part2 = $10,
-        plate_city_code = $11,
-        serial_number = $12,
-        owner_name = $13,
-        vin = $14,
-        year = $15,
-        status = $16,
-        color = $17,
-        usage_type = $18,
-        engine_number = $19,
-        vehicle_tip = $20,
-        chassis_number = $21,
-        capacity = $22,
-        wheel_count = $23,
-        axle_count = $24,
-        cylinder_count = $25,
-        domain_name = $26,
-        fuel_type = $27,
-        vehicle_code = $28,
+        current_vehicle_type = $5,
+        brand = $6,
+        model = $7,
+        type = $8,
+        plate_part1 = $9,
+        plate_letter = $10,
+        plate_part2 = $11,
+        plate_city_code = $12,
+        serial_number = $13,
+        owner_name = $14,
+        vin = $15,
+        year = $16,
+        status = $17,
+        color = $18,
+        usage_type = $19,
+        engine_number = $20,
+        vehicle_tip = $21,
+        chassis_number = $22,
+        capacity = $23,
+        wheel_count = $24,
+        axle_count = $25,
+        cylinder_count = $26,
+        domain_name = $27,
+        fuel_type = $28,
+        vehicle_code = $29,
         updated_at = NOW()
-      WHERE id = $29
+      WHERE id = $30
       RETURNING id;
     `;
     let result;
@@ -491,6 +499,7 @@ async function updateVehicle(req, res) {
           v.holdingCompany || null,
           v.mihanCompany || null,
           v.vehicleCategory || null,
+          v.vehicleType || null,
           v.brand || null,
           fallbackModelValue || 'نامشخص', // Ensure model is never null
           v.type || null,
@@ -511,20 +520,21 @@ async function updateVehicle(req, res) {
             holding_company = $2,
             mihan_company = $3,
             vehicle_category = $4,
-            brand = $5,
-            model = $6,
-            type = $7,
-            plate_part1 = $8,
-            plate_letter = $9,
-            plate_part2 = $10,
-            plate_city_code = $11,
-            serial_number = $12,
-            owner_name = $13,
-            vin = $14,
-            year = $15,
-            status = $16,
+            current_vehicle_type = $5,
+            brand = $6,
+            model = $7,
+            type = $8,
+            plate_part1 = $9,
+            plate_letter = $10,
+            plate_part2 = $11,
+            plate_city_code = $12,
+            serial_number = $13,
+            owner_name = $14,
+            vin = $15,
+            year = $16,
+            status = $17,
             updated_at = NOW()
-          WHERE id = $17
+          WHERE id = $18
           RETURNING id;
         `;
         result = await pool.query(updateSql, params);

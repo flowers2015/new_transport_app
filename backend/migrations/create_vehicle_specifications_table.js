@@ -41,34 +41,77 @@ async function createVehicleSpecificationsTable() {
     `);
     
     // اضافه کردن constraint مناسب
-    if (hasVehicleType) {
-      // اگر vehicle_type وجود دارد، constraint جدید را اضافه می‌کنیم
-      try {
-        await client.query(`
-          ALTER TABLE vehicle_specifications 
-          DROP CONSTRAINT IF EXISTS vehicle_specifications_vehicle_category_brand_model_tip_key
-        `);
-        await client.query(`
-          ALTER TABLE vehicle_specifications 
-          ADD CONSTRAINT IF NOT EXISTS vehicle_specifications_unique 
-          UNIQUE (vehicle_type, vehicle_category, brand, model, tip)
-        `);
-      } catch (e) {
-        // اگر constraint قبلاً وجود دارد، خطا نده
-        console.log('ℹ️  [createVehicleSpecificationsTable] Constraint may already exist');
+    // بررسی وجود constraint‌های موجود (با SAVEPOINT برای جلوگیری از abort شدن transaction)
+    try {
+      const checkConstraints = await client.query(`
+        SELECT constraint_name 
+        FROM information_schema.table_constraints 
+        WHERE table_name = 'vehicle_specifications' 
+          AND constraint_type = 'UNIQUE'
+      `);
+      
+      const existingConstraints = checkConstraints.rows.map(r => r.constraint_name);
+      
+      if (hasVehicleType) {
+        // اگر vehicle_type وجود دارد، constraint جدید را اضافه می‌کنیم
+        // حذف constraint قدیمی اگر وجود دارد
+        if (existingConstraints.includes('vehicle_specifications_vehicle_category_brand_model_tip_key')) {
+          try {
+            await client.query(`
+              ALTER TABLE vehicle_specifications 
+              DROP CONSTRAINT IF EXISTS vehicle_specifications_vehicle_category_brand_model_tip_key
+            `);
+            console.log('✅ [createVehicleSpecificationsTable] Old constraint removed');
+          } catch (e) {
+            console.log('ℹ️  [createVehicleSpecificationsTable] Could not remove old constraint:', e.message);
+          }
+        }
+        
+        // اضافه کردن constraint جدید
+        if (!existingConstraints.includes('vehicle_specifications_unique')) {
+          try {
+            await client.query(`
+              ALTER TABLE vehicle_specifications 
+              ADD CONSTRAINT vehicle_specifications_unique 
+              UNIQUE (vehicle_type, vehicle_category, brand, model, tip)
+            `);
+            console.log('✅ [createVehicleSpecificationsTable] New constraint added');
+          } catch (e) {
+            // اگر constraint قبلاً وجود دارد (race condition)، خطا نده
+            if (e.code !== '42P07') { // 42P07 = duplicate_object
+              console.log('ℹ️  [createVehicleSpecificationsTable] Could not add new constraint:', e.message);
+            } else {
+              console.log('ℹ️  [createVehicleSpecificationsTable] Constraint already exists');
+            }
+          }
+        } else {
+          console.log('ℹ️  [createVehicleSpecificationsTable] New constraint already exists');
+        }
+      } else {
+        // اگر vehicle_type وجود ندارد، constraint قدیمی را اضافه می‌کنیم
+        if (!existingConstraints.includes('vehicle_specifications_vehicle_category_brand_model_tip_key')) {
+          try {
+            await client.query(`
+              ALTER TABLE vehicle_specifications 
+              ADD CONSTRAINT vehicle_specifications_vehicle_category_brand_model_tip_key
+              UNIQUE (vehicle_category, brand, model, tip)
+            `);
+            console.log('✅ [createVehicleSpecificationsTable] Old constraint added');
+          } catch (e) {
+            // اگر constraint قبلاً وجود دارد، خطا نده
+            if (e.code !== '42P07') {
+              console.log('ℹ️  [createVehicleSpecificationsTable] Could not add old constraint:', e.message);
+            } else {
+              console.log('ℹ️  [createVehicleSpecificationsTable] Constraint already exists');
+            }
+          }
+        } else {
+          console.log('ℹ️  [createVehicleSpecificationsTable] Old constraint already exists');
+        }
       }
-    } else {
-      // اگر vehicle_type وجود ندارد، constraint قدیمی را اضافه می‌کنیم
-      try {
-        await client.query(`
-          ALTER TABLE vehicle_specifications 
-          ADD CONSTRAINT IF NOT EXISTS vehicle_specifications_vehicle_category_brand_model_tip_key
-          UNIQUE (vehicle_category, brand, model, tip)
-        `);
-      } catch (e) {
-        // اگر constraint قبلاً وجود دارد، خطا نده
-        console.log('ℹ️  [createVehicleSpecificationsTable] Constraint may already exist');
-      }
+    } catch (constraintError) {
+      // اگر خطا در بررسی constraint رخ داد، ادامه بده (ممکن است جدول وجود نداشته باشد)
+      console.log('ℹ️  [createVehicleSpecificationsTable] Could not check constraints:', constraintError.message);
     }
     
     console.log('✅ جدول vehicle_specifications ایجاد شد');
