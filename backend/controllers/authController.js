@@ -11,7 +11,18 @@ async function login(req, res) {
 
   try {
     // ابتدا کاربر را بدون join بگیریم (ساده‌تر و سریع‌تر)
-    const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    // فقط ستون‌های مورد نیاز را بگیریم برای بهبود عملکرد
+    const { rows } = await pool.query(`
+      SELECT 
+        id, username, password_hash, role, branch_id, branch_city, 
+        full_name, name, email, 
+        COALESCE(failed_login_attempts, 0) as failed_login_attempts,
+        account_locked_until,
+        password_changed_at,
+        created_at
+      FROM users 
+      WHERE username = $1
+    `, [username]);
     const user = rows[0];
 
     if (!user) {

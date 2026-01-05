@@ -233,10 +233,22 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                                <button onClick={() => onNavigate(View.NewRepairOrder)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">ثبت سفارش تعمیر</button>
                             )}
                         </nav>
+                        {currentUser && (
+                            <button 
+                                onClick={() => setShowChangePasswordDialog(true)} 
+                                className="mr-4 px-3 py-2 rounded-md text-sm font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 transition"
+                            >
+                                تغییر رمز عبور
+                            </button>
+                        )}
                         <button onClick={onLogout} className="mr-4 px-3 py-2 rounded-md text-sm font-medium bg-red-50 hover:bg-red-100 text-red-700 transition">خروج</button>
                     </div>
                 </div>
             </div>
+            <ChangePasswordDialog 
+                isOpen={showChangePasswordDialog} 
+                onClose={() => setShowChangePasswordDialog(false)}
+            />
         </header>
     );
 };
