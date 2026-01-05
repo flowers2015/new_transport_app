@@ -435,9 +435,10 @@ const AdminResourceManagement: React.FC = () => {
             <th className="px-3 py-2 text-right font-medium text-gray-500">ردیف</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">کد خودرو</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">پلاک</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-500">نوع وسیله نقلیه</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-500">نوع خودرو</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">برند</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">مدل</th>
-            <th className="px-3 py-2 text-right font-medium text-gray-500">نوع</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">رنگ</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">سال ساخت</th>
             <th className="px-3 py-2 text-right font-medium text-gray-500">VIN</th>
@@ -454,9 +455,18 @@ const AdminResourceManagement: React.FC = () => {
               <td className="px-3 py-2">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
               <td className="px-3 py-2 font-mono">{vehicle.vehicleCode || '-'}</td>
               <td className="px-3 py-2 font-mono" dir="ltr">{formatPlate(vehicle.plateNumber)}</td>
+              <td className="px-3 py-2">
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                  {vehicle.vehicleCategory || vehicle.type || '-'}
+                </span>
+              </td>
+              <td className="px-3 py-2">
+                <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                  {vehicle.vehicleType || '-'}
+                </span>
+              </td>
               <td className="px-3 py-2">{vehicle.brand || '-'}</td>
               <td className="px-3 py-2">{vehicle.model || '-'}</td>
-              <td className="px-3 py-2">{vehicle.type || '-'}</td>
               <td className="px-3 py-2">{vehicle.color || '-'}</td>
               <td className="px-3 py-2">{vehicle.year || '-'}</td>
               <td className="px-3 py-2 font-mono text-xs">{vehicle.vin || '-'}</td>
