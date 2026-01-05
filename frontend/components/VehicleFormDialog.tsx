@@ -14,6 +14,7 @@ interface VehicleFormDialogProps {
   initialData?: Vehicle | null;
   branches: Branch[];
   showSpecsButton?: boolean; // نمایش دکمه مدیریت مشخصات
+  externalSpec?: any; // مشخصات خارجی که از VehicleSpecsDialog در VehicleDashboard می‌آید
 }
 
 const persianAlphabet = ['الف', 'ب', 'پ', 'ت', 'ث', 'ج', 'چ', 'ح', 'خ', 'د', 'ذ', 'ر', 'ز', 'ژ', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع', 'غ', 'ف', 'ق', 'ک', 'گ', 'ل', 'م', 'ن', 'و', 'ه', 'ی'];
@@ -28,7 +29,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
   onSave,
   initialData,
   branches,
-  showSpecsButton = false
+  showSpecsButton = false,
+  externalSpec
 }) => {
   const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: 'الف', part2: '', cityCode: '' });
   const [serialNumber, setSerialNumber] = useState('');
@@ -133,6 +135,13 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
       setIsPlate(true);
     }
   }, [initialData]);
+
+  // Handle external spec from VehicleDashboard
+  useEffect(() => {
+    if (externalSpec && isOpen) {
+      handleSpecSelect(externalSpec);
+    }
+  }, [externalSpec, isOpen]);
 
   // Handle spec selection from VehicleSpecsDialog
   const handleSpecSelect = (spec: any) => {

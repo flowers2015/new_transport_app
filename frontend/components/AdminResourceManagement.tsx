@@ -16,6 +16,8 @@ import {
   getBrandsForType,
   getModelsForBrand
 } from '../utils/vehicleConstants';
+import VehicleFormDialog from './VehicleFormDialog';
+import { Vehicle, Branch } from '../types';
 
 // ============================================
 // Types
@@ -118,6 +120,7 @@ const AdminResourceManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -183,6 +186,16 @@ const AdminResourceManagement: React.FC = () => {
     }
   };
 
+  const fetchBranches = async () => {
+    try {
+      const { cachedFetch } = await import('../utils/apiCache');
+      const data = await cachedFetch(getApiUrl('branches'), { headers }, 10 * 60 * 1000); // 10 min cache
+      setBranches(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching branches:', err);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -192,6 +205,7 @@ const AdminResourceManagement: React.FC = () => {
         fetchCompanyVehicles(),
         fetchPersonalDrivers(),
         fetchPersonalVehicles(),
+        fetchBranches(),
       ]);
     } finally {
       setLoading(false);
@@ -289,6 +303,10 @@ const AdminResourceManagement: React.FC = () => {
     } catch (err: any) {
       alert(err.message);
     }
+  };
+
+  const handleSaveVehicle = async (vehicle: Omit<Vehicle, 'id'>) => {
+    await handleSave(vehicle);
   };
 
   // ============================================
@@ -638,10 +656,13 @@ const AdminResourceManagement: React.FC = () => {
             />
           )}
           {activeTab === 'company-vehicles' && (
-            <CompanyVehicleForm
-              initialData={modalMode === 'edit' ? selectedItem : null}
-              onSave={handleSave}
-              onCancel={() => { setShowModal(false); setSelectedItem(null); }}
+            <VehicleFormDialog
+              isOpen={showModal}
+              onClose={() => { setShowModal(false); setSelectedItem(null); }}
+              onSave={handleSaveVehicle}
+              initialData={modalMode === 'edit' ? (selectedItem as Vehicle) : null}
+              branches={branches}
+              showSpecsButton={true}
             />
           )}
           {activeTab === 'personal-drivers' && (
@@ -958,15 +979,10 @@ const CompanyDriverForm: React.FC<{
   );
 };
 
-// Company Vehicle Form
-const CompanyVehicleForm: React.FC<{
-  initialData: CompanyVehicle | null;
-  onSave: (data: any) => void;
-  onCancel: () => void;
-}> = ({ initialData, onSave, onCancel }) => {
-  const [form, setForm] = useState({
-    vehicleCode: initialData?.vehicleCode || '',
-    platePart1: initialData?.plateNumber?.part1 || '',
+// Company Vehicle Form - REMOVED: Now using VehicleFormDialog
+// This component has been replaced by VehicleFormDialog for consistency
+
+// Personal Driver Form
     plateLetter: initialData?.plateNumber?.letter || '',
     platePart2: initialData?.plateNumber?.part2 || '',
     plateCityCode: initialData?.plateNumber?.cityCode || '',
