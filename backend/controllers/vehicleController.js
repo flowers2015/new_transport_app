@@ -342,14 +342,18 @@ async function updateVehicle(req, res) {
     const v = req.body || {};
     const plate = v.plateNumber || {};
     
+    // Get current vehicle data (for VIN check and model fallback)
+    const currentVehicle = await pool.query(
+      'SELECT vin, model FROM vehicles WHERE id = $1',
+      [id]
+    );
+    
+    if (currentVehicle.rows.length === 0) {
+      return res.status(404).json({ message: 'خودرو یافت نشد' });
+    }
+    
     // Check if VIN is being changed and if it conflicts with existing VINs
     if (v.vin) {
-      // First, get the current VIN of this vehicle
-      const currentVehicle = await pool.query(
-        'SELECT vin FROM vehicles WHERE id = $1',
-        [id]
-      );
-      
       const currentVin = currentVehicle.rows[0]?.vin;
       
       // Only check for conflicts if VIN is actually being changed
@@ -372,6 +376,26 @@ async function updateVehicle(req, res) {
       return n;
     };
     const safeYear = toSafeYear(v.year);
+    
+    // Ensure model is not empty (required field)
+    // Get current model from database first
+    const currentModel = currentVehicle.rows[0]?.model;
+    let modelValue = v.model;
+    
+    // If model is empty or null, use current model from database
+    if (!modelValue || (typeof modelValue === 'string' && modelValue.trim() === '')) {
+      if (currentModel && currentModel.trim() !== '') {
+        modelValue = currentModel; // Keep existing model
+      } else {
+        // If no current model exists, try vehicleTip or use default
+        if (v.vehicleTip && v.vehicleTip.trim() !== '') {
+          modelValue = v.vehicleTip;
+        } else {
+          modelValue = 'نامشخص'; // Fallback default
+        }
+      }
+    }
+    
     // Try extended update first (if optional columns exist)
     const extParams = [
       v.branchId || null,
@@ -379,7 +403,7 @@ async function updateVehicle(req, res) {
       v.mihanCompany || null,
       v.vehicleCategory || null,
       v.brand || null,
-      v.model || null,
+      modelValue || 'نامشخص', // Ensure model is never null
       v.type || null,
       plate.part1 || null,
       plate.letter || null,
@@ -448,13 +472,27 @@ async function updateVehicle(req, res) {
           message: 'شماره VIN تکراری است. لطفاً شماره VIN منحصر به فرد وارد کنید.' 
         });
       } else if (err && err.code === '42703') {
+        // Ensure model is not empty for fallback query too
+        // Use the same logic as above
+        const fallbackCurrentModel = currentVehicle.rows[0]?.model;
+        let fallbackModelValue = v.model;
+        if (!fallbackModelValue || (typeof fallbackModelValue === 'string' && fallbackModelValue.trim() === '')) {
+          if (fallbackCurrentModel && fallbackCurrentModel.trim() !== '') {
+            fallbackModelValue = fallbackCurrentModel;
+          } else if (v.vehicleTip && v.vehicleTip.trim() !== '') {
+            fallbackModelValue = v.vehicleTip;
+          } else {
+            fallbackModelValue = 'نامشخص';
+          }
+        }
+        
         const params = [
           v.branchId || null,
           v.holdingCompany || null,
           v.mihanCompany || null,
           v.vehicleCategory || null,
           v.brand || null,
-          v.model || null,
+          fallbackModelValue || 'نامشخص', // Ensure model is never null
           v.type || null,
           plate.part1 || null,
           plate.letter || null,

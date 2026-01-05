@@ -808,11 +808,15 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             return;
         }
 
+        // Ensure model is not empty (required field)
+        const modelParts = [formState.model, formState.vehicleTip].filter(Boolean);
+        const finalModel = modelParts.length > 0 ? modelParts.join(' ') : (formState.model || formState.vehicleTip || 'نامشخص');
+        
         const vehicleData: Omit<Vehicle, 'id'> = {
             ...formState,
             holdingCompany: holdingCompany,
             vehicleCategory: vehicleCategory,
-            model: [formState.model, formState.vehicleTip].filter(Boolean).join(' '),
+            model: finalModel,
             year: year ? parseInt(String(year)) : undefined,
             wheelCount: wheelCount ? parseInt(String(wheelCount)) : undefined,
             axleCount: axleCount ? parseInt(String(axleCount)) : undefined,

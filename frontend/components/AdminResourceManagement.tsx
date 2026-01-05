@@ -1101,8 +1101,13 @@ const CompanyVehicleForm: React.FC<{
       alert('انتخاب هلدینگ و نوع وسیله نقلیه الزامی است');
       return;
     }
+    
+    // Ensure model is not empty (required field)
+    const finalModel = form.model?.trim() || form.vehicleTip?.trim() || 'نامشخص';
+    
     onSave({
       ...form,
+      model: finalModel,
       plateNumber: {
         part1: form.platePart1,
         letter: form.plateLetter,
