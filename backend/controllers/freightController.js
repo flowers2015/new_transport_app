@@ -5451,7 +5451,35 @@ async function getAssignmentStatistics(req, res) {
         timePeriod = timePeriod.replace(/-/g, '/');
       }
       
-      const periodDetails = periodDetailsMap.get(timePeriod) || periodDetailsMap.get(timePeriod.replace(/\//g, '-'));
+      // پیدا کردن periodDetails - برای ماهانه باید همه روزهای آن ماه را جمع کنیم
+      let periodDetails = null;
+      if (monthsDiff > 1) {
+        // برای ماهانه: باید همه periodDetails هایی که با این ماه شروع می‌شوند را جمع کنیم
+        const monthPrefix = timePeriod; // مثلاً "1404/08"
+        const aggregatedDetails = {
+          period: monthPrefix,
+          assignedRecords: [],
+          assignmentByDay: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, '11+': 0 },
+          leftoverFromPrevious: 0
+        };
+        
+        for (const [key, details] of periodDetailsMap.entries()) {
+          if (key.startsWith(monthPrefix) || key.startsWith(monthPrefix.replace(/\//g, '-'))) {
+            aggregatedDetails.assignedRecords.push(...details.assignedRecords);
+            for (const [day, count] of Object.entries(details.assignmentByDay)) {
+              aggregatedDetails.assignmentByDay[day] = (aggregatedDetails.assignmentByDay[day] || 0) + count;
+            }
+            aggregatedDetails.leftoverFromPrevious += details.leftoverFromPrevious;
+          }
+        }
+        
+        if (aggregatedDetails.assignedRecords.length > 0) {
+          periodDetails = aggregatedDetails;
+        }
+      } else {
+        // برای روزانه: پیدا کردن periodDetails به صورت مستقیم
+        periodDetails = periodDetailsMap.get(timePeriod) || periodDetailsMap.get(timePeriod.replace(/\//g, '-'));
+      }
       
       const totalRequests = parseInt(row.total_requests) || 0;
       const totalAssignments = parseInt(row.total_assignments) || 0;
@@ -5564,19 +5592,34 @@ async function getAssignmentStatistics(req, res) {
     });
     
     // 5.7. محاسبه مقایسه برای هر نوع خودرو (به تفکیک company, personal, total)
+    // برای کارت‌های نوع خودرو، باید تعداد اعلام‌بارها را بشماریم، نه تعداد مقاصد
+    // پس یک query جداگانه می‌نویسیم که بر اساس vehicle_type و assignment_type گروه‌بندی کند
+    const vehicleTypeSummaryQuery = `
+      SELECT 
+        COALESCE(fa.vehicle_type, 'نامشخص') as vehicle_type,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as company_count,
+        COUNT(DISTINCT CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN fa.id END) as personal_count,
+        COUNT(DISTINCT fa.id) as total_count
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${dateFilter}
+        ${lineTypeFilter}
+        ${finalizedCondition}
+      GROUP BY fa.vehicle_type
+    `;
+    
+    const vehicleTypeSummaryResult = await pool.query(vehicleTypeSummaryQuery, dateParams);
+    
     const currentByVehicleTypeCompany = {};
     const currentByVehicleTypePersonal = {};
     const currentByVehicleTypeTotal = {};
     
-    byVehicleType.forEach(item => {
-      const vt = item.vehicleType;
-      if (!currentByVehicleTypeCompany[vt]) currentByVehicleTypeCompany[vt] = 0;
-      if (!currentByVehicleTypePersonal[vt]) currentByVehicleTypePersonal[vt] = 0;
-      if (!currentByVehicleTypeTotal[vt]) currentByVehicleTypeTotal[vt] = 0;
-      
-      currentByVehicleTypeCompany[vt] += item.companyCount;
-      currentByVehicleTypePersonal[vt] += item.personalCount;
-      currentByVehicleTypeTotal[vt] += item.totalCount;
+    vehicleTypeSummaryResult.rows.forEach(row => {
+      const vt = row.vehicle_type || 'نامشخص';
+      currentByVehicleTypeCompany[vt] = parseInt(row.company_count) || 0;
+      currentByVehicleTypePersonal[vt] = parseInt(row.personal_count) || 0;
+      currentByVehicleTypeTotal[vt] = parseInt(row.total_count) || 0;
     });
     
     // محاسبه آمار ماه قبل و سال قبل برای company و personal

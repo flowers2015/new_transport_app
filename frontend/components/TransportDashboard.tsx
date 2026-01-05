@@ -456,6 +456,7 @@ const LineRow: React.FC<{
     timeRange: 'day' | 'month' | 'year';
 }> = ({ title, stats, timeRange }) => {
     const [zoomChart, setZoomChart] = useState<{ type: 'line' | 'bar' | 'pie' | null; data: any; data2?: any }>({ type: null, data: null });
+    const [dailySummaryPage, setDailySummaryPage] = useState(1);
     // Debug: Log stats received
     React.useEffect(() => {
         console.log(`📈 [LineRow:${title}] Stats:`, stats, 'Length:', stats?.length);
@@ -948,15 +949,49 @@ const LineRow: React.FC<{
                 </div>
             </div>
 
-            {/* Statistics Summary Table - Daily or Monthly based on timeRange */}
-            {chartData.length > 0 && (
+            {/* Statistics Summary Table - Always Daily with Pagination (31 rows per page) */}
+            {chartData.length > 0 && (() => {
+                // فیلتر کردن فقط داده‌های روزانه (بازه زمانی که به فرمت YYYY/MM/DD است)
+                const dailyData = chartData.filter(stat => {
+                    const period = stat.timePeriod || '';
+                    // اگر بازه زمانی به فرمت YYYY/MM/DD باشد (10 کاراکتر)، روزانه است
+                    return period.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(period);
+                });
+                
+                if (dailyData.length === 0) return null;
+                
+                const dailySummaryPageSize = 31; // 31 روز = یک ماه
+                const totalDailyPages = Math.ceil(dailyData.length / dailySummaryPageSize);
+                const startDailyIndex = (dailySummaryPage - 1) * dailySummaryPageSize;
+                const endDailyIndex = startDailyIndex + dailySummaryPageSize;
+                const paginatedDailyData = dailyData.slice(startDailyIndex, endDailyIndex);
+                
+                return (
                 <div className="bg-slate-50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                        <h3 className="text-base font-semibold text-slate-700">
-                            {timeRange === 'day' ? 'خلاصه آمار (روزانه)' : timeRange === 'month' ? 'خلاصه آمار (ماهانه)' : 'خلاصه آمار (سالانه)'}
-                        </h3>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold text-slate-700">خلاصه آمار (روزانه)</h3>
+                        {totalDailyPages > 1 && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setDailySummaryPage(p => Math.max(1, p - 1))}
+                                    disabled={dailySummaryPage === 1}
+                                    className="px-3 py-1 text-sm border border-slate-300 rounded-md hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    قبلی
+                                </button>
+                                <span className="text-sm text-slate-600">
+                                    صفحه {dailySummaryPage} از {totalDailyPages}
+                                </span>
+                                <button
+                                    onClick={() => setDailySummaryPage(p => Math.min(totalDailyPages, p + 1))}
+                                    disabled={dailySummaryPage === totalDailyPages}
+                                    className="px-3 py-1 text-sm border border-slate-300 rounded-md hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    بعدی
+                                </button>
+                            </div>
+                        )}
                     </div>
-                    {(
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
@@ -976,7 +1011,7 @@ const LineRow: React.FC<{
                                 </tr>
                             </thead>
                             <tbody>
-                                {chartData.map((stat, idx) => {
+                                {paginatedDailyData.map((stat, idx) => {
                                     const day1Percent = stat.assignmentPercentagesByDay?.['0'] || 0; // یک روز = همان روز (day 0)
                                     const day2Percent = stat.assignmentPercentagesByDay?.['1'] || 0; // دو روز = یک روز بعد (day 1)
                                     const day3Percent = stat.assignmentPercentagesByDay?.['2'] || 0; // سه روز = دو روز بعد (day 2)
@@ -1134,6 +1169,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     const [vehicleTypePage, setVehicleTypePage] = useState(1);
     const [vehicleTypeSearch, setVehicleTypeSearch] = useState('');
     const [monthlySummaryPage, setMonthlySummaryPage] = useState(1);
+    const [dailySummaryPage, setDailySummaryPage] = useState(1);
     const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics'>('daily');
     const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics'>>(new Set(['daily']));
     const [dailyStats, setDailyStats] = useState<{
@@ -1947,7 +1983,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
 
                             {/* Vehicle Type Statistics Table */}
                             {assignmentStatistics && assignmentStatistics.byVehicleType && assignmentStatistics.byVehicleType.length > 0 && (() => {
-                                const vehicleTypePageSize = 20;
+                                const vehicleTypePageSize = 15;
                                 
                                 const filteredVehicleTypes = assignmentStatistics.byVehicleType.filter(item =>
                                     !vehicleTypeSearch || item.city.toLowerCase().includes(vehicleTypeSearch.toLowerCase())
