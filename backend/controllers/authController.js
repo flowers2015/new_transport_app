@@ -12,18 +12,8 @@ async function login(req, res) {
   try {
     // ابتدا کاربر را بدون join بگیریم (ساده‌تر و سریع‌تر)
     // فقط ستون‌های مورد نیاز را بگیریم برای بهبود عملکرد
-    // توجه: branch_id ممکن است وجود نداشته باشد، پس از branch_city استفاده می‌کنیم
-    const { rows } = await pool.query(`
-      SELECT 
-        id, username, password_hash, role, branch_city, 
-        full_name, name, email, 
-        COALESCE(failed_login_attempts, 0) as failed_login_attempts,
-        account_locked_until,
-        password_changed_at,
-        created_at
-      FROM users 
-      WHERE username = $1
-    `, [username]);
+    // استفاده از * برای اطمینان از دریافت همه ستون‌ها (branch_id یا branch_city)
+    const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     const user = rows[0];
 
     if (!user) {
@@ -92,9 +82,11 @@ async function login(req, res) {
       );
     }
 
-    // گرفتن branch name از branch_city
+    // گرفتن branch name - پشتیبانی از branch_id و branch_city
     let branchCityValue = user.branch_city || null;
-    if (user.branch_city) {
+    const branchId = user.branch_id || null;
+    
+    if (branchId || user.branch_city) {
       try {
         // بررسی اینکه آیا جدول branches وجود دارد
         const branchesCheck = await pool.query(`
@@ -107,13 +99,23 @@ async function login(req, res) {
         const branchesTableExists = branchesCheck.rows[0]?.exists || false;
         
         if (branchesTableExists) {
-          // اگر branch_city یک UUID است، سعی می‌کنیم از branches table بگیریم
-          const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_city]);
-          if (branchResult.rows.length > 0) {
-            branchCityValue = branchResult.rows[0].name;
-          } else {
-            // اگر پیدا نشد، احتمالاً branch_city خودش نام شهر است
-            branchCityValue = user.branch_city;
+          // اول سعی می‌کنیم از branch_id استفاده کنیم
+          if (branchId) {
+            const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchId]);
+            if (branchResult.rows.length > 0) {
+              branchCityValue = branchResult.rows[0].name;
+            }
+          }
+          
+          // اگر branch_id پیدا نشد یا وجود نداشت، از branch_city استفاده می‌کنیم
+          if (!branchCityValue && user.branch_city) {
+            const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_city]);
+            if (branchResult.rows.length > 0) {
+              branchCityValue = branchResult.rows[0].name;
+            } else {
+              // اگر پیدا نشد، احتمالاً branch_city خودش نام شهر است
+              branchCityValue = user.branch_city;
+            }
           }
         }
       } catch (branchError) {
@@ -142,7 +144,7 @@ async function login(req, res) {
       userId: user.id,
       username: user.username,
       role: user.role,
-      employeeId: user.branch_city || null, 
+      employeeId: user.branch_id || user.branch_city || null, 
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }); // 7 روز اعتبار
@@ -154,7 +156,7 @@ async function login(req, res) {
         id: user.id,
         username: user.username,
         role: user.role,
-        employeeId: user.branch_city || null,
+        employeeId: user.branch_id || user.branch_city || null,
         fullName: user.full_name || user.name || null,
         email: user.email || null,
         branchCity: branchCityValue
