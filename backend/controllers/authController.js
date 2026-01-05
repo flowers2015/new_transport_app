@@ -82,46 +82,24 @@ async function login(req, res) {
       );
     }
 
-    // گرفتن branch name - پشتیبانی از branch_id و branch_city
+    // گرفتن branch name - بهینه‌سازی شده برای سرعت بیشتر
+    // فقط اگر branch_id وجود دارد و branch_city خالی است، query اضافی می‌زنیم
     let branchCityValue = user.branch_city || null;
     const branchId = user.branch_id || null;
     
-    if (branchId || user.branch_city) {
+    // فقط در صورت نیاز query اضافی می‌زنیم (بهینه‌سازی سرعت)
+    if (branchId && !user.branch_city) {
       try {
-        // بررسی اینکه آیا جدول branches وجود دارد
-        const branchesCheck = await pool.query(`
-          SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = 'branches'
-          )
-        `);
-        const branchesTableExists = branchesCheck.rows[0]?.exists || false;
-        
-        if (branchesTableExists) {
-          // اول سعی می‌کنیم از branch_id استفاده کنیم
-          if (branchId) {
-            const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchId]);
-            if (branchResult.rows.length > 0) {
-              branchCityValue = branchResult.rows[0].name;
-            }
-          }
-          
-          // اگر branch_id پیدا نشد یا وجود نداشت، از branch_city استفاده می‌کنیم
-          if (!branchCityValue && user.branch_city) {
-            const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [user.branch_city]);
-            if (branchResult.rows.length > 0) {
-              branchCityValue = branchResult.rows[0].name;
-            } else {
-              // اگر پیدا نشد، احتمالاً branch_city خودش نام شهر است
-              branchCityValue = user.branch_city;
-            }
-          }
+        // فقط یک query ساده برای گرفتن نام branch
+        const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1 LIMIT 1', [branchId]);
+        if (branchResult.rows.length > 0) {
+          branchCityValue = branchResult.rows[0].name;
+        } else {
+          branchCityValue = branchId; // fallback
         }
       } catch (branchError) {
-        console.warn('⚠️ [Login] Could not fetch branch name:', branchError.message);
-        // اگر خطا رخ داد، از مقدار اصلی استفاده کن
-        branchCityValue = user.branch_city || null;
+        // اگر خطا رخ داد، از branch_id استفاده می‌کنیم
+        branchCityValue = branchId;
       }
     }
 
@@ -157,7 +135,7 @@ async function login(req, res) {
         username: user.username,
         role: user.role,
         employeeId: user.branch_id || user.branch_city || null,
-        fullName: user.full_name || user.name || null,
+        fullName: (user.full_name || user.name || null),
         email: user.email || null,
         branchCity: branchCityValue
       },

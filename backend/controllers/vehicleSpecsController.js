@@ -11,9 +11,12 @@ async function getAllVehicleSpecs(req, res) {
   try {
     const { category, brand, model, isActive } = req.query;
     
+    const { vehicleType } = req.query;
+    
     let query = `
       SELECT 
         id, 
+        vehicle_type AS "vehicleType",
         vehicle_category AS "vehicleCategory",
         brand,
         model,
@@ -34,6 +37,10 @@ async function getAllVehicleSpecs(req, res) {
     const params = [];
     let paramIndex = 1;
     
+    if (vehicleType) {
+      query += ` AND vehicle_type = $${paramIndex++}`;
+      params.push(vehicleType);
+    }
     if (category) {
       query += ` AND vehicle_category = $${paramIndex++}`;
       params.push(category);
@@ -51,7 +58,7 @@ async function getAllVehicleSpecs(req, res) {
       params.push(isActive === 'true');
     }
     
-    query += ` ORDER BY vehicle_category, brand, model, tip`;
+    query += ` ORDER BY vehicle_type, vehicle_category, brand, model, tip`;
     
     const { rows } = await pool.query(query, params);
     res.json(rows);
@@ -61,13 +68,13 @@ async function getAllVehicleSpecs(req, res) {
   }
 }
 
-// دریافت لیست برندها (یونیک)
-async function getBrands(req, res) {
+// دریافت لیست انواع خودرو (vehicle_type)
+async function getVehicleTypes(req, res) {
   try {
     const { category } = req.query;
     
     let query = `
-      SELECT DISTINCT brand 
+      SELECT DISTINCT vehicle_type AS "vehicleType"
       FROM vehicle_specifications 
       WHERE is_active = true
     `;
@@ -75,6 +82,38 @@ async function getBrands(req, res) {
     
     if (category) {
       query += ` AND vehicle_category = $1`;
+      params.push(category);
+    }
+    
+    query += ` ORDER BY vehicle_type`;
+    
+    const { rows } = await pool.query(query, params);
+    res.json(rows.map(r => r.vehicleType));
+  } catch (error) {
+    console.error('Error fetching vehicle types:', error);
+    res.status(500).json({ message: 'خطا در دریافت انواع خودرو' });
+  }
+}
+
+// دریافت لیست برندها (یونیک)
+async function getBrands(req, res) {
+  try {
+    const { category, vehicleType } = req.query;
+    
+    let query = `
+      SELECT DISTINCT brand 
+      FROM vehicle_specifications 
+      WHERE is_active = true
+    `;
+    const params = [];
+    let paramIndex = 1;
+    
+    if (vehicleType) {
+      query += ` AND vehicle_type = $${paramIndex++}`;
+      params.push(vehicleType);
+    }
+    if (category) {
+      query += ` AND vehicle_category = $${paramIndex++}`;
       params.push(category);
     }
     
@@ -91,7 +130,7 @@ async function getBrands(req, res) {
 // دریافت مدل‌های یک برند
 async function getModels(req, res) {
   try {
-    const { category, brand } = req.query;
+    const { category, brand, vehicleType } = req.query;
     
     if (!brand) {
       return res.status(400).json({ message: 'برند الزامی است' });
@@ -103,9 +142,14 @@ async function getModels(req, res) {
       WHERE brand = $1 AND is_active = true
     `;
     const params = [brand];
+    let paramIndex = 2;
     
+    if (vehicleType) {
+      query += ` AND vehicle_type = $${paramIndex++}`;
+      params.push(vehicleType);
+    }
     if (category) {
-      query += ` AND vehicle_category = $2`;
+      query += ` AND vehicle_category = $${paramIndex++}`;
       params.push(category);
     }
     
@@ -122,7 +166,7 @@ async function getModels(req, res) {
 // دریافت تیپ‌های یک مدل با مشخصات کامل
 async function getTips(req, res) {
   try {
-    const { category, brand, model } = req.query;
+    const { category, brand, model, vehicleType } = req.query;
     
     if (!brand || !model) {
       return res.status(400).json({ message: 'برند و مدل الزامی است' });
@@ -131,6 +175,7 @@ async function getTips(req, res) {
     let query = `
       SELECT 
         id,
+        vehicle_type AS "vehicleType",
         tip,
         fuel_type AS "fuelType",
         cylinder_count AS "cylinderCount",
@@ -143,9 +188,14 @@ async function getTips(req, res) {
       WHERE brand = $1 AND model = $2 AND is_active = true
     `;
     const params = [brand, model];
+    let paramIndex = 3;
     
+    if (vehicleType) {
+      query += ` AND vehicle_type = $${paramIndex++}`;
+      params.push(vehicleType);
+    }
     if (category) {
-      query += ` AND vehicle_category = $3`;
+      query += ` AND vehicle_category = $${paramIndex++}`;
       params.push(category);
     }
     
@@ -167,6 +217,7 @@ async function getVehicleSpecById(req, res) {
     const { rows } = await pool.query(`
       SELECT 
         id, 
+        vehicle_type AS "vehicleType",
         vehicle_category AS "vehicleCategory",
         brand,
         model,
@@ -198,6 +249,7 @@ async function getVehicleSpecById(req, res) {
 async function createVehicleSpec(req, res) {
   try {
     const {
+      vehicleType,
       vehicleCategory,
       brand,
       model,
@@ -211,18 +263,19 @@ async function createVehicleSpec(req, res) {
       description
     } = req.body;
     
-    if (!vehicleCategory || !brand || !model) {
-      return res.status(400).json({ message: 'دسته‌بندی، برند و مدل الزامی است' });
+    if (!vehicleType || !vehicleCategory || !brand || !model) {
+      return res.status(400).json({ message: 'نوع خودرو، دسته‌بندی، برند و مدل الزامی است' });
     }
     
     const id = crypto.randomUUID();
     
     const { rows } = await pool.query(`
       INSERT INTO vehicle_specifications 
-      (id, vehicle_category, brand, model, tip, fuel_type, cylinder_count, axle_count, wheel_count, capacity, engine_type, description)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      (id, vehicle_type, vehicle_category, brand, model, tip, fuel_type, cylinder_count, axle_count, wheel_count, capacity, engine_type, description)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING 
         id, 
+        vehicle_type AS "vehicleType",
         vehicle_category AS "vehicleCategory",
         brand,
         model,
@@ -235,12 +288,12 @@ async function createVehicleSpec(req, res) {
         engine_type AS "engineType",
         description,
         is_active AS "isActive"
-    `, [id, vehicleCategory, brand, model, tip || null, fuelType || null, cylinderCount || null, axleCount || null, wheelCount || null, capacity || null, engineType || null, description || null]);
+    `, [id, vehicleType, vehicleCategory, brand, model, tip || null, fuelType || null, cylinderCount || null, axleCount || null, wheelCount || null, capacity || null, engineType || null, description || null]);
     
     res.status(201).json(rows[0]);
   } catch (error) {
     if (error.code === '23505') { // unique violation
-      return res.status(400).json({ message: 'این ترکیب دسته‌بندی/برند/مدل/تیپ قبلاً ثبت شده است' });
+      return res.status(400).json({ message: 'این ترکیب نوع/دسته‌بندی/برند/مدل/تیپ قبلاً ثبت شده است' });
     }
     console.error('Error creating vehicle spec:', error);
     res.status(500).json({ message: 'خطا در ایجاد مشخصات' });
@@ -252,6 +305,7 @@ async function updateVehicleSpec(req, res) {
   try {
     const { id } = req.params;
     const {
+      vehicleType,
       vehicleCategory,
       brand,
       model,
@@ -268,22 +322,24 @@ async function updateVehicleSpec(req, res) {
     
     const { rows } = await pool.query(`
       UPDATE vehicle_specifications SET
-        vehicle_category = COALESCE($2, vehicle_category),
-        brand = COALESCE($3, brand),
-        model = COALESCE($4, model),
-        tip = $5,
-        fuel_type = $6,
-        cylinder_count = $7,
-        axle_count = $8,
-        wheel_count = $9,
-        capacity = $10,
-        engine_type = $11,
-        description = $12,
-        is_active = COALESCE($13, is_active),
+        vehicle_type = COALESCE($2, vehicle_type),
+        vehicle_category = COALESCE($3, vehicle_category),
+        brand = COALESCE($4, brand),
+        model = COALESCE($5, model),
+        tip = $6,
+        fuel_type = $7,
+        cylinder_count = $8,
+        axle_count = $9,
+        wheel_count = $10,
+        capacity = $11,
+        engine_type = $12,
+        description = $13,
+        is_active = COALESCE($14, is_active),
         updated_at = NOW()
       WHERE id = $1
       RETURNING 
         id, 
+        vehicle_type AS "vehicleType",
         vehicle_category AS "vehicleCategory",
         brand,
         model,
@@ -296,7 +352,7 @@ async function updateVehicleSpec(req, res) {
         engine_type AS "engineType",
         description,
         is_active AS "isActive"
-    `, [id, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, isActive]);
+    `, [id, vehicleType, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, isActive]);
     
     if (rows.length === 0) {
       return res.status(404).json({ message: 'مشخصات یافت نشد' });
@@ -305,7 +361,7 @@ async function updateVehicleSpec(req, res) {
     res.json(rows[0]);
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(400).json({ message: 'این ترکیب دسته‌بندی/برند/مدل/تیپ قبلاً ثبت شده است' });
+      return res.status(400).json({ message: 'این ترکیب نوع/دسته‌بندی/برند/مدل/تیپ قبلاً ثبت شده است' });
     }
     console.error('Error updating vehicle spec:', error);
     res.status(500).json({ message: 'خطا در ویرایش مشخصات' });
@@ -348,6 +404,7 @@ async function getCategories(req, res) {
 
 module.exports = {
   getAllVehicleSpecs,
+  getVehicleTypes,
   getBrands,
   getModels,
   getTips,

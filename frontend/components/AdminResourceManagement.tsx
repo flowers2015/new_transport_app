@@ -57,6 +57,7 @@ interface CompanyVehicle {
   serialNumber?: string;
   model: string;
   brand?: string;
+  vehicleType?: string;
   type?: string;
   branchId?: string;
   branchName?: string;
@@ -959,6 +960,7 @@ const CompanyVehicleForm: React.FC<{
     plateLetter: initialData?.plateNumber?.letter || '',
     platePart2: initialData?.plateNumber?.part2 || '',
     plateCityCode: initialData?.plateNumber?.cityCode || '',
+    vehicleType: initialData?.vehicleType || '',
     brand: initialData?.brand || '',
     model: initialData?.model || '',
     type: initialData?.type || '',
@@ -982,6 +984,116 @@ const CompanyVehicleForm: React.FC<{
     fuelType: initialData?.fuelType || '',
     status: initialData?.status || 'Active',
   });
+
+  // States for API data
+  const [apiVehicleTypes, setApiVehicleTypes] = useState<string[]>([]);
+  const [apiBrands, setApiBrands] = useState<string[]>([]);
+  const [apiModels, setApiModels] = useState<string[]>([]);
+  const [apiTips, setApiTips] = useState<any[]>([]);
+
+  // Fetch vehicle types from API
+  useEffect(() => {
+    const fetchVehicleTypes = async () => {
+      if (!form.type) {
+        setApiVehicleTypes([]);
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(getApiUrl(`vehicle-specs/vehicle-types?category=${encodeURIComponent(form.type)}`), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setApiVehicleTypes(data);
+        }
+      } catch (err) {
+        console.error('Error fetching vehicle types:', err);
+      }
+    };
+    fetchVehicleTypes();
+  }, [form.type]);
+
+  // Fetch brands from API
+  useEffect(() => {
+    const fetchBrands = async () => {
+      if (!form.type) {
+        setApiBrands([]);
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        let url = `vehicle-specs/brands?category=${encodeURIComponent(form.type)}`;
+        if (form.vehicleType) {
+          url += `&vehicleType=${encodeURIComponent(form.vehicleType)}`;
+        }
+        const res = await fetch(getApiUrl(url), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setApiBrands(data);
+        }
+      } catch (err) {
+        console.error('Error fetching brands:', err);
+      }
+    };
+    fetchBrands();
+  }, [form.type, form.vehicleType]);
+
+  // Fetch models from API
+  useEffect(() => {
+    const fetchModels = async () => {
+      if (!form.type || !form.brand) {
+        setApiModels([]);
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        let url = `vehicle-specs/models?category=${encodeURIComponent(form.type)}&brand=${encodeURIComponent(form.brand)}`;
+        if (form.vehicleType) {
+          url += `&vehicleType=${encodeURIComponent(form.vehicleType)}`;
+        }
+        const res = await fetch(getApiUrl(url), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setApiModels(data);
+        }
+      } catch (err) {
+        console.error('Error fetching models:', err);
+      }
+    };
+    fetchModels();
+  }, [form.type, form.brand, form.vehicleType]);
+
+  // Fetch tips from API
+  useEffect(() => {
+    const fetchTips = async () => {
+      if (!form.type || !form.brand || !form.model) {
+        setApiTips([]);
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        let url = `vehicle-specs/tips?category=${encodeURIComponent(form.type)}&brand=${encodeURIComponent(form.brand)}&model=${encodeURIComponent(form.model)}`;
+        if (form.vehicleType) {
+          url += `&vehicleType=${encodeURIComponent(form.vehicleType)}`;
+        }
+        const res = await fetch(getApiUrl(url), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setApiTips(data);
+        }
+      } catch (err) {
+        console.error('Error fetching tips:', err);
+      }
+    };
+    fetchTips();
+  }, [form.type, form.brand, form.model, form.vehicleType]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1055,7 +1167,21 @@ const CompanyVehicleForm: React.FC<{
       {/* بخش ۲: شناسه و مدل خودرو */}
       <div className={sectionClass}>
         <h3 className="font-bold text-gray-700 mb-3 border-b pb-2">۲. شناسه و مدل خودرو</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className={labelClass}>نوع خودرو</label>
+            <input 
+              type="text" 
+              value={form.vehicleType} 
+              onChange={e => setForm({...form, vehicleType: e.target.value, brand: '', model: '', vehicleTip: ''})} 
+              className={inputClass} 
+              placeholder="انتخاب یا تایپ کنید..."
+              list="vehicle-type-list"
+            />
+            <datalist id="vehicle-type-list">
+              {apiVehicleTypes.map(vt => <option key={vt} value={vt} />)}
+            </datalist>
+          </div>
           <div>
             <label className={labelClass}>برند *</label>
             <input 
@@ -1065,9 +1191,10 @@ const CompanyVehicleForm: React.FC<{
               className={inputClass} 
               placeholder="انتخاب یا تایپ کنید..."
               list="brand-list"
+              required
             />
             <datalist id="brand-list">
-              {getBrandsForType(form.type).map(b => <option key={b} value={b} />)}
+              {(apiBrands.length > 0 ? apiBrands : getBrandsForType(form.type)).map(b => <option key={b} value={b} />)}
             </datalist>
           </div>
           <div>

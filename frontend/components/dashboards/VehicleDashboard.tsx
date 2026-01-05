@@ -529,6 +529,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
     
     // States برای دیالوگ مشخصات و داده‌های API
     const [showSpecsDialog, setShowSpecsDialog] = useState(false);
+    const [apiVehicleTypes, setApiVehicleTypes] = useState<string[]>([]);
     const [apiBrands, setApiBrands] = useState<string[]>([]);
     const [apiModels, setApiModels] = useState<string[]>([]);
     const [apiTips, setApiTips] = useState<any[]>([]);
@@ -537,6 +538,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         holdingCompany: '' as 'mihan' | 'other' | '',
         mihanCompany: '',
         vehicleCategory: '' as VehicleCategory | '',
+        vehicleType: '',
         brand: '',
         model: '',
         vehicleTip: '',
@@ -560,16 +562,15 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
     };
     const [formState, setFormState] = useState(initialFormState);
 
-    // --- دریافت برندها از API بر اساس دسته‌بندی ---
+    // --- دریافت انواع خودرو از API بر اساس دسته‌بندی ---
     useEffect(() => {
-        const fetchBrands = async () => {
+        const fetchVehicleTypes = async () => {
             if (!formState.vehicleCategory) {
-                setApiBrands([]);
+                setApiVehicleTypes([]);
                 return;
             }
             try {
                 const token = localStorage.getItem('token');
-                // تبدیل VehicleCategory به نام فارسی برای API
                 const categoryMap: Record<string, string> = {
                     [VehicleCategory.Heavy]: 'خودرو سنگین',
                     [VehicleCategory.Medium]: 'خودرو نیمه سنگین',
@@ -578,7 +579,42 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                     [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
                 };
                 const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
-                const res = await fetch(getApiUrl(`vehicle-specs/brands?category=${encodeURIComponent(categoryName)}`), {
+                const res = await fetch(getApiUrl(`vehicle-specs/vehicle-types?category=${encodeURIComponent(categoryName)}`), {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setApiVehicleTypes(data);
+                }
+            } catch (err) {
+                console.error('Error fetching vehicle types:', err);
+            }
+        };
+        fetchVehicleTypes();
+    }, [formState.vehicleCategory]);
+
+    // --- دریافت برندها از API بر اساس دسته‌بندی و نوع خودرو ---
+    useEffect(() => {
+        const fetchBrands = async () => {
+            if (!formState.vehicleCategory) {
+                setApiBrands([]);
+                return;
+            }
+            try {
+                const token = localStorage.getItem('token');
+                const categoryMap: Record<string, string> = {
+                    [VehicleCategory.Heavy]: 'خودرو سنگین',
+                    [VehicleCategory.Medium]: 'خودرو نیمه سنگین',
+                    [VehicleCategory.Car]: 'سواری',
+                    [VehicleCategory.Pickup]: 'وانت',
+                    [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+                };
+                const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
+                let url = `vehicle-specs/brands?category=${encodeURIComponent(categoryName)}`;
+                if (formState.vehicleType) {
+                    url += `&vehicleType=${encodeURIComponent(formState.vehicleType)}`;
+                }
+                const res = await fetch(getApiUrl(url), {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -590,9 +626,9 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             }
         };
         fetchBrands();
-    }, [formState.vehicleCategory]);
+    }, [formState.vehicleCategory, formState.vehicleType]);
 
-    // --- دریافت مدل‌ها از API بر اساس برند ---
+    // --- دریافت مدل‌ها از API بر اساس برند و نوع خودرو ---
     useEffect(() => {
         const fetchModels = async () => {
             if (!formState.vehicleCategory || !formState.brand) {
@@ -609,7 +645,11 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                     [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
                 };
                 const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
-                const res = await fetch(getApiUrl(`vehicle-specs/models?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}`), {
+                let url = `vehicle-specs/models?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}`;
+                if (formState.vehicleType) {
+                    url += `&vehicleType=${encodeURIComponent(formState.vehicleType)}`;
+                }
+                const res = await fetch(getApiUrl(url), {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -621,7 +661,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             }
         };
         fetchModels();
-    }, [formState.vehicleCategory, formState.brand]);
+    }, [formState.vehicleCategory, formState.brand, formState.vehicleType]);
 
     // --- دریافت تیپ‌ها و مشخصات فنی از API ---
     useEffect(() => {
@@ -640,7 +680,11 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                     [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
                 };
                 const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
-                const res = await fetch(getApiUrl(`vehicle-specs/tips?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}&model=${encodeURIComponent(formState.model)}`), {
+                let url = `vehicle-specs/tips?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}&model=${encodeURIComponent(formState.model)}`;
+                if (formState.vehicleType) {
+                    url += `&vehicleType=${encodeURIComponent(formState.vehicleType)}`;
+                }
+                const res = await fetch(getApiUrl(url), {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -652,7 +696,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             }
         };
         fetchTips();
-    }, [formState.vehicleCategory, formState.brand, formState.model]);
+    }, [formState.vehicleCategory, formState.brand, formState.model, formState.vehicleType]);
 
     // --- پر کردن خودکار مشخصات فنی با انتخاب تیپ از API ---
     useEffect(() => {
@@ -709,6 +753,11 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             branchId: prev.branchId,
             vehicleCategory: newCategory,
         }));
+    };
+
+    const handleVehicleTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newVehicleType = e.target.value;
+        setFormState(prev => ({ ...prev, vehicleType: newVehicleType, brand: '', model: '', vehicleTip: '' }));
     };
 
     const handleBrandChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -804,6 +853,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
             holdingCompany: (v.holdingCompany as any) || '',
             mihanCompany: (v.mihanCompany as any) || '',
             vehicleCategory: (v.vehicleCategory as any) || '',
+            vehicleType: (v as any).vehicleType || '',
             brand: v.brand || '',
             model: modelName,
             vehicleTip: tip,
@@ -936,8 +986,15 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
 
                             <fieldset className="p-4 border border-slate-200 rounded-lg">
                                 <legend className="px-2 font-semibold text-slate-700">۳. شناسه و مدل خودرو</legend>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                     <div>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700">نوع خودرو</label>
+                                        <input list="vehicle-type-list" name="vehicleType" value={formState.vehicleType} onChange={handleVehicleTypeChange} className="mt-1 input-style" placeholder="انتخاب یا تایپ کنید..." />
+                                        <datalist id="vehicle-type-list">
+                                            {apiVehicleTypes.map(vt => <option key={vt} value={vt} />)}
+                                        </datalist>
+                                    </div>
+                                    <div>
                                         <label className="block text-sm font-medium text-slate-700">برند <span className="text-red-500">*</span></label>
                                         <input list="brand-list" name="brand" value={formState.brand} onChange={handleBrandChange} className="mt-1 input-style" placeholder="انتخاب یا تایپ کنید..." required />
                                         <datalist id="brand-list">

@@ -95,6 +95,7 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
                                 onChange={(e) => setCurrentPassword(e.target.value)}
                                 className="w-full px-3 py-2 border rounded pr-10"
                                 required
+                                autoComplete="current-password"
                             />
                             <button
                                 type="button"
@@ -124,6 +125,7 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
                                 className="w-full px-3 py-2 border rounded pr-10"
                                 required
                                 minLength={6}
+                                autoComplete="new-password"
                             />
                             <button
                                 type="button"
@@ -154,6 +156,7 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
                                 className="w-full px-3 py-2 border rounded pr-10"
                                 required
                                 minLength={6}
+                                autoComplete="new-password"
                             />
                             <button
                                 type="button"

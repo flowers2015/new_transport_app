@@ -9,6 +9,7 @@ import { getApiUrl } from '../utils/apiConfig';
 // Types
 interface VehicleSpec {
   id: string;
+  vehicleType: string;
   vehicleCategory: string;
   brand: string;
   model: string;
@@ -39,6 +40,20 @@ const vehicleCategories = [
   'نیمه یدک (تانکر)'
 ];
 
+// انواع خودرو (vehicle_type)
+const vehicleTypes = [
+  'کشنده',
+  'ده چرخ',
+  'تریلی',
+  'کامیون',
+  'کامیونت',
+  'سواری',
+  'وانت',
+  'مینی‌بوس',
+  'اتوبوس',
+  'سایر'
+];
+
 const fuelTypes = ['بنزینی', 'گازوییلی', 'برقی', 'هیبریدی', 'گازی', 'دوگانه‌سوز'];
 
 const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose }) => {
@@ -52,9 +67,11 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
   // Filter states
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterBrand, setFilterBrand] = useState<string>('');
+  const [filterVehicleType, setFilterVehicleType] = useState<string>('');
   
   // Form states
   const [form, setForm] = useState({
+    vehicleType: '',
     vehicleCategory: 'خودرو سنگین',
     brand: '',
     model: '',
@@ -76,6 +93,7 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
       const token = localStorage.getItem('token');
       let url = getApiUrl('vehicle-specs');
       const params = new URLSearchParams();
+      if (filterVehicleType) params.append('vehicleType', filterVehicleType);
       if (filterCategory) params.append('category', filterCategory);
       if (filterBrand) params.append('brand', filterBrand);
       if (params.toString()) url += '?' + params.toString();
@@ -98,11 +116,12 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
     if (isOpen) {
       fetchSpecs();
     }
-  }, [isOpen, filterCategory, filterBrand]);
+  }, [isOpen, filterCategory, filterBrand, filterVehicleType]);
   
   // Reset form
   const resetForm = () => {
     setForm({
+      vehicleType: '',
       vehicleCategory: 'خودرو سنگین',
       brand: '',
       model: '',
@@ -123,6 +142,7 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
   const handleEdit = (spec: VehicleSpec) => {
     setEditingSpec(spec);
     setForm({
+      vehicleType: spec.vehicleType || '',
       vehicleCategory: spec.vehicleCategory,
       brand: spec.brand,
       model: spec.model,
@@ -142,8 +162,8 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!form.brand || !form.model) {
-      alert('برند و مدل الزامی است');
+    if (!form.vehicleType || !form.brand || !form.model) {
+      alert('نوع خودرو، برند و مدل الزامی است');
       return;
     }
     
@@ -155,6 +175,7 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
         : getApiUrl('vehicle-specs');
       
       const body = {
+        vehicleType: form.vehicleType.trim(),
         vehicleCategory: form.vehicleCategory,
         brand: form.brand.trim(),
         model: form.model.trim(),
@@ -249,6 +270,17 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
             
             {/* Filters */}
             <select
+              value={filterVehicleType}
+              onChange={e => setFilterVehicleType(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm"
+            >
+              <option value="">همه انواع</option>
+              {vehicleTypes.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            
+            <select
               value={filterCategory}
               onChange={e => setFilterCategory(e.target.value)}
               className="px-3 py-2 border rounded-lg text-sm"
@@ -280,7 +312,21 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Row 1 */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">نوع خودرو *</label>
+                    <select
+                      value={form.vehicleType}
+                      onChange={e => setForm({...form, vehicleType: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="">انتخاب کنید</option>
+                      {vehicleTypes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">دسته‌بندی *</label>
                     <select
@@ -451,6 +497,7 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
               <table className="w-full text-sm">
                 <thead className="bg-gray-100">
                   <tr>
+                    <th className="px-3 py-3 text-right font-medium text-gray-700">نوع خودرو</th>
                     <th className="px-3 py-3 text-right font-medium text-gray-700">دسته‌بندی</th>
                     <th className="px-3 py-3 text-right font-medium text-gray-700">برند</th>
                     <th className="px-3 py-3 text-right font-medium text-gray-700">مدل</th>
@@ -466,6 +513,11 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
                 <tbody className="divide-y">
                   {specs.map(spec => (
                     <tr key={spec.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                          {spec.vehicleType}
+                        </span>
+                      </td>
                       <td className="px-3 py-2">
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
                           {spec.vehicleCategory}

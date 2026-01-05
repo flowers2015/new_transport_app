@@ -7,6 +7,7 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/authMiddleware');
 const {
   getAllVehicleSpecs,
+  getVehicleTypes,
   getBrands,
   getModels,
   getTips,
@@ -19,6 +20,7 @@ const {
 
 // مسیرهای عمومی (برای انتخاب در فرم‌ها)
 router.get('/categories', authenticateToken, getCategories);
+router.get('/vehicle-types', authenticateToken, getVehicleTypes);
 router.get('/brands', authenticateToken, getBrands);
 router.get('/models', authenticateToken, getModels);
 router.get('/tips', authenticateToken, getTips);
