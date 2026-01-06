@@ -519,6 +519,9 @@ const vehicleDatabase: any = {
 };
 
 
+type SortField = 'plateNumber' | 'vehicleCode' | 'vehicleType' | 'brand' | 'model' | 'vehicleTip' | 'year' | 'status' | null;
+type SortDirection = 'asc' | 'desc';
+
 const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle, onUpdateVehicle }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
@@ -526,6 +529,8 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
     const [showFormDialog, setShowFormDialog] = useState(false);
     const [showSpecsDialog, setShowSpecsDialog] = useState(false);
     const [selectedSpec, setSelectedSpec] = useState<any>(null);
+    const [sortField, setSortField] = useState<SortField>(null);
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     
     const handleEdit = (v: Vehicle) => {
         setEditingVehicle(v);
@@ -575,19 +580,92 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         URL.revokeObjectURL(url);
     };
 
-    const filteredVehicles = useMemo(() => {
-        if (!searchTerm) return vehicles;
-        const lowercasedTerm = searchTerm.toLowerCase();
-        return vehicles.filter(v => {
-            const vehicleFullName = [v.brand, v.model].filter(Boolean).join(' ').toLowerCase();
-            return (
-                (v.plateNumber && formatPlateNumber(v.plateNumber).toLowerCase().includes(lowercasedTerm)) ||
-                (v.serialNumber && v.serialNumber.toLowerCase().includes(lowercasedTerm)) ||
-                (vehicleFullName.includes(lowercasedTerm)) ||
-                (v.ownerName && v.ownerName.toLowerCase().includes(lowercasedTerm))
-            );
-        });
-    }, [searchTerm, vehicles]);
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+    };
+
+    const filteredAndSortedVehicles = useMemo(() => {
+        let result = vehicles;
+        
+        // Filter
+        if (searchTerm) {
+            const lowercasedTerm = searchTerm.toLowerCase();
+            result = result.filter(v => {
+                const vehicleFullName = [v.brand, v.model].filter(Boolean).join(' ').toLowerCase();
+                return (
+                    (v.plateNumber && formatPlateNumber(v.plateNumber).toLowerCase().includes(lowercasedTerm)) ||
+                    (v.serialNumber && v.serialNumber.toLowerCase().includes(lowercasedTerm)) ||
+                    (vehicleFullName.includes(lowercasedTerm)) ||
+                    (v.ownerName && v.ownerName.toLowerCase().includes(lowercasedTerm))
+                );
+            });
+        }
+        
+        // Sort
+        if (sortField) {
+            result = [...result].sort((a, b) => {
+                let aVal: any;
+                let bVal: any;
+                
+                switch (sortField) {
+                    case 'plateNumber':
+                        aVal = a.plateNumber ? formatPlateNumber(a.plateNumber) : (a.serialNumber || '');
+                        bVal = b.plateNumber ? formatPlateNumber(b.plateNumber) : (b.serialNumber || '');
+                        break;
+                    case 'vehicleCode':
+                        aVal = (a as any).vehicleCode || '';
+                        bVal = (b as any).vehicleCode || '';
+                        break;
+                    case 'vehicleType':
+                        aVal = (a as any).vehicleType || '';
+                        bVal = (b as any).vehicleType || '';
+                        break;
+                    case 'brand':
+                        aVal = a.brand || '';
+                        bVal = b.brand || '';
+                        break;
+                    case 'model':
+                        aVal = a.model || '';
+                        bVal = b.model || '';
+                        break;
+                    case 'vehicleTip':
+                        aVal = (a as any).vehicleTip || '';
+                        bVal = (b as any).vehicleTip || '';
+                        break;
+                    case 'year':
+                        aVal = a.year || 0;
+                        bVal = b.year || 0;
+                        break;
+                    case 'status':
+                        aVal = a.status || '';
+                        bVal = b.status || '';
+                        break;
+                    default:
+                        return 0;
+                }
+                
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                
+                const aStr = String(aVal).toLowerCase();
+                const bStr = String(bVal).toLowerCase();
+                
+                if (sortDirection === 'asc') {
+                    return aStr.localeCompare(bStr, 'fa');
+                } else {
+                    return bStr.localeCompare(aStr, 'fa');
+                }
+            });
+        }
+        
+        return result;
+    }, [searchTerm, vehicles, sortField, sortDirection]);
     
     const handleToggleExpand = (vehicleId: string) => {
         setExpandedVehicleId(prevId => (prevId === vehicleId ? null : vehicleId));
@@ -646,19 +724,59 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                     <table className="w-full text-sm text-right text-gray-500">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
-                                <th className="px-4 py-3">پلاک/شماره شاسی</th>
-                                <th className="px-4 py-3">کد خودرو</th>
-                                <th className="px-4 py-3">نوع خودرو</th>
-                                <th className="px-4 py-3">برند</th>
-                                <th className="px-4 py-3">مدل اصلی</th>
-                                <th className="px-4 py-3">تیپ خودرو</th>
-                                <th className="px-4 py-3">سال ساخت</th>
-                                <th className="px-4 py-3">وضعیت</th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('plateNumber')}
+                                >
+                                    پلاک/شماره شاسی {sortField === 'plateNumber' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('vehicleCode')}
+                                >
+                                    کد خودرو {sortField === 'vehicleCode' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('vehicleType')}
+                                >
+                                    نوع خودرو {sortField === 'vehicleType' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('brand')}
+                                >
+                                    برند {sortField === 'brand' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('model')}
+                                >
+                                    مدل اصلی {sortField === 'model' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('vehicleTip')}
+                                >
+                                    تیپ خودرو {sortField === 'vehicleTip' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('year')}
+                                >
+                                    سال ساخت {sortField === 'year' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                                    onClick={() => handleSort('status')}
+                                >
+                                    وضعیت {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
                                 <th className="px-4 py-3">عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredVehicles.map(vehicle => (
+                            {filteredAndSortedVehicles.map(vehicle => (
                                 <React.Fragment key={vehicle.id}>
                                     <tr className="bg-white border-b hover:bg-gray-50">
                                         <td className="px-4 py-4 font-medium text-gray-900 font-mono">

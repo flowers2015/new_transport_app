@@ -24,7 +24,7 @@ async function addVehicleTypeColumn() {
       console.log('📝 [Migration] Adding vehicle_type column...');
       await client.query(`
         ALTER TABLE vehicle_specifications 
-        ADD COLUMN vehicle_type VARCHAR(100)
+        ADD COLUMN vehicle_type VARCHAR(200)
       `);
       console.log('✅ [Migration] vehicle_type column added successfully');
     } else {

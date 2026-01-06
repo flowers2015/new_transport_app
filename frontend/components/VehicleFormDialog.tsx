@@ -47,8 +47,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
   const [apiTips, setApiTips] = useState<any[]>([]);
   
   const initialFormState = {
-    holdingCompany: '' as 'mihan' | 'other' | '',
-    mihanCompany: '',
+    holdingCompany: 'mihan' as 'mihan' | 'other' | '', // Default to mihan
+    mihanCompany: 'پخش سراسری میهن', // Default to پخش سراسری میهن
     vehicleCategory: '' as VehicleCategory | '',
     vehicleType: '',
     brand: '',
