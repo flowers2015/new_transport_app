@@ -108,7 +108,7 @@ async function getAllVehicleSpecs(req, res) {
     try {
       const result = await pool.query(query, params);
       rows = result.rows;
-    } catch (queryError: any) {
+    } catch (queryError) {
       // اگر خطای ستون بود، از fallback استفاده کن
       if (queryError.code === '42703') {
         console.warn('⚠️ [getAllVehicleSpecs] Column error, using fallback query');
