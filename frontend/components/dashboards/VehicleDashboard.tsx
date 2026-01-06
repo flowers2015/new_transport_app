@@ -624,8 +624,16 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                         bVal = b.plateNumber ? formatPlateNumber(b.plateNumber) : (b.serialNumber || '');
                         break;
                     case 'vehicleCode':
-                        aVal = (a as any).vehicleCode || '';
-                        bVal = (b as any).vehicleCode || '';
+                        // Extract numeric part from vehicleCode for proper numeric sorting
+                        const extractNumber = (code: string): number => {
+                            if (!code) return 0;
+                            // Extract all digits from the code
+                            const match = code.match(/\d+/);
+                            return match ? parseInt(match[0], 10) : 0;
+                        };
+                        aVal = extractNumber((a as any).vehicleCode || '');
+                        bVal = extractNumber((b as any).vehicleCode || '');
+                        // For numeric sorting, we'll handle it in the comparison below
                         break;
                     case 'vehicleType':
                         aVal = (a as any).vehicleType || '';
@@ -655,10 +663,20 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                         return 0;
                 }
                 
+                // Handle numeric sorting (for vehicleCode, year, etc.)
+                if (sortField === 'vehicleCode' || sortField === 'year') {
+                    // Both should be numbers for these fields
+                    if (typeof aVal === 'number' && typeof bVal === 'number') {
+                        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+                    }
+                }
+                
+                // For other numeric fields
                 if (typeof aVal === 'number' && typeof bVal === 'number') {
                     return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
                 }
                 
+                // String comparison for text fields
                 const aStr = String(aVal).toLowerCase();
                 const bStr = String(bVal).toLowerCase();
                 
