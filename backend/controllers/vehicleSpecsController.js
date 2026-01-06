@@ -104,7 +104,71 @@ async function getAllVehicleSpecs(req, res) {
     
     query += ` ORDER BY vehicle_type, vehicle_category, brand, model, tip`;
     
-    const { rows } = await pool.query(query, params);
+    let rows;
+    try {
+      const result = await pool.query(query, params);
+      rows = result.rows;
+    } catch (queryError: any) {
+      // اگر خطای ستون بود، از fallback استفاده کن
+      if (queryError.code === '42703') {
+        console.warn('⚠️ [getAllVehicleSpecs] Column error, using fallback query');
+        // ساخت fallback query بدون ستون‌های جدید
+        let fallbackQuery = `
+          SELECT 
+            id, 
+            vehicle_type AS "vehicleType",
+            vehicle_category AS "vehicleCategory",
+            brand,
+            model,
+            tip,
+            fuel_type AS "fuelType",
+            cylinder_count AS "cylinderCount",
+            axle_count AS "axleCount",
+            wheel_count AS "wheelCount",
+            capacity,
+            engine_type AS "engineType",
+            description,
+            NULL AS "fuelConsumptionPercentage",
+            NULL AS "fuelPricePerLiter",
+            is_active AS "isActive",
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
+          FROM vehicle_specifications
+          WHERE 1=1
+        `;
+        const fallbackParams = [];
+        let fallbackParamIndex = 1;
+        
+        if (vehicleType) {
+          fallbackQuery += ` AND vehicle_type = $${fallbackParamIndex++}`;
+          fallbackParams.push(vehicleType);
+        }
+        if (category) {
+          fallbackQuery += ` AND vehicle_category = $${fallbackParamIndex++}`;
+          fallbackParams.push(category);
+        }
+        if (brand) {
+          fallbackQuery += ` AND brand = $${fallbackParamIndex++}`;
+          fallbackParams.push(brand);
+        }
+        if (model) {
+          fallbackQuery += ` AND model = $${fallbackParamIndex++}`;
+          fallbackParams.push(model);
+        }
+        if (isActive !== undefined) {
+          fallbackQuery += ` AND is_active = $${fallbackParamIndex++}`;
+          fallbackParams.push(isActive === 'true');
+        }
+        
+        fallbackQuery += ` ORDER BY vehicle_type, vehicle_category, brand, model, tip`;
+        
+        const fallbackResult = await pool.query(fallbackQuery, fallbackParams);
+        rows = fallbackResult.rows;
+      } else {
+        throw queryError;
+      }
+    }
+    
     res.json(rows);
   } catch (error) {
     console.error('Error fetching vehicle specs:', error);
@@ -512,29 +576,85 @@ async function updateVehicleSpec(req, res) {
       hasFuelColumns = false;
     }
     
-    let updateQuery, returnQuery, params;
+    // ساخت dynamic update query - فقط فیلدهای ارسال شده را به‌روز می‌کند
+    const updateFields = [];
+    const updateParams = [id];
+    let paramIndex = 2;
     
+    // فقط فیلدهایی که ارسال شده‌اند را اضافه کن
+    if (vehicleType !== undefined) {
+      updateFields.push(`vehicle_type = $${paramIndex++}`);
+      updateParams.push(vehicleType);
+    }
+    if (vehicleCategory !== undefined) {
+      updateFields.push(`vehicle_category = $${paramIndex++}`);
+      updateParams.push(vehicleCategory);
+    }
+    if (brand !== undefined) {
+      updateFields.push(`brand = $${paramIndex++}`);
+      updateParams.push(brand);
+    }
+    if (model !== undefined) {
+      updateFields.push(`model = $${paramIndex++}`);
+      updateParams.push(model);
+    }
+    if (tip !== undefined) {
+      updateFields.push(`tip = $${paramIndex++}`);
+      updateParams.push(tip);
+    }
+    if (fuelType !== undefined) {
+      updateFields.push(`fuel_type = $${paramIndex++}`);
+      updateParams.push(fuelType);
+    }
+    if (cylinderCount !== undefined) {
+      updateFields.push(`cylinder_count = $${paramIndex++}`);
+      updateParams.push(cylinderCount);
+    }
+    if (axleCount !== undefined) {
+      updateFields.push(`axle_count = $${paramIndex++}`);
+      updateParams.push(axleCount);
+    }
+    if (wheelCount !== undefined) {
+      updateFields.push(`wheel_count = $${paramIndex++}`);
+      updateParams.push(wheelCount);
+    }
+    if (capacity !== undefined) {
+      updateFields.push(`capacity = $${paramIndex++}`);
+      updateParams.push(capacity);
+    }
+    if (engineType !== undefined) {
+      updateFields.push(`engine_type = $${paramIndex++}`);
+      updateParams.push(engineType);
+    }
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramIndex++}`);
+      updateParams.push(description);
+    }
     if (hasFuelColumns) {
-      updateQuery = `
-        UPDATE vehicle_specifications SET
-          vehicle_type = COALESCE($2, vehicle_type),
-          vehicle_category = COALESCE($3, vehicle_category),
-          brand = COALESCE($4, brand),
-          model = COALESCE($5, model),
-          tip = $6,
-          fuel_type = $7,
-          cylinder_count = $8,
-          axle_count = $9,
-          wheel_count = $10,
-          capacity = $11,
-          engine_type = $12,
-          description = $13,
-          fuel_consumption_percentage = COALESCE($14, fuel_consumption_percentage),
-          fuel_price_per_liter = COALESCE($15, fuel_price_per_liter),
-          is_active = COALESCE($16, is_active),
-          updated_at = NOW()
-        WHERE id = $1
-      `;
+      if (fuelConsumptionPercentage !== undefined) {
+        updateFields.push(`fuel_consumption_percentage = $${paramIndex++}`);
+        updateParams.push(fuelConsumptionPercentage);
+      }
+      if (fuelPricePerLiter !== undefined) {
+        updateFields.push(`fuel_price_per_liter = $${paramIndex++}`);
+        updateParams.push(fuelPricePerLiter);
+      }
+    }
+    if (isActive !== undefined) {
+      updateFields.push(`is_active = $${paramIndex++}`);
+      updateParams.push(isActive);
+    }
+    
+    // همیشه updated_at را به‌روز کن
+    updateFields.push(`updated_at = NOW()`);
+    
+    if (updateFields.length === 1) {
+      // فقط updated_at - هیچ فیلدی برای به‌روزرسانی نیست
+      return res.status(400).json({ message: 'هیچ فیلدی برای به‌روزرسانی ارسال نشده است' });
+    }
+    
+    let returnQuery;
+    if (hasFuelColumns) {
       returnQuery = `
         RETURNING 
           id, 
@@ -554,26 +674,7 @@ async function updateVehicleSpec(req, res) {
           fuel_price_per_liter AS "fuelPricePerLiter",
           is_active AS "isActive"
       `;
-      params = [id, vehicleType, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, fuelConsumptionPercentage, fuelPricePerLiter, isActive];
     } else {
-      updateQuery = `
-        UPDATE vehicle_specifications SET
-          vehicle_type = COALESCE($2, vehicle_type),
-          vehicle_category = COALESCE($3, vehicle_category),
-          brand = COALESCE($4, brand),
-          model = COALESCE($5, model),
-          tip = $6,
-          fuel_type = $7,
-          cylinder_count = $8,
-          axle_count = $9,
-          wheel_count = $10,
-          capacity = $11,
-          engine_type = $12,
-          description = $13,
-          is_active = COALESCE($14, is_active),
-          updated_at = NOW()
-        WHERE id = $1
-      `;
       returnQuery = `
         RETURNING 
           id, 
@@ -591,10 +692,16 @@ async function updateVehicleSpec(req, res) {
           description,
           is_active AS "isActive"
       `;
-      params = [id, vehicleType, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, isActive];
     }
     
-    const { rows } = await pool.query(updateQuery + returnQuery, params);
+    const updateQuery = `
+      UPDATE vehicle_specifications SET
+        ${updateFields.join(', ')}
+      WHERE id = $1
+      ${returnQuery}
+    `;
+    
+    const { rows } = await pool.query(updateQuery, updateParams);
     
     if (rows.length === 0) {
       return res.status(404).json({ message: 'مشخصات یافت نشد' });
