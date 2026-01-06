@@ -8,14 +8,29 @@ const VehiclesPage: React.FC = () => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const token = localStorage.getItem('token');
-                const headers = { 'Authorization': `Bearer ${token}` } as any;
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const token = localStorage.getItem('token');
+            const headers = { 'Authorization': `Bearer ${token}` } as any;
+            
+            if (forceRefresh) {
+                // Force refresh - bypass cache
+                const [vehiclesRes, branchesRes] = await Promise.all([
+                    fetch(getApiUrl('vehicles'), { headers }),
+                    fetch(getApiUrl('branches'), { headers })
+                ]);
+                const [vehiclesData, branchesData] = await Promise.all([
+                    vehiclesRes.json(),
+                    branchesRes.json()
+                ]);
+                setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+                setBranches(Array.isArray(branchesData) ? branchesData : []);
+            } else {
+                // Use cache for initial load
                 const { cachedFetch } = await import('../utils/apiCache');
                 const [vehiclesData, branchesData] = await Promise.all([
                     cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
@@ -23,14 +38,22 @@ const VehiclesPage: React.FC = () => {
                 ]);
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
                 setBranches(Array.isArray(branchesData) ? branchesData : []);
-            } catch (e: any) {
-                setError(e.message);
-            } finally {
-                setLoading(false);
             }
-        };
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchData();
     }, []);
+
+    const handleRefresh = () => {
+        setRefreshKey(prev => prev + 1);
+        fetchData(true);
+    };
 
     const handleAddVehicle = async (vehicle: Omit<Vehicle, 'id'>) => {
         try {
@@ -72,6 +95,8 @@ const VehiclesPage: React.FC = () => {
             }
             const updated = await res.json();
             setVehicles(prev => prev.map(v => v.id === id ? updated : v));
+            // Refresh data after update
+            await fetchData(true);
             alert('خودرو با موفقیت ویرایش شد!');
         } catch (e:any) {
             alert(e.message || 'خطا در ویرایش خودرو');
@@ -87,6 +112,8 @@ const VehiclesPage: React.FC = () => {
             branches={branches}
             onAddVehicle={handleAddVehicle as any}
             onUpdateVehicle={handleUpdateVehicle as any}
+            onRefresh={handleRefresh}
+            refreshing={loading}
         />
     );
 };

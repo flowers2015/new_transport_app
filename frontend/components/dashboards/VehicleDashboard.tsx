@@ -13,6 +13,8 @@ interface VehicleManagementProps {
     branches: Branch[];
     onAddVehicle: (vehicle: Omit<Vehicle, 'id'>) => void;
     onUpdateVehicle?: (id: string, vehicle: Omit<Vehicle, 'id'>) => void;
+    onRefresh?: () => void;
+    refreshing?: boolean;
 }
 
 const persianAlphabet = ['الف', 'ب', 'پ', 'ت', 'ث', 'ج', 'چ', 'ح', 'خ', 'د', 'ذ', 'ر', 'ز', 'ژ', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع', 'غ', 'ف', 'ق', 'ک', 'گ', 'ل', 'م', 'ن', 'و', 'ه', 'ی'];
@@ -522,7 +524,7 @@ const vehicleDatabase: any = {
 type SortField = 'plateNumber' | 'vehicleCode' | 'vehicleType' | 'brand' | 'model' | 'vehicleTip' | 'year' | 'status' | null;
 type SortDirection = 'asc' | 'desc';
 
-const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle, onUpdateVehicle }) => {
+const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branches, onAddVehicle, onUpdateVehicle, onRefresh, refreshing = false }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -552,6 +554,10 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         }
         setShowFormDialog(false);
         setEditingVehicle(null);
+        // Refresh data after save
+        if (onRefresh) {
+            onRefresh();
+        }
     };
     
     // Removed old form state and handlers - now using VehicleFormDialog
@@ -686,6 +692,18 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                         مدیریت خودروها
                     </h2>
                     <div className="flex items-center gap-2">
+                        {onRefresh && (
+                            <button
+                                type="button"
+                                onClick={onRefresh}
+                                disabled={refreshing}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                                title="بروزرسانی لیست خودروها"
+                            >
+                                <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+                                <span>{refreshing ? 'در حال بروزرسانی...' : 'بروزرسانی'}</span>
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => setShowSpecsDialog(true)}
