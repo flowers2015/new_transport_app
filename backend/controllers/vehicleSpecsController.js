@@ -28,6 +28,8 @@ async function getAllVehicleSpecs(req, res) {
         capacity,
         engine_type AS "engineType",
         description,
+        fuel_consumption_percentage AS "fuelConsumptionPercentage",
+        fuel_price_per_liter AS "fuelPricePerLiter",
         is_active AS "isActive",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
@@ -229,6 +231,8 @@ async function getVehicleSpecById(req, res) {
         capacity,
         engine_type AS "engineType",
         description,
+        fuel_consumption_percentage AS "fuelConsumptionPercentage",
+        fuel_price_per_liter AS "fuelPricePerLiter",
         is_active AS "isActive"
       FROM vehicle_specifications
       WHERE id = $1
@@ -406,42 +410,108 @@ async function updateVehicleSpec(req, res) {
       capacity,
       engineType,
       description,
+      fuelConsumptionPercentage,
+      fuelPricePerLiter,
       isActive
     } = req.body;
     
-    const { rows } = await pool.query(`
-      UPDATE vehicle_specifications SET
-        vehicle_type = COALESCE($2, vehicle_type),
-        vehicle_category = COALESCE($3, vehicle_category),
-        brand = COALESCE($4, brand),
-        model = COALESCE($5, model),
-        tip = $6,
-        fuel_type = $7,
-        cylinder_count = $8,
-        axle_count = $9,
-        wheel_count = $10,
-        capacity = $11,
-        engine_type = $12,
-        description = $13,
-        is_active = COALESCE($14, is_active),
-        updated_at = NOW()
-      WHERE id = $1
-      RETURNING 
-        id, 
-        vehicle_type AS "vehicleType",
-        vehicle_category AS "vehicleCategory",
-        brand,
-        model,
-        tip,
-        fuel_type AS "fuelType",
-        cylinder_count AS "cylinderCount",
-        axle_count AS "axleCount",
-        wheel_count AS "wheelCount",
-        capacity,
-        engine_type AS "engineType",
-        description,
-        is_active AS "isActive"
-    `, [id, vehicleType, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, isActive]);
+    // بررسی وجود ستون‌های جدید
+    let hasFuelColumns = false;
+    try {
+      const checkColumns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'vehicle_specifications' 
+        AND column_name IN ('fuel_consumption_percentage', 'fuel_price_per_liter')
+      `);
+      hasFuelColumns = checkColumns.rows.length === 2;
+    } catch (e) {
+      hasFuelColumns = false;
+    }
+    
+    let updateQuery, returnQuery, params;
+    
+    if (hasFuelColumns) {
+      updateQuery = `
+        UPDATE vehicle_specifications SET
+          vehicle_type = COALESCE($2, vehicle_type),
+          vehicle_category = COALESCE($3, vehicle_category),
+          brand = COALESCE($4, brand),
+          model = COALESCE($5, model),
+          tip = $6,
+          fuel_type = $7,
+          cylinder_count = $8,
+          axle_count = $9,
+          wheel_count = $10,
+          capacity = $11,
+          engine_type = $12,
+          description = $13,
+          fuel_consumption_percentage = COALESCE($14, fuel_consumption_percentage),
+          fuel_price_per_liter = COALESCE($15, fuel_price_per_liter),
+          is_active = COALESCE($16, is_active),
+          updated_at = NOW()
+        WHERE id = $1
+      `;
+      returnQuery = `
+        RETURNING 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          fuel_consumption_percentage AS "fuelConsumptionPercentage",
+          fuel_price_per_liter AS "fuelPricePerLiter",
+          is_active AS "isActive"
+      `;
+      params = [id, vehicleType, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, fuelConsumptionPercentage, fuelPricePerLiter, isActive];
+    } else {
+      updateQuery = `
+        UPDATE vehicle_specifications SET
+          vehicle_type = COALESCE($2, vehicle_type),
+          vehicle_category = COALESCE($3, vehicle_category),
+          brand = COALESCE($4, brand),
+          model = COALESCE($5, model),
+          tip = $6,
+          fuel_type = $7,
+          cylinder_count = $8,
+          axle_count = $9,
+          wheel_count = $10,
+          capacity = $11,
+          engine_type = $12,
+          description = $13,
+          is_active = COALESCE($14, is_active),
+          updated_at = NOW()
+        WHERE id = $1
+      `;
+      returnQuery = `
+        RETURNING 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          is_active AS "isActive"
+      `;
+      params = [id, vehicleType, vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description, isActive];
+    }
+    
+    const { rows } = await pool.query(updateQuery + returnQuery, params);
     
     if (rows.length === 0) {
       return res.status(404).json({ message: 'مشخصات یافت نشد' });

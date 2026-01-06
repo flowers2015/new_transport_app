@@ -269,6 +269,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [fixedAllowance, setFixedAllowance] = useState<number>(0);
     const [foodCostPerDay, setFoodCostPerDay] = useState<number>(0);
     const [fuelConsumptionRegulations, setFuelConsumptionRegulations] = useState<{ [key: string]: { consumptionPercentage: number; fuelPrice: number } }>({});
+    const [vehicleSpecs, setVehicleSpecs] = useState<any[]>([]); // Vehicle specifications for fuel calculation
     const [excessMissionCostPerDay, setExcessMissionCostPerDay] = useState<number>(0);
     const [multiUnloadCostPerUnit, setMultiUnloadCostPerUnit] = useState<number>(0);
     const [helperAllowancePerKm, setHelperAllowancePerKm] = useState<number>(0);
@@ -449,14 +450,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 'Content-Type': 'application/json',
             };
 
-            // Fetch همه بخشنامه‌ها
-            const [foodRes, excessMissionRes, multiUnloadRes, helperRes, fuelConsumptionRes, returnCargoRes] = await Promise.all([
+            // Fetch همه بخشنامه‌ها و مشخصات خودرو
+            const [foodRes, excessMissionRes, multiUnloadRes, helperRes, fuelConsumptionRes, returnCargoRes, vehicleSpecsRes] = await Promise.all([
                 fetch(getApiUrl('allowance-regulations/food'), { headers }),
                 fetch(getApiUrl('allowance-regulations/excess-mission'), { headers }),
                 fetch(getApiUrl('allowance-regulations/multi-unload'), { headers }),
                 fetch(getApiUrl('allowance-regulations/helper'), { headers }),
                 fetch(getApiUrl('allowance-regulations/fuel-consumption'), { headers }),
                 fetch(getApiUrl('allowance-regulations/return-cargo'), { headers }),
+                fetch(getApiUrl('vehicle-specs'), { headers }),
             ]);
 
             if (foodRes.ok) {
@@ -507,6 +509,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     });
                     setFuelConsumptionRegulations(fuelMap);
                 }
+            }
+
+            if (vehicleSpecsRes.ok) {
+                const vehicleSpecsData = await vehicleSpecsRes.json();
+                setVehicleSpecs(Array.isArray(vehicleSpecsData) ? vehicleSpecsData : []);
             }
 
             if (returnCargoRes.ok) {
@@ -1960,13 +1967,41 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
                 : '';
             
-            // محاسبه هزینه سوخت برای نمایش در دیالوگ
-            const vehicleTypeForFuel = tour.vehicleType || '';
+            // محاسبه هزینه سوخت برای نمایش در دیالوگ - بر اساس vehicle specs
             let initialFuelCost = tour.fuelCost || 0;
-            const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
-            if (fuelReg && !initialFuelCost) {
-                const totalKmForFuel = (tour.approvedKilometers || 0) + (tour.excessKilometers || 0);
-                initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            
+            if (!initialFuelCost) {
+                // پیدا کردن vehicle spec
+                const vehicleCode = tour.vehicleCode || '';
+                const plateNumber = tour.plateNumber || '';
+                const vehicle = vehicles.find(v => 
+                    (vehicleCode && (v as any).vehicleCode === vehicleCode) ||
+                    (plateNumber && v.plateNumber && 
+                        `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}` === plateNumber)
+                );
+                
+                let matchedSpec = null;
+                if (vehicle) {
+                    matchedSpec = vehicleSpecs.find(spec => 
+                        spec.brand === vehicle.brand &&
+                        spec.model === vehicle.model &&
+                        spec.vehicleType === (vehicle as any).vehicleType &&
+                        spec.tip === (vehicle as any).vehicleTip
+                    );
+                }
+                
+                if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
+                    const totalKmForFuel = (tour.approvedKilometers || 0) + (tour.excessKilometers || 0) + (tour.depotTotalMileage || 0);
+                    initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
+                } else {
+                    // Fallback: استفاده از بخشنامه قدیمی
+                    const vehicleTypeForFuel = tour.vehicleType || '';
+                    const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+                    if (fuelReg) {
+                        const totalKmForFuel = (tour.approvedKilometers || 0) + (tour.excessKilometers || 0);
+                        initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+                    }
+                }
             }
             
             // محاسبه تعداد چندجا تخلیه
@@ -3069,13 +3104,39 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
                 : '';
             
-            // محاسبه هزینه سوخت برای نمایش در دیالوگ (در صورت خطا)
-            const vehicleTypeForFuel = tour.vehicleType || '';
+            // محاسبه هزینه سوخت برای نمایش در دیالوگ (در صورت خطا) - بر اساس vehicle specs
             let initialFuelCost = 0;
-            const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
-            if (fuelReg) {
-                const totalKmForFuel = (tour.approvedKilometers || tour.roundTripKm || 0) + (tour.excessKilometers || 0);
-                initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            
+            // پیدا کردن vehicle spec
+            const vehicleCode = tour.vehicleCode || '';
+            const plateNumber = tour.plateNumber || '';
+            const vehicle = vehicles.find(v => 
+                (vehicleCode && (v as any).vehicleCode === vehicleCode) ||
+                (plateNumber && v.plateNumber && 
+                    `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}` === plateNumber)
+            );
+            
+            let matchedSpec = null;
+            if (vehicle) {
+                matchedSpec = vehicleSpecs.find(spec => 
+                    spec.brand === vehicle.brand &&
+                    spec.model === vehicle.model &&
+                    spec.vehicleType === (vehicle as any).vehicleType &&
+                    spec.tip === (vehicle as any).vehicleTip
+                );
+            }
+            
+            if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
+                const totalKmForFuel = (tour.approvedKilometers || tour.roundTripKm || 0) + (tour.excessKilometers || 0) + (tour.depotTotalMileage || 0);
+                initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
+            } else {
+                // Fallback: استفاده از بخشنامه قدیمی
+                const vehicleTypeForFuel = tour.vehicleType || '';
+                const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+                if (fuelReg) {
+                    const totalKmForFuel = (tour.approvedKilometers || tour.roundTripKm || 0) + (tour.excessKilometers || 0);
+                    initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+                }
             }
             
             // محاسبه تعداد چندجا تخلیه
@@ -3279,18 +3340,51 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const helperExcessMissionDays = Number(savedInputDialogData.helperDriverExcessMissionDays) || 0;
         const calculatedHelperDriverExcessMissionCost = Math.round(helperExcessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
         
-        // محاسبه هزینه سوخت بر اساس نوع خودرو و بخشنامه مصرف سوخت
-        const vehicleType = tour.vehicleType || '';
+        // محاسبه هزینه سوخت بر اساس مشخصات خودرو از vehicle_specifications
         let fuelCost = 0;
-        const fuelReg = fuelConsumptionRegulations[vehicleType];
-        if (fuelReg) {
+        
+        // پیدا کردن vehicle spec بر اساس vehicleCode یا plateNumber
+        const vehicleCode = tour.vehicleCode || '';
+        const plateNumber = tour.plateNumber || '';
+        
+        // پیدا کردن vehicle از لیست vehicles
+        const vehicle = vehicles.find(v => 
+            (vehicleCode && (v as any).vehicleCode === vehicleCode) ||
+            (plateNumber && v.plateNumber && 
+                `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}` === plateNumber)
+        );
+        
+        // پیدا کردن vehicle spec بر اساس brand, model, vehicleType, tip
+        let matchedSpec = null;
+        if (vehicle) {
+            matchedSpec = vehicleSpecs.find(spec => 
+                spec.brand === vehicle.brand &&
+                spec.model === vehicle.model &&
+                spec.vehicleType === (vehicle as any).vehicleType &&
+                spec.tip === (vehicle as any).vehicleTip
+            );
+        }
+        
+        if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
             // محاسبه کل پیمایش
-            const totalKm = (savedInputDialogData.approvedKilometers || 0) + (savedInputDialogData.excessKilometers || 0) + (savedInputDialogData.depotTotalMileage || 0);
-            // هزینه سوخت = (کل پیمایش / 100) × درصد مصرف × قیمت هر لیتر
-            fuelCost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            const totalKm = (savedInputDialogData.approvedKilometers || 0) + 
+                          (savedInputDialogData.excessKilometers || 0) + 
+                          (savedInputDialogData.depotTotalMileage || 0);
+            // هزینه سوخت = کل پیمایش × (درصد مصرف / 100) × مبلغ سوخت به ازای لیتر
+            fuelCost = Math.round(totalKm * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
         } else {
-            // اگر بخشنامه مصرف سوخت برای این نوع خودرو وجود نداشت، از مقدار موجود در savedInputDialogData استفاده کن
-            fuelCost = Math.round(Number(savedInputDialogData.fuelCost) || 0) || 0;
+            // Fallback: استفاده از بخشنامه مصرف سوخت قدیمی
+            const vehicleType = tour.vehicleType || '';
+            const fuelReg = fuelConsumptionRegulations[vehicleType];
+            if (fuelReg) {
+                const totalKm = (savedInputDialogData.approvedKilometers || 0) + 
+                              (savedInputDialogData.excessKilometers || 0) + 
+                              (savedInputDialogData.depotTotalMileage || 0);
+                fuelCost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            } else {
+                // اگر هیچ کدام پیدا نشد، از مقدار موجود در savedInputDialogData استفاده کن
+                fuelCost = Math.round(Number(savedInputDialogData.fuelCost) || 0) || 0;
+            }
         }
         
         // دریافت token و headers برای API calls

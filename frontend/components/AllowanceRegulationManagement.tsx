@@ -139,6 +139,18 @@ interface ReturnCargoRegulation {
     updatedByName?: string;
 }
 
+interface VehicleSpecWithFuel {
+    id: string;
+    vehicleCategory: string;
+    vehicleType: string;
+    brand: string;
+    model: string;
+    tip: string;
+    capacity: string;
+    fuelConsumptionPercentage?: number;
+    fuelPricePerLiter?: number;
+}
+
 interface AllowanceRegulationManagementProps {
     currentUser: User;
 }
@@ -170,7 +182,7 @@ const jalaliToGregorianDateInput = (jalaliStr: string): string => {
 };
 
 const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps> = ({ currentUser }) => {
-    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'fixed-allowance' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption' | 'return-cargo'>('food');
+    const [activeTab, setActiveTab] = useState<'food' | 'helper' | 'fixed-allowance' | 'mileage' | 'excess-mission' | 'multi-unload' | 'fuel-consumption' | 'fuel-percentage' | 'return-cargo'>('food');
     
     // Food Regulations
     const [foodRegulations, setFoodRegulations] = useState<FoodRegulation[]>([]);
@@ -271,6 +283,15 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
         isActive: true,
     });
     
+    // Vehicle Specs for Fuel Percentage Tab
+    const [vehicleSpecs, setVehicleSpecs] = useState<VehicleSpecWithFuel[]>([]);
+    const [editingSpec, setEditingSpec] = useState<VehicleSpecWithFuel | null>(null);
+    const [showSpecEditDialog, setShowSpecEditDialog] = useState(false);
+    const [specFormData, setSpecFormData] = useState<{ fuelConsumptionPercentage: string; fuelPricePerLiter: string }>({
+        fuelConsumptionPercentage: '',
+        fuelPricePerLiter: '',
+    });
+    
     // Return Cargo Regulations (اجرت بار برگشتی)
     const [returnCargoRegulations, setReturnCargoRegulations] = useState<ReturnCargoRegulation[]>([]);
     const [showReturnCargoDialog, setShowReturnCargoDialog] = useState(false);
@@ -292,7 +313,27 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
 
     useEffect(() => {
         fetchAllRegulations();
-    }, []);
+        if (activeTab === 'fuel-percentage') {
+            fetchVehicleSpecs();
+        }
+    }, [activeTab]);
+    
+    const fetchVehicleSpecs = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+            const res = await fetch(getApiUrl('vehicle-specs'), { headers });
+            if (res.ok) {
+                const data = await res.json();
+                setVehicleSpecs(data || []);
+            }
+        } catch (err: any) {
+            console.error('Error fetching vehicle specs:', err);
+        }
+    };
 
     const fetchAllRegulations = async () => {
         try {
@@ -1263,6 +1304,16 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                             بخشنامه مصرف سوخت
                         </button>
                         <button
+                            onClick={() => setActiveTab('fuel-percentage')}
+                            className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+                                activeTab === 'fuel-percentage'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                        >
+                            درصد سوخت مصرفی
+                        </button>
+                        <button
                             onClick={() => setActiveTab('return-cargo')}
                             className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
                                 activeTab === 'return-cargo'
@@ -2063,6 +2114,158 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'fuel-percentage' && (
+                    <div>
+                        <div className="mb-4">
+                            <p className="text-sm text-slate-600 mb-4">
+                                در این بخش می‌توانید درصد مصرف سوخت و مبلغ سوخت به ازای لیتر را برای هر مشخصات خودرو تنظیم کنید.
+                            </p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-700 text-white border-b">
+                                        <th className="p-3 text-right border-l border-slate-600">ردیف</th>
+                                        <th className="p-3 text-right border-l border-slate-600">دسته‌بندی</th>
+                                        <th className="p-3 text-right border-l border-slate-600">نوع خودرو</th>
+                                        <th className="p-3 text-right border-l border-slate-600">برند</th>
+                                        <th className="p-3 text-right border-l border-slate-600">مدل</th>
+                                        <th className="p-3 text-right border-l border-slate-600">تیپ</th>
+                                        <th className="p-3 text-right border-l border-slate-600">ظرفیت</th>
+                                        <th className="p-3 text-right border-l border-slate-600">درصد مصرف</th>
+                                        <th className="p-3 text-right border-l border-slate-600">مبلغ سوخت (ریال/لیتر)</th>
+                                        <th className="p-3 text-right">عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {vehicleSpecs.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={10} className="p-6 text-center text-slate-500">
+                                                در حال بارگذاری...
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        vehicleSpecs.map((spec, index) => (
+                                            <tr key={spec.id} className="border-b border-slate-200 bg-white hover:bg-slate-50">
+                                                <td className="p-3 border-l border-slate-200 text-center">{index + 1}</td>
+                                                <td className="p-3 border-l border-slate-200">{spec.vehicleCategory || '-'}</td>
+                                                <td className="p-3 border-l border-slate-200">{spec.vehicleType || '-'}</td>
+                                                <td className="p-3 border-l border-slate-200 font-medium">{spec.brand || '-'}</td>
+                                                <td className="p-3 border-l border-slate-200">{spec.model || '-'}</td>
+                                                <td className="p-3 border-l border-slate-200">{spec.tip || '-'}</td>
+                                                <td className="p-3 border-l border-slate-200">{spec.capacity || '-'}</td>
+                                                <td className="p-3 border-l border-slate-200 text-left">
+                                                    {spec.fuelConsumptionPercentage ? `${spec.fuelConsumptionPercentage}%` : '-'}
+                                                </td>
+                                                <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
+                                                    {spec.fuelPricePerLiter ? spec.fuelPricePerLiter.toLocaleString('fa-IR') : '-'}
+                                                </td>
+                                                <td className="p-3">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingSpec(spec);
+                                                            setSpecFormData({
+                                                                fuelConsumptionPercentage: spec.fuelConsumptionPercentage?.toString() || '',
+                                                                fuelPricePerLiter: spec.fuelPricePerLiter?.toString() || '',
+                                                            });
+                                                            setShowSpecEditDialog(true);
+                                                        }}
+                                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 transition-colors"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        {/* دیالوگ ویرایش */}
+                        {showSpecEditDialog && editingSpec && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4">
+                                        ویرایش درصد مصرف سوخت - {editingSpec.brand} {editingSpec.model}
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                درصد مصرف سوخت (در هر 100 کیلومتر)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={specFormData.fuelConsumptionPercentage}
+                                                onChange={(e) => setSpecFormData({ ...specFormData, fuelConsumptionPercentage: e.target.value })}
+                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                placeholder="مثال: 35.5"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                مبلغ سوخت به ازای لیتر (ریال)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="100"
+                                                value={specFormData.fuelPricePerLiter}
+                                                onChange={(e) => setSpecFormData({ ...specFormData, fuelPricePerLiter: e.target.value })}
+                                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                placeholder="مثال: 50000"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="mt-6 flex justify-end gap-2">
+                                        <button
+                                            onClick={() => {
+                                                setShowSpecEditDialog(false);
+                                                setEditingSpec(null);
+                                            }}
+                                            className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300"
+                                        >
+                                            انصراف
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    const token = localStorage.getItem('token');
+                                                    const res = await fetch(getApiUrl(`vehicle-specs/${editingSpec.id}`), {
+                                                        method: 'PUT',
+                                                        headers: {
+                                                            'Authorization': `Bearer ${token}`,
+                                                            'Content-Type': 'application/json',
+                                                        },
+                                                        body: JSON.stringify({
+                                                            fuelConsumptionPercentage: specFormData.fuelConsumptionPercentage ? parseFloat(specFormData.fuelConsumptionPercentage) : null,
+                                                            fuelPricePerLiter: specFormData.fuelPricePerLiter ? parseFloat(specFormData.fuelPricePerLiter) : null,
+                                                        }),
+                                                    });
+                                                    if (res.ok) {
+                                                        alert('اطلاعات با موفقیت به‌روزرسانی شد.');
+                                                        setShowSpecEditDialog(false);
+                                                        setEditingSpec(null);
+                                                        fetchVehicleSpecs();
+                                                    } else {
+                                                        const error = await res.json();
+                                                        alert(error.message || 'خطا در به‌روزرسانی');
+                                                    }
+                                                } catch (err: any) {
+                                                    alert(`خطا: ${err.message}`);
+                                                }
+                                            }}
+                                            className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm hover:bg-sky-700"
+                                        >
+                                            ذخیره
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
