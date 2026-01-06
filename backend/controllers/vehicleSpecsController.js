@@ -13,29 +13,71 @@ async function getAllVehicleSpecs(req, res) {
     
     const { vehicleType } = req.query;
     
-    let query = `
-      SELECT 
-        id, 
-        vehicle_type AS "vehicleType",
-        vehicle_category AS "vehicleCategory",
-        brand,
-        model,
-        tip,
-        fuel_type AS "fuelType",
-        cylinder_count AS "cylinderCount",
-        axle_count AS "axleCount",
-        wheel_count AS "wheelCount",
-        capacity,
-        engine_type AS "engineType",
-        description,
-        fuel_consumption_percentage AS "fuelConsumptionPercentage",
-        fuel_price_per_liter AS "fuelPricePerLiter",
-        is_active AS "isActive",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-      FROM vehicle_specifications
-      WHERE 1=1
-    `;
+    // بررسی وجود ستون‌های جدید
+    let hasFuelColumns = false;
+    try {
+      const checkColumns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'vehicle_specifications' 
+        AND column_name IN ('fuel_consumption_percentage', 'fuel_price_per_liter')
+      `);
+      hasFuelColumns = checkColumns.rows.length === 2;
+    } catch (e) {
+      hasFuelColumns = false;
+    }
+    
+    let query;
+    if (hasFuelColumns) {
+      query = `
+        SELECT 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          fuel_consumption_percentage AS "fuelConsumptionPercentage",
+          fuel_price_per_liter AS "fuelPricePerLiter",
+          is_active AS "isActive",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM vehicle_specifications
+        WHERE 1=1
+      `;
+    } else {
+      query = `
+        SELECT 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          NULL AS "fuelConsumptionPercentage",
+          NULL AS "fuelPricePerLiter",
+          is_active AS "isActive",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM vehicle_specifications
+        WHERE 1=1
+      `;
+    }
+    
     const params = [];
     let paramIndex = 1;
     
@@ -216,27 +258,68 @@ async function getVehicleSpecById(req, res) {
   try {
     const { id } = req.params;
     
-    const { rows } = await pool.query(`
-      SELECT 
-        id, 
-        vehicle_type AS "vehicleType",
-        vehicle_category AS "vehicleCategory",
-        brand,
-        model,
-        tip,
-        fuel_type AS "fuelType",
-        cylinder_count AS "cylinderCount",
-        axle_count AS "axleCount",
-        wheel_count AS "wheelCount",
-        capacity,
-        engine_type AS "engineType",
-        description,
-        fuel_consumption_percentage AS "fuelConsumptionPercentage",
-        fuel_price_per_liter AS "fuelPricePerLiter",
-        is_active AS "isActive"
-      FROM vehicle_specifications
-      WHERE id = $1
-    `, [id]);
+    // بررسی وجود ستون‌های جدید
+    let hasFuelColumns = false;
+    try {
+      const checkColumns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'vehicle_specifications' 
+        AND column_name IN ('fuel_consumption_percentage', 'fuel_price_per_liter')
+      `);
+      hasFuelColumns = checkColumns.rows.length === 2;
+    } catch (e) {
+      hasFuelColumns = false;
+    }
+    
+    let query;
+    if (hasFuelColumns) {
+      query = `
+        SELECT 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          fuel_consumption_percentage AS "fuelConsumptionPercentage",
+          fuel_price_per_liter AS "fuelPricePerLiter",
+          is_active AS "isActive"
+        FROM vehicle_specifications
+        WHERE id = $1
+      `;
+    } else {
+      query = `
+        SELECT 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          NULL AS "fuelConsumptionPercentage",
+          NULL AS "fuelPricePerLiter",
+          is_active AS "isActive"
+        FROM vehicle_specifications
+        WHERE id = $1
+      `;
+    }
+    
+    const { rows } = await pool.query(query, [id]);
     
     if (rows.length === 0) {
       return res.status(404).json({ message: 'مشخصات یافت نشد' });
