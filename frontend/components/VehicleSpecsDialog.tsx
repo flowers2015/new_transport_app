@@ -103,11 +103,23 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
-      if (!res.ok) throw new Error('خطا در دریافت اطلاعات');
+      if (!res.ok) {
+        const errorText = await res.text();
+        let errorMessage = 'خطا در دریافت اطلاعات';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          errorMessage = res.status === 500 ? 'خطای سرور' : errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
       const data = await res.json();
-      setSpecs(data);
+      setSpecs(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      setError(err.message);
+      console.error('Error fetching specs:', err);
+      setError(err.message || 'خطا در دریافت اطلاعات');
+      setSpecs([]);
     } finally {
       setLoading(false);
     }
@@ -200,15 +212,18 @@ const VehicleSpecsDialog: React.FC<VehicleSpecsDialogProps> = ({ isOpen, onClose
       });
       
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({ message: 'خطا در ذخیره' }));
         throw new Error(errData.message || 'خطا در ذخیره');
       }
       
       alert(editingSpec ? 'مشخصات با موفقیت ویرایش شد' : 'مشخصات جدید با موفقیت ثبت شد');
       resetForm();
-      fetchSpecs();
+      setShowForm(false);
+      setEditingSpec(null);
+      await fetchSpecs(); // منتظر می‌مانیم تا داده‌ها refresh شوند
     } catch (err: any) {
-      alert(err.message);
+      console.error('Error saving spec:', err);
+      alert(err.message || 'خطا در ذخیره مشخصات');
     }
   };
   
