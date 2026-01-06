@@ -78,15 +78,29 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
   // Sync form with initialData when it changes (for edit mode)
   useEffect(() => {
     if (initialData) {
+      // Use vehicleTip directly from initialData, don't try to extract it from model
+      const vehicleTip = (initialData as any).vehicleTip || '';
+      
+      // If model contains vehicleTip, try to separate them
       const baseModel = (initialData.model || '').trim();
-      const knownTips = ['TU5','TU3','EF7','EF7T','K4M'];
       let modelName = baseModel;
-      let tip = '';
-      for (const t of knownTips) {
-        if (baseModel.toLowerCase().includes(t.toLowerCase())) {
-          modelName = baseModel.replace(new RegExp(t, 'i'), '').trim();
-          tip = t;
-          break;
+      
+      // Only try to separate if vehicleTip is empty and model seems to contain a tip
+      if (!vehicleTip && baseModel) {
+        // Check if model contains common tip patterns (like "سری G G410" -> "سری G" and "G410")
+        // This is a fallback for old data where tip might be in model
+        const tipPatterns = [
+          /(.+?)\s+([A-Z]\d+[A-Z]?)$/, // Pattern like "سری G G410"
+          /(.+?)\s+(G\d+|R\d+|S\d+|P\d+)$/, // Scania patterns
+        ];
+        
+        for (const pattern of tipPatterns) {
+          const match = baseModel.match(pattern);
+          if (match) {
+            modelName = match[1].trim();
+            // Don't set tip here, let it come from initialData.vehicleTip
+            break;
+          }
         }
       }
       
@@ -97,7 +111,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
         vehicleType: (initialData as any).vehicleType || '',
         brand: initialData.brand || '',
         model: modelName,
-        vehicleTip: tip,
+        vehicleTip: vehicleTip,
         type: initialData.type || '',
         branchId: initialData.branchId || '',
         color: (initialData as any).color || '',
@@ -407,15 +421,16 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
         return;
       }
 
-      // Ensure model is not empty (required field)
-      const modelParts = [formState.model, formState.vehicleTip].filter(Boolean);
-      const finalModel = modelParts.length > 0 ? modelParts.join(' ') : (formState.model || formState.vehicleTip || 'نامشخص');
+      // Ensure model is not empty (required field) - keep model and vehicleTip separate
+      // Don't combine them - model should be just the base model name
+      const finalModel = formState.model || 'نامشخص';
       
       const vehicleData: Omit<Vehicle, 'id'> = {
         ...formState,
         holdingCompany: holdingCompany,
         vehicleCategory: vehicleCategory,
-        model: finalModel,
+        model: finalModel, // Keep model separate from vehicleTip
+        vehicleTip: formState.vehicleTip || undefined, // Keep vehicleTip separate
         year: year ? parseInt(String(year)) : undefined,
         wheelCount: wheelCount ? parseInt(String(wheelCount)) : undefined,
         axleCount: axleCount ? parseInt(String(axleCount)) : undefined,

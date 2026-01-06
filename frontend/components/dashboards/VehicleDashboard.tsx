@@ -646,25 +646,37 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                     <table className="w-full text-sm text-right text-gray-500">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3">شناسه</th>
-                                <th className="px-6 py-3">مدل</th>
-                                <th className="px-6 py-3">نام مالک</th>
-                                <th className="px-6 py-3">شعبه</th>
-                                <th className="px-6 py-3">وضعیت</th>
-                                <th className="px-4 py-3"></th>
+                                <th className="px-4 py-3">پلاک/شماره شاسی</th>
+                                <th className="px-4 py-3">کد خودرو</th>
+                                <th className="px-4 py-3">نوع خودرو</th>
+                                <th className="px-4 py-3">برند</th>
+                                <th className="px-4 py-3">مدل اصلی</th>
+                                <th className="px-4 py-3">تیپ خودرو</th>
+                                <th className="px-4 py-3">سال ساخت</th>
+                                <th className="px-4 py-3">وضعیت</th>
+                                <th className="px-4 py-3">عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredVehicles.map(vehicle => (
                                 <React.Fragment key={vehicle.id}>
                                     <tr className="bg-white border-b hover:bg-gray-50">
-                                        <th className="px-6 py-4 font-medium text-gray-900 font-mono">
-                                            {vehicle.plateNumber ? formatPlateNumber(vehicle.plateNumber) : vehicle.serialNumber}
-                                        </th>
-                                        <td className="px-6 py-4">{[vehicle.brand, vehicle.model].filter(Boolean).join(' ')}</td>
-                                        <td className="px-6 py-4">{vehicle.ownerName || '-'}</td>
-                                        <td className="px-6 py-4">{getBranchName(vehicle.branchId)}</td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-4 py-4 font-medium text-gray-900 font-mono">
+                                            {vehicle.plateNumber ? formatPlateNumber(vehicle.plateNumber) : (vehicle.serialNumber || '-')}
+                                        </td>
+                                        <td className="px-4 py-4 font-mono text-sm">{vehicle.vehicleCode || '-'}</td>
+                                        <td className="px-4 py-4">
+                                            {(vehicle as any).vehicleType ? (
+                                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                                                    {(vehicle as any).vehicleType}
+                                                </span>
+                                            ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-4">{vehicle.brand || '-'}</td>
+                                        <td className="px-4 py-4">{vehicle.model || '-'}</td>
+                                        <td className="px-4 py-4">{(vehicle as any).vehicleTip || '-'}</td>
+                                        <td className="px-4 py-4">{vehicle.year || '-'}</td>
+                                        <td className="px-4 py-4">
                                             {vehicle.status && (
                                                 <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[vehicle.status]}`}>
                                                     {vehicle.status}
@@ -682,7 +694,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                     </tr>
                                     {expandedVehicleId === vehicle.id && (
                                         <tr className="bg-slate-50">
-                                            <td colSpan={6} className="p-4">
+                                            <td colSpan={9} className="p-4">
                                                 <div className="bg-white p-4 rounded-lg border">
                                                     <h4 className="text-md font-bold text-slate-800 mb-3">تاریخچه مالکیت</h4>
                                                     {vehicle.ownerHistory && vehicle.ownerHistory.length > 0 ? (
