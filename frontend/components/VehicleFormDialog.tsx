@@ -475,30 +475,26 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
                 <option value="other">متفرقه</option>
               </select>
             </div>
-            {formState.holdingCompany && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700">۲. نوع وسیله نقلیه <span className="text-red-500">*</span></label>
-                <select name="vehicleCategory" value={formState.vehicleCategory} onChange={handleCategoryChange} className="mt-1 input-style" required>
-                  <option value="">-- انتخاب کنید --</option>
-                  {vehicleCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-slate-700">۲. نوع وسیله نقلیه <span className="text-red-500">*</span></label>
+              <select name="vehicleCategory" value={formState.vehicleCategory} onChange={handleCategoryChange} className="mt-1 input-style" required>
+                <option value="">-- انتخاب کنید --</option>
+                {vehicleCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
 
-          {formState.vehicleCategory && (
-            <>
-              {formState.holdingCompany === 'mihan' && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">شرکت <span className="text-red-500">*</span></label>
-                  <select name="mihanCompany" value={formState.mihanCompany} onChange={handleFormChange} className="mt-1 input-style" required>
-                    <option value="">-- انتخاب کنید --</option>
-                    {mihanCompanies.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-              )}
+          {formState.holdingCompany === 'mihan' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700">شرکت <span className="text-red-500">*</span></label>
+              <select name="mihanCompany" value={formState.mihanCompany} onChange={handleFormChange} className="mt-1 input-style" required>
+                <option value="">-- انتخاب کنید --</option>
+                {mihanCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
 
-              <fieldset className="p-4 border border-slate-200 rounded-lg">
+          <fieldset className="p-4 border border-slate-200 rounded-lg">
                 <legend className="px-2 font-semibold text-slate-700">۳. شناسه و مدل خودرو</legend>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
@@ -663,8 +659,6 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
                   {loading ? 'در حال ذخیره...' : (initialData ? 'ذخیره تغییرات' : 'ثبت خودرو')}
                 </button>
               </div>
-            </>
-          )}
         </form>
         <style>{`.input-style { direction: ltr; text-align: right; display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; }`}</style>
       </div>

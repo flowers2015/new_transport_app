@@ -263,40 +263,129 @@ async function createVehicleSpec(req, res) {
       description
     } = req.body;
     
-    if (!vehicleType || !vehicleCategory || !brand || !model) {
-      return res.status(400).json({ message: 'نوع خودرو، دسته‌بندی، برند و مدل الزامی است' });
+    // بررسی وجود ستون vehicle_type
+    let hasVehicleTypeColumn = false;
+    try {
+      const checkColumn = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'vehicle_specifications' AND column_name = 'vehicle_type'
+      `);
+      hasVehicleTypeColumn = checkColumn.rows.length > 0;
+    } catch (e) {
+      hasVehicleTypeColumn = false;
+    }
+    
+    // Validation: اگر vehicle_type وجود دارد، باید ارسال شود
+    if (hasVehicleTypeColumn) {
+      if (!vehicleType || !vehicleCategory || !brand || !model) {
+        return res.status(400).json({ message: 'نوع خودرو، دسته‌بندی، برند و مدل الزامی است' });
+      }
+    } else {
+      if (!vehicleCategory || !brand || !model) {
+        return res.status(400).json({ message: 'دسته‌بندی، برند و مدل الزامی است' });
+      }
     }
     
     const id = crypto.randomUUID();
     
-    const { rows } = await pool.query(`
-      INSERT INTO vehicle_specifications 
-      (id, vehicle_type, vehicle_category, brand, model, tip, fuel_type, cylinder_count, axle_count, wheel_count, capacity, engine_type, description)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING 
-        id, 
-        vehicle_type AS "vehicleType",
-        vehicle_category AS "vehicleCategory",
-        brand,
-        model,
-        tip,
-        fuel_type AS "fuelType",
-        cylinder_count AS "cylinderCount",
-        axle_count AS "axleCount",
-        wheel_count AS "wheelCount",
-        capacity,
-        engine_type AS "engineType",
-        description,
-        is_active AS "isActive"
-    `, [id, vehicleType, vehicleCategory, brand, model, tip || null, fuelType || null, cylinderCount || null, axleCount || null, wheelCount || null, capacity || null, engineType || null, description || null]);
+    let query, params;
+    if (hasVehicleTypeColumn) {
+      query = `
+        INSERT INTO vehicle_specifications 
+        (id, vehicle_type, vehicle_category, brand, model, tip, fuel_type, cylinder_count, axle_count, wheel_count, capacity, engine_type, description)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING 
+          id, 
+          vehicle_type AS "vehicleType",
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          is_active AS "isActive"
+      `;
+      params = [id, vehicleType, vehicleCategory, brand, model, tip || null, fuelType || null, cylinderCount || null, axleCount || null, wheelCount || null, capacity || null, engineType || null, description || null];
+    } else {
+      query = `
+        INSERT INTO vehicle_specifications 
+        (id, vehicle_category, brand, model, tip, fuel_type, cylinder_count, axle_count, wheel_count, capacity, engine_type, description)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING 
+          id, 
+          vehicle_category AS "vehicleCategory",
+          brand,
+          model,
+          tip,
+          fuel_type AS "fuelType",
+          cylinder_count AS "cylinderCount",
+          axle_count AS "axleCount",
+          wheel_count AS "wheelCount",
+          capacity,
+          engine_type AS "engineType",
+          description,
+          is_active AS "isActive"
+      `;
+      params = [id, vehicleCategory, brand, model, tip || null, fuelType || null, cylinderCount || null, axleCount || null, wheelCount || null, capacity || null, engineType || null, description || null];
+    }
+    
+    const { rows } = await pool.query(query, params);
+    
+    // اگر vehicle_type وجود ندارد، null برگردان
+    if (!hasVehicleTypeColumn && rows[0]) {
+      rows[0].vehicleType = null;
+    }
     
     res.status(201).json(rows[0]);
   } catch (error) {
     if (error.code === '23505') { // unique violation
       return res.status(400).json({ message: 'این ترکیب نوع/دسته‌بندی/برند/مدل/تیپ قبلاً ثبت شده است' });
     }
+    if (error.code === '42703') { // undefined column
+      console.error('⚠️ [createVehicleSpec] Column error:', error.message);
+      // اگر خطای ستون بود، دوباره بدون vehicle_type امتحان کنیم
+      if (error.message.includes('vehicle_type')) {
+        // Retry without vehicle_type
+        try {
+          const id = crypto.randomUUID();
+          const { vehicleCategory, brand, model, tip, fuelType, cylinderCount, axleCount, wheelCount, capacity, engineType, description } = req.body;
+          
+          const { rows } = await pool.query(`
+            INSERT INTO vehicle_specifications 
+            (id, vehicle_category, brand, model, tip, fuel_type, cylinder_count, axle_count, wheel_count, capacity, engine_type, description)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING 
+              id, 
+              vehicle_category AS "vehicleCategory",
+              brand,
+              model,
+              tip,
+              fuel_type AS "fuelType",
+              cylinder_count AS "cylinderCount",
+              axle_count AS "axleCount",
+              wheel_count AS "wheelCount",
+              capacity,
+              engine_type AS "engineType",
+              description,
+              is_active AS "isActive"
+          `, [id, vehicleCategory, brand, model, tip || null, fuelType || null, cylinderCount || null, axleCount || null, wheelCount || null, capacity || null, engineType || null, description || null]);
+          
+          rows[0].vehicleType = null;
+          return res.status(201).json(rows[0]);
+        } catch (retryError) {
+          console.error('❌ [createVehicleSpec] Retry also failed:', retryError);
+          return res.status(500).json({ message: 'خطا در ایجاد مشخصات: ' + retryError.message });
+        }
+      }
+    }
     console.error('Error creating vehicle spec:', error);
-    res.status(500).json({ message: 'خطا در ایجاد مشخصات' });
+    res.status(500).json({ message: 'خطا در ایجاد مشخصات: ' + error.message });
   }
 }
 
