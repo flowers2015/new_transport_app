@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Vehicle, Branch, PlateNumber, VehicleStatus, VehicleCategory } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
+import VehicleSpecsDialog from './VehicleSpecsDialog';
 
 interface VehicleFormDialogProps {
   isOpen: boolean;
