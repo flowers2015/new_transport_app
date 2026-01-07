@@ -975,7 +975,8 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                         </tr>
                                     )}
                                 </React.Fragment>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
