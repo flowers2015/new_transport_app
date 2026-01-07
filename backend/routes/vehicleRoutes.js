@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { authenticateToken } = require('../middleware/authMiddleware');
-const { getVehicles, getVehicleById, createVehicle, updateVehicle, importCompanyVehiclesFromExcel } = require('../controllers/vehicleController');
+const { getVehicles, getVehicleById, createVehicle, updateVehicle, importCompanyVehiclesFromExcel, checkVehicleDependencies, deleteVehicle, restoreVehicle } = require('../controllers/vehicleController');
 
 // تنظیمات multer برای آپلود فایل اکسل
 const excelStorage = multer.diskStorage({
@@ -41,6 +41,16 @@ router.get('/:id', authenticateToken, getVehicleById);
 router.post('/', authenticateToken, createVehicle);
 router.post('/import-excel', authenticateToken, excelUpload.single('file'), importCompanyVehiclesFromExcel);
 router.put('/:id', authenticateToken, updateVehicle);
+router.get('/:id/dependencies', authenticateToken, async (req, res) => {
+  try {
+    const dependencies = await checkVehicleDependencies(req.params.id);
+    res.json(dependencies);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+router.post('/:id/delete', authenticateToken, deleteVehicle);
+router.post('/:id/restore', authenticateToken, restoreVehicle);
 
 module.exports = router;
 

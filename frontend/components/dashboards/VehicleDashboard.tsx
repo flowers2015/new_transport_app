@@ -533,6 +533,13 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
     const [selectedSpec, setSelectedSpec] = useState<any>(null);
     const [sortField, setSortField] = useState<SortField>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [newStatus, setNewStatus] = useState('حذف شده');
+    const [deletingVehicle, setDeletingVehicle] = useState(false);
+    const [dependencies, setDependencies] = useState<any>(null);
+    const [deleteType, setDeleteType] = useState<'soft' | 'hard'>('soft');
     
     const handleEdit = (v: Vehicle) => {
         setEditingVehicle(v);
@@ -557,6 +564,85 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         // Refresh data after save
         if (onRefresh) {
             onRefresh();
+        }
+    };
+
+    const handleDeleteClick = async (vehicle: Vehicle) => {
+        setVehicleToDelete(vehicle);
+        
+        // بررسی وابستگی‌ها
+        try {
+            const response = await fetch(`${getApiUrl()}/api/v1/vehicles/${vehicle.id}/dependencies`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+            if (response.ok) {
+                const deps = await response.json();
+                setDependencies(deps);
+            }
+        } catch (error) {
+            console.error('Error checking dependencies:', error);
+        }
+        
+        setShowDeleteDialog(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!vehicleToDelete || !deleteReason.trim()) {
+            alert('لطفاً دلیل حذف را وارد کنید');
+            return;
+        }
+
+        // تایید نهایی برای حذف فیزیکی
+        if (deleteType === 'hard') {
+            const confirmed = window.confirm(
+                '⚠️ هشدار: این عملیات غیرقابل بازگشت است!\n\n' +
+                'آیا مطمئن هستید که می‌خواهید این خودرو را به طور کامل و دائمی از سیستم حذف کنید؟\n\n' +
+                'این خودرو دیگر قابل بازیابی نخواهد بود.'
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        setDeletingVehicle(true);
+        try {
+            const response = await fetch(`${getApiUrl()}/api/v1/vehicles/${vehicleToDelete.id}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    reason: deleteReason.trim(),
+                    newStatus: newStatus || 'حذف شده',
+                    hardDelete: deleteType === 'hard'
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(result.message || 'خودرو با موفقیت حذف شد');
+                setShowDeleteDialog(false);
+                setVehicleToDelete(null);
+                setDeleteReason('');
+                setDependencies(null);
+                setDeleteType('soft');
+                
+                // Refresh data after delete
+                if (onRefresh) {
+                    onRefresh();
+                }
+            } else {
+                const error = await response.json();
+                alert(error.message || 'خطا در حذف خودرو');
+            }
+        } catch (error: any) {
+            console.error('Error deleting vehicle:', error);
+            alert('خطا در حذف خودرو: ' + (error.message || 'خطای نامشخص'));
+        } finally {
+            setDeletingVehicle(false);
         }
     };
     
@@ -809,12 +895,15 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                     وضعیت {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
                                 <th className="px-4 py-3">عملیات</th>
+                                <th className="px-4 py-3">دلیل حذف</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredAndSortedVehicles.map(vehicle => (
+                            {filteredAndSortedVehicles.map(vehicle => {
+                                const isDeleted = (vehicle as any).deletedAt !== null && (vehicle as any).deletedAt !== undefined;
+                                return (
                                 <React.Fragment key={vehicle.id}>
-                                    <tr className="bg-white border-b hover:bg-gray-50">
+                                    <tr className={`border-b hover:bg-gray-50 ${isDeleted ? 'bg-gray-200 opacity-70' : 'bg-white'}`}>
                                         <td className="px-4 py-4 font-medium text-gray-900 font-mono">
                                             {vehicle.plateNumber ? formatPlateNumber(vehicle.plateNumber) : (vehicle.serialNumber || '-')}
                                         </td>
@@ -842,13 +931,21 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                                                 <button onClick={() => handleToggleExpand(vehicle.id)} className="text-slate-500 hover:text-sky-600" title="جزئیات">
                                                     <ChevronDownIcon className={`w-5 h-5 transition-transform ${expandedVehicleId === vehicle.id ? 'rotate-180' : ''}`} />
                                                 </button>
-                                                <button onClick={() => handleEdit(vehicle)} className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600">ویرایش</button>
+                                                {!isDeleted && (
+                                                    <>
+                                                        <button onClick={() => handleEdit(vehicle)} className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600">ویرایش</button>
+                                                        <button onClick={() => handleDeleteClick(vehicle)} className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">حذف</button>
+                                                    </>
+                                                )}
                                             </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-sm text-gray-600">
+                                            {(vehicle as any).deletionReason || '-'}
                                         </td>
                                     </tr>
                                     {expandedVehicleId === vehicle.id && (
                                         <tr className="bg-slate-50">
-                                            <td colSpan={9} className="p-4">
+                                            <td colSpan={10} className="p-4">
                                                 <div className="bg-white p-4 rounded-lg border">
                                                     <h4 className="text-md font-bold text-slate-800 mb-3">تاریخچه مالکیت</h4>
                                                     {vehicle.ownerHistory && vehicle.ownerHistory.length > 0 ? (
@@ -912,6 +1009,152 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
                     setShowFormDialog(true);
                 }}
             />
+
+            {/* دیالوگ تایید حذف */}
+            {showDeleteDialog && vehicleToDelete && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-xl font-bold text-red-600 mb-4">تایید حذف خودرو</h2>
+                        
+                        <div className="mb-4 p-4 bg-gray-50 rounded">
+                            <p className="font-semibold">اطلاعات خودرو:</p>
+                            <p>پلاک: {vehicleToDelete.plateNumber ? formatPlateNumber(vehicleToDelete.plateNumber) : (vehicleToDelete.serialNumber || '-')}</p>
+                            <p>کد خودرو: {vehicleToDelete.vehicleCode || '-'}</p>
+                            <p>برند: {vehicleToDelete.brand || '-'}</p>
+                            <p>مدل: {vehicleToDelete.model || '-'}</p>
+                        </div>
+
+                        {dependencies && dependencies.hasDependencies && (
+                            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+                                <p className="font-semibold text-yellow-800 mb-2">⚠️ این خودرو در موارد زیر استفاده شده است:</p>
+                                <ul className="list-disc list-inside text-sm text-yellow-700">
+                                    {dependencies.tables.map((dep: any, idx: number) => (
+                                        <li key={idx}>{dep.description}: {dep.count} مورد</li>
+                                    ))}
+                                </ul>
+                                <p className="text-sm text-yellow-700 mt-2">در این حالت، خودرو فقط غیرفعال می‌شود و حذف فیزیکی انجام نمی‌شود.</p>
+                            </div>
+                        )}
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                دلیل حذف <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                value={deleteReason}
+                                onChange={(e) => setDeleteReason(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                rows={3}
+                                placeholder="دلیل حذف خودرو را وارد کنید..."
+                                required
+                            />
+                        </div>
+
+                        {dependencies && dependencies.hasDependencies ? (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    تغییر وضعیت به:
+                                </label>
+                                <select
+                                    value={newStatus}
+                                    onChange={(e) => setNewStatus(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                >
+                                    <option value="حذف شده">حذف شده</option>
+                                    <option value="اسقاط شده">اسقاط شده</option>
+                                    <option value="فروخته شده">فروخته شده</option>
+                                    <option value="غیرفعال">غیرفعال</option>
+                                </select>
+                            </div>
+                        ) : dependencies && !dependencies.hasDependencies && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    نوع حذف:
+                                </label>
+                                <div className="space-y-3">
+                                    <label className="flex items-start p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                        <input
+                                            type="radio"
+                                            name="deleteType"
+                                            value="soft"
+                                            checked={deleteType === 'soft'}
+                                            onChange={(e) => setDeleteType(e.target.value as 'soft' | 'hard')}
+                                            className="mt-1 mr-3"
+                                        />
+                                        <div>
+                                            <div className="font-medium text-gray-900">حذف موقت (Soft Delete)</div>
+                                            <div className="text-sm text-gray-600">خودرو غیرفعال می‌شود و امکان بازیابی وجود دارد</div>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-start p-3 border border-red-300 rounded-md cursor-pointer hover:bg-red-50">
+                                        <input
+                                            type="radio"
+                                            name="deleteType"
+                                            value="hard"
+                                            checked={deleteType === 'hard'}
+                                            onChange={(e) => setDeleteType(e.target.value as 'soft' | 'hard')}
+                                            className="mt-1 mr-3"
+                                        />
+                                        <div>
+                                            <div className="font-medium text-red-700">حذف کامل (Hard Delete)</div>
+                                            <div className="text-sm text-red-600">⚠️ خودرو به طور دائمی حذف می‌شود و قابل بازیابی نیست</div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                {deleteType === 'soft' && (
+                                    <div className="mt-3">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            تغییر وضعیت به:
+                                        </label>
+                                        <select
+                                            value={newStatus}
+                                            onChange={(e) => setNewStatus(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        >
+                                            <option value="حذف شده">حذف شده</option>
+                                            <option value="اسقاط شده">اسقاط شده</option>
+                                            <option value="فروخته شده">فروخته شده</option>
+                                            <option value="غیرفعال">غیرفعال</option>
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => {
+                                    setShowDeleteDialog(false);
+                                    setVehicleToDelete(null);
+                                    setDeleteReason('');
+                                    setDependencies(null);
+                                    setDeleteType('soft');
+                                }}
+                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                                disabled={deletingVehicle}
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                className={`px-4 py-2 text-white rounded disabled:bg-gray-400 disabled:cursor-not-allowed ${
+                                    deleteType === 'hard' 
+                                        ? 'bg-red-700 hover:bg-red-800' 
+                                        : 'bg-red-500 hover:bg-red-600'
+                                }`}
+                                disabled={deletingVehicle || !deleteReason.trim()}
+                            >
+                                {deletingVehicle 
+                                    ? 'در حال حذف...' 
+                                    : deleteType === 'hard' 
+                                        ? '⚠️ حذف دائمی' 
+                                        : 'تایید حذف'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

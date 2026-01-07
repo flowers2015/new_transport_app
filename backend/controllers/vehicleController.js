@@ -40,13 +40,17 @@ async function getVehicles(req, res) {
         v.fuel_type AS "fuelType",
         v.status,
         v.vehicle_code AS "vehicleCode",
+        v.deleted_at AS "deletedAt",
+        v.deletion_reason AS "deletionReason",
         v.created_at AS "createdAt",
         v.updated_at AS "updatedAt",
         b.name as "branchName",
         b.location as "branchLocation"
       FROM vehicles v 
       LEFT JOIN branches b ON v.branch_id = b.id 
-      ORDER BY v.created_at DESC
+      ORDER BY 
+        CASE WHEN v.deleted_at IS NULL THEN 0 ELSE 1 END,
+        v.created_at DESC
     `;
     
     let rows;
@@ -855,10 +859,316 @@ async function importCompanyVehiclesFromExcel(req, res) {
   }
 }
 
+/**
+ * بررسی وابستگی‌های یک خودرو در تمام جدول‌های مرتبط
+ */
+async function checkVehicleDependencies(vehicleId) {
+  const dependencies = {
+    hasDependencies: false,
+    tables: []
+  };
+
+  try {
+    // لیست تمام جدول‌هایی که ممکن است به vehicles مرتبط باشند
+    const checks = [
+      {
+        name: 'vehicle_owner_history',
+        query: 'SELECT COUNT(*) as count FROM vehicle_owner_history WHERE vehicle_id = $1',
+        description: 'تاریخچه مالکین'
+      },
+      {
+        name: 'repair_orders',
+        query: 'SELECT COUNT(*) as count FROM repair_orders WHERE vehicle_id = $1',
+        description: 'سفارش‌های تعمیر'
+      },
+      {
+        name: 'invoices',
+        query: 'SELECT COUNT(*) as count FROM invoices WHERE vehicle_id = $1',
+        description: 'فاکتورها'
+      },
+      {
+        name: 'freight_announcements',
+        query: 'SELECT COUNT(*) as count FROM freight_announcements WHERE assigned_vehicle_id = $1',
+        description: 'اعلام بارها'
+      },
+      {
+        name: 'fuel_card_requests',
+        query: 'SELECT COUNT(*) as count FROM fuel_card_requests WHERE vehicle_id = $1',
+        description: 'درخواست کارت سوخت'
+      },
+      {
+        name: 'traffic_fines',
+        query: 'SELECT COUNT(*) as count FROM traffic_fines WHERE vehicle_id = $1',
+        description: 'جرائم رانندگی'
+      },
+      {
+        name: 'vehicle_permits',
+        query: 'SELECT COUNT(*) as count FROM vehicle_permits WHERE vehicle_id = $1',
+        description: 'پروانه‌های فعالیت'
+      },
+      {
+        name: 'insurance_policies',
+        query: 'SELECT COUNT(*) as count FROM insurance_policies WHERE vehicle_id = $1',
+        description: 'بیمه‌نامه‌ها'
+      },
+      {
+        name: 'accident_reports',
+        query: 'SELECT COUNT(*) as count FROM accident_reports WHERE vehicle_id = $1',
+        description: 'گزارشات حوادث'
+      },
+      {
+        name: 'vehicle_allocations',
+        query: 'SELECT COUNT(*) as count FROM vehicle_allocations WHERE vehicle_id = $1',
+        description: 'تخصیص خودرو'
+      }
+    ];
+
+    // بررسی هر جدول
+    for (const check of checks) {
+      try {
+        const result = await pool.query(check.query, [vehicleId]);
+        const count = parseInt(result.rows[0].count, 10);
+        
+        if (count > 0) {
+          dependencies.hasDependencies = true;
+          dependencies.tables.push({
+            table: check.name,
+            description: check.description,
+            count: count
+          });
+        }
+      } catch (err) {
+        // اگر جدول وجود ندارد، نادیده بگیر
+        if (err.code !== '42P01') {
+          console.warn(`⚠️ [checkVehicleDependencies] Error checking ${check.name}:`, err.message);
+        }
+      }
+    }
+
+    // بررسی در جداول محاسبات (driver_calculations)
+    try {
+      const calcResult = await pool.query(
+        `SELECT COUNT(*) as count 
+         FROM driver_calculations 
+         WHERE vehicle_id = $1 OR vehicle_code = $2 OR plate_number LIKE $3`,
+        [vehicleId, vehicleId, `%${vehicleId}%`]
+      );
+      const calcCount = parseInt(calcResult.rows[0].count, 10);
+      if (calcCount > 0) {
+        dependencies.hasDependencies = true;
+        dependencies.tables.push({
+          table: 'driver_calculations',
+          description: 'محاسبات راننده',
+          count: calcCount
+        });
+      }
+    } catch (err) {
+      if (err.code !== '42P01') {
+        console.warn('⚠️ [checkVehicleDependencies] Error checking driver_calculations:', err.message);
+      }
+    }
+
+    return dependencies;
+  } catch (error) {
+    console.error('❌ [checkVehicleDependencies] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * حذف خودرو (Soft Delete یا Hard Delete)
+ * POST /api/v1/vehicles/:id/delete
+ * Body: { reason: string, newStatus?: string, hardDelete?: boolean }
+ */
+async function deleteVehicle(req, res) {
+  try {
+    const { id } = req.params;
+    const { reason, newStatus, hardDelete } = req.body;
+
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ 
+        message: 'دلیل حذف الزامی است' 
+      });
+    }
+
+    // بررسی وجود خودرو
+    const vehicleCheck = await pool.query(
+      'SELECT id, status, deleted_at FROM vehicles WHERE id = $1',
+      [id]
+    );
+
+    if (vehicleCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'خودرو یافت نشد' });
+    }
+
+    const vehicle = vehicleCheck.rows[0];
+
+    // اگر قبلاً حذف شده، خطا بده
+    if (vehicle.deleted_at) {
+      return res.status(400).json({ 
+        message: 'این خودرو قبلاً حذف شده است' 
+      });
+    }
+
+    // بررسی وابستگی‌ها
+    const dependencies = await checkVehicleDependencies(id);
+
+    if (dependencies.hasDependencies) {
+      // اگر وابستگی وجود دارد، فقط Soft Delete با تغییر وضعیت
+      let finalStatus = newStatus || 'حذف شده';
+      
+      // اگر وضعیت جدید مشخص نشده، وضعیت‌های پیشنهادی: اسقاط شده، فروخته شده، غیرفعال
+      const allowedStatuses = ['اسقاط شده', 'فروخته شده', 'غیرفعال', 'حذف شده'];
+      if (!allowedStatuses.includes(finalStatus)) {
+        finalStatus = 'حذف شده';
+      }
+
+      // Soft Delete: تنظیم deleted_at و deletion_reason و تغییر وضعیت
+      await pool.query(
+        `UPDATE vehicles 
+         SET deleted_at = NOW(), 
+             deletion_reason = $1,
+             status = $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [reason.trim(), finalStatus, id]
+      );
+
+      return res.json({
+        message: 'خودرو با موفقیت حذف شد (Soft Delete)',
+        type: 'soft',
+        dependencies: dependencies.tables,
+        status: finalStatus
+      });
+    } else {
+      // اگر وابستگی ندارد، Hard Delete یا Soft Delete امکان‌پذیر است
+      if (hardDelete === true) {
+        // Hard Delete: حذف فیزیکی از دیتابیس
+        await pool.query('DELETE FROM vehicles WHERE id = $1', [id]);
+
+        // ثبت در لاگ
+        console.log(`🗑️ [deleteVehicle] Hard delete: Vehicle ${id} permanently deleted. Reason: ${reason}`);
+
+        return res.json({
+          message: 'خودرو به طور کامل از سیستم حذف شد',
+          type: 'hard',
+          dependencies: []
+        });
+      } else {
+        // Soft Delete: تنظیم deleted_at و deletion_reason
+        await pool.query(
+          `UPDATE vehicles 
+           SET deleted_at = NOW(), 
+               deletion_reason = $1,
+               status = $2,
+               updated_at = NOW()
+           WHERE id = $3`,
+          [reason.trim(), newStatus || 'حذف شده', id]
+        );
+
+        return res.json({
+          message: 'خودرو با موفقیت حذف شد',
+          type: 'soft',
+          dependencies: [],
+          canHardDelete: true // می‌تواند حذف فیزیکی شود
+        });
+      }
+    }
+  } catch (error) {
+    console.error('❌ [deleteVehicle] Error:', error);
+    res.status(500).json({ 
+      message: 'خطا در حذف خودرو: ' + error.message 
+    });
+  }
+}
+
+/**
+ * بازیابی خودرو حذف شده
+ * POST /api/v1/vehicles/:id/restore
+ */
+async function restoreVehicle(req, res) {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE vehicles 
+       SET deleted_at = NULL, 
+           deletion_reason = NULL,
+           status = 'غیرفعال',
+           updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NOT NULL
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        message: 'خودرو حذف شده یافت نشد یا قبلاً بازیابی شده است' 
+      });
+    }
+
+    const restoredVehicle = await pool.query(
+      `SELECT 
+        v.id,
+        json_build_object(
+          'part1', v.plate_part1,
+          'letter', v.plate_letter,
+          'part2', v.plate_part2,
+          'cityCode', v.plate_city_code
+        ) AS "plateNumber",
+        v.serial_number AS "serialNumber",
+        v.model,
+        v.type,
+        v.branch_id AS "branchId",
+        v.holding_company AS "holdingCompany",
+        v.mihan_company AS "mihanCompany",
+        v.vehicle_category AS "vehicleCategory",
+        v.current_vehicle_type AS "vehicleType",
+        v.brand,
+        v.owner_name AS "ownerName",
+        v.color,
+        v.usage_type AS "usageType",
+        v.engine_number AS "engineNumber",
+        v.vehicle_tip AS "vehicleTip",
+        v.chassis_number AS "chassisNumber",
+        v.capacity,
+        v.vin,
+        v.year,
+        v.wheel_count AS "wheelCount",
+        v.axle_count AS "axleCount",
+        v.cylinder_count AS "cylinderCount",
+        v.domain_name AS "domainName",
+        v.fuel_type AS "fuelType",
+        v.status,
+        v.vehicle_code AS "vehicleCode",
+        v.deleted_at AS "deletedAt",
+        v.deletion_reason AS "deletionReason",
+        v.created_at AS "createdAt",
+        v.updated_at AS "updatedAt"
+      FROM vehicles v 
+      WHERE v.id = $1`,
+      [id]
+    );
+
+    return res.json({
+      message: 'خودرو با موفقیت بازیابی شد',
+      vehicle: restoredVehicle.rows[0]
+    });
+  } catch (error) {
+    console.error('❌ [restoreVehicle] Error:', error);
+    res.status(500).json({ 
+      message: 'خطا در بازیابی خودرو: ' + error.message 
+    });
+  }
+}
+
 module.exports = {
   getVehicles,
   getVehicleById,
   createVehicle,
   updateVehicle,
   importCompanyVehiclesFromExcel,
+  checkVehicleDependencies,
+  deleteVehicle,
+  restoreVehicle,
 };
