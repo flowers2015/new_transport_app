@@ -374,6 +374,103 @@ async function createQueueEntry(req, res) {
       }
     }
 
+    // اعتبارسنجی تطابق نوع خودرو با vehicleCategory
+    if (vehicleCategory && (vehicleCategory === 'trailer' || vehicleCategory === 'mini-trailer' || vehicleCategory === 'ten-wheel')) {
+      // گرفتن vehicle_type خودرو
+      let vehicleCheck;
+      let vehicleType = null;
+      
+      try {
+        vehicleCheck = await client.query(
+          'SELECT id, current_vehicle_type, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code, brand, model, vehicle_tip FROM vehicles WHERE id = $1',
+          [vehicleId]
+        );
+      } catch (err) {
+        // اگر current_vehicle_type وجود نداشت، بدون آن بخوانیم
+        if (err.code === '42703') {
+          vehicleCheck = await client.query(
+            'SELECT id, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code, brand, model, vehicle_tip FROM vehicles WHERE id = $1',
+            [vehicleId]
+          );
+        } else {
+          throw err;
+        }
+      }
+      
+      if (vehicleCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'خودرو یافت نشد.' });
+      }
+      
+      const vehicle = vehicleCheck.rows[0];
+      vehicleType = vehicle.current_vehicle_type;
+      
+      // اگر current_vehicle_type خالی است، از vehicle_specifications استفاده می‌کنیم
+      if (!vehicleType || vehicleType.trim() === '') {
+        try {
+          // جستجو در vehicle_specifications بر اساس brand, model, tip
+          const specQuery = `
+            SELECT vehicle_type 
+            FROM vehicle_specifications 
+            WHERE brand = $1 
+              AND model = $2 
+              AND (tip = $3 OR tip IS NULL)
+            LIMIT 1
+          `;
+          const specResult = await client.query(specQuery, [
+            vehicle.brand || '',
+            vehicle.model || '',
+            vehicle.vehicle_tip || ''
+          ]);
+          
+          if (specResult.rows.length > 0 && specResult.rows[0].vehicle_type) {
+            vehicleType = specResult.rows[0].vehicle_type;
+          }
+        } catch (specErr) {
+          console.warn('⚠️ [createQueueEntry] خطا در جستجوی vehicle_specifications:', specErr.message);
+          // ادامه می‌دهیم با vehicleType = null
+        }
+      }
+      
+      // اگر vehicle_type خالی است
+      if (!vehicleType || vehicleType.trim() === '') {
+        const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
+          ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
+          : (vehicle.vehicle_code || 'این خودرو');
+        await client.query('ROLLBACK');
+        return res.status(400).json({ 
+          message: `نوع خودرو برای ${plateInfo} تعریف نشده است. لطفاً به قسمت "مدیریت خودروها" بروید و نوع خودرو را تعریف کنید.` 
+        });
+      }
+      
+      // تطابق نوع خودرو با vehicleCategory
+      const categoryLabel = vehicleCategory === 'trailer' ? 'تریلی' : vehicleCategory === 'mini-trailer' ? 'مینی تریلی' : 'ده چرخ';
+      
+      if (vehicleCategory === 'trailer' || vehicleCategory === 'mini-trailer') {
+        // باید خودرو "کشنده" باشد
+        if (vehicleType !== 'کشنده') {
+          const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
+            ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
+            : (vehicle.vehicle_code || 'این خودرو');
+          await client.query('ROLLBACK');
+          return res.status(400).json({ 
+            message: `برای ثبت نوبت در رسته "${categoryLabel}"، خودرو باید از نوع "کشنده" باشد، اما خودروی انتخاب شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "کشنده" انتخاب کنید.` 
+          });
+        }
+      } else if (vehicleCategory === 'ten-wheel') {
+        // باید خودرو "ده چرخ" باشد
+        if (vehicleType !== 'ده چرخ') {
+          const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
+            ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
+            : (vehicle.vehicle_code || 'این خودرو');
+          await client.query('ROLLBACK');
+          return res.status(400).json({ 
+            message: `برای ثبت نوبت در رسته "ده چرخ"، خودرو باید از نوع "ده چرخ" باشد، اما خودروی انتخاب شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "ده چرخ" انتخاب کنید.` 
+          });
+        }
+      }
+    }
+
     const { rows: maxRows } = await client.query(
       'SELECT COALESCE(MAX(position), 0) + 1 AS next_pos FROM dispatch_queue_entries WHERE queue_type = $1 AND vehicle_category = $2',
       [queueType, vehicleCategory || null]
@@ -967,10 +1064,26 @@ async function assignFreight(req, res) {
     // کنترل تطابق نوع خودرو با اعلام بار
     if (announcement.vehicle_type && (announcement.vehicle_type === 'تریلی' || announcement.vehicle_type === 'مینی تریلی' || announcement.vehicle_type === 'ده چرخ')) {
       // گرفتن vehicle_type خودرو
-      const vehicleCheck = await client.query(
-        'SELECT id, vehicle_type, current_vehicle_type, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code FROM vehicles WHERE id = $1',
-        [vehicleId]
-      );
+      // ابتدا سعی می‌کنیم current_vehicle_type را از vehicles بخوانیم
+      let vehicleCheck;
+      let vehicleType = null;
+      
+      try {
+        vehicleCheck = await client.query(
+          'SELECT id, current_vehicle_type, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code, brand, model, vehicle_tip FROM vehicles WHERE id = $1',
+          [vehicleId]
+        );
+      } catch (err) {
+        // اگر current_vehicle_type وجود نداشت، بدون آن بخوانیم
+        if (err.code === '42703') {
+          vehicleCheck = await client.query(
+            'SELECT id, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code, brand, model, vehicle_tip FROM vehicles WHERE id = $1',
+            [vehicleId]
+          );
+        } else {
+          throw err;
+        }
+      }
       
       if (vehicleCheck.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -978,7 +1091,34 @@ async function assignFreight(req, res) {
       }
       
       const vehicle = vehicleCheck.rows[0];
-      const vehicleType = vehicle.current_vehicle_type || vehicle.vehicle_type;
+      vehicleType = vehicle.current_vehicle_type;
+      
+      // اگر current_vehicle_type خالی است، از vehicle_specifications استفاده می‌کنیم
+      if (!vehicleType || vehicleType.trim() === '') {
+        try {
+          // جستجو در vehicle_specifications بر اساس brand, model, tip
+          const specQuery = `
+            SELECT vehicle_type 
+            FROM vehicle_specifications 
+            WHERE brand = $1 
+              AND model = $2 
+              AND (tip = $3 OR tip IS NULL)
+            LIMIT 1
+          `;
+          const specResult = await client.query(specQuery, [
+            vehicle.brand || '',
+            vehicle.model || '',
+            vehicle.vehicle_tip || ''
+          ]);
+          
+          if (specResult.rows.length > 0 && specResult.rows[0].vehicle_type) {
+            vehicleType = specResult.rows[0].vehicle_type;
+          }
+        } catch (specErr) {
+          console.warn('⚠️ [assignFreight] خطا در جستجوی vehicle_specifications:', specErr.message);
+          // ادامه می‌دهیم با vehicleType = null
+        }
+      }
       
       // اگر vehicle_type خالی است
       if (!vehicleType || vehicleType.trim() === '') {
