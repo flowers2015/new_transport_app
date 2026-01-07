@@ -632,12 +632,26 @@ async function updateVehicleSpec(req, res) {
     }
     if (hasFuelColumns) {
       if (fuelConsumptionPercentage !== undefined) {
+        // Validation: بررسی محدوده مجاز (0 تا 999999.99)
+        const percentage = parseFloat(fuelConsumptionPercentage);
+        if (isNaN(percentage) || percentage < 0 || percentage > 999999.99) {
+          return res.status(400).json({ 
+            message: 'درصد مصرف سوخت باید بین 0 تا 999999.99 باشد' 
+          });
+        }
         updateFields.push(`fuel_consumption_percentage = $${paramIndex++}`);
-        updateParams.push(fuelConsumptionPercentage);
+        updateParams.push(percentage);
       }
       if (fuelPricePerLiter !== undefined) {
+        // Validation: بررسی محدوده مجاز (0 تا 99999999.99)
+        const price = parseFloat(fuelPricePerLiter);
+        if (isNaN(price) || price < 0 || price > 99999999.99) {
+          return res.status(400).json({ 
+            message: 'مبلغ سوخت باید بین 0 تا 99999999.99 باشد' 
+          });
+        }
         updateFields.push(`fuel_price_per_liter = $${paramIndex++}`);
-        updateParams.push(fuelPricePerLiter);
+        updateParams.push(price);
       }
     }
     if (isActive !== undefined) {
@@ -712,8 +726,14 @@ async function updateVehicleSpec(req, res) {
     if (error.code === '23505') {
       return res.status(400).json({ message: 'این ترکیب نوع/دسته‌بندی/برند/مدل/تیپ قبلاً ثبت شده است' });
     }
+    if (error.code === '22003') {
+      // Numeric field overflow
+      return res.status(400).json({ 
+        message: 'مقدار وارد شده برای درصد مصرف سوخت یا مبلغ سوخت خیلی بزرگ است. لطفاً مقدار کوچکتری وارد کنید.' 
+      });
+    }
     console.error('Error updating vehicle spec:', error);
-    res.status(500).json({ message: 'خطا در ویرایش مشخصات' });
+    res.status(500).json({ message: 'خطا در ویرایش مشخصات: ' + (error.message || 'خطای نامشخص') });
   }
 }
 
