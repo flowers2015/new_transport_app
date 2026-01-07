@@ -326,9 +326,29 @@ async function createQueueEntry(req, res) {
     return res.status(400).json({ message: 'vehicleId، driverId و queueType الزامی هستند.' });
   }
 
+  // تبدیل vehicleCategory از key انگلیسی به label فارسی (اگر لازم باشد)
+  const categoryKeyToLabel = {
+    'trailer': 'تریلی',
+    'mini-trailer': 'مینی تریلی',
+    'ten-wheel': 'ده چرخ'
+  };
+  const normalizedVehicleCategory = vehicleCategory && categoryKeyToLabel[vehicleCategory] 
+    ? categoryKeyToLabel[vehicleCategory] 
+    : vehicleCategory;
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // تبدیل vehicleCategory از key انگلیسی به label فارسی (اگر لازم باشد)
+    const categoryKeyToLabel = {
+      'trailer': 'تریلی',
+      'mini-trailer': 'مینی تریلی',
+      'ten-wheel': 'ده چرخ'
+    };
+    const normalizedVehicleCategory = vehicleCategory && categoryKeyToLabel[vehicleCategory] 
+      ? categoryKeyToLabel[vehicleCategory] 
+      : vehicleCategory;
 
     // بررسی اینکه آیا راننده/خودرو در نوبت موجود است
     const existing = await client.query(
@@ -387,7 +407,9 @@ async function createQueueEntry(req, res) {
     }
 
     // اعتبارسنجی تطابق نوع خودرو با vehicleCategory
-    if (vehicleCategory && (vehicleCategory === 'trailer' || vehicleCategory === 'mini-trailer' || vehicleCategory === 'ten-wheel')) {
+    // استفاده از normalizedVehicleCategory برای validation
+    const categoryForValidation = normalizedVehicleCategory || vehicleCategory;
+    if (categoryForValidation && (categoryForValidation === 'trailer' || categoryForValidation === 'mini-trailer' || categoryForValidation === 'ten-wheel' || categoryForValidation === 'تریلی' || categoryForValidation === 'مینی تریلی' || categoryForValidation === 'ده چرخ')) {
       // گرفتن vehicle_type خودرو
       let vehicleCheck;
       let vehicleType = null;
@@ -456,9 +478,13 @@ async function createQueueEntry(req, res) {
       }
       
       // تطابق نوع خودرو با vehicleCategory
-      const categoryLabel = vehicleCategory === 'trailer' ? 'تریلی' : vehicleCategory === 'mini-trailer' ? 'مینی تریلی' : 'ده چرخ';
+      // استفاده از categoryForValidation برای مقایسه
+      const isTrailerCategory = categoryForValidation === 'trailer' || categoryForValidation === 'تریلی';
+      const isMiniTrailerCategory = categoryForValidation === 'mini-trailer' || categoryForValidation === 'مینی تریلی';
+      const isTenWheelCategory = categoryForValidation === 'ten-wheel' || categoryForValidation === 'ده چرخ';
+      const categoryLabel = isTrailerCategory ? 'تریلی' : isMiniTrailerCategory ? 'مینی تریلی' : 'ده چرخ';
       
-      if (vehicleCategory === 'trailer' || vehicleCategory === 'mini-trailer') {
+      if (isTrailerCategory || isMiniTrailerCategory) {
         // باید خودرو "کشنده" باشد
         if (vehicleType !== 'کشنده') {
           const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
@@ -469,7 +495,7 @@ async function createQueueEntry(req, res) {
             message: `برای ثبت نوبت در رسته "${categoryLabel}"، خودرو باید از نوع "کشنده" باشد، اما خودروی انتخاب شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "کشنده" انتخاب کنید.` 
           });
         }
-      } else if (vehicleCategory === 'ten-wheel') {
+      } else if (isTenWheelCategory) {
         // باید خودرو "ده چرخ" باشد
         if (vehicleType !== 'ده چرخ') {
           const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
@@ -482,16 +508,6 @@ async function createQueueEntry(req, res) {
         }
       }
     }
-
-    // تبدیل vehicleCategory از key انگلیسی به label فارسی (اگر لازم باشد)
-    const categoryKeyToLabel = {
-      'trailer': 'تریلی',
-      'mini-trailer': 'مینی تریلی',
-      'ten-wheel': 'ده چرخ'
-    };
-    const normalizedVehicleCategory = vehicleCategory && categoryKeyToLabel[vehicleCategory] 
-      ? categoryKeyToLabel[vehicleCategory] 
-      : vehicleCategory;
 
     const { rows: maxRows } = await client.query(
       'SELECT COALESCE(MAX(position), 0) + 1 AS next_pos FROM dispatch_queue_entries WHERE queue_type = $1 AND vehicle_category = $2',

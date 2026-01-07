@@ -75,7 +75,7 @@ router.get('/city-details', authenticateToken, getCityDetails);
 router.post(
   '/finalize-assignments',
   authenticateToken,
-  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'transport_finance', 'admin']),
   finalizeAssignments
 );
 
