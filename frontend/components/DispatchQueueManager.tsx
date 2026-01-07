@@ -228,6 +228,17 @@ const resolveCategoryKey = (value?: string | null): PresetCategory['key'] | null
     return null;
 };
 
+// تبدیل category key به label
+const resolveCategoryLabel = (categoryKey?: string | null): string | null => {
+    if (!categoryKey) return null;
+    for (const preset of presetCategories) {
+        if (preset.key === categoryKey) {
+            return preset.label;
+        }
+    }
+    return null;
+};
+
 const vehicleMatchesCategory = (vehicleType?: string | null, categoryLabel?: string | null): boolean => {
     const presetKey = resolveCategoryKey(categoryLabel);
     if (!presetKey) return false;
@@ -878,7 +889,15 @@ const DispatchQueueManager: React.FC = () => {
             const res = await fetch(getApiUrl('dispatch/queue'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as QueueGroup;
-            setQueueData(data || {});
+            
+            // تبدیل keyهای vehicleCategory (مثل 'ten-wheel') به label (مثل 'ده چرخ')
+            const normalizedData: QueueGroup = {};
+            Object.keys(data || {}).forEach(key => {
+                const label = resolveCategoryLabel(key) || key;
+                normalizedData[label] = data[key];
+            });
+            
+            setQueueData(normalizedData || {});
         } catch (error) {
             console.error('Failed to load queue', error);
             setQueueData({});
@@ -1004,7 +1023,19 @@ const DispatchQueueManager: React.FC = () => {
                     notes: row.notes || undefined,
                 }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const errorText = await res.text();
+                let errorMessage = 'ثبت نوبت ناموفق بود.';
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    if (errorJson.message) {
+                        errorMessage = errorJson.message;
+                    }
+                } catch {
+                    errorMessage = errorText || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
             updateRow(rowId, () => ({
                 ...createRow({ key: row.categoryKey, label: row.categoryLabel }, row.queueType),
                 id: rowId,
@@ -1258,9 +1289,10 @@ const DispatchQueueManager: React.FC = () => {
     const presetLabels = presetCategories.map(cat => cat.label);
 
     const orderedCategoryLabels = useMemo(() => {
+        // queueData قبلاً در fetchQueue normalize شده است
         const extras = Object.keys(queueData || {}).filter(label => !presetLabels.includes(label));
         return [...presetLabels, ...extras];
-    }, [queueData]);
+    }, [queueData, presetLabels]);
 
     const activeCategoryLabel = useMemo(() => {
         const preset = presetCategories.find(cat => cat.key === activeCategoryKey);

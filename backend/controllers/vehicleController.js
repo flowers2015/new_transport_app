@@ -918,7 +918,34 @@ async function checkVehicleDependencies(vehicleId) {
       },
       {
         name: 'vehicle_allocations',
-        query: 'SELECT COUNT(*) as count FROM vehicle_allocations WHERE vehicle_id = $1',
+        query: async (vehicleId) => {
+          // بررسی وجود ستون vehicle_id در vehicle_allocations
+          try {
+            const checkColumn = await pool.query(`
+              SELECT column_name FROM information_schema.columns 
+              WHERE table_name = 'vehicle_allocations' AND column_name = 'vehicle_id'
+            `);
+            
+            if (checkColumn.rows.length > 0) {
+              // اگر vehicle_id وجود دارد
+              return await pool.query(
+                `SELECT COUNT(*) as count FROM vehicle_allocations 
+                 WHERE vehicle_id = $1 
+                    OR id IN (SELECT allocation_id FROM vehicle_allocation_items WHERE vehicle_id = $1)`,
+                [vehicleId]
+              );
+            } else {
+              // اگر vehicle_id وجود ندارد، فقط از vehicle_allocation_items استفاده کن
+              return await pool.query(
+                `SELECT COUNT(*) as count FROM vehicle_allocation_items WHERE vehicle_id = $1`,
+                [vehicleId]
+              );
+            }
+          } catch (err) {
+            // اگر جدول وجود ندارد، null برگردان
+            return { rows: [{ count: '0' }] };
+          }
+        },
         description: 'تخصیص خودرو'
       }
     ];
@@ -926,7 +953,13 @@ async function checkVehicleDependencies(vehicleId) {
     // بررسی هر جدول
     for (const check of checks) {
       try {
-        const result = await pool.query(check.query, [vehicleId]);
+        let result;
+        // اگر query یک تابع است (مثل vehicle_allocations)، آن را اجرا کن
+        if (typeof check.query === 'function') {
+          result = await check.query(vehicleId);
+        } else {
+          result = await pool.query(check.query, [vehicleId]);
+        }
         const count = parseInt(result.rows[0].count, 10);
         
         if (count > 0) {
@@ -939,31 +972,74 @@ async function checkVehicleDependencies(vehicleId) {
         }
       } catch (err) {
         // اگر جدول وجود ندارد، نادیده بگیر
-        if (err.code !== '42P01') {
+        if (err.code !== '42P01' && err.code !== '42703') {
           console.warn(`⚠️ [checkVehicleDependencies] Error checking ${check.name}:`, err.message);
         }
       }
     }
 
     // بررسی در جداول محاسبات (driver_calculations)
+    // ابتدا vehicle_code و plate_number را از vehicles بگیریم
     try {
-      const calcResult = await pool.query(
-        `SELECT COUNT(*) as count 
-         FROM driver_calculations 
-         WHERE vehicle_id = $1 OR vehicle_code = $2 OR plate_number LIKE $3`,
-        [vehicleId, vehicleId, `%${vehicleId}%`]
+      const vehicleInfo = await pool.query(
+        'SELECT vehicle_code, plate_part1, plate_letter, plate_part2 FROM vehicles WHERE id = $1',
+        [vehicleId]
       );
-      const calcCount = parseInt(calcResult.rows[0].count, 10);
-      if (calcCount > 0) {
-        dependencies.hasDependencies = true;
-        dependencies.tables.push({
-          table: 'driver_calculations',
-          description: 'محاسبات راننده',
-          count: calcCount
-        });
+      
+      if (vehicleInfo.rows.length > 0) {
+        const vehicle = vehicleInfo.rows[0];
+        const vehicleCode = vehicle.vehicle_code || '';
+        const plateNumber = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2
+          ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}`
+          : '';
+        
+        // بررسی وجود ستون‌ها در driver_calculations
+        let calcQuery = '';
+        let calcParams = [];
+        let hasVehicleIdColumn = false;
+        
+        try {
+          // بررسی وجود ستون vehicle_id
+          const checkVehicleId = await pool.query(`
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = 'driver_calculations' AND column_name = 'vehicle_id'
+          `);
+          
+          hasVehicleIdColumn = checkVehicleId.rows.length > 0;
+        } catch (checkErr) {
+          // اگر جدول وجود ندارد، hasVehicleIdColumn = false باقی می‌ماند
+        }
+        
+        if (hasVehicleIdColumn) {
+          // اگر vehicle_id وجود دارد
+          calcQuery = `SELECT COUNT(*) as count 
+                      FROM driver_calculations 
+                      WHERE vehicle_id = $1 
+                         OR vehicle_code = $2 
+                         OR vehicle_plate LIKE $3`;
+          calcParams = [vehicleId, vehicleCode, `%${plateNumber}%`];
+        } else {
+          // اگر vehicle_id وجود ندارد، فقط از vehicle_code و vehicle_plate استفاده کن
+          calcQuery = `SELECT COUNT(*) as count 
+                      FROM driver_calculations 
+                      WHERE vehicle_code = $1 
+                         OR vehicle_plate LIKE $2`;
+          calcParams = [vehicleCode, `%${plateNumber}%`];
+        }
+        
+        const calcResult = await pool.query(calcQuery, calcParams);
+        const calcCount = parseInt(calcResult.rows[0].count, 10);
+        if (calcCount > 0) {
+          dependencies.hasDependencies = true;
+          dependencies.tables.push({
+            table: 'driver_calculations',
+            description: 'محاسبات راننده',
+            count: calcCount
+          });
+        }
       }
     } catch (err) {
-      if (err.code !== '42P01') {
+      if (err.code !== '42P01' && err.code !== '42703') {
         console.warn('⚠️ [checkVehicleDependencies] Error checking driver_calculations:', err.message);
       }
     }

@@ -335,9 +335,10 @@ async function createQueueEntry(req, res) {
       const isDriverConflict = existingEntry.driver_id === driverId;
       const conflictType = isDriverConflict ? 'راننده' : 'خودرو';
       const conflictName = isDriverConflict ? existingEntry.driver_name : existingEntry.vehicle_code;
-      const queueTypeLabel = existingEntry.queue_type === 'far' ? 'دور' : existingEntry.queue_type === 'near' ? 'نزدیک' : existingEntry.queue_type;
+      const queueTypeLabel = existingEntry.queue_type === 'far' ? 'مسیر دور' : existingEntry.queue_type === 'near' ? 'مسیر نزدیک' : existingEntry.queue_type;
+      const positionText = existingEntry.position ? ` در موقعیت ${existingEntry.position}` : '';
       return res.status(409).json({ 
-        message: `${conflictType} "${conflictName || 'نامشخص'}" در صف "${queueTypeLabel}" موجود است.`,
+        message: `${conflictType} "${conflictName || 'نامشخص'}" قبلاً در صف "${queueTypeLabel}"${positionText} ثبت شده است. لطفاً ابتدا نوبت قبلی را حذف کنید.`,
         conflictType,
         conflictName: conflictName || 'نامشخص',
         existingQueueType: existingEntry.queue_type,
