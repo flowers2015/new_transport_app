@@ -273,7 +273,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [excessMissionCostPerDay, setExcessMissionCostPerDay] = useState<number>(0);
     const [multiUnloadCostPerUnit, setMultiUnloadCostPerUnit] = useState<number>(0);
     const [helperAllowancePerKm, setHelperAllowancePerKm] = useState<number>(0);
-    const [returnCargoRegulations, setReturnCargoRegulations] = useState<Array<{ vehicleType: 'تریلی' | 'ده چرخ'; cargoType: 'full_product' | 'full_box_pallet_basket' | 'half'; cost: number; startDate?: string; endDate?: string; isActive?: boolean }>>([]);
+    const [returnCargoRegulations, setReturnCargoRegulations] = useState<Array<{ vehicleType: 'کشنده' | 'ده چرخ'; cargoType: 'full_product' | 'full_box_pallet_basket' | 'half'; cost: number; startDate?: string; endDate?: string; isActive?: boolean }>>([]);
 
     useEffect(() => {
         fetchData();
@@ -305,8 +305,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 const vehicleType = tour.vehicleType || '';
                 const isTrailer = vehicleType.includes('تریلی');
                 const isTenWheeler = vehicleType.includes('ده چرخ');
+                // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
                 let vehicleTypeForApi = '';
-                if (isTrailer) vehicleTypeForApi = 'تریلی';
+                if (isTrailer) vehicleTypeForApi = 'کشنده';
                 else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
                 
                 if (vehicleTypeForApi) {
@@ -382,7 +383,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const vehicleType = inputDialogData.vehicleType;
             const isTrailer = vehicleType.includes('تریلی');
             const isTenWheeler = vehicleType.includes('ده چرخ');
-            const vehicleTypeForReg = isTrailer ? 'تریلی' : (isTenWheeler ? 'ده چرخ' : null);
+            // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
+            const vehicleTypeForReg = isTrailer ? 'کشنده' : (isTenWheeler ? 'ده چرخ' : null);
 
             if (vehicleTypeForReg) {
                 // پیدا کردن بخشنامه اجرت بار برگشتی برای "هزینه بار کامل (محصول)"
@@ -1385,12 +1387,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         const trailerAndMiniTrailerCount = trailerCount + miniTrailerCount;
                         const trailerAndMiniTrailerPercent = totalTours > 0 ? Math.round((trailerAndMiniTrailerCount / totalTours) * 100) : 0;
                         
+                        // Mapping: تریلی/مینی تریلی → کشنده
                         if (trailerAndMiniTrailerPercent > 50) {
-                            return 'تریلی';
+                            return 'کشنده';
                         } else if (trailerAndMiniTrailerPercent < 50) {
                             return 'ده چرخ';
                         } else {
-                            return 'تریلی';
+                            return 'کشنده';
                         }
                     };
                     aValue = getCommissionBase(a);
@@ -3003,8 +3006,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     const vehicleType = tour.vehicleType || '';
                     const isTrailer = vehicleType.includes('تریلی');
                     const isTenWheeler = vehicleType.includes('ده چرخ');
+                    // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
                     let vehicleTypeForApi = '';
-                    if (isTrailer) vehicleTypeForApi = 'تریلی';
+                    if (isTrailer) vehicleTypeForApi = 'کشنده';
                     else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
                     
                     if (vehicleTypeForApi) {
@@ -3238,8 +3242,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 const vehicleType = tour.vehicleType || '';
                 const isTrailer = vehicleType.includes('تریلی');
                 const isTenWheeler = vehicleType.includes('ده چرخ');
+                // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
                 let vehicleTypeForApi = '';
-                if (isTrailer) vehicleTypeForApi = 'تریلی';
+                if (isTrailer) vehicleTypeForApi = 'کشنده';
                 else if (isTenWheeler) vehicleTypeForApi = 'ده چرخ';
                 
                 if (vehicleTypeForApi) {
@@ -3354,16 +3359,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}` === plateNumber)
         );
         
+        // اگر خودرو پیدا نشد
+        if (!vehicle) {
+            const errorMessage = `خودرو برای محاسبه هزینه سوخت یافت نشد.\n\n` +
+                `کد خودرو: ${vehicleCode || '-'}\n` +
+                `پلاک: ${plateNumber || '-'}\n\n` +
+                `لطفاً مطمئن شوید که:\n` +
+                `1. خودرو در "مدیریت خودروها" ثبت شده است\n` +
+                `2. کد خودرو یا پلاک درست است`;
+            
+            alert(errorMessage);
+            // باز کردن دوباره دیالوگ
+            setShowInputDialog(true);
+            setInputDialogData(savedInputDialogData);
+            return;
+        }
+        
         // پیدا کردن vehicle spec بر اساس brand, model, vehicleType, tip
         let matchedSpec = null;
-        if (vehicle) {
-            matchedSpec = vehicleSpecs.find(spec => 
-                spec.brand === vehicle.brand &&
-                spec.model === vehicle.model &&
-                spec.vehicleType === (vehicle as any).vehicleType &&
-                spec.tip === (vehicle as any).vehicleTip
-            );
-        }
+        matchedSpec = vehicleSpecs.find(spec => 
+            spec.brand === vehicle.brand &&
+            spec.model === vehicle.model &&
+            spec.vehicleType === (vehicle as any).vehicleType &&
+            spec.tip === (vehicle as any).vehicleTip
+        );
         
         if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
             // محاسبه کل پیمایش
@@ -3373,18 +3392,27 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // هزینه سوخت = کل پیمایش × (درصد مصرف / 100) × مبلغ سوخت به ازای لیتر
             fuelCost = Math.round(totalKm * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
         } else {
-            // Fallback: استفاده از بخشنامه مصرف سوخت قدیمی
-            const vehicleType = tour.vehicleType || '';
-            const fuelReg = fuelConsumptionRegulations[vehicleType];
-            if (fuelReg) {
-                const totalKm = (savedInputDialogData.approvedKilometers || 0) + 
-                              (savedInputDialogData.excessKilometers || 0) + 
-                              (savedInputDialogData.depotTotalMileage || 0);
-                fuelCost = Math.round((totalKm / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
-            } else {
-                // اگر هیچ کدام پیدا نشد، از مقدار موجود در savedInputDialogData استفاده کن
-                fuelCost = Math.round(Number(savedInputDialogData.fuelCost) || 0) || 0;
-            }
+            // خطا: مشخصات خودرو در vehicle_specifications پیدا نشد
+            const vehicleInfo = vehicle 
+                ? `${vehicle.brand || ''} ${vehicle.model || ''} ${(vehicle as any).vehicleTip || ''}`.trim() || 
+                  (vehicleCode || plateNumber || 'این خودرو')
+                : (vehicleCode || plateNumber || 'این خودرو');
+            
+            const errorMessage = `مشخصات خودرو برای محاسبه هزینه سوخت یافت نشد.\n\n` +
+                `خودرو: ${vehicleInfo}\n` +
+                `کد خودرو: ${vehicleCode || '-'}\n` +
+                `پلاک: ${plateNumber || '-'}\n\n` +
+                `لطفاً به قسمت "بخشنامه" → "درصد سوخت مصرفی" بروید و مشخصات این خودرو را تعریف کنید.\n\n` +
+                `برای تعریف مشخصات خودرو:\n` +
+                `1. به "بخشنامه" → "درصد سوخت مصرفی" بروید\n` +
+                `2. مشخصات خودرو (برند، مدل، تیپ) را پیدا کنید یا اضافه کنید\n` +
+                `3. "درصد مصرف" و "مبلغ سوخت (به ازای لیتر)" را وارد کنید`;
+            
+            alert(errorMessage);
+            // باز کردن دوباره دیالوگ
+            setShowInputDialog(true);
+            setInputDialogData(savedInputDialogData);
+            return;
         }
         
         // دریافت token و headers برای API calls
@@ -3405,7 +3433,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 const isTenWheeler = vehicleType.includes('ده چرخ');
                 
                 if (isTrailer || isTenWheeler) {
-                    const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                    // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
+                    const vehicleTypeForApi = isTrailer ? 'کشنده' : 'ده چرخ';
                     const totalKm = savedInputDialogData.approvedKilometers + savedInputDialogData.excessKilometers;
                     
                     // اضافه کردن تاریخ بارنامه برای انتخاب بخشنامه صحیح
@@ -4672,7 +4701,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
                                                             const vehicleType = inputDialogData.vehicleType || '';
                                                             const isTrailer = vehicleType.includes('تریلی');
-                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
+                                                            const vehicleTypeForApi = isTrailer ? 'کشنده' : 'ده چرخ';
                                                             
                                                             const selectedReg = returnCargoRegulations.find(reg => 
                                                                 reg.vehicleType === vehicleTypeForApi &&
@@ -4704,7 +4734,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         {(() => {
                                                             const vehicleType = inputDialogData.vehicleType || '';
                                                             const isTrailer = vehicleType.includes('تریلی');
-                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
+                                                            const vehicleTypeForApi = isTrailer ? 'کشنده' : 'ده چرخ';
                                                             
                                                             // فیلتر کردن بر اساس نوع خودرو
                                                             const filteredRegs = returnCargoRegulations.filter(reg => 
@@ -4745,7 +4776,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             // پیدا کردن regulation انتخاب شده بر اساس vehicleType و cargoType
                                                             const vehicleType = inputDialogData.vehicleType || '';
                                                             const isTrailer = vehicleType.includes('تریلی');
-                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
+                                                            const vehicleTypeForApi = isTrailer ? 'کشنده' : 'ده چرخ';
                                                             
                                                             const selectedReg = returnCargoRegulations.find(reg => 
                                                                 reg.vehicleType === vehicleTypeForApi &&
@@ -4777,7 +4809,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         {(() => {
                                                             const vehicleType = inputDialogData.vehicleType || '';
                                                             const isTrailer = vehicleType.includes('تریلی');
-                                                            const vehicleTypeForApi = isTrailer ? 'تریلی' : 'ده چرخ';
+                                                            // Mapping: تریلی/مینی تریلی → کشنده برای استفاده در بخشنامه‌ها
+                                                            const vehicleTypeForApi = isTrailer ? 'کشنده' : 'ده چرخ';
                                                             
                                                             // فیلتر کردن بر اساس نوع خودرو
                                                             const filteredRegs = returnCargoRegulations.filter(reg => 

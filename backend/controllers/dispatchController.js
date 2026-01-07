@@ -947,7 +947,7 @@ async function assignFreight(req, res) {
     await client.query('BEGIN');
 
     const { rows: annRows } = await client.query(
-      `SELECT id, announcement_code, status, assignment_type
+      `SELECT id, announcement_code, status, assignment_type, vehicle_type
        FROM freight_announcements
        WHERE id = $1 FOR UPDATE`,
       [freightAnnouncementId]
@@ -962,6 +962,59 @@ async function assignFreight(req, res) {
     if (announcement.status === 'Finalized') {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'اعلام بار قبلاً نهایی شده است.' });
+    }
+
+    // کنترل تطابق نوع خودرو با اعلام بار
+    if (announcement.vehicle_type && (announcement.vehicle_type === 'تریلی' || announcement.vehicle_type === 'مینی تریلی' || announcement.vehicle_type === 'ده چرخ')) {
+      // گرفتن vehicle_type خودرو
+      const vehicleCheck = await client.query(
+        'SELECT id, vehicle_type, current_vehicle_type, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code FROM vehicles WHERE id = $1',
+        [vehicleId]
+      );
+      
+      if (vehicleCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'خودرو یافت نشد.' });
+      }
+      
+      const vehicle = vehicleCheck.rows[0];
+      const vehicleType = vehicle.current_vehicle_type || vehicle.vehicle_type;
+      
+      // اگر vehicle_type خالی است
+      if (!vehicleType || vehicleType.trim() === '') {
+        const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
+          ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
+          : (vehicle.vehicle_code || 'این خودرو');
+        await client.query('ROLLBACK');
+        return res.status(400).json({ 
+          message: `نوع خودرو برای ${plateInfo} تعریف نشده است. لطفاً به قسمت "مدیریت خودروها" بروید و نوع خودرو را تعریف کنید.` 
+        });
+      }
+      
+      // تطابق نوع خودرو با اعلام بار
+      if (announcement.vehicle_type === 'تریلی' || announcement.vehicle_type === 'مینی تریلی') {
+        // باید خودرو "کشنده" باشد
+        if (vehicleType !== 'کشنده') {
+          const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
+            ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
+            : (vehicle.vehicle_code || 'این خودرو');
+          await client.query('ROLLBACK');
+          return res.status(400).json({ 
+            message: `این اعلام بار برای "${announcement.vehicle_type}" است، اما خودروی تخصیص داده شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "کشنده" تخصیص دهید.` 
+          });
+        }
+      } else if (announcement.vehicle_type === 'ده چرخ') {
+        // باید خودرو "ده چرخ" باشد
+        if (vehicleType !== 'ده چرخ') {
+          const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
+            ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
+            : (vehicle.vehicle_code || 'این خودرو');
+          await client.query('ROLLBACK');
+          return res.status(400).json({ 
+            message: `این اعلام بار برای "ده چرخ" است، اما خودروی تخصیص داده شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "ده چرخ" تخصیص دهید.` 
+          });
+        }
+      }
     }
 
     // گرفتن همه مقاصد این اعلام بار (نه فقط یک مقصد)

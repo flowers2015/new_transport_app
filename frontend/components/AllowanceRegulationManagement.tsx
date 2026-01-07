@@ -5,7 +5,7 @@ import { formatJalali, parseJalaliDateString, gregorianToJalali } from '../utils
 
 interface MileageRegulation {
     id?: string;
-    vehicleType: 'تریلی' | 'ده چرخ';
+    vehicleType: 'کشنده' | 'ده چرخ';
     minKilometers: number;
     maxKilometers: number;
     allowancePerKm: number;
@@ -106,7 +106,7 @@ interface FuelConsumptionRegulation {
 
 interface FixedAllowanceRegulation {
     id?: string;
-    vehicleType: 'تریلی' | 'ده چرخ';
+    vehicleType: 'کشنده' | 'ده چرخ';
     fixedAllowancePerKm: number; // اجرت ثابت به ازای هر کیلومتر (ریال)
     approvalDate: string;
     documentPath?: string;
@@ -123,7 +123,7 @@ interface FixedAllowanceRegulation {
 
 interface ReturnCargoRegulation {
     id?: string;
-    vehicleType: 'تریلی' | 'ده چرخ';
+    vehicleType: 'کشنده' | 'ده چرخ';
     cargoType: 'full_product' | 'full_box_pallet_basket' | 'half'; // هزینه بار کامل (محصول) | هزینه بار کامل (باکس پالت و سبد) | هزینه بارهای نصفه
     cost: number; // مبلغ بخشنامه (ریال)
     approvalDate: string;
@@ -215,7 +215,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const [showFixedAllowanceDialog, setShowFixedAllowanceDialog] = useState(false);
     const [editingFixedAllowance, setEditingFixedAllowance] = useState<FixedAllowanceRegulation | null>(null);
     const [fixedAllowanceFormData, setFixedAllowanceFormData] = useState<FixedAllowanceRegulation>({
-        vehicleType: 'تریلی',
+        vehicleType: 'کشنده',
         fixedAllowancePerKm: 0,
         approvalDate: getTodayJalali(),
         documentPath: '',
@@ -229,7 +229,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const [showMileageDialog, setShowMileageDialog] = useState(false);
     const [editingMileage, setEditingMileage] = useState<MileageRegulation | null>(null);
     const [mileageFormData, setMileageFormData] = useState<MileageRegulation>({
-        vehicleType: 'تریلی',
+        vehicleType: 'کشنده',
         minKilometers: 0,
         maxKilometers: 0,
         allowancePerKm: 0,
@@ -273,7 +273,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const [showFuelConsumptionDialog, setShowFuelConsumptionDialog] = useState(false);
     const [editingFuelConsumption, setEditingFuelConsumption] = useState<FuelConsumptionRegulation | null>(null);
     const [fuelConsumptionFormData, setFuelConsumptionFormData] = useState<FuelConsumptionRegulation>({
-        vehicleType: 'تریلی',
+        vehicleType: 'کشنده',
         consumptionPercentage: 0,
         fuelPrice: 0,
         approvalDate: getTodayJalali(),
@@ -297,7 +297,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const [showReturnCargoDialog, setShowReturnCargoDialog] = useState(false);
     const [editingReturnCargo, setEditingReturnCargo] = useState<ReturnCargoRegulation | null>(null);
     const [returnCargoFormData, setReturnCargoFormData] = useState<ReturnCargoRegulation>({
-        vehicleType: 'تریلی',
+        vehicleType: 'کشنده',
         cargoType: 'full_product',
         cost: 0,
         approvalDate: getTodayJalali(),
@@ -609,7 +609,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const handleAddFixedAllowance = () => {
         setEditingFixedAllowance(null);
         setFixedAllowanceFormData({
-            vehicleType: 'تریلی',
+            vehicleType: 'کشنده',
             fixedAllowancePerKm: 0,
             approvalDate: getTodayJalali(),
             documentPath: '',
@@ -708,7 +708,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const handleAddMileage = () => {
         setEditingMileage(null);
         setMileageFormData({
-            vehicleType: 'تریلی',
+            vehicleType: 'کشنده',
             minKilometers: 0,
             maxKilometers: 0,
             allowancePerKm: 0,
@@ -1016,7 +1016,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     const handleAddFuelConsumption = () => {
         setEditingFuelConsumption(null);
         setFuelConsumptionFormData({
-            vehicleType: 'تریلی',
+            vehicleType: 'کشنده',
             consumptionPercentage: 0,
             fuelPrice: 0,
             approvalDate: getTodayJalali(),
@@ -1112,7 +1112,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
     };
 
     // Return Cargo Regulation Handlers
-    const handleAddReturnCargo = (vehicleType: 'تریلی' | 'ده چرخ', cargoType: 'full_product' | 'full_box_pallet_basket' | 'half') => {
+    const handleAddReturnCargo = (vehicleType: 'کشنده' | 'ده چرخ', cargoType: 'full_product' | 'full_box_pallet_basket' | 'half') => {
         setEditingReturnCargo(null);
         setReturnCargoFormData({
             vehicleType,
@@ -1546,7 +1546,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                             <tr key={regulation.id || index} className="border-b border-slate-200 bg-white hover:bg-amber-50">
                                                 <td className="p-3 border-l border-slate-200 text-center">{index + 1}</td>
                                                 <td className="p-3 border-l border-slate-200 font-semibold">
-                                                    {regulation.vehicleType === 'تریلی' ? '🚛 تریلی / مینی تریلی' : '🚚 ده چرخ'}
+                                                    {regulation.vehicleType === 'کشنده' ? '🚛 کشنده' : '🚚 ده چرخ'}
                                                 </td>
                                                 <td className="p-3 border-l border-slate-200 text-left font-semibold text-amber-700">
                                                     {regulation.fixedAllowancePerKm.toLocaleString('fa-IR')}
@@ -1614,7 +1614,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 <div className="flex justify-between items-start mb-4">
                                     <h3 className="text-lg font-bold text-purple-800">🚛 تریلی / مینی تریلی</h3>
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-purple-200 text-purple-800">
-                                        {mileageRegulations.filter(r => r.vehicleType === 'تریلی').length} بازه
+                                        {mileageRegulations.filter(r => r.vehicleType === 'کشنده').length} بازه
                                     </span>
                                 </div>
                                 <p className="text-sm text-slate-600 mb-2">
@@ -2279,7 +2279,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                     <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بار کامل (محصول)</h3>
                                     {returnCargoRegulations
-                                        .filter(r => r.vehicleType === 'تریلی' && r.cargoType === 'full_product')
+                                        .filter(r => r.vehicleType === 'کشنده' && r.cargoType === 'full_product')
                                         .map((regulation, idx) => (
                                             <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
                                                 <div className="text-xs text-slate-600 mb-1">
@@ -2316,7 +2316,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                     <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بار کامل (باکس پالت و سبد)</h3>
                                     {returnCargoRegulations
-                                        .filter(r => r.vehicleType === 'تریلی' && r.cargoType === 'full_box_pallet_basket')
+                                        .filter(r => r.vehicleType === 'کشنده' && r.cargoType === 'full_box_pallet_basket')
                                         .map((regulation, idx) => (
                                             <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
                                                 <div className="text-xs text-slate-600 mb-1">
@@ -2353,7 +2353,7 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                     <h3 className="text-sm font-semibold text-slate-700 mb-3">هزینه بارهای نصفه</h3>
                                     {returnCargoRegulations
-                                        .filter(r => r.vehicleType === 'تریلی' && r.cargoType === 'half')
+                                        .filter(r => r.vehicleType === 'کشنده' && r.cargoType === 'half')
                                         .map((regulation, idx) => (
                                             <div key={regulation.id || idx} className="mb-2 p-2 bg-white rounded border border-slate-200">
                                                 <div className="text-xs text-slate-600 mb-1">
@@ -2781,10 +2781,10 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                 </label>
                                 <select
                                     value={fixedAllowanceFormData.vehicleType}
-                                    onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, vehicleType: e.target.value as 'تریلی' | 'ده چرخ' })}
+                                    onChange={(e) => setFixedAllowanceFormData({ ...fixedAllowanceFormData, vehicleType: e.target.value as 'کشنده' | 'ده چرخ' })}
                                     className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-amber-500 focus:border-amber-500"
                                 >
-                                    <option value="تریلی">🚛 تریلی / مینی تریلی</option>
+                                    <option value="کشنده">🚛 کشنده</option>
                                     <option value="ده چرخ">🚚 ده چرخ</option>
                                 </select>
                             </div>
@@ -3518,10 +3518,10 @@ const AllowanceRegulationManagement: React.FC<AllowanceRegulationManagementProps
                                     </label>
                                     <select
                                         value={returnCargoFormData.vehicleType}
-                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, vehicleType: e.target.value as 'تریلی' | 'ده چرخ' })}
+                                        onChange={(e) => setReturnCargoFormData({ ...returnCargoFormData, vehicleType: e.target.value as 'کشنده' | 'ده چرخ' })}
                                         className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                     >
-                                        <option value="تریلی">تریلی</option>
+                                        <option value="کشنده">کشنده</option>
                                         <option value="ده چرخ">ده چرخ</option>
                                     </select>
                                 </div>
