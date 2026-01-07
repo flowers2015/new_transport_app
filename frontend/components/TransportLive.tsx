@@ -1789,7 +1789,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 // --- Dialog Components ---
 const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onFinalize' | 'onTransferDestination' | 'onForward' | 'onCancel'> & { announcement: FreightAnnouncement, onClose: () => void }> =
 (props) => {
-    const { announcement, drivers, vehicles, personalDrivers, personalVehicles, onClose, onUpdateAssignment, currentUser } = props;
+    const { announcement, drivers, vehicles, personalDrivers, personalVehicles, onClose, onUpdateAssignment, currentUser, onChangeRequest, onChangeVehicleType } = props;
     
     // Helper function for vehicle identifier
     const getVehicleIdentifier = (id: string | undefined, vehicles: Vehicle[]) => {

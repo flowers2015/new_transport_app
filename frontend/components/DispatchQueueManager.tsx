@@ -999,7 +999,7 @@ const DispatchQueueManager: React.FC = () => {
                 body: JSON.stringify({
                     vehicleId: row.selectedVehicle.id,
                     driverId: row.selectedDriver.id,
-                    vehicleCategory: row.categoryLabel || row.selectedVehicle.vehicleCategory || '',
+                    vehicleCategory: row.categoryKey || row.selectedVehicle.vehicleCategory || '',
                     queueType: row.queueType,
                     notes: row.notes || undefined,
                 }),
