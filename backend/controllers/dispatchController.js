@@ -233,9 +233,20 @@ async function getQueue(req, res) {
       }
     }
 
+    // تبدیل vehicleCategory از key انگلیسی به label فارسی
+    const categoryKeyToLabel = {
+      'trailer': 'تریلی',
+      'mini-trailer': 'مینی تریلی',
+      'ten-wheel': 'ده چرخ'
+    };
+    
     const grouped = {};
     for (const row of rows) {
-      const category = row.vehicle_category || 'نامشخص';
+      // تبدیل category از key به label
+      let category = row.vehicle_category || 'نامشخص';
+      if (categoryKeyToLabel[category]) {
+        category = categoryKeyToLabel[category];
+      }
       if (!grouped[category]) {
         grouped[category] = {
           near: [],
@@ -472,9 +483,19 @@ async function createQueueEntry(req, res) {
       }
     }
 
+    // تبدیل vehicleCategory از key انگلیسی به label فارسی (اگر لازم باشد)
+    const categoryKeyToLabel = {
+      'trailer': 'تریلی',
+      'mini-trailer': 'مینی تریلی',
+      'ten-wheel': 'ده چرخ'
+    };
+    const normalizedVehicleCategory = vehicleCategory && categoryKeyToLabel[vehicleCategory] 
+      ? categoryKeyToLabel[vehicleCategory] 
+      : vehicleCategory;
+
     const { rows: maxRows } = await client.query(
       'SELECT COALESCE(MAX(position), 0) + 1 AS next_pos FROM dispatch_queue_entries WHERE queue_type = $1 AND vehicle_category = $2',
-      [queueType, vehicleCategory || null]
+      [queueType, normalizedVehicleCategory || null]
     );
 
     const position = maxRows[0]?.next_pos || 1;
@@ -484,7 +505,7 @@ async function createQueueEntry(req, res) {
         (vehicle_id, driver_id, vehicle_category, queue_type, position, notes, created_by_user_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [vehicleId, driverId, vehicleCategory || null, queueType, position, notes || null, req.user?.id || null]
+      [vehicleId, driverId, normalizedVehicleCategory || null, queueType, position, notes || null, req.user?.id || null]
     );
 
     await client.query('COMMIT');

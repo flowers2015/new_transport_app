@@ -1040,7 +1040,12 @@ const DispatchQueueManager: React.FC = () => {
                 ...createRow({ key: row.categoryKey, label: row.categoryLabel }, row.queueType),
                 id: rowId,
             }));
-            fetchQueue();
+            // فراخوانی fetchQueue با delay کوتاه برای اطمینان از به‌روزرسانی
+            setTimeout(() => {
+                fetchQueue().catch(err => {
+                    console.error('خطا در به‌روزرسانی لیست نوبت‌ها:', err);
+                });
+            }, 100);
         } catch (error: any) {
             alert(error?.message || 'ثبت نوبت ناموفق بود.');
             updateRow(rowId, { submitting: false });
