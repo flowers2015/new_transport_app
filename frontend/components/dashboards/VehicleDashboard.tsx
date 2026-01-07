@@ -572,7 +572,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
         
         // بررسی وابستگی‌ها
         try {
-            const response = await fetch(getApiUrl(`/api/v1/vehicles/${vehicle.id}/dependencies`), {
+            const response = await fetch(getApiUrl(`vehicles/${vehicle.id}/dependencies`), {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 }
@@ -608,7 +608,7 @@ const VehicleManagement: React.FC<VehicleManagementProps> = ({ vehicles, branche
 
         setDeletingVehicle(true);
         try {
-            const response = await fetch(getApiUrl(`/api/v1/vehicles/${vehicleToDelete.id}/delete`), {
+            const response = await fetch(getApiUrl(`vehicles/${vehicleToDelete.id}/delete`), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
