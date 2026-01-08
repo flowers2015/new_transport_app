@@ -936,14 +936,25 @@ async function checkVehicleDependencies(vehicleId) {
               );
             } else {
               // اگر vehicle_id وجود ندارد، فقط از vehicle_allocation_items استفاده کن
-              return await pool.query(
-                `SELECT COUNT(*) as count FROM vehicle_allocation_items WHERE vehicle_id = $1`,
-                [vehicleId]
-              );
+              try {
+                return await pool.query(
+                  `SELECT COUNT(*) as count FROM vehicle_allocation_items WHERE vehicle_id = $1`,
+                  [vehicleId]
+                );
+              } catch (itemsErr) {
+                // اگر vehicle_allocation_items هم وجود ندارد یا vehicle_id ندارد، صفر برگردان
+                if (itemsErr.code === '42P01' || itemsErr.code === '42703') {
+                  return { rows: [{ count: '0' }] };
+                }
+                throw itemsErr;
+              }
             }
           } catch (err) {
-            // اگر جدول وجود ندارد، null برگردان
-            return { rows: [{ count: '0' }] };
+            // اگر جدول وجود ندارد، صفر برگردان
+            if (err.code === '42P01') {
+              return { rows: [{ count: '0' }] };
+            }
+            throw err;
           }
         },
         description: 'تخصیص خودرو'
@@ -971,10 +982,13 @@ async function checkVehicleDependencies(vehicleId) {
           });
         }
       } catch (err) {
-        // اگر جدول وجود ندارد، نادیده بگیر
-        if (err.code !== '42P01' && err.code !== '42703') {
-          console.warn(`⚠️ [checkVehicleDependencies] Error checking ${check.name}:`, err.message);
+        // اگر جدول وجود ندارد یا ستون وجود ندارد، نادیده بگیر
+        if (err.code === '42P01' || err.code === '42703') {
+          // این خطاها طبیعی هستند و نیاز به لاگ ندارند
+          continue;
         }
+        // فقط خطاهای دیگر را لاگ کن
+        console.warn(`⚠️ [checkVehicleDependencies] Error checking ${check.name}:`, err.message);
       }
     }
 
@@ -1039,7 +1053,11 @@ async function checkVehicleDependencies(vehicleId) {
         }
       }
     } catch (err) {
-      if (err.code !== '42P01' && err.code !== '42703') {
+      // اگر جدول وجود ندارد یا ستون وجود ندارد، نادیده بگیر
+      if (err.code === '42P01' || err.code === '42703') {
+        // این خطاها طبیعی هستند و نیاز به لاگ ندارند
+      } else {
+        // فقط خطاهای دیگر را لاگ کن
         console.warn('⚠️ [checkVehicleDependencies] Error checking driver_calculations:', err.message);
       }
     }

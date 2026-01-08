@@ -2996,14 +2996,28 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 // پیدا کردن vehicle spec
                 const vehicleCode = tour.vehicleCode || '';
                 const plateNumber = tour.plateNumber || '';
-                const vehicle = vehicles.find(v => 
-                    (vehicleCode && (v as any).vehicleCode === vehicleCode) ||
-                    (plateNumber && v.plateNumber && 
-                        `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}` === plateNumber)
-                );
+                let vehicle = null;
+                
+                // جستجوی vehicle بر اساس vehicleCode
+                if (vehicleCode) {
+                    vehicle = vehicles.find(v => (v as any).vehicleCode === vehicleCode || (v as any).vehicle_code === vehicleCode);
+                }
+                
+                // اگر vehicle پیدا نشد، بر اساس plateNumber جستجو کن
+                if (!vehicle && plateNumber) {
+                    vehicle = vehicles.find(v => {
+                        if (!v.plateNumber) return false;
+                        const vehiclePlateStr = `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}`;
+                        // تطبیق با فرمت‌های مختلف
+                        return vehiclePlateStr === plateNumber || 
+                               vehiclePlateStr.replace(/-/g, '') === plateNumber.replace(/-/g, '') ||
+                               `${v.plateNumber.part1}-${v.plateNumber.part2}${v.plateNumber.letter}${v.plateNumber.cityCode}` === plateNumber;
+                    });
+                }
                 
                 let matchedSpec = null;
                 if (vehicle) {
+                    // جستجوی spec بر اساس vehicle
                     matchedSpec = vehicleSpecs.find(spec => 
                         spec.brand === vehicle.brand &&
                         spec.model === vehicle.model &&
@@ -3012,16 +3026,53 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     );
                 }
                 
+                // اگر spec پیدا نشد، بر اساس vehicleType و vehicleCode مستقیماً در specs جستجو کن
+                if (!matchedSpec && vehicleCode) {
+                    const vehicleType = tour.vehicleType || '';
+                    // Mapping: تریلی/مینی تریلی → کشنده
+                    let vehicleTypeForSpec = vehicleType;
+                    if (vehicleType.includes('تریلی') || vehicleType.includes('مینی تریلی')) {
+                        vehicleTypeForSpec = 'کشنده';
+                    }
+                    
+                    // جستجو در specs بر اساس vehicleType
+                    matchedSpec = vehicleSpecs.find(spec => spec.vehicleType === vehicleTypeForSpec);
+                }
+                
                 if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
                     const totalKmForFuel = approvedKm + (tour.excessKilometers || 0) + ((tour as any).depotTotalMileage || 0);
                     initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
+                    console.log('⛽ [handleRecordData] محاسبه هزینه سوخت از vehicleSpecs:', {
+                        vehicleCode,
+                        plateNumber,
+                        vehicleType: tour.vehicleType,
+                        matchedSpec: matchedSpec ? { brand: matchedSpec.brand, model: matchedSpec.model, vehicleType: matchedSpec.vehicleType } : null,
+                        fuelConsumptionPercentage: matchedSpec?.fuelConsumptionPercentage,
+                        fuelPricePerLiter: matchedSpec?.fuelPricePerLiter,
+                        totalKmForFuel,
+                        initialFuelCost
+                    });
                 } else {
                     // Fallback: استفاده از بخشنامه قدیمی
                     const vehicleTypeForFuel = tour.vehicleType || '';
-                    const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+                    // Mapping: تریلی/مینی تریلی → کشنده
+                    let mappedVehicleType = vehicleTypeForFuel;
+                    if (vehicleTypeForFuel.includes('تریلی') || vehicleTypeForFuel.includes('مینی تریلی')) {
+                        mappedVehicleType = 'کشنده';
+                    }
+                    const fuelReg = fuelConsumptionRegulations[mappedVehicleType] || fuelConsumptionRegulations[vehicleTypeForFuel];
                     if (fuelReg) {
                         const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
                         initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+                        console.log('⛽ [handleRecordData] محاسبه هزینه سوخت از بخشنامه قدیمی:', {
+                            vehicleTypeForFuel,
+                            mappedVehicleType,
+                            fuelReg: { consumptionPercentage: fuelReg.consumptionPercentage, fuelPrice: fuelReg.fuelPrice },
+                            totalKmForFuel,
+                            initialFuelCost
+                        });
+                    } else {
+                        console.warn('⚠️ [handleRecordData] هیچ بخشنامه سوختی برای', vehicleTypeForFuel, 'پیدا نشد');
                     }
                 }
             }
