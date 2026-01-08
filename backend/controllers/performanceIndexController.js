@@ -65,8 +65,7 @@ async function getPerformanceIndex(req, res) {
       FROM driver_calculations dc
       INNER JOIN freight_announcements fa ON fa.id = dc.announcement_id
       LEFT JOIN vehicles v ON (
-        (dc.vehicle_code IS NOT NULL AND v.vehicle_code = dc.vehicle_code)
-        OR (dc.vehicle_plate IS NOT NULL AND v.plate_number = dc.vehicle_plate)
+        dc.vehicle_code IS NOT NULL AND v.vehicle_code = dc.vehicle_code
       )
       LEFT JOIN vehicle_specifications vs ON (
         vs.brand = v.brand 
