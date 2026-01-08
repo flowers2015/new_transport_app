@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
-import { gregorianToJalali } from '../utils/jalali';
+import { gregorianToJalali, jalaliToGregorian } from '../utils/jalali';
 
 interface PerformanceIndexData {
     month: string; // YYYY/MM
@@ -30,13 +30,16 @@ const PerformanceIndexTab: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    // تاریخ پیش‌فرض: از 26 ماه قبل تا 25 ماه جاری
+    // تاریخ پیش‌فرض: سال 1404
     const getDefaultDates = () => {
         const today = new Date();
         const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
         
-        // 26 ماه قبل
-        let startYear = jy;
+        // سال پیش‌فرض 1404
+        const defaultYear = 1404;
+        
+        // 26 ماه قبل از ماه جاری (در سال 1404)
+        let startYear = defaultYear;
         let startMonth = jm - 26;
         while (startMonth <= 0) {
             startMonth += 12;
@@ -44,7 +47,7 @@ const PerformanceIndexTab: React.FC = () => {
         }
         
         // 25 ماه جاری (اگر روز >= 26، ماه جاری، وگرنه ماه قبل)
-        let endYear = jy;
+        let endYear = defaultYear;
         let endMonth = jm;
         if (jd < 26) {
             endMonth = jm - 1;
@@ -66,26 +69,43 @@ const PerformanceIndexTab: React.FC = () => {
     
     const defaultDates = useMemo(() => getDefaultDates(), []);
     
-    const [startYear, setStartYear] = useState(defaultDates.startYear);
-    const [startMonth, setStartMonth] = useState(defaultDates.startMonth);
-    const [startDay, setStartDay] = useState(defaultDates.startDay);
-    const [endYear, setEndYear] = useState(defaultDates.endYear);
-    const [endMonth, setEndMonth] = useState(defaultDates.endMonth);
-    const [endDay, setEndDay] = useState(defaultDates.endDay);
+    // استفاده از state برای تاریخ‌های شمسی (فرمت YYYY/MM/DD)
+    const [startDate, setStartDate] = useState(
+        `${defaultDates.startYear}/${String(defaultDates.startMonth).padStart(2, '0')}/${String(defaultDates.startDay).padStart(2, '0')}`
+    );
+    const [endDate, setEndDate] = useState(
+        `${defaultDates.endYear}/${String(defaultDates.endMonth).padStart(2, '0')}/${String(defaultDates.endDay).padStart(2, '0')}`
+    );
+    
+    // استخراج سال، ماه، روز از تاریخ شمسی
+    const parseJalaliDate = (dateStr: string) => {
+        const parts = dateStr.split('/');
+        return {
+            year: parseInt(parts[0]) || 1404,
+            month: parseInt(parts[1]) || 1,
+            day: parseInt(parts[2]) || 1
+        };
+    };
+    
+    const startDateParts = parseJalaliDate(startDate);
+    const endDateParts = parseJalaliDate(endDate);
     
     const fetchData = async () => {
         try {
             setLoading(true);
             setError(null);
             
+            const startParts = parseJalaliDate(startDate);
+            const endParts = parseJalaliDate(endDate);
+            
             const token = localStorage.getItem('token');
             const params = new URLSearchParams({
-                startYear: startYear.toString(),
-                startMonth: startMonth.toString(),
-                startDay: startDay.toString(),
-                endYear: endYear.toString(),
-                endMonth: endMonth.toString(),
-                endDay: endDay.toString(),
+                startYear: startParts.year.toString(),
+                startMonth: startParts.month.toString(),
+                startDay: startParts.day.toString(),
+                endYear: endParts.year.toString(),
+                endMonth: endParts.month.toString(),
+                endDay: endParts.day.toString(),
                 assignmentType: 'company' // فقط شرکتی
             });
             
@@ -112,7 +132,14 @@ const PerformanceIndexTab: React.FC = () => {
     
     useEffect(() => {
         fetchData();
-    }, [startYear, startMonth, startDay, endYear, endMonth, endDay]);
+    }, [startDate, endDate]);
+    
+    // Debug: Log data
+    useEffect(() => {
+        console.log('📊 [PerformanceIndexTab] Data:', data);
+        console.log('📊 [PerformanceIndexTab] Grouped Data:', groupedData);
+        console.log('📊 [PerformanceIndexTab] Sorted Months:', sortedMonths);
+    }, [data, groupedData, sortedMonths]);
     
     // گروه‌بندی داده‌ها بر اساس ماه و نوع خودرو
     const groupedData = useMemo(() => {
@@ -161,67 +188,37 @@ const PerformanceIndexTab: React.FC = () => {
             {/* فیلتر تاریخ */}
             <div className="bg-white rounded-lg shadow p-4">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">فیلتر تاریخ</h3>
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">سال شروع</label>
+                <div className="flex flex-wrap gap-4 items-end">
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">از تاریخ</label>
                         <input
-                            type="number"
-                            value={startYear}
-                            onChange={(e) => setStartYear(parseInt(e.target.value) || 1400)}
+                            type="text"
+                            value={startDate}
+                            onChange={(e) => {
+                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                if (value.length <= 10) {
+                                    setStartDate(value);
+                                }
+                            }}
+                            placeholder="1404/08/26"
                             className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                            dir="rtl"
                         />
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">ماه شروع</label>
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">تا تاریخ</label>
                         <input
-                            type="number"
-                            min="1"
-                            max="12"
-                            value={startMonth}
-                            onChange={(e) => setStartMonth(parseInt(e.target.value) || 1)}
+                            type="text"
+                            value={endDate}
+                            onChange={(e) => {
+                                let value = e.target.value.replace(/[^\d\/]/g, '');
+                                if (value.length <= 10) {
+                                    setEndDate(value);
+                                }
+                            }}
+                            placeholder="1404/09/25"
                             className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">روز شروع</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="31"
-                            value={startDay}
-                            onChange={(e) => setStartDay(parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">سال پایان</label>
-                        <input
-                            type="number"
-                            value={endYear}
-                            onChange={(e) => setEndYear(parseInt(e.target.value) || 1400)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">ماه پایان</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="12"
-                            value={endMonth}
-                            onChange={(e) => setEndMonth(parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">روز پایان</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="31"
-                            value={endDay}
-                            onChange={(e) => setEndDay(parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                            dir="rtl"
                         />
                     </div>
                 </div>
@@ -232,6 +229,8 @@ const PerformanceIndexTab: React.FC = () => {
                 <div className="text-center py-10 text-slate-500">در حال بارگذاری...</div>
             ) : error ? (
                 <div className="text-center py-10 text-red-500">{error}</div>
+            ) : sortedMonths.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">داده‌ای برای نمایش وجود ندارد</div>
             ) : (
                 <div className="bg-white rounded-lg shadow overflow-x-auto">
                     <table className="min-w-full text-sm">
