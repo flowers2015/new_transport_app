@@ -1,12 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { DispatchBoardEntry } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 
 type BoardResponse = Record<string, DispatchBoardEntry[]>;
 
+type TableRow = {
+    city: string;
+    driverName: string;
+    vehicleCode: string;
+    assignmentDate: string;
+    entry: DispatchBoardEntry;
+};
+
 const DispatchBoardView: React.FC = () => {
     const [board, setBoard] = useState<BoardResponse>({});
     const [loading, setLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const token = useMemo(() => localStorage.getItem('token') || '', []);
     const headers = useMemo(
@@ -44,76 +53,113 @@ const DispatchBoardView: React.FC = () => {
         };
     }, []);
 
+    // تبدیل داده‌ها به فرمت جدول
+    const tableRows = useMemo(() => {
+        const rows: TableRow[] = [];
+        Object.entries(board).forEach(([city, entries]) => {
+            entries.forEach(entry => {
+                const assignmentDate = entry.createdAt 
+                    ? new Date(entry.createdAt).toLocaleDateString('fa-IR', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    })
+                    : '---';
+                
+                rows.push({
+                    city,
+                    driverName: entry.driver?.name || 'نامشخص',
+                    vehicleCode: entry.vehicle?.vehicleCode || entry.vehicle?.model || '---',
+                    assignmentDate,
+                    entry
+                });
+            });
+        });
+        return rows;
+    }, [board]);
+
+    // فیلتر کردن ردیف‌ها بر اساس جستجو
+    const filteredRows = useMemo(() => {
+        if (!searchTerm.trim()) return tableRows;
+        const term = searchTerm.toLowerCase().trim();
+        return tableRows.filter(row => 
+            row.city.toLowerCase().includes(term) ||
+            row.driverName.toLowerCase().includes(term) ||
+            row.vehicleCode.toLowerCase().includes(term)
+        );
+    }, [tableRows, searchTerm]);
+
     return (
         <div className="p-4 space-y-4">
             <section className="bg-white rounded-2xl shadow-sm border border-slate-200">
-                <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <header className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h2 className="text-base font-semibold text-slate-800">تابلو اعلام بار</h2>
                         <p className="text-xs text-slate-500">
                             فهرست تخصیص‌های ثبت شده به تفکیک شهر مقصد نمایش داده می‌شود.
                         </p>
                     </div>
-                    <button
-                        onClick={loadBoard}
-                        className="px-3 py-1.5 text-sm rounded-md border border-slate-200 hover:bg-slate-50"
-                        disabled={loading}
-                    >
-                        بروزرسانی
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            placeholder="جستجوی شهر یا راننده..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="px-3 py-1.5 text-sm rounded-md border border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                        />
+                        <button
+                            onClick={loadBoard}
+                            className="px-3 py-1.5 text-sm rounded-md border border-slate-200 hover:bg-slate-50 whitespace-nowrap"
+                            disabled={loading}
+                        >
+                            بروزرسانی
+                        </button>
+                    </div>
                 </header>
                 {loading ? (
                     <div className="py-10 text-center text-slate-500 text-sm">در حال بارگذاری...</div>
-                ) : Object.keys(board).length === 0 ? (
-                    <div className="py-10 text-center text-slate-400 text-sm">هنوز تخصیصی ثبت نشده است.</div>
+                ) : filteredRows.length === 0 ? (
+                    <div className="py-10 text-center text-slate-400 text-sm">
+                        {searchTerm ? 'نتیجه‌ای یافت نشد.' : 'هنوز تخصیصی ثبت نشده است.'}
+                    </div>
                 ) : (
-                    <div className="px-4 py-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {Object.entries(board).map(([city, entries]) => (
-                            <div key={city} className="border border-slate-100 rounded-xl overflow-hidden">
-                                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100">
-                                    <h3 className="text-sm font-semibold text-slate-700">{city}</h3>
-                                    <span className="text-xs text-slate-500">{entries.length} مورد</span>
-                                </div>
-                                <div className="p-3 space-y-2 max-h-80 overflow-auto text-xs">
-                                    {entries.map(entry => {
-                                        const daysSince = entry.daysSinceAssignment ?? 0;
-                                        const expectedDays = entry.route?.expectedDays;
-                                        const isOverdue = expectedDays != null && daysSince > expectedDays;
-                                        const isDue = expectedDays != null && daysSince === expectedDays;
-                                        const bgColor = isOverdue ? 'bg-red-50 border-red-200' : isDue ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-slate-200';
-                                        
-                                        // تبدیل دسته خودرو به فارسی
-                                        const category = entry.vehicle?.vehicleCategory;
-                                        const categoryMap: Record<string, string> = {
-                                            'trailer': 'تریلی',
-                                            'mini-trailer': 'مینی تریلی',
-                                            'ten-wheel': 'ده چرخ',
-                                        };
-                                        const categoryLabel = category ? (categoryMap[category] || category) : 'دسته خودرو';
-                                        
-                                        // Debug log
-                                        console.log('📅 [DispatchBoardView] Entry:', {
-                                            assignmentId: entry.assignmentId,
-                                            daysSince,
-                                            assignmentFinalizedAt: entry.assignmentFinalizedAt,
-                                            createdAt: entry.createdAt,
-                                            expectedDays
-                                        });
-                                        
-                                        return (
-                                            <div key={entry.assignmentId} className={`border rounded-lg p-3 space-y-1 ${bgColor}`}>
-                                                <div className="font-semibold text-slate-800">
-                                                    {entry.vehicle?.vehicleCode || entry.vehicle?.model || 'کد خودرو'}
-                                                </div>
-                                                <div className="text-sm text-slate-600 mt-1">
-                                                    {entry.driver?.name || 'راننده'}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-200">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                        شهر مقصد
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                        نام راننده
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                        کد خودرو
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                        تاریخ تخصیص
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-200">
+                                {filteredRows.map((row, index) => (
+                                    <tr key={`${row.entry.assignmentId}-${index}`} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-slate-900">{row.city}</div>
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <div className="text-sm text-slate-900">{row.driverName}</div>
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <div className="text-sm text-slate-900">{row.vehicleCode}</div>
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <div className="text-sm text-slate-600">{row.assignmentDate}</div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </section>

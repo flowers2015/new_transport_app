@@ -5394,7 +5394,8 @@ async function getAssignmentStatistics(req, res) {
     
     // برای محاسبه assignmentByDay و assignmentPercentagesByDay، باید جزئیات تخصیص‌ها را بگیریم
     // Fallback: اگر assigned_at در history پیدا نشد، از da2.created_at (تاریخ تخصیص در dispatch_assignments) استفاده می‌کنیم
-    // توجه: lateralJoin شامل da است، پس از آن استفاده نمی‌کنیم و فقط da2 را اضافه می‌کنیم
+    // توجه: در این query از finalizedCondition استفاده نمی‌کنیم چون da وجود ندارد، فقط fa.assignment_finalized_at را چک می‌کنیم
+    const detailedQueryFinalizedCondition = `AND fa.assignment_finalized_at IS NOT NULL`;
     const detailedQuery = `
       SELECT 
         fa.id,
@@ -5423,7 +5424,7 @@ async function getAssignmentStatistics(req, res) {
       WHERE 1=1
         ${dateFilter}
         ${lineTypeFilter}
-        ${finalizedCondition}
+        ${detailedQueryFinalizedCondition}
         AND fa.assigned_driver_id IS NOT NULL
     `;
     
