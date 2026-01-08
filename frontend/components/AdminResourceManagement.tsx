@@ -145,8 +145,9 @@ const AdminResourceManagement: React.FC = () => {
   // ============================================
   const fetchCompanyDrivers = async () => {
     try {
+      // برای admin panel، همه فیلدها را می‌خواهیم (full=true)
       const { cachedFetch } = await import('../utils/apiCache');
-      const data = await cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000); // 10 min cache
+      const data = await cachedFetch(getApiUrl('drivers?full=true'), { headers }, 10 * 60 * 1000); // 10 min cache
       setCompanyDrivers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message);
@@ -299,6 +300,35 @@ const AdminResourceManagement: React.FC = () => {
       alert(modalMode === 'add' ? 'با موفقیت ایجاد شد' : 'با موفقیت ویرایش شد');
       setShowModal(false);
       setSelectedItem(null);
+      
+      // پاک کردن cache برای drivers بعد از update
+      if (activeTab === 'company-drivers') {
+        const { apiCache } = await import('../utils/apiCache');
+        // پاک کردن cache برای drivers?full=true
+        const cacheKeyFull = `GET:${getApiUrl('drivers?full=true')}`;
+        apiCache.invalidate(cacheKeyFull);
+        // همچنین cache برای drivers بدون full=true را هم پاک می‌کنیم
+        const cacheKeyWithoutFull = `GET:${getApiUrl('drivers')}`;
+        apiCache.invalidate(cacheKeyWithoutFull);
+      }
+      
+      // پاک کردن cache برای سایر موارد هم
+      if (activeTab === 'company-vehicles') {
+        const { apiCache } = await import('../utils/apiCache');
+        const cacheKey = `GET:${getApiUrl('vehicles')}`;
+        apiCache.invalidate(cacheKey);
+      }
+      if (activeTab === 'personal-drivers') {
+        const { apiCache } = await import('../utils/apiCache');
+        const cacheKey = `GET:${getApiUrl('personal-drivers')}`;
+        apiCache.invalidate(cacheKey);
+      }
+      if (activeTab === 'personal-vehicles') {
+        const { apiCache } = await import('../utils/apiCache');
+        const cacheKey = `GET:${getApiUrl('personal-vehicles')}`;
+        apiCache.invalidate(cacheKey);
+      }
+      
       fetchData();
     } catch (err: any) {
       alert(err.message);

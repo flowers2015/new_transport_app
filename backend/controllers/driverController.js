@@ -6,6 +6,9 @@ const crypto = require('crypto');
  */
 async function getDrivers(req, res) {
   try {
+    const { full } = req.query; // اگر full=true باشد، همه فیلدها را برمی‌گرداند
+    const isFull = full === 'true' || full === true;
+    
     // بررسی وجود ستون account_number
     let hasAccountNumber = false;
     try {
@@ -22,28 +25,68 @@ async function getDrivers(req, res) {
       hasAccountNumber = false;
     }
     
-    // فقط فیلدهای ضروری برای dropdown/select را برگردان
-    // حذف فیلدهای غیرضروری برای کاهش حجم داده
     const accountNumberSelect = hasAccountNumber 
       ? 'account_number AS "accountNumber"'
       : 'NULL AS "accountNumber"';
     
-    const { rows } = await pool.query(`
-      SELECT 
-        id,
-        employee_id AS "employeeId",
-        name,
-        mobile,
-        national_id AS "nationalId",
-        license_number AS "licenseNumber",
-        license_type AS "licenseType",
-        current_vehicle_type AS "currentVehicleType",
-        current_vehicle_plate AS "currentVehiclePlate",
-        ${accountNumberSelect}
-      FROM drivers 
-      WHERE is_deleted = false 
-      ORDER BY name
-    `);
+    let query;
+    if (isFull) {
+      // برگرداندن همه فیلدها برای admin panel
+      query = `
+        SELECT 
+          id,
+          employee_id AS "employeeId",
+          name,
+          father_name AS "fatherName",
+          national_id AS "nationalId",
+          birth_date AS "birthDate",
+          id_number AS "idNumber",
+          birth_place AS "birthPlace",
+          issue_place AS "issuePlace",
+          home_phone AS "homePhone",
+          work_phone AS "workPhone",
+          mobile,
+          postal_code AS "postalCode",
+          home_address AS "homeAddress",
+          work_location AS "workLocation",
+          job_title AS "jobTitle",
+          hire_date AS "hireDate",
+          termination_date AS "terminationDate",
+          license_number AS "licenseNumber",
+          license_type AS "licenseType",
+          license_issue_date AS "licenseIssueDate",
+          license_issue_place AS "licenseIssuePlace",
+          license_expiry_date AS "licenseExpiryDate",
+          current_vehicle_type AS "currentVehicleType",
+          current_vehicle_plate AS "currentVehiclePlate",
+          ${accountNumberSelect},
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM drivers 
+        WHERE is_deleted = false 
+        ORDER BY name
+      `;
+    } else {
+      // فقط فیلدهای ضروری برای dropdown/select را برگردان
+      query = `
+        SELECT 
+          id,
+          employee_id AS "employeeId",
+          name,
+          mobile,
+          national_id AS "nationalId",
+          license_number AS "licenseNumber",
+          license_type AS "licenseType",
+          current_vehicle_type AS "currentVehicleType",
+          current_vehicle_plate AS "currentVehiclePlate",
+          ${accountNumberSelect}
+        FROM drivers 
+        WHERE is_deleted = false 
+        ORDER BY name
+      `;
+    }
+    
+    const { rows } = await pool.query(query);
     res.json(rows);
   } catch (error) {
     console.error('Failed to get drivers:', error);

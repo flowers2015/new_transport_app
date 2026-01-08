@@ -69,14 +69,6 @@ const PerformanceIndexTab: React.FC = () => {
     
     const defaultDates = useMemo(() => getDefaultDates(), []);
     
-    // استفاده از state برای تاریخ‌های شمسی (فرمت YYYY/MM/DD)
-    const [startDate, setStartDate] = useState(
-        `${defaultDates.startYear}/${String(defaultDates.startMonth).padStart(2, '0')}/${String(defaultDates.startDay).padStart(2, '0')}`
-    );
-    const [endDate, setEndDate] = useState(
-        `${defaultDates.endYear}/${String(defaultDates.endMonth).padStart(2, '0')}/${String(defaultDates.endDay).padStart(2, '0')}`
-    );
-    
     // استخراج سال، ماه، روز از تاریخ شمسی
     const parseJalaliDate = (dateStr: string) => {
         const parts = dateStr.split('/');
@@ -87,8 +79,13 @@ const PerformanceIndexTab: React.FC = () => {
         };
     };
     
-    const startDateParts = parseJalaliDate(startDate);
-    const endDateParts = parseJalaliDate(endDate);
+    // استفاده از state برای تاریخ‌های شمسی (فرمت YYYY/MM/DD)
+    const [startDate, setStartDate] = useState(
+        `${defaultDates.startYear}/${String(defaultDates.startMonth).padStart(2, '0')}/${String(defaultDates.startDay).padStart(2, '0')}`
+    );
+    const [endDate, setEndDate] = useState(
+        `${defaultDates.endYear}/${String(defaultDates.endMonth).padStart(2, '0')}/${String(defaultDates.endDay).padStart(2, '0')}`
+    );
     
     const fetchData = async () => {
         try {
@@ -134,13 +131,6 @@ const PerformanceIndexTab: React.FC = () => {
         fetchData();
     }, [startDate, endDate]);
     
-    // Debug: Log data
-    useEffect(() => {
-        console.log('📊 [PerformanceIndexTab] Data:', data);
-        console.log('📊 [PerformanceIndexTab] Grouped Data:', groupedData);
-        console.log('📊 [PerformanceIndexTab] Sorted Months:', sortedMonths);
-    }, [data, groupedData, sortedMonths]);
-    
     // گروه‌بندی داده‌ها بر اساس ماه و نوع خودرو
     const groupedData = useMemo(() => {
         const grouped: { [key: string]: { [vehicleType: string]: PerformanceIndexData } } = {};
@@ -164,6 +154,13 @@ const PerformanceIndexTab: React.FC = () => {
             return aMonth - bMonth;
         }).slice(-10); // آخرین 10 ماه
     }, [groupedData]);
+    
+    // Debug: Log data
+    useEffect(() => {
+        console.log('📊 [PerformanceIndexTab] Data:', data);
+        console.log('📊 [PerformanceIndexTab] Grouped Data:', groupedData);
+        console.log('📊 [PerformanceIndexTab] Sorted Months:', sortedMonths);
+    }, [data, groupedData, sortedMonths]);
     
     // محاسبه مجموع برای هر ماه
     const getMonthTotals = (month: string) => {
