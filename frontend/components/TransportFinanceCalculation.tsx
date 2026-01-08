@@ -2992,90 +2992,141 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // محاسبه هزینه سوخت برای نمایش در دیالوگ - بر اساس vehicle specs
             let initialFuelCost = (tour as any).fuelCost || 0;
             
-            if (!initialFuelCost) {
-                // پیدا کردن vehicle spec
-                const vehicleCode = tour.vehicleCode || '';
-                const plateNumber = tour.plateNumber || '';
-                let vehicle = null;
+            // همیشه محاسبه کن، حتی اگر fuelCost موجود باشد (برای اطمینان از محاسبه صحیح)
+            const vehicleCode = String(tour.vehicleCode || '').trim();
+            const plateNumber = tour.plateNumber || '';
+            const vehicleType = tour.vehicleType || '';
+            
+            console.log('⛽ [handleRecordData] شروع محاسبه هزینه سوخت:', {
+                vehicleCode,
+                plateNumber,
+                vehicleType,
+                approvedKm,
+                excessKm: tour.excessKilometers || 0,
+                depotKm: (tour as any).depotTotalMileage || 0,
+                vehicleSpecsCount: vehicleSpecs.length,
+                fuelRegulationsKeys: Object.keys(fuelConsumptionRegulations),
+                vehiclesCount: vehicles.length
+            });
+            
+            let vehicle = null;
+            
+            // جستجوی vehicle بر اساس vehicleCode (با تبدیل به string برای تطبیق)
+            if (vehicleCode) {
+                vehicle = vehicles.find(v => {
+                    const vCode = String((v as any).vehicleCode || (v as any).vehicle_code || '').trim();
+                    return vCode === vehicleCode || vCode === String(vehicleCode);
+                });
+                console.log('🔍 [handleRecordData] جستجوی vehicle بر اساس vehicleCode:', { vehicleCode, found: !!vehicle });
+            }
+            
+            // اگر vehicle پیدا نشد، بر اساس plateNumber جستجو کن
+            if (!vehicle && plateNumber) {
+                vehicle = vehicles.find(v => {
+                    if (!v.plateNumber) return false;
+                    const vehiclePlateStr = `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}`;
+                    // تطبیق با فرمت‌های مختلف
+                    const match1 = vehiclePlateStr === plateNumber;
+                    const match2 = vehiclePlateStr.replace(/-/g, '') === plateNumber.replace(/-/g, '');
+                    const match3 = `${v.plateNumber.part1}-${v.plateNumber.part2}${v.plateNumber.letter}${v.plateNumber.cityCode}` === plateNumber;
+                    return match1 || match2 || match3;
+                });
+                console.log('🔍 [handleRecordData] جستجوی vehicle بر اساس plateNumber:', { plateNumber, found: !!vehicle });
+            }
+            
+            let matchedSpec = null;
+            if (vehicle) {
+                console.log('🚗 [handleRecordData] vehicle پیدا شد:', {
+                    id: vehicle.id,
+                    brand: vehicle.brand,
+                    model: vehicle.model,
+                    vehicleType: (vehicle as any).vehicleType,
+                    vehicleTip: (vehicle as any).vehicleTip
+                });
                 
-                // جستجوی vehicle بر اساس vehicleCode
-                if (vehicleCode) {
-                    vehicle = vehicles.find(v => (v as any).vehicleCode === vehicleCode || (v as any).vehicle_code === vehicleCode);
-                }
+                // جستجوی spec بر اساس vehicle
+                matchedSpec = vehicleSpecs.find(spec => 
+                    spec.brand === vehicle.brand &&
+                    spec.model === vehicle.model &&
+                    spec.vehicleType === (vehicle as any).vehicleType &&
+                    spec.tip === (vehicle as any).vehicleTip
+                );
                 
-                // اگر vehicle پیدا نشد، بر اساس plateNumber جستجو کن
-                if (!vehicle && plateNumber) {
-                    vehicle = vehicles.find(v => {
-                        if (!v.plateNumber) return false;
-                        const vehiclePlateStr = `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}`;
-                        // تطبیق با فرمت‌های مختلف
-                        return vehiclePlateStr === plateNumber || 
-                               vehiclePlateStr.replace(/-/g, '') === plateNumber.replace(/-/g, '') ||
-                               `${v.plateNumber.part1}-${v.plateNumber.part2}${v.plateNumber.letter}${v.plateNumber.cityCode}` === plateNumber;
+                if (matchedSpec) {
+                    console.log('✅ [handleRecordData] spec بر اساس vehicle پیدا شد:', {
+                        brand: matchedSpec.brand,
+                        model: matchedSpec.model,
+                        vehicleType: matchedSpec.vehicleType,
+                        fuelConsumptionPercentage: matchedSpec.fuelConsumptionPercentage,
+                        fuelPricePerLiter: matchedSpec.fuelPricePerLiter
                     });
+                } else {
+                    console.log('⚠️ [handleRecordData] spec بر اساس vehicle پیدا نشد');
+                }
+            }
+            
+            // اگر spec پیدا نشد، بر اساس vehicleType مستقیماً در specs جستجو کن
+            if (!matchedSpec) {
+                // Mapping: تریلی/مینی تریلی → کشنده
+                let vehicleTypeForSpec = vehicleType;
+                if (vehicleType.includes('تریلی') || vehicleType.includes('مینی تریلی')) {
+                    vehicleTypeForSpec = 'کشنده';
                 }
                 
-                let matchedSpec = null;
-                if (vehicle) {
-                    // جستجوی spec بر اساس vehicle
-                    matchedSpec = vehicleSpecs.find(spec => 
-                        spec.brand === vehicle.brand &&
-                        spec.model === vehicle.model &&
-                        spec.vehicleType === (vehicle as any).vehicleType &&
-                        spec.tip === (vehicle as any).vehicleTip
-                    );
+                // جستجو در specs بر اساس vehicleType
+                matchedSpec = vehicleSpecs.find(spec => spec.vehicleType === vehicleTypeForSpec);
+                
+                if (matchedSpec) {
+                    console.log('✅ [handleRecordData] spec بر اساس vehicleType پیدا شد:', {
+                        vehicleType,
+                        vehicleTypeForSpec,
+                        brand: matchedSpec.brand,
+                        model: matchedSpec.model,
+                        fuelConsumptionPercentage: matchedSpec.fuelConsumptionPercentage,
+                        fuelPricePerLiter: matchedSpec.fuelPricePerLiter
+                    });
+                } else {
+                    console.log('⚠️ [handleRecordData] spec بر اساس vehicleType پیدا نشد:', { vehicleType, vehicleTypeForSpec, availableTypes: vehicleSpecs.map(s => s.vehicleType) });
+                }
+            }
+            
+            if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
+                const totalKmForFuel = approvedKm + (tour.excessKilometers || 0) + ((tour as any).depotTotalMileage || 0);
+                initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
+                console.log('💰 [handleRecordData] محاسبه هزینه سوخت از vehicleSpecs:', {
+                    totalKmForFuel,
+                    fuelConsumptionPercentage: matchedSpec.fuelConsumptionPercentage,
+                    fuelPricePerLiter: matchedSpec.fuelPricePerLiter,
+                    calculation: `${totalKmForFuel} * (${matchedSpec.fuelConsumptionPercentage} / 100) * ${matchedSpec.fuelPricePerLiter}`,
+                    initialFuelCost
+                });
+            } else {
+                // Fallback: استفاده از بخشنامه قدیمی
+                // Mapping: تریلی/مینی تریلی → کشنده
+                let mappedVehicleType = vehicleType;
+                if (vehicleType.includes('تریلی') || vehicleType.includes('مینی تریلی')) {
+                    mappedVehicleType = 'کشنده';
                 }
                 
-                // اگر spec پیدا نشد، بر اساس vehicleType و vehicleCode مستقیماً در specs جستجو کن
-                if (!matchedSpec && vehicleCode) {
-                    const vehicleType = tour.vehicleType || '';
-                    // Mapping: تریلی/مینی تریلی → کشنده
-                    let vehicleTypeForSpec = vehicleType;
-                    if (vehicleType.includes('تریلی') || vehicleType.includes('مینی تریلی')) {
-                        vehicleTypeForSpec = 'کشنده';
-                    }
-                    
-                    // جستجو در specs بر اساس vehicleType
-                    matchedSpec = vehicleSpecs.find(spec => spec.vehicleType === vehicleTypeForSpec);
-                }
-                
-                if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
-                    const totalKmForFuel = approvedKm + (tour.excessKilometers || 0) + ((tour as any).depotTotalMileage || 0);
-                    initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
-                    console.log('⛽ [handleRecordData] محاسبه هزینه سوخت از vehicleSpecs:', {
-                        vehicleCode,
-                        plateNumber,
-                        vehicleType: tour.vehicleType,
-                        matchedSpec: matchedSpec ? { brand: matchedSpec.brand, model: matchedSpec.model, vehicleType: matchedSpec.vehicleType } : null,
-                        fuelConsumptionPercentage: matchedSpec?.fuelConsumptionPercentage,
-                        fuelPricePerLiter: matchedSpec?.fuelPricePerLiter,
+                const fuelReg = fuelConsumptionRegulations[mappedVehicleType] || fuelConsumptionRegulations[vehicleType];
+                if (fuelReg) {
+                    const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
+                    initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+                    console.log('💰 [handleRecordData] محاسبه هزینه سوخت از بخشنامه قدیمی:', {
+                        vehicleType,
+                        mappedVehicleType,
+                        fuelReg: { consumptionPercentage: fuelReg.consumptionPercentage, fuelPrice: fuelReg.fuelPrice },
                         totalKmForFuel,
+                        calculation: `(${totalKmForFuel} / 100) * ${fuelReg.consumptionPercentage} * ${fuelReg.fuelPrice}`,
                         initialFuelCost
                     });
                 } else {
-                    // Fallback: استفاده از بخشنامه قدیمی
-                    const vehicleTypeForFuel = tour.vehicleType || '';
-                    // Mapping: تریلی/مینی تریلی → کشنده
-                    let mappedVehicleType = vehicleTypeForFuel;
-                    if (vehicleTypeForFuel.includes('تریلی') || vehicleTypeForFuel.includes('مینی تریلی')) {
-                        mappedVehicleType = 'کشنده';
-                    }
-                    const fuelReg = fuelConsumptionRegulations[mappedVehicleType] || fuelConsumptionRegulations[vehicleTypeForFuel];
-                    if (fuelReg) {
-                        const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
-                        initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
-                        console.log('⛽ [handleRecordData] محاسبه هزینه سوخت از بخشنامه قدیمی:', {
-                            vehicleTypeForFuel,
-                            mappedVehicleType,
-                            fuelReg: { consumptionPercentage: fuelReg.consumptionPercentage, fuelPrice: fuelReg.fuelPrice },
-                            totalKmForFuel,
-                            initialFuelCost
-                        });
-                    } else {
-                        console.warn('⚠️ [handleRecordData] هیچ بخشنامه سوختی برای', vehicleTypeForFuel, 'پیدا نشد');
-                    }
+                    console.warn('⚠️ [handleRecordData] هیچ بخشنامه سوختی برای', vehicleType, 'پیدا نشد. بخشنامه‌های موجود:', Object.keys(fuelConsumptionRegulations));
+                    initialFuelCost = 0;
                 }
             }
+            
+            console.log('✅ [handleRecordData] هزینه سوخت نهایی:', initialFuelCost);
             
             // تعیین نوع محاسبه اجرت - از تور ذخیره شده یا پیش‌فرض
             const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';

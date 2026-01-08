@@ -249,6 +249,26 @@ async function updateDriver(req, res) {
       return res.status(400).json({ message: 'Employee ID and name are required.' });
     }
 
+    // بررسی اینکه آیا national_id متعلق به راننده دیگری است یا نه
+    // فقط اگر national_id خالی نباشد چک می‌کنیم (NULL یا empty string)
+    if (nationalId && nationalId.trim() !== '') {
+      try {
+        const existingDriver = await pool.query(
+          'SELECT id, name FROM drivers WHERE national_id = $1 AND national_id IS NOT NULL AND national_id != \'\' AND id != $2 AND is_deleted = false',
+          [nationalId.trim(), id]
+        );
+        
+        if (existingDriver.rows.length > 0) {
+          return res.status(400).json({ 
+            message: `کد ملی "${nationalId}" متعلق به راننده دیگری است (${existingDriver.rows[0].name}). لطفاً یک کد ملی منحصر به فرد وارد کنید.` 
+          });
+        }
+      } catch (checkError) {
+        console.warn('⚠️ [updateDriver] Failed to check national_id uniqueness:', checkError.message);
+        // اگر چک با خطا مواجه شد، ادامه می‌دهیم (ممکن است ستون وجود نداشته باشد)
+      }
+    }
+
     // بررسی وجود ستون account_number
     let hasAccountNumber = false;
     try {
@@ -266,6 +286,9 @@ async function updateDriver(req, res) {
     }
 
     // ساخت query بر اساس وجود ستون
+    // تبدیل national_id خالی به null برای جلوگیری از duplicate key error
+    const normalizedNationalId = (nationalId && nationalId.trim() !== '') ? nationalId.trim() : null;
+    
     let updateQuery = `UPDATE drivers SET 
         employee_id = $1, name = $2, father_name = $3, national_id = $4, birth_date = $5, id_number = $6,
         birth_place = $7, issue_place = $8, home_phone = $9, work_phone = $10, mobile = $11, postal_code = $12,
@@ -274,7 +297,7 @@ async function updateDriver(req, res) {
         license_expiry_date = $22, updated_at = NOW()
       WHERE id = $23 AND is_deleted = false RETURNING *`;
     let updateParams = [
-      employeeId, name, fatherName || null, nationalId,
+      employeeId, name, fatherName || null, normalizedNationalId,
       birthDate ? new Date(birthDate) : null, idNumber || null,
       birthPlace || null, issuePlace || null, homePhone || null,
       workPhone || null, mobile || null, postalCode || null,
@@ -294,7 +317,7 @@ async function updateDriver(req, res) {
         license_expiry_date = $22, account_number = $23, updated_at = NOW()
       WHERE id = $24 AND is_deleted = false RETURNING *`;
       updateParams = [
-        employeeId, name, fatherName || null, nationalId,
+        employeeId, name, fatherName || null, normalizedNationalId,
         birthDate ? new Date(birthDate) : null, idNumber || null,
         birthPlace || null, issuePlace || null, homePhone || null,
         workPhone || null, mobile || null, postalCode || null,
@@ -316,6 +339,24 @@ async function updateDriver(req, res) {
   } catch (error) {
     const did = req?.params?.id;
     console.error(`Failed to update driver ${did}:`, error);
+    
+    // بررسی خطای unique constraint violation
+    if (error.code === '23505') {
+      // کد 23505 = unique_violation
+      if (error.constraint === 'drivers_national_id_key') {
+        return res.status(400).json({ 
+          message: 'کد ملی تکراری است. لطفاً یک کد ملی منحصر به فرد وارد کنید.' 
+        });
+      } else if (error.constraint === 'drivers_employee_id_key') {
+        return res.status(400).json({ 
+          message: 'کد پرسنلی تکراری است. لطفاً یک کد پرسنلی منحصر به فرد وارد کنید.' 
+        });
+      }
+      return res.status(400).json({ 
+        message: 'مقدار تکراری وارد شده است. لطفاً مقادیر منحصر به فرد وارد کنید.' 
+      });
+    }
+    
     res.status(500).json({ message: 'Internal server error while updating driver.' });
   }
 }
