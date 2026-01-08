@@ -1496,8 +1496,8 @@ async function getDriverPreferences(req, res) {
         ) dqe ON TRUE
         WHERE da.driver_id = $1
           AND da.created_at BETWEEN $2 AND $3
-          AND (fa.status IN ('Assigned', 'InTransit') OR da.is_cancelled = TRUE)
           AND fa.status != 'Cancelled'
+          AND (fa.status IN ('Assigned', 'InTransit', 'Finalized') OR da.is_cancelled = TRUE)
         ORDER BY dr.round_trip_km DESC NULLS LAST, da.created_at DESC
       `,
       [driverId, fromISO, toISO]
@@ -1822,6 +1822,8 @@ async function getDriverPreferences(req, res) {
 async function getBoard(req, res) {
   try {
     // ابتدا همه dispatch_assignments را با مقاصدشان بگیریم
+    // منطق: راننده و خودرو تا زمانی که مجدد در نوبت قرار بگیرند در تابلو می‌مانند
+    // اگر راننده یا خودرو در dispatch_queue_entries هستند، از تابلو خارج می‌شوند
     const { rows: allRows } = await pool.query(
       `SELECT
          da.id,
@@ -1847,14 +1849,24 @@ async function getBoard(req, res) {
          d.employee_id,
          v.model AS vehicle_model,
          v.vehicle_code,
-         COALESCE(da.vehicle_category, v.vehicle_category) AS vehicle_category
+         COALESCE(da.vehicle_category, v.vehicle_category) AS vehicle_category,
+         -- چک می‌کنیم که آیا راننده یا خودرو در نوبت هستند یا نه
+         -- اگر راننده یا خودرو در dispatch_queue_entries هستند، از تابلو خارج می‌شوند
+         CASE WHEN EXISTS (
+           SELECT 1 FROM dispatch_queue_entries dqe 
+           WHERE dqe.driver_id = da.driver_id
+         ) THEN TRUE ELSE FALSE END AS driver_in_queue,
+         CASE WHEN EXISTS (
+           SELECT 1 FROM dispatch_queue_entries dqe 
+           WHERE dqe.vehicle_id = da.vehicle_id
+         ) THEN TRUE ELSE FALSE END AS vehicle_in_queue
        FROM dispatch_assignments da
        LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
        LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
        LEFT JOIN drivers d ON d.id = da.driver_id
        LEFT JOIN vehicles v ON v.id = da.vehicle_id
-       WHERE fa.status IN ('Assigned', 'InTransit')
+       WHERE fa.status IN ('Assigned', 'InTransit', 'Finalized')
          AND fa.status NOT IN ('Cancelled')
          AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
          -- فقط راننده‌ها و خودروهای شرکتی: بررسی می‌کنیم که vehicle_id و driver_id در جداول company وجود دارند
@@ -1864,10 +1876,16 @@ async function getBoard(req, res) {
        ORDER BY da.freight_announcement_id, fd.created_at ASC`
     );
 
+    // فیلتر کردن: اگر راننده یا خودرو در نوبت هستند، از تابلو خارج می‌شوند
+    const filteredRows = allRows.filter(row => {
+      // اگر راننده یا خودرو در نوبت هستند، از تابلو خارج می‌شوند
+      return !(row.driver_in_queue || row.vehicle_in_queue);
+    });
+    
     // گروه‌بندی بر اساس freight_announcement_id
     const announcementMap = new Map();
     
-    for (const row of allRows) {
+    for (const row of filteredRows) {
       const annId = row.freight_announcement_id;
       
       if (!announcementMap.has(annId)) {

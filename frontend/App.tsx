@@ -578,13 +578,15 @@ const App: React.FC = () => {
                 return <TransportLiveContainer currentUser={currentUser} />;
             case View.TransportDispatchQueue:
                 console.log('[App] Render view:', View.TransportDispatchQueue);
-                return <DispatchQueueManager />;
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <DispatchQueueManager currentUser={currentUser} />;
             case View.TransportDispatchAssignment:
                 console.log('[App] Render view:', View.TransportDispatchAssignment);
                 return <DispatchAssignmentManager />;
             case View.TransportDispatchBoard:
                 console.log('[App] Render view:', View.TransportDispatchBoard);
-                return <DispatchBoardView />;
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <DispatchQueueManager currentUser={currentUser} />;
             case View.FreightPlanning:
                 console.log('[App] Render view:', View.FreightPlanning);
                 return (

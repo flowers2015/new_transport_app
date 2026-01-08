@@ -830,13 +830,76 @@ const CompanyDriverForm: React.FC<{
     accountNumber: initialData?.accountNumber || '',
   });
 
+  // به‌روزرسانی form وقتی initialData تغییر می‌کند
+  useEffect(() => {
+    if (initialData) {
+      setForm({
+        employeeId: initialData.employeeId || '',
+        name: initialData.name || '',
+        fatherName: initialData.fatherName || '',
+        nationalId: initialData.nationalId || '',
+        birthDate: initialData.birthDate?.split('T')[0] || '',
+        idNumber: initialData.idNumber || '',
+        birthPlace: initialData.birthPlace || '',
+        issuePlace: initialData.issuePlace || '',
+        homePhone: initialData.homePhone || '',
+        workPhone: initialData.workPhone || '',
+        mobile: initialData.mobile || '',
+        postalCode: initialData.postalCode || '',
+        homeAddress: initialData.homeAddress || '',
+        workLocation: initialData.workLocation || '',
+        jobTitle: initialData.jobTitle || '',
+        hireDate: initialData.hireDate?.split('T')[0] || '',
+        terminationDate: initialData.terminationDate?.split('T')[0] || '',
+        licenseNumber: initialData.licenseNumber || '',
+        licenseType: initialData.licenseType || '',
+        licenseIssueDate: initialData.licenseIssueDate?.split('T')[0] || '',
+        licenseIssuePlace: initialData.licenseIssuePlace || '',
+        licenseExpiryDate: initialData.licenseExpiryDate?.split('T')[0] || '',
+        accountNumber: initialData.accountNumber || '',
+      });
+    } else {
+      // اگر initialData null است، فرم را reset کن
+      setForm({
+        employeeId: '',
+        name: '',
+        fatherName: '',
+        nationalId: '',
+        birthDate: '',
+        idNumber: '',
+        birthPlace: '',
+        issuePlace: '',
+        homePhone: '',
+        workPhone: '',
+        mobile: '',
+        postalCode: '',
+        homeAddress: '',
+        workLocation: '',
+        jobTitle: '',
+        hireDate: '',
+        terminationDate: '',
+        licenseNumber: '',
+        licenseType: '',
+        licenseIssueDate: '',
+        licenseIssuePlace: '',
+        licenseExpiryDate: '',
+        accountNumber: '',
+      });
+    }
+  }, [initialData]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.employeeId || !form.name) {
       alert('کد پرسنلی و نام الزامی است');
       return;
     }
-    onSave(form);
+    // Normalize nationalId: اگر خالی است، null بفرست (نه empty string)
+    const normalizedForm = {
+      ...form,
+      nationalId: (form.nationalId && form.nationalId.trim() !== '') ? form.nationalId.trim() : null,
+    };
+    onSave(normalizedForm);
   };
 
   const inputClass = "w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm";

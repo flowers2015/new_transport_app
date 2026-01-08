@@ -498,32 +498,33 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const liveAnnouncements = useMemo(() => {
         const filtered = announcements.filter(a => {
             // همه اعلام‌بارها نمایش داده می‌شوند (فیلتر تاریخ حذف شد)
-
-            // اگر تخصیص نهایی شده است (assignment_finalized_at وجود دارد)، از پیگیری اعلام بار زنده خارج می‌شود
-            if (a.assignmentFinalizedAt) {
-                return false;
-            }
+            // توجه: راننده و خودرو تا زمانی که مجدد در نوبت قرار بگیرند در تابلو اعلام بار می‌مانند
+            // (نه تا اتمام تخصیص)
 
             if (currentUser.role === UserRole.TransportationUser) {
                 // ترابری شرکت: بر اساس قانون ارجاع خودکار
                 // بستنی: ابتدا به ترابری شرکت، در صورت عدم پوشش به ترابری شخصی
                 // پاستوریزه و لبنیات: ابتدا به ترابری شخصی، در صورت عدم پوشش به ترابری شرکت
                 
+                // Exclude cancelled freight
+                if (a.status === FreightAnnouncementStatus.Cancelled) {
+                    return false;
+                }
+                
+                // Exclude finalized freight (که تخصیص نهایی شده)
+                if (a.status === FreightAnnouncementStatus.Finalized) {
+                    return false;
+                }
+                
                 const allowedStatuses = [
                     FreightAnnouncementStatus.PendingCompanyAssignment,
                     FreightAnnouncementStatus.PendingPersonalAssignment,
                     FreightAnnouncementStatus.Assigned,
                     FreightAnnouncementStatus.InTransit,
-                    FreightAnnouncementStatus.Finalized,
                 ];
                 // Also check for English status values (for backward compatibility)
-                const englishStatuses = ['Assigned', 'InTransit', 'Finalized'];
+                const englishStatuses = ['Assigned', 'InTransit'];
                 const isAllowed = allowedStatuses.includes(a.status) || englishStatuses.includes(a.status);
-                
-                // Exclude cancelled freight
-                if (a.status === FreightAnnouncementStatus.Cancelled) {
-                    return false;
-                }
                 
                 // قانون ارجاع خودکار: ترابری شرکت باید بستنی را ببیند و بتواند روی آن عمل کند
                 if (isAllowed && (a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی')) {
@@ -532,6 +533,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 } else if (isAllowed && ((a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه') || (a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند'))) {
                     // پاستوریزه و لبنیات: ترابری شرکت باید ببیند اما عملیات غیرفعال باشد تا زمانی که ارجاع داده شود
                     return true; // همیشه نمایش داده می‌شود
+                }
+                
+                // همچنین اعلام‌بارهای در انتظار تایید هم باید نمایش داده شوند (برای مشاهده)
+                if (a.status === FreightAnnouncementStatus.PendingApproval) {
+                    return (a.lineType === FreightLineType.IceCream || a.lineType === 'IceCream' || a.lineType === 'بستنی') ||
+                           (a.lineType === FreightLineType.Dairy || a.lineType === 'Dairy' || a.lineType === 'پاستوریزه') ||
+                           (a.lineType === FreightLineType.Ambient || a.lineType === 'Ambient' || a.lineType === 'لبنیات-فروتلند');
                 }
                 
                 return false;

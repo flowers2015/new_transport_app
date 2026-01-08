@@ -249,18 +249,24 @@ async function updateDriver(req, res) {
       return res.status(400).json({ message: 'Employee ID and name are required.' });
     }
 
+    // Normalize nationalId: اگر undefined، null، یا empty string است، به null تبدیل کن
+    let normalizedNationalId = null;
+    if (nationalId !== undefined && nationalId !== null && String(nationalId).trim() !== '') {
+      normalizedNationalId = String(nationalId).trim();
+    }
+
     // بررسی اینکه آیا national_id متعلق به راننده دیگری است یا نه
     // فقط اگر national_id خالی نباشد چک می‌کنیم (NULL یا empty string)
-    if (nationalId && nationalId.trim() !== '') {
+    if (normalizedNationalId) {
       try {
         const existingDriver = await pool.query(
           'SELECT id, name FROM drivers WHERE national_id = $1 AND national_id IS NOT NULL AND national_id != \'\' AND id != $2 AND is_deleted = false',
-          [nationalId.trim(), id]
+          [normalizedNationalId, id]
         );
         
         if (existingDriver.rows.length > 0) {
           return res.status(400).json({ 
-            message: `کد ملی "${nationalId}" متعلق به راننده دیگری است (${existingDriver.rows[0].name}). لطفاً یک کد ملی منحصر به فرد وارد کنید.` 
+            message: `کد ملی "${normalizedNationalId}" متعلق به راننده دیگری است (${existingDriver.rows[0].name}). لطفاً یک کد ملی منحصر به فرد وارد کنید.` 
           });
         }
       } catch (checkError) {
@@ -286,8 +292,7 @@ async function updateDriver(req, res) {
     }
 
     // ساخت query بر اساس وجود ستون
-    // تبدیل national_id خالی به null برای جلوگیری از duplicate key error
-    const normalizedNationalId = (nationalId && nationalId.trim() !== '') ? nationalId.trim() : null;
+    // normalizedNationalId قبلاً محاسبه شده است
     
     let updateQuery = `UPDATE drivers SET 
         employee_id = $1, name = $2, father_name = $3, national_id = $4, birth_date = $5, id_number = $6,

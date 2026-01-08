@@ -3110,7 +3110,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 
                 const fuelReg = fuelConsumptionRegulations[mappedVehicleType] || fuelConsumptionRegulations[vehicleType];
                 if (fuelReg) {
-                    const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
+                    // محاسبه کل پیمایش: پیمایش مصوب + پیمایش مازاد + پیمایش دپو
+                    const totalKmForFuel = approvedKm + (tour.excessKilometers || 0) + ((tour as any).depotTotalMileage || 0);
                     initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
                     console.log('💰 [handleRecordData] محاسبه هزینه سوخت از بخشنامه قدیمی:', {
                         vehicleType,
@@ -4322,13 +4323,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         const tollCost = Number(tour.tollCost) || 0;
                                                         const billOfLadingCost = Number((tour as any).billOfLadingCost || (tour as any).bill_of_lading_cost || 0);
                                                         const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
+                                                        const returnInterBranchCargo = Number((tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0);
                                                         const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
                                                         const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
                                                         const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
                                                         const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
                                                         const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
                                                         
-                                                        return sum + multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost;
+                                                        return sum + multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + returnInterBranchCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost;
                                                     }, 0);
                                                     
                                                     // هزینه کل = سایر هزینه‌ها + اجرت/پورسانت

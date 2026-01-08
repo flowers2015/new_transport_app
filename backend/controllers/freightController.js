@@ -5393,21 +5393,33 @@ async function getAssignmentStatistics(req, res) {
     const timeBasedResult = await pool.query(timeBasedQuery, dateParams);
     
     // برای محاسبه assignmentByDay و assignmentPercentagesByDay، باید جزئیات تخصیص‌ها را بگیریم
+    // Fallback: اگر assigned_at در history پیدا نشد، از da.created_at (تاریخ تخصیص در dispatch_assignments) استفاده می‌کنیم
     const detailedQuery = `
       SELECT 
         fa.id,
         CAST(fa.loading_date AS TEXT) as loading_date,
         fa.assigned_driver_id,
         fa.assignment_type,
-        (
-          SELECT MIN(fah.created_at) 
-          FROM freight_announcement_history fah 
-          WHERE fah.freight_announcement_id = fa.id 
-            AND fah.action = 'ASSIGNED'
-          LIMIT 1
+        COALESCE(
+          (
+            SELECT MIN(fah.created_at) 
+            FROM freight_announcement_history fah 
+            WHERE fah.freight_announcement_id = fa.id 
+              AND fah.action = 'ASSIGNED'
+            LIMIT 1
+          ),
+          da.created_at,
+          fa.updated_at
         ) as assigned_at
       FROM freight_announcements fa
       ${lateralJoin}
+      LEFT JOIN LATERAL (
+        SELECT MIN(created_at) as created_at
+        FROM dispatch_assignments
+        WHERE freight_announcement_id = fa.id 
+          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+        LIMIT 1
+      ) da ON true
       WHERE 1=1
         ${dateFilter}
         ${lineTypeFilter}
@@ -5447,7 +5459,15 @@ async function getAssignmentStatistics(req, res) {
       
       const periodDetails = periodDetailsMap.get(recordTimePeriod);
       
-      if (record.assigned_driver_id && record.assigned_at) {
+      // اگر assigned_driver_id وجود دارد، باید assigned_at را محاسبه کنیم
+      if (record.assigned_driver_id) {
+        // اگر assigned_at وجود ندارد، از fallback استفاده نمی‌کنیم (چون در query از COALESCE استفاده کردیم)
+        // اما اگر هنوز null است، skip می‌کنیم
+        if (!record.assigned_at) {
+          console.warn(`⚠️ [AssignmentStatistics] No assigned_at found for announcement ${record.id}, skipping assignmentByDay calculation`);
+          continue;
+        }
+        
         const assignedAtDate = new Date(record.assigned_at);
         const assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
         const loadingDateNormalized = record.loading_date?.replace(/-/g, '/');
@@ -5455,6 +5475,7 @@ async function getAssignmentStatistics(req, res) {
         if (assignedAtJalali && loadingDateNormalized) {
           let daysDiff = jalaliUtils.daysDifferenceJalali(loadingDateNormalized, assignedAtJalali);
           
+          // اگر daysDiff منفی است (تخصیص قبل از loading_date)، سعی می‌کنیم آن را اصلاح کنیم
           if (daysDiff < 0 && daysDiff >= -2) {
             const loadingMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(loadingDateNormalized);
             const assignedMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(assignedAtJalali);
@@ -5475,6 +5496,7 @@ async function getAssignmentStatistics(req, res) {
             }
           }
           
+          // فقط daysDiff >= 0 را در نظر می‌گیریم (تخصیص در همان روز یا بعد از loading_date)
           if (daysDiff !== null && daysDiff >= 0) {
             periodDetails.assignedRecords.push({
               daysDiff,
@@ -5494,6 +5516,8 @@ async function getAssignmentStatistics(req, res) {
               periodDetails.assignmentByDay['11+']++;
             }
           }
+        } else {
+          console.warn(`⚠️ [AssignmentStatistics] Could not parse dates for announcement ${record.id}: loadingDate=${loadingDateNormalized}, assignedAtJalali=${assignedAtJalali}`);
         }
       }
     }
@@ -5510,16 +5534,21 @@ async function getAssignmentStatistics(req, res) {
       let periodDetails = null;
       if (monthsDiff > 1) {
         // برای ماهانه: باید همه periodDetails هایی که با این ماه شروع می‌شوند را جمع کنیم
-        const monthPrefix = timePeriod; // مثلاً "1404/08"
+        const monthPrefix = timePeriod; // مثلاً "1404/08" یا "1404-08"
+        const monthPrefixSlash = monthPrefix.replace(/-/g, '/'); // تبدیل به "/"
+        const monthPrefixDash = monthPrefix.replace(/\//g, '-'); // تبدیل به "-"
         const aggregatedDetails = {
-          period: monthPrefix,
+          period: monthPrefixSlash,
           assignedRecords: [],
           assignmentByDay: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, '11+': 0 },
           leftoverFromPrevious: 0
         };
         
         for (const [key, details] of periodDetailsMap.entries()) {
-          if (key.startsWith(monthPrefix) || key.startsWith(monthPrefix.replace(/\//g, '-'))) {
+          // بررسی اینکه آیا key با monthPrefix شروع می‌شود (با هر دو فرمت / و -)
+          const keyNormalized = key.replace(/-/g, '/');
+          const monthPrefixNormalized = monthPrefixSlash;
+          if (keyNormalized.startsWith(monthPrefixNormalized) || key.startsWith(monthPrefixDash)) {
             aggregatedDetails.assignedRecords.push(...details.assignedRecords);
             for (const [day, count] of Object.entries(details.assignmentByDay)) {
               aggregatedDetails.assignmentByDay[day] = (aggregatedDetails.assignmentByDay[day] || 0) + count;
@@ -5533,7 +5562,10 @@ async function getAssignmentStatistics(req, res) {
         }
       } else {
         // برای روزانه: پیدا کردن periodDetails به صورت مستقیم
-        periodDetails = periodDetailsMap.get(timePeriod) || periodDetailsMap.get(timePeriod.replace(/\//g, '-'));
+        // تلاش با هر دو فرمت / و -
+        periodDetails = periodDetailsMap.get(timePeriod) || 
+                       periodDetailsMap.get(timePeriod.replace(/\//g, '-')) ||
+                       periodDetailsMap.get(timePeriod.replace(/-/g, '/'));
       }
       
       const totalRequests = parseInt(row.total_requests) || 0;
