@@ -143,9 +143,15 @@ const AdminResourceManagement: React.FC = () => {
   // ============================================
   // Data Fetching
   // ============================================
-  const fetchCompanyDrivers = async () => {
+  const fetchCompanyDrivers = async (forceRefresh = false) => {
     try {
       // برای admin panel، همه فیلدها را می‌خواهیم (full=true)
+      if (forceRefresh) {
+        // اگر forceRefresh true باشد، cache را پاک می‌کنیم و دوباره fetch می‌کنیم
+        const { apiCache } = await import('../utils/apiCache');
+        const cacheKey = `GET:${getApiUrl('drivers?full=true')}`;
+        apiCache.invalidate(cacheKey);
+      }
       const { cachedFetch } = await import('../utils/apiCache');
       const data = await cachedFetch(getApiUrl('drivers?full=true'), { headers }, 10 * 60 * 1000); // 10 min cache
       setCompanyDrivers(Array.isArray(data) ? data : []);
@@ -301,7 +307,7 @@ const AdminResourceManagement: React.FC = () => {
       setShowModal(false);
       setSelectedItem(null);
       
-      // پاک کردن cache برای drivers بعد از update
+      // پاک کردن cache و fetch مجدد داده‌ها
       if (activeTab === 'company-drivers') {
         const { apiCache } = await import('../utils/apiCache');
         // پاک کردن cache برای drivers?full=true
@@ -310,26 +316,24 @@ const AdminResourceManagement: React.FC = () => {
         // همچنین cache برای drivers بدون full=true را هم پاک می‌کنیم
         const cacheKeyWithoutFull = `GET:${getApiUrl('drivers')}`;
         apiCache.invalidate(cacheKeyWithoutFull);
-      }
-      
-      // پاک کردن cache برای سایر موارد هم
-      if (activeTab === 'company-vehicles') {
+        // fetch مجدد با forceRefresh
+        await fetchCompanyDrivers(true);
+      } else if (activeTab === 'company-vehicles') {
         const { apiCache } = await import('../utils/apiCache');
         const cacheKey = `GET:${getApiUrl('vehicles')}`;
         apiCache.invalidate(cacheKey);
-      }
-      if (activeTab === 'personal-drivers') {
+        await fetchCompanyVehicles();
+      } else if (activeTab === 'personal-drivers') {
         const { apiCache } = await import('../utils/apiCache');
         const cacheKey = `GET:${getApiUrl('personal-drivers')}`;
         apiCache.invalidate(cacheKey);
-      }
-      if (activeTab === 'personal-vehicles') {
+        await fetchPersonalDrivers();
+      } else if (activeTab === 'personal-vehicles') {
         const { apiCache } = await import('../utils/apiCache');
         const cacheKey = `GET:${getApiUrl('personal-vehicles')}`;
         apiCache.invalidate(cacheKey);
+        await fetchPersonalVehicles();
       }
-      
-      fetchData();
     } catch (err: any) {
       alert(err.message);
     }
@@ -680,6 +684,7 @@ const AdminResourceManagement: React.FC = () => {
 
           {activeTab === 'company-drivers' && (
             <CompanyDriverForm
+              key={selectedItem?.id || 'new'} // اضافه کردن key برای force re-render
               initialData={modalMode === 'edit' ? selectedItem : null}
               onSave={handleSave}
               onCancel={() => { setShowModal(false); setSelectedItem(null); }}
@@ -834,12 +839,26 @@ const CompanyDriverForm: React.FC<{
   onSave: (data: any) => void;
   onCancel: () => void;
 }> = ({ initialData, onSave, onCancel }) => {
+  // تابع کمکی برای تبدیل تاریخ به فرمت مناسب
+  const formatDateForInput = (dateStr: string | undefined | null): string => {
+    if (!dateStr) return '';
+    // اگر تاریخ به صورت ISO string است (مثلاً "2024-01-01T00:00:00.000Z")
+    if (dateStr.includes('T')) {
+      return dateStr.split('T')[0];
+    }
+    // اگر تاریخ به صورت string ساده است (مثلاً "2024-01-01")
+    if (dateStr.includes('-')) {
+      return dateStr.split(' ')[0]; // فقط قسمت تاریخ را بگیر
+    }
+    return '';
+  };
+
   const [form, setForm] = useState({
     employeeId: initialData?.employeeId || '',
     name: initialData?.name || '',
     fatherName: initialData?.fatherName || '',
     nationalId: initialData?.nationalId || '',
-    birthDate: initialData?.birthDate?.split('T')[0] || '',
+    birthDate: formatDateForInput(initialData?.birthDate),
     idNumber: initialData?.idNumber || '',
     birthPlace: initialData?.birthPlace || '',
     issuePlace: initialData?.issuePlace || '',
@@ -850,25 +869,39 @@ const CompanyDriverForm: React.FC<{
     homeAddress: initialData?.homeAddress || '',
     workLocation: initialData?.workLocation || '',
     jobTitle: initialData?.jobTitle || '',
-    hireDate: initialData?.hireDate?.split('T')[0] || '',
-    terminationDate: initialData?.terminationDate?.split('T')[0] || '',
+    hireDate: formatDateForInput(initialData?.hireDate),
+    terminationDate: formatDateForInput(initialData?.terminationDate),
     licenseNumber: initialData?.licenseNumber || '',
     licenseType: initialData?.licenseType || '',
-    licenseIssueDate: initialData?.licenseIssueDate?.split('T')[0] || '',
+    licenseIssueDate: formatDateForInput(initialData?.licenseIssueDate),
     licenseIssuePlace: initialData?.licenseIssuePlace || '',
-    licenseExpiryDate: initialData?.licenseExpiryDate?.split('T')[0] || '',
+    licenseExpiryDate: formatDateForInput(initialData?.licenseExpiryDate),
     accountNumber: initialData?.accountNumber || '',
   });
 
   // به‌روزرسانی form وقتی initialData تغییر می‌کند
   useEffect(() => {
     if (initialData) {
+      // تبدیل تاریخ‌ها به فرمت مناسب برای input type="date"
+      const formatDateForInput = (dateStr: string | undefined | null): string => {
+        if (!dateStr) return '';
+        // اگر تاریخ به صورت ISO string است (مثلاً "2024-01-01T00:00:00.000Z")
+        if (dateStr.includes('T')) {
+          return dateStr.split('T')[0];
+        }
+        // اگر تاریخ به صورت string ساده است (مثلاً "2024-01-01")
+        if (dateStr.includes('-')) {
+          return dateStr.split(' ')[0]; // فقط قسمت تاریخ را بگیر
+        }
+        return '';
+      };
+      
       setForm({
         employeeId: initialData.employeeId || '',
         name: initialData.name || '',
         fatherName: initialData.fatherName || '',
         nationalId: initialData.nationalId || '',
-        birthDate: initialData.birthDate?.split('T')[0] || '',
+        birthDate: formatDateForInput(initialData.birthDate),
         idNumber: initialData.idNumber || '',
         birthPlace: initialData.birthPlace || '',
         issuePlace: initialData.issuePlace || '',
@@ -879,13 +912,13 @@ const CompanyDriverForm: React.FC<{
         homeAddress: initialData.homeAddress || '',
         workLocation: initialData.workLocation || '',
         jobTitle: initialData.jobTitle || '',
-        hireDate: initialData.hireDate?.split('T')[0] || '',
-        terminationDate: initialData.terminationDate?.split('T')[0] || '',
+        hireDate: formatDateForInput(initialData.hireDate),
+        terminationDate: formatDateForInput(initialData.terminationDate),
         licenseNumber: initialData.licenseNumber || '',
         licenseType: initialData.licenseType || '',
-        licenseIssueDate: initialData.licenseIssueDate?.split('T')[0] || '',
+        licenseIssueDate: formatDateForInput(initialData.licenseIssueDate),
         licenseIssuePlace: initialData.licenseIssuePlace || '',
-        licenseExpiryDate: initialData.licenseExpiryDate?.split('T')[0] || '',
+        licenseExpiryDate: formatDateForInput(initialData.licenseExpiryDate),
         accountNumber: initialData.accountNumber || '',
       });
     } else {
