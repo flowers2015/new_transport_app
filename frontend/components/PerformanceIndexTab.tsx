@@ -30,40 +30,28 @@ const PerformanceIndexTab: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    // تاریخ پیش‌فرض: سال 1404
+    // تاریخ پیش‌فرض: از 1404/09/26 تا 1404/09/25 (ماه بعد)
     const getDefaultDates = () => {
-        const today = new Date();
-        const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
-        
         // سال پیش‌فرض 1404
         const defaultYear = 1404;
         
-        // 26 ماه قبل از ماه جاری (در سال 1404)
-        let startYear = defaultYear;
-        let startMonth = jm - 26;
-        while (startMonth <= 0) {
-            startMonth += 12;
-            startYear -= 1;
-        }
+        // از تاریخ: 1404/09/26
+        const startYear = defaultYear;
+        const startMonth = 9;
+        const startDay = 26;
         
-        // 25 ماه جاری (اگر روز >= 26، ماه جاری، وگرنه ماه قبل)
-        let endYear = defaultYear;
-        let endMonth = jm;
-        if (jd < 26) {
-            endMonth = jm - 1;
-            if (endMonth <= 0) {
-                endMonth = 12;
-                endYear -= 1;
-            }
-        }
+        // تا تاریخ: 1404/10/25 (ماه بعد)
+        const endYear = defaultYear;
+        const endMonth = 10;
+        const endDay = 25;
         
         return {
             startYear,
             startMonth,
-            startDay: 26,
+            startDay,
             endYear,
             endMonth,
-            endDay: 25
+            endDay
         };
     };
     
@@ -127,9 +115,8 @@ const PerformanceIndexTab: React.FC = () => {
         }
     };
     
-    useEffect(() => {
-        fetchData();
-    }, [startDate, endDate]);
+    // فقط وقتی دکمه جستجو زده شد، داده‌ها را fetch می‌کنیم
+    // useEffect برای auto-fetch را حذف می‌کنیم
     
     // گروه‌بندی داده‌ها بر اساس ماه و نوع خودرو
     const groupedData = useMemo(() => {
@@ -183,11 +170,11 @@ const PerformanceIndexTab: React.FC = () => {
     return (
         <div className="space-y-4">
             {/* فیلتر تاریخ */}
-            <div className="bg-white rounded-lg shadow p-4">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">فیلتر تاریخ</h3>
-                <div className="flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">از تاریخ</label>
+            <div className="bg-white rounded-lg shadow p-3">
+                <h3 className="text-base font-semibold text-slate-800 mb-3">فیلتر تاریخ</h3>
+                <div className="flex flex-wrap gap-3 items-end">
+                    <div className="flex-1 min-w-[150px]">
+                        <label className="block text-xs font-medium text-slate-700 mb-1">از تاریخ</label>
                         <input
                             type="text"
                             value={startDate}
@@ -197,13 +184,13 @@ const PerformanceIndexTab: React.FC = () => {
                                     setStartDate(value);
                                 }
                             }}
-                            placeholder="1404/08/26"
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                            placeholder="1404/09/26"
+                            className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs"
                             dir="rtl"
                         />
                     </div>
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">تا تاریخ</label>
+                    <div className="flex-1 min-w-[150px]">
+                        <label className="block text-xs font-medium text-slate-700 mb-1">تا تاریخ</label>
                         <input
                             type="text"
                             value={endDate}
@@ -214,9 +201,18 @@ const PerformanceIndexTab: React.FC = () => {
                                 }
                             }}
                             placeholder="1404/09/25"
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                            className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs"
                             dir="rtl"
                         />
+                    </div>
+                    <div className="flex-shrink-0">
+                        <button
+                            onClick={fetchData}
+                            disabled={loading}
+                            className="px-4 py-1.5 bg-sky-600 text-white rounded-md hover:bg-sky-700 disabled:bg-slate-400 text-xs font-medium whitespace-nowrap"
+                        >
+                            {loading ? 'در حال جستجو...' : 'جستجو'}
+                        </button>
                     </div>
                 </div>
             </div>
