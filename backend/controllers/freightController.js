@@ -5199,9 +5199,6 @@ async function getAssignmentStatistics(req, res) {
       dateParams.push(lineType);
     }
     
-    // فقط finalized assignments (از freight_announcements یا dispatch_assignments)
-    const finalizedCondition = `AND COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) IS NOT NULL`;
-    
     // LEFT JOIN LATERAL برای dispatch_assignments
     const lateralJoin = `
       LEFT JOIN LATERAL (
@@ -5213,6 +5210,19 @@ async function getAssignmentStatistics(req, res) {
         LIMIT 1
       ) da ON true
     `;
+    
+    // فقط finalized assignments (از freight_announcements یا dispatch_assignments)
+    // استفاده از EXISTS به جای COALESCE برای جلوگیری از خطای "missing FROM-clause entry for table da"
+    const finalizedCondition = `AND (
+      fa.assignment_finalized_at IS NOT NULL 
+      OR EXISTS (
+        SELECT 1 FROM dispatch_assignments da_check
+        WHERE da_check.freight_announcement_id = fa.id
+          AND (da_check.is_cancelled IS NULL OR da_check.is_cancelled = FALSE)
+          AND da_check.assignment_finalized_at IS NOT NULL
+        LIMIT 1
+      )
+    )`;
     
     // 1. آمار کلی (جمع کل)
     const summaryQuery = `

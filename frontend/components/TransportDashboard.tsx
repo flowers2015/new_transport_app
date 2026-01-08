@@ -460,7 +460,8 @@ const LineRow: React.FC<{
     title: string;
     stats: StatisticsData[];
     timeRange: 'day' | 'month' | 'year';
-}> = ({ title, stats, timeRange }) => {
+    assignmentStatistics?: AssignmentStatisticsResponse | null;
+}> = ({ title, stats, timeRange, assignmentStatistics }) => {
     const [zoomChart, setZoomChart] = useState<{ type: 'line' | 'bar' | 'pie' | null; data: any; data2?: any }>({ type: null, data: null });
     const [dailySummaryPage, setDailySummaryPage] = useState(1);
     // Debug: Log stats received
@@ -975,8 +976,8 @@ const LineRow: React.FC<{
                         totalAssigned: (item as any).totalAssigned || 0
                     }));
                 } else {
-                    // Fallback: فیلتر کردن از chartData (برای سازگاری با کد قدیمی)
-                    dailyData = chartData.filter(stat => {
+                    // Fallback: فیلتر کردن از stats (برای سازگاری با کد قدیمی)
+                    dailyData = stats.filter(stat => {
                         const period = stat.timePeriod || '';
                         const normalizedPeriod = period.replace(/-/g, '/');
                         const isDaily = normalizedPeriod.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(normalizedPeriod);
@@ -1487,6 +1488,16 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                         }`}
                     >
                         آنالیز کرایه
+                    </button>
+                    <button
+                        onClick={() => handleTabChange('performance')}
+                        className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                            activeTab === 'performance'
+                                ? 'border-b-2 border-sky-600 text-sky-600 bg-sky-50'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                    >
+                        شاخص عملکرد
                     </button>
                 </div>
 
@@ -2200,27 +2211,16 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             })()}
 
                             {/* Line Row - Only show selected line */}
-                            {/* استفاده از assignmentStatistics.dailyTimeBased برای نمایش خلاصه عملکرد روزانه */}
-                            {selectedLine && assignmentStatistics && assignmentStatistics.dailyTimeBased && assignmentStatistics.dailyTimeBased.length > 0 && (
+                            {selectedLine && lineStats.length > 0 && (
                                 <LineRow 
                                     title={
                                         selectedLine === FreightLineType.IceCream ? 'بستنی' :
                                         selectedLine === FreightLineType.Dairy ? 'پاستوریزه' :
                                         'لبنیات-فروتلند'
                                     } 
-                                    stats={assignmentStatistics.dailyTimeBased.map(item => ({
-                                        timePeriod: item.timePeriod,
-                                        totalRequests: item.totalRequests,
-                                        companyAssignments: item.companyAssignments,
-                                        personalAssignments: item.personalAssignments,
-                                        totalAssignments: item.totalAssignments,
-                                        successRate: item.successRate,
-                                        leftoverFromPrevious: (item as any).leftoverFromPrevious || 0,
-                                        assignmentByDay: (item as any).assignmentByDay || {},
-                                        assignmentPercentagesByDay: (item as any).assignmentPercentagesByDay || {},
-                                        totalAssigned: (item as any).totalAssigned || 0
-                                    }))} 
-                                    timeRange={detectTimeRange(lineStartDate, lineEndDate)} 
+                                    stats={lineStats} 
+                                    timeRange={detectTimeRange(lineStartDate, lineEndDate)}
+                                    assignmentStatistics={assignmentStatistics}
                                 />
                             )}
 
