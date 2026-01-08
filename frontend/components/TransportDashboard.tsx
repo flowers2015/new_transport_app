@@ -7,6 +7,7 @@ import html2canvas from 'html2canvas';
 import { getApiUrl } from '../utils/apiConfig';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import PerformanceIndexTab from './PerformanceIndexTab';
 
 interface StatisticsData {
     timePeriod: string;
@@ -956,31 +957,35 @@ const LineRow: React.FC<{
 
             {/* Statistics Summary Table - Daily with Pagination (31 rows per page) */}
             {(() => {
-                // فیلتر کردن فقط داده‌های روزانه (بازه زمانی که به فرمت YYYY/MM/DD یا YYYY-MM-DD است)
-                const dailyData = chartData.filter(stat => {
-                    const period = stat.timePeriod || '';
-                    // اگر بازه زمانی به فرمت YYYY/MM/DD یا YYYY-MM-DD باشد (10 کاراکتر)، روزانه است
-                    // تبدیل - به / برای سازگاری
-                    const normalizedPeriod = period.replace(/-/g, '/');
-                    // چک می‌کنیم که آیا به فرمت YYYY/MM/DD است (10 کاراکتر با / یا -)
-                    const isDaily = normalizedPeriod.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(normalizedPeriod);
-                    if (isDaily) {
-                        console.log(`✅ [DailySummary] Found daily data: ${period} -> ${normalizedPeriod}`);
-                    }
-                    return isDaily;
-                }).map(stat => {
-                    // نرمال‌سازی timePeriod برای نمایش یکنواخت
-                    const normalized = stat.timePeriod?.replace(/-/g, '/') || stat.timePeriod;
-                    console.log(`📅 [DailySummary] Mapping stat: ${stat.timePeriod} -> ${normalized}`, {
-                        totalRequests: stat.totalRequests,
-                        totalAssignments: stat.totalAssignments,
-                        assignmentPercentagesByDay: stat.assignmentPercentagesByDay
-                    });
-                    return {
+                // استفاده از dailyTimeBased از assignmentStatistics به جای chartData
+                let dailyData: StatisticsData[] = [];
+                
+                if (assignmentStatistics && assignmentStatistics.dailyTimeBased && assignmentStatistics.dailyTimeBased.length > 0) {
+                    // استفاده مستقیم از dailyTimeBased
+                    dailyData = assignmentStatistics.dailyTimeBased.map(item => ({
+                        timePeriod: item.timePeriod?.replace(/-/g, '/') || item.timePeriod || '',
+                        totalRequests: item.totalRequests || 0,
+                        companyAssignments: item.companyAssignments || 0,
+                        personalAssignments: item.personalAssignments || 0,
+                        totalAssignments: item.totalAssignments || 0,
+                        successRate: item.successRate || 0,
+                        leftoverFromPrevious: (item as any).leftoverFromPrevious || 0,
+                        assignmentByDay: (item as any).assignmentByDay || {},
+                        assignmentPercentagesByDay: (item as any).assignmentPercentagesByDay || {},
+                        totalAssigned: (item as any).totalAssigned || 0
+                    }));
+                } else {
+                    // Fallback: فیلتر کردن از chartData (برای سازگاری با کد قدیمی)
+                    dailyData = chartData.filter(stat => {
+                        const period = stat.timePeriod || '';
+                        const normalizedPeriod = period.replace(/-/g, '/');
+                        const isDaily = normalizedPeriod.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(normalizedPeriod);
+                        return isDaily;
+                    }).map(stat => ({
                         ...stat,
-                        timePeriod: normalized
-                    };
-                });
+                        timePeriod: stat.timePeriod?.replace(/-/g, '/') || stat.timePeriod
+                    }));
+                }
                 
                 const dailySummaryPageSize = 31; // 31 روز = یک ماه
                 const totalDailyPages = Math.ceil(dailyData.length / dailySummaryPageSize);
@@ -1025,26 +1030,13 @@ const LineRow: React.FC<{
                                     <th className="px-3 py-2 text-center text-slate-700">کل</th>
                                     <th className="px-3 py-2 text-center text-slate-700">موفقیت</th>
                                     <th className="px-3 py-2 text-center text-slate-700">مانده از قبل</th>
-                                    <th className="px-3 py-2 text-center text-slate-700">یک روز</th>
-                                    <th className="px-3 py-2 text-center text-slate-700">دو روز</th>
-                                    <th className="px-3 py-2 text-center text-slate-700">سه روز</th>
-                                    <th className="px-3 py-2 text-center text-slate-700">چهار روز</th>
-                                    <th className="px-3 py-2 text-center text-slate-700">پنج روز به بالا</th>
+                                    <th className="px-3 py-2 text-center text-slate-700">تعداد بار مانده (عودت به کارشناس)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {paginatedDailyData.map((stat, idx) => {
-                                    const day1Percent = stat.assignmentPercentagesByDay?.['0'] || 0; // یک روز = همان روز (day 0)
-                                    const day2Percent = stat.assignmentPercentagesByDay?.['1'] || 0; // دو روز = یک روز بعد (day 1)
-                                    const day3Percent = stat.assignmentPercentagesByDay?.['2'] || 0; // سه روز = دو روز بعد (day 2)
-                                    const day4Percent = stat.assignmentPercentagesByDay?.['3'] || 0; // چهار روز = سه روز بعد (day 3)
-                                    const day5PlusPercent = Object.entries(stat.assignmentPercentagesByDay || {})
-                                        .filter(([day]) => day !== '0' && day !== '1' && day !== '2' && day !== '3')
-                                        .reduce((sum, [, percent]) => sum + (percent || 0), 0);
-                                    
                                     return (
                                     <tr key={idx} className="border-b border-slate-200 hover:bg-slate-100">
-                                            {/* در جدول کل تاریخ را نمایش می‌دهیم، نه فقط بخشی از آن */}
                                             <td className="px-3 py-2 text-right">{stat.timePeriod}</td>
                                         <td className="px-3 py-2 text-center">{stat.totalRequests}</td>
                                         <td className="px-3 py-2 text-center">{stat.companyAssignments}</td>
@@ -1069,48 +1061,12 @@ const LineRow: React.FC<{
                                                 )}
                                             </td>
                                             <td className="px-3 py-2 text-center">
-                                                {day1Percent > 0 ? (
-                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">
-                                                        {day1Percent}%
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2 text-center">
-                                                {day2Percent > 0 ? (
-                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">
-                                                        {day2Percent}%
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2 text-center">
-                                                {day3Percent > 0 ? (
-                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-800">
-                                                        {day3Percent}%
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2 text-center">
-                                                {day4Percent > 0 ? (
+                                                {stat.leftoverFromPrevious > 0 ? (
                                                     <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">
-                                                        {day4Percent}%
+                                                        {stat.leftoverFromPrevious}
                                                     </span>
                                                 ) : (
-                                                    <span className="text-slate-400">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2 text-center">
-                                                {day5PlusPercent > 0 ? (
-                                                    <span className="px-2 py-1 rounded text-xs font-semibold bg-red-200 text-red-900">
-                                                        {day5PlusPercent}%
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400">-</span>
+                                                    <span className="text-slate-400">0</span>
                                                 )}
                                             </td>
                                     </tr>
@@ -1202,8 +1158,8 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     const [vehicleTypeSearch, setVehicleTypeSearch] = useState('');
     const [monthlySummaryPage, setMonthlySummaryPage] = useState(1);
     const [dailySummaryPage, setDailySummaryPage] = useState(1);
-    const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics'>('daily');
-    const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics'>>(new Set(['daily']));
+    const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics' | 'performance'>('daily');
+    const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics' | 'performance'>>(new Set(['daily']));
     const [dailyStats, setDailyStats] = useState<{
         iceCream: StatisticsData[];
         dairy: StatisticsData[];
@@ -1460,7 +1416,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     }
 
     // Handle tab change with lazy loading
-    const handleTabChange = (tab: 'daily' | 'lines' | 'representatives' | 'analytics') => {
+    const handleTabChange = (tab: 'daily' | 'lines' | 'representatives' | 'analytics' | 'performance') => {
         setActiveTab(tab);
         setLoadedTabs(prev => new Set([...prev, tab]));
     };
@@ -2395,6 +2351,13 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                                     selectedMonth={analyticsMonth}
                                 />
                             )}
+                        </div>
+                    )}
+
+                    {/* Tab 5: Performance Index */}
+                    {activeTab === 'performance' && loadedTabs.has('performance') && (
+                        <div className="space-y-4">
+                            <PerformanceIndexTab />
                         </div>
                     )}
                 </div>

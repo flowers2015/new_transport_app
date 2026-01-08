@@ -33,6 +33,8 @@ const {
   changeVehicleType,
 } = require('../controllers/freightController');
 
+const { getPerformanceIndex } = require('../controllers/performanceIndexController');
+
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
 // You should replace them with the actual roles defined in your user_role_enum.
 // For example, 'Admin', 'LogisticsCoordinator', etc.
@@ -48,6 +50,9 @@ router.get('/statistics', authenticateToken, getTransportStatistics);
 
 // Get assignment statistics (detailed statistics for finalized assignments)
 router.get('/assignment-statistics', authenticateToken, getAssignmentStatistics);
+
+// Get performance index (شاخص عملکرد)
+router.get('/performance-index', authenticateToken, getPerformanceIndex);
 
 // Get representative statistics (for transport dashboard)
 router.get('/representative-statistics', authenticateToken, getRepresentativeStatistics);
