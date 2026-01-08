@@ -1606,20 +1606,21 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }, 0);
             
             // محاسبه سایر هزینه‌ها (بدون اجرت/پورسانت)
-            // سایر هزینه‌ها = چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو
+            // سایر هزینه‌ها = چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + بار برگشتی بین شعب + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو
             const otherCosts = calc.tours.reduce((sum, tour) => {
                 const foodCost = Number(tour.foodCost) || 0;
                 const fuelCost = Number(tour.fuelCost) || 0;
                 const tollCost = Number(tour.tollCost) || 0;
                 const billOfLadingCost = Number((tour as any).billOfLadingCost || (tour as any).bill_of_lading_cost || 0);
                 const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
+                const returnInterBranchCargo = Number((tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0);
                 const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
                 const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
                 const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
                 const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
                 const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
                 
-                return sum + multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost;
+                return sum + multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + returnInterBranchCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost;
             }, 0);
             
             // محاسبه هزینه کل = سایر هزینه‌ها + اجرت/پورسانت
@@ -1713,7 +1714,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const excelData = getExcelFilteredData();
         
         const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره تور', 'نوع خودرو', 'کد * پلاک', 'لاین', 'مقاصد', 'شماره بارنامه', 'تاریخ صدور بارنامه', 'پیمایش مصوب (کیلومتر)', 'پیمایش مازاد (کیلومتر)', 'ماموریت مصوب (روز)', 'ماموریت مازاد (روز)', 'هزینه عوارض (ریال)', 'هزینه غذا (ریال)', 'هزینه سوخت (ریال)', 'هزینه تور (ریال)', 'هزینه کل (ریال)', 'توضیحات']
+            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره تور', 'نوع خودرو', 'کد * پلاک', 'لاین', 'مقاصد', 'شماره بارنامه', 'تاریخ صدور بارنامه', 'پیمایش مصوب (کیلومتر)', 'پیمایش مازاد (کیلومتر)', 'ماموریت مصوب (روز)', 'ماموریت مازاد (روز)', 'هزینه عوارض (ریال)', 'هزینه غذا (ریال)', 'هزینه سوخت (ریال)', 'هزینه بار برگشتی بین شعب (ریال)', 'هزینه تور (ریال)', 'هزینه کل (ریال)', 'توضیحات']
         ];
 
         let rowIndex = 1;
@@ -1741,6 +1742,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     tour.tollCost || 0,
                     tour.foodCost || 0,
                     tour.fuelCost || 0,
+                    (tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0,
                     tour.tourCost || 0,
                     tour.totalCost || 0,
                     tour.notes || ''
@@ -1794,6 +1796,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             { wch: 18 }, // هزینه عوارض
             { wch: 18 }, // هزینه غذا
             { wch: 18 }, // هزینه سوخت
+            { wch: 25 }, // هزینه بار برگشتی بین شعب
             { wch: 18 }, // هزینه تور
             { wch: 18 }, // هزینه کل
             { wch: 30 }  // توضیحات
@@ -2986,13 +2989,41 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     : formatJalali(tour.billOfLadingDate);
             }
             
-            // محاسبه هزینه سوخت برای نمایش در دیالوگ
-            const vehicleTypeForFuel = tour.vehicleType || '';
-            let initialFuelCost = 0;
-            const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
-            if (fuelReg) {
-                const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
-                initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+            // محاسبه هزینه سوخت برای نمایش در دیالوگ - بر اساس vehicle specs
+            let initialFuelCost = (tour as any).fuelCost || 0;
+            
+            if (!initialFuelCost) {
+                // پیدا کردن vehicle spec
+                const vehicleCode = tour.vehicleCode || '';
+                const plateNumber = tour.plateNumber || '';
+                const vehicle = vehicles.find(v => 
+                    (vehicleCode && (v as any).vehicleCode === vehicleCode) ||
+                    (plateNumber && v.plateNumber && 
+                        `${v.plateNumber.part1}${v.plateNumber.letter}${v.plateNumber.part2}-${v.plateNumber.cityCode}` === plateNumber)
+                );
+                
+                let matchedSpec = null;
+                if (vehicle) {
+                    matchedSpec = vehicleSpecs.find(spec => 
+                        spec.brand === vehicle.brand &&
+                        spec.model === vehicle.model &&
+                        spec.vehicleType === (vehicle as any).vehicleType &&
+                        spec.tip === (vehicle as any).vehicleTip
+                    );
+                }
+                
+                if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
+                    const totalKmForFuel = approvedKm + (tour.excessKilometers || 0) + ((tour as any).depotTotalMileage || 0);
+                    initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
+                } else {
+                    // Fallback: استفاده از بخشنامه قدیمی
+                    const vehicleTypeForFuel = tour.vehicleType || '';
+                    const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
+                    if (fuelReg) {
+                        const totalKmForFuel = approvedKm + (tour.excessKilometers || 0);
+                        initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
+                    }
+                }
             }
             
             // تعیین نوع محاسبه اجرت - از تور ذخیره شده یا پیش‌فرض

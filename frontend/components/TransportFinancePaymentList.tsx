@@ -397,6 +397,14 @@ const renderInvoiceLayout1 = (
                 getUnitPrice: (calc: any) => parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0)
             },
             { 
+                key: 'return_inter_branch_cargo', 
+                category: 'هزینه‌های مستقیم',
+                label: 'بار برگشتی بین شعب', 
+                getValue: (calc: any) => parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0),
+                getCount: () => calculations.filter(c => parseFloat(c.return_inter_branch_cargo_cost || c.returnInterBranchCargoCost || 0) > 0).length,
+                getUnitPrice: (calc: any) => parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0)
+            },
+            { 
                 key: 'multi_unload', 
                 category: 'هزینه‌های مستقیم',
                 label: 'چندجا تخلیه', 
@@ -2651,6 +2659,20 @@ const convertToInvoiceDataFormatHorizontal_DEPRECATED = (
         totalAmount: returnCargoTotal,
         tourValues: returnCargoValues
     });
+    
+    // 8. هزینه بار برگشتی بین شعب
+    const returnInterBranchCargoValues = calculations.map((calc: any) => parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0));
+    const returnInterBranchCargoTotal = returnInterBranchCargoValues.reduce((sum, val) => sum + val, 0);
+    if (returnInterBranchCargoTotal > 0) {
+        mainDriverRows.push({
+            kind: 'cost',
+            category: 'هزینه‌های مستقیم',
+            description: 'هزینه بار برگشتی بین شعب',
+            unitAmount: returnInterBranchCargoTotal,
+            totalAmount: returnInterBranchCargoTotal,
+            tourValues: returnInterBranchCargoValues
+        });
+    }
 
     // 8. ماموریت مازاد (ریال)
     const excessMissionValues = calculations.map((calc: any) => parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0));
@@ -2804,6 +2826,7 @@ const convertToInvoiceDataFormatHorizontal_DEPRECATED = (
             const multi = parseFloat(calc.multi_unload_cost || calc.multiUnloadCost || 0);
             const toll = parseFloat(calc.toll_cost || calc.tollCost || 0);
             const returnCargo = parseFloat(calc.return_cargo_cost || calc.returnCargoCost || 0);
+            const returnInterBranchCargo = parseFloat(calc.return_inter_branch_cargo_cost || calc.returnInterBranchCargoCost || 0);
             const excess = parseFloat(calc.excess_mission_cost || calc.excessMissionCost || 0);
             const cargoHandling = parseFloat(calc.depot_cargo_handling_cost || calc.depotCargoHandlingCost || 0);
             const mission = parseFloat(calc.depot_mission_cost || calc.depotMissionCost || 0);
