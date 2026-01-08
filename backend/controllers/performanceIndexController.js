@@ -249,7 +249,210 @@ async function getPerformanceIndex(req, res) {
   }
 }
 
+/**
+ * GET /api/v1/freight-announcements/personal-performance-index
+ * شاخص عملکرد ترابری شخصی
+ */
+async function getPersonalPerformanceIndex(req, res) {
+  try {
+    const {
+      startYear,
+      startMonth,
+      startDay,
+      endYear,
+      endMonth,
+      endDay
+    } = req.query;
+
+    if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
+      return res.status(400).json({ message: 'تمام پارامترهای تاریخ الزامی است.' });
+    }
+
+    // تبدیل تاریخ شمسی به میلادی
+    const [startGy, startGm, startGd] = jalaliUtils.jalaliToGregorian(
+      parseInt(startYear),
+      parseInt(startMonth),
+      parseInt(startDay)
+    );
+    const [endGy, endGm, endGd] = jalaliUtils.jalaliToGregorian(
+      parseInt(endYear),
+      parseInt(endMonth),
+      parseInt(endDay)
+    );
+
+    const startDate = new Date(startGy, startGm - 1, startGd);
+    const endDate = new Date(endGy, endGm - 1, endGd);
+    endDate.setHours(23, 59, 59, 999);
+
+    console.log('📊 [PersonalPerformanceIndex] Fetching data:', {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString()
+    });
+
+    // Query برای دریافت داده‌های freight_announcements برای ترابری شخصی
+    const startDateStr = `${startYear}/${String(startMonth).padStart(2, '0')}/${String(startDay).padStart(2, '0')}`;
+    const endDateStr = `${endYear}/${String(endMonth).padStart(2, '0')}/${String(endDay).padStart(2, '0')}`;
+    const startDateStrDash = startDateStr.replace(/\//g, '-');
+    const endDateStrDash = endDateStr.replace(/\//g, '-');
+    
+    const query = `
+      SELECT 
+        fa.id,
+        fa.loading_date,
+        fa.line_type,
+        fa.vehicle_type,
+        fa.total_freight_cost,
+        fa.carton_count,
+        fa.assignment_finalized_at,
+        fa.created_at,
+        COALESCE(SUM(fd.tonnage), 0) as total_tonnage,
+        COUNT(DISTINCT fd.id) as destination_count
+      FROM freight_announcements fa
+      LEFT JOIN freight_destinations fd ON fd.freight_announcement_id = fa.id
+      WHERE fa.assignment_type = 'personal'
+        AND fa.status = 'Finalized'
+        AND fa.assigned_driver_id IS NOT NULL
+        AND (
+          (CAST(fa.loading_date AS TEXT) >= $1 AND CAST(fa.loading_date AS TEXT) <= $2) OR
+          (CAST(fa.loading_date AS TEXT) >= $3 AND CAST(fa.loading_date AS TEXT) <= $4)
+        )
+      GROUP BY fa.id, fa.loading_date, fa.line_type, fa.vehicle_type, fa.total_freight_cost, fa.carton_count, fa.assignment_finalized_at, fa.created_at
+      ORDER BY fa.loading_date, fa.line_type, fa.vehicle_type
+    `;
+
+    const result = await pool.query(query, [
+      startDateStr,
+      endDateStr,
+      startDateStrDash,
+      endDateStrDash
+    ]);
+
+    console.log(`✅ [PersonalPerformanceIndex] Found ${result.rows.length} announcements`);
+
+    // گروه‌بندی بر اساس ماه، لاین و نوع خودرو
+    const monthlyData = new Map();
+
+    for (const row of result.rows) {
+      // استخراج ماه از loading_date
+      let monthKey;
+      if (typeof row.loading_date === 'string' && row.loading_date.includes('/')) {
+        const parts = row.loading_date.split('/');
+        const year = parts[0];
+        const month = parts[1];
+        monthKey = `${year}/${String(month).padStart(2, '0')}`;
+      } else {
+        const loadingDate = new Date(row.loading_date);
+        const jalaliDate = jalaliUtils.timestampToJalaliDate(loadingDate);
+        const [year, month] = jalaliDate.split('/');
+        monthKey = `${year}/${String(month).padStart(2, '0')}`;
+      }
+
+      const lineType = row.line_type || 'نامشخص';
+      const vehicleType = row.vehicle_type || 'نامشخص';
+      const key = `${monthKey}_${lineType}_${vehicleType}`;
+      
+      if (!monthlyData.has(key)) {
+        monthlyData.set(key, {
+          month: monthKey,
+          lineType,
+          vehicleType,
+          assignmentCount: 0,
+          totalFreightCost: 0,
+          totalCarton: 0,
+          totalTonnage: 0,
+          assignmentDays: [] // برای محاسبه میانگین موفقیت تخصیص
+        });
+      }
+
+      const data = monthlyData.get(key);
+      
+      data.assignmentCount += 1;
+      data.totalFreightCost += parseFloat(row.total_freight_cost || 0);
+      
+      // برای بستنی: carton_count
+      if (lineType === 'بستنی' || lineType === 'IceCream') {
+        data.totalCarton += parseInt(row.carton_count || 0);
+      }
+      
+      // برای پاستوریزه و لبنیات-فروتلند: tonnage
+      if (lineType === 'پاستوریزه' || lineType === 'Dairy' || lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') {
+        data.totalTonnage += parseFloat(row.total_tonnage || 0);
+      }
+      
+      // محاسبه روز تخصیص برای میانگین موفقیت
+      if (row.assignment_finalized_at) {
+        const assignmentDate = new Date(row.assignment_finalized_at);
+        const loadingDate = typeof row.loading_date === 'string' && row.loading_date.includes('/')
+          ? jalaliUtils.parseJalaliDateString(row.loading_date)
+          : new Date(row.loading_date);
+        
+        if (loadingDate && !isNaN(loadingDate.getTime())) {
+          const daysDiff = Math.floor((assignmentDate.getTime() - loadingDate.getTime()) / (1000 * 60 * 60 * 24));
+          data.assignmentDays.push(daysDiff);
+        }
+      }
+    }
+
+    // تبدیل به آرایه و محاسبه نسبت‌ها
+    const responseData = Array.from(monthlyData.values()).map(item => {
+      // میانگین موفقیت تخصیص (میانگین روزهای تخصیص)
+      const avgAssignmentDays = item.assignmentDays.length > 0
+        ? item.assignmentDays.reduce((a, b) => a + b, 0) / item.assignmentDays.length
+        : 0;
+      
+      // محاسبه نسبت‌ها
+      const freightPerVehicle = item.assignmentCount > 0 ? item.totalFreightCost / item.assignmentCount : 0;
+      
+      let freightPerUnit = 0;
+      let totalUnit = 0;
+      
+      if (item.lineType === 'بستنی' || item.lineType === 'IceCream') {
+        totalUnit = item.totalCarton;
+        freightPerUnit = item.totalCarton > 0 ? item.totalFreightCost / item.totalCarton : 0;
+      } else {
+        totalUnit = item.totalTonnage;
+        freightPerUnit = item.totalTonnage > 0 ? item.totalFreightCost / item.totalTonnage : 0;
+      }
+
+      return {
+        month: item.month,
+        lineType: item.lineType,
+        vehicleType: item.vehicleType,
+        assignmentCount: item.assignmentCount,
+        avgAssignmentSuccess: avgAssignmentDays,
+        totalFreightCost: item.totalFreightCost,
+        totalCarton: item.totalCarton,
+        totalTonnage: item.totalTonnage,
+        freightPerUnit,
+        freightPerVehicle,
+        totalUnit
+      };
+    });
+
+    // مرتب‌سازی بر اساس ماه، لاین و نوع خودرو
+    responseData.sort((a, b) => {
+      const [aYear, aMonth] = a.month.split('/').map(Number);
+      const [bYear, bMonth] = b.month.split('/').map(Number);
+      if (aYear !== bYear) return aYear - bYear;
+      if (aMonth !== bMonth) return aMonth - bMonth;
+      if (a.lineType !== b.lineType) return a.lineType.localeCompare(b.lineType);
+      return a.vehicleType.localeCompare(b.vehicleType);
+    });
+
+    console.log(`✅ [PersonalPerformanceIndex] Returning ${responseData.length} records`);
+
+    res.json({ data: responseData });
+  } catch (error) {
+    console.error('❌ [PersonalPerformanceIndex] Error:', error);
+    res.status(500).json({ 
+      message: 'خطا در دریافت شاخص عملکرد ترابری شخصی',
+      error: error.message 
+    });
+  }
+}
+
 module.exports = {
-  getPerformanceIndex
+  getPerformanceIndex,
+  getPersonalPerformanceIndex
 };
 

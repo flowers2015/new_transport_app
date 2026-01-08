@@ -25,7 +25,10 @@ interface PerformanceIndexResponse {
     data: PerformanceIndexData[];
 }
 
+import PersonalPerformanceIndexTab from './PersonalPerformanceIndexTab';
+
 const PerformanceIndexTab: React.FC = () => {
+    const [activeSubTab, setActiveSubTab] = useState<'company' | 'personal'>('company');
     const [data, setData] = useState<PerformanceIndexData[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -169,6 +172,36 @@ const PerformanceIndexTab: React.FC = () => {
     
     return (
         <div className="space-y-4">
+            {/* تب‌های فرعی */}
+            <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex gap-2 border-b border-slate-200">
+                    <button
+                        onClick={() => setActiveSubTab('company')}
+                        className={`px-4 py-2 font-medium transition ${
+                            activeSubTab === 'company'
+                                ? 'border-b-2 border-sky-600 text-sky-600'
+                                : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                    >
+                        ترابری شرکتی
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('personal')}
+                        className={`px-4 py-2 font-medium transition ${
+                            activeSubTab === 'personal'
+                                ? 'border-b-2 border-sky-600 text-sky-600'
+                                : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                    >
+                        ترابری شخصی
+                    </button>
+                </div>
+            </div>
+            
+            {activeSubTab === 'personal' ? (
+                <PersonalPerformanceIndexTab />
+            ) : (
+                <>
             {/* فیلتر تاریخ */}
             <div className="bg-white rounded-lg shadow p-3">
                 <h3 className="text-base font-semibold text-slate-800 mb-3">فیلتر تاریخ</h3>
@@ -333,6 +366,8 @@ const PerformanceIndexTab: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+            )}
+                </>
             )}
         </div>
     );
