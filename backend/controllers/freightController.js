@@ -5393,7 +5393,8 @@ async function getAssignmentStatistics(req, res) {
     const timeBasedResult = await pool.query(timeBasedQuery, dateParams);
     
     // برای محاسبه assignmentByDay و assignmentPercentagesByDay، باید جزئیات تخصیص‌ها را بگیریم
-    // Fallback: اگر assigned_at در history پیدا نشد، از da.created_at (تاریخ تخصیص در dispatch_assignments) استفاده می‌کنیم
+    // Fallback: اگر assigned_at در history پیدا نشد، از da2.created_at (تاریخ تخصیص در dispatch_assignments) استفاده می‌کنیم
+    // توجه: lateralJoin شامل da است، پس از آن استفاده نمی‌کنیم و فقط da2 را اضافه می‌کنیم
     const detailedQuery = `
       SELECT 
         fa.id,
@@ -5408,18 +5409,17 @@ async function getAssignmentStatistics(req, res) {
               AND fah.action = 'ASSIGNED'
             LIMIT 1
           ),
-          da.created_at,
+          da2.created_at,
           fa.updated_at
         ) as assigned_at
       FROM freight_announcements fa
-      ${lateralJoin}
       LEFT JOIN LATERAL (
         SELECT MIN(created_at) as created_at
         FROM dispatch_assignments
         WHERE freight_announcement_id = fa.id 
           AND (is_cancelled IS NULL OR is_cancelled = FALSE)
         LIMIT 1
-      ) da ON true
+      ) da2 ON true
       WHERE 1=1
         ${dateFilter}
         ${lineTypeFilter}

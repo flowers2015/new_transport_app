@@ -586,7 +586,7 @@ const App: React.FC = () => {
             case View.TransportDispatchBoard:
                 console.log('[App] Render view:', View.TransportDispatchBoard);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
-                return <DispatchQueueManager currentUser={currentUser} />;
+                return <DispatchBoardView />;
             case View.FreightPlanning:
                 console.log('[App] Render view:', View.FreightPlanning);
                 return (

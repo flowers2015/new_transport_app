@@ -102,21 +102,11 @@ const DispatchBoardView: React.FC = () => {
                                         
                                         return (
                                             <div key={entry.assignmentId} className={`border rounded-lg p-3 space-y-1 ${bgColor}`}>
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <div className="font-semibold text-slate-800">
-                                                            {entry.driver?.name || 'راننده'}
-                                                        </div>
-                                                        <div className="text-sm text-slate-600 mt-1">
-                                                            {categoryLabel} • {entry.vehicle?.vehicleCode || entry.vehicle?.model || 'کد خودرو'}
-                                                        </div>
-                                                    </div>
+                                                <div className="font-semibold text-slate-800">
+                                                    {entry.vehicle?.vehicleCode || entry.vehicle?.model || 'کد خودرو'}
                                                 </div>
-                                                <div className={`text-xs font-medium mt-1 ${
-                                                    isOverdue ? 'text-red-700' : isDue ? 'text-yellow-700' : 'text-slate-600'
-                                                }`}>
-                                                    {daysSince > 0 ? `${daysSince} روز از تخصیص گذشته` : 'امروز تخصیص داده شده'}
-                                                    {expectedDays != null && ` / مدت مصوب: ${expectedDays} روز`}
+                                                <div className="text-sm text-slate-600 mt-1">
+                                                    {entry.driver?.name || 'راننده'}
                                                 </div>
                                             </div>
                                         );
