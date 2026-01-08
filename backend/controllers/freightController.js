@@ -5953,6 +5953,7 @@ async function getAssignmentStatistics(req, res) {
         comparisonWithLastYear
       },
       timeBased,
+      dailyTimeBased, // اضافه کردن dailyTimeBased به response
       byVehicleType,
       vehicleTypeComparisons,
       monthlyComparison,
@@ -5966,6 +5967,7 @@ async function getAssignmentStatistics(req, res) {
     console.log('✅ [AssignmentStatistics] Response:', {
       summary: response.summary,
       timeBasedCount: timeBased.length,
+      dailyTimeBasedCount: dailyTimeBased.length,
       vehicleTypeCount: byVehicleType.length,
       monthlyComparisonCount: monthlyComparison.length
     });

@@ -304,8 +304,11 @@ const AdminResourceManagement: React.FC = () => {
       }
 
       alert(modalMode === 'add' ? 'با موفقیت ایجاد شد' : 'با موفقیت ویرایش شد');
+      
+      // بستن modal و reset کردن state قبل از fetch
       setShowModal(false);
       setSelectedItem(null);
+      setModalMode('add');
       
       // پاک کردن cache و fetch مجدد داده‌ها
       if (activeTab === 'company-drivers') {
@@ -459,7 +462,13 @@ const AdminResourceManagement: React.FC = () => {
               <td className="px-3 py-2">
                 <div className="flex gap-1">
                   <button
-                    onClick={() => { setSelectedItem(driver); setModalMode('edit'); setShowModal(true); }}
+                    onClick={() => { 
+                      // ایجاد یک کپی عمیق از driver برای جلوگیری از تغییر reference
+                      const driverCopy = JSON.parse(JSON.stringify(driver));
+                      setSelectedItem(driverCopy);
+                      setModalMode('edit');
+                      setShowModal(true);
+                    }}
                     className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                   >
                     ویرایش
@@ -534,7 +543,13 @@ const AdminResourceManagement: React.FC = () => {
               </td>
               <td className="px-3 py-2">
                 <button
-                  onClick={() => { setSelectedItem(vehicle); setModalMode('edit'); setShowModal(true); }}
+                  onClick={() => { 
+                    // ایجاد یک کپی عمیق از vehicle برای جلوگیری از تغییر reference
+                    const vehicleCopy = JSON.parse(JSON.stringify(vehicle));
+                    setSelectedItem(vehicleCopy);
+                    setModalMode('edit');
+                    setShowModal(true);
+                  }}
                   className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                 >
                   ویرایش
@@ -573,7 +588,13 @@ const AdminResourceManagement: React.FC = () => {
               <td className="px-3 py-2">
                 <div className="flex gap-1">
                   <button
-                    onClick={() => { setSelectedItem(driver); setModalMode('edit'); setShowModal(true); }}
+                    onClick={() => { 
+                      // ایجاد یک کپی عمیق از driver برای جلوگیری از تغییر reference
+                      const driverCopy = JSON.parse(JSON.stringify(driver));
+                      setSelectedItem(driverCopy);
+                      setModalMode('edit');
+                      setShowModal(true);
+                    }}
                     className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                   >
                     ویرایش
@@ -621,7 +642,13 @@ const AdminResourceManagement: React.FC = () => {
               <td className="px-3 py-2">
                 <div className="flex gap-1">
                   <button
-                    onClick={() => { setSelectedItem(vehicle); setModalMode('edit'); setShowModal(true); }}
+                    onClick={() => { 
+                      // ایجاد یک کپی عمیق از vehicle برای جلوگیری از تغییر reference
+                      const vehicleCopy = JSON.parse(JSON.stringify(vehicle));
+                      setSelectedItem(vehicleCopy);
+                      setModalMode('edit');
+                      setShowModal(true);
+                    }}
                     className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                   >
                     ویرایش
@@ -675,7 +702,11 @@ const AdminResourceManagement: React.FC = () => {
               }
             </h2>
             <button
-              onClick={() => { setShowModal(false); setSelectedItem(null); }}
+              onClick={() => { 
+                setShowModal(false);
+                setSelectedItem(null);
+                setModalMode('add');
+              }}
               className="text-gray-500 hover:text-gray-700 text-2xl"
             >
               ✕
@@ -684,10 +715,10 @@ const AdminResourceManagement: React.FC = () => {
 
           {activeTab === 'company-drivers' && (
             <CompanyDriverForm
-              key={selectedItem?.id || 'new'} // اضافه کردن key برای force re-render
+              key={`${modalMode}-${selectedItem?.id || 'new'}`} // اضافه کردن modalMode به key برای force re-render
               initialData={modalMode === 'edit' ? selectedItem : null}
               onSave={handleSave}
-              onCancel={() => { setShowModal(false); setSelectedItem(null); }}
+              onCancel={() => { setShowModal(false); setSelectedItem(null); setModalMode('add'); }}
             />
           )}
           {activeTab === 'company-vehicles' && (

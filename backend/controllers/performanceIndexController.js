@@ -46,6 +46,13 @@ async function getPerformanceIndex(req, res) {
     // Query برای دریافت داده‌های driver_calculations
     // فقط رانندگان شرکتی (assignment_type = 'company')
     // و فقط خودروهای سنگین (کشنده و ده چرخ)
+    // توجه: loading_date در دیتابیس به صورت Jalali string است (مثلاً "1404/09/26")
+    // پس باید از CAST به TEXT و مقایسه string استفاده کنیم
+    const startDateStr = `${startYear}/${String(startMonth).padStart(2, '0')}/${String(startDay).padStart(2, '0')}`;
+    const endDateStr = `${endYear}/${String(endMonth).padStart(2, '0')}/${String(endDay).padStart(2, '0')}`;
+    const startDateStrDash = startDateStr.replace(/\//g, '-');
+    const endDateStrDash = endDateStr.replace(/\//g, '-');
+    
     const query = `
       SELECT 
         dc.id,
@@ -61,29 +68,35 @@ async function getPerformanceIndex(req, res) {
         fa.loading_date,
         fa.vehicle_type,
         v.current_vehicle_type,
-        vs.vehicle_type as spec_vehicle_type
+        vs.vehicle_type as spec_vehicle_type,
+        COALESCE(v.vehicle_code, dc.vehicle_code) as vehicle_code
       FROM driver_calculations dc
       INNER JOIN freight_announcements fa ON fa.id = dc.announcement_id
       LEFT JOIN vehicles v ON (
         dc.vehicle_code IS NOT NULL AND v.vehicle_code = dc.vehicle_code
       )
       LEFT JOIN vehicle_specifications vs ON (
-        vs.brand = v.brand 
+        v.id IS NOT NULL
+        AND vs.brand = v.brand 
         AND vs.model = v.model 
-        AND (vs.tip = v.vehicle_tip OR vs.tip IS NULL)
+        AND (vs.tip = v.vehicle_tip OR vs.tip IS NULL OR v.vehicle_tip IS NULL)
       )
       WHERE fa.assignment_type = $1
         AND fa.status = 'Finalized'
-        AND fa.loading_date >= $2
-        AND fa.loading_date <= $3
+        AND (
+          (CAST(fa.loading_date AS TEXT) >= $2 AND CAST(fa.loading_date AS TEXT) <= $3) OR
+          (CAST(fa.loading_date AS TEXT) >= $4 AND CAST(fa.loading_date AS TEXT) <= $5)
+        )
         AND dc.approved_kilometers IS NOT NULL
         AND dc.approved_kilometers > 0
     `;
 
     const result = await pool.query(query, [
       assignmentType,
-      startDate.toISOString().split('T')[0],
-      endDate.toISOString().split('T')[0]
+      startDateStr,
+      endDateStr,
+      startDateStrDash,
+      endDateStrDash
     ]);
 
     console.log(`✅ [PerformanceIndex] Found ${result.rows.length} calculations`);
