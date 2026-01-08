@@ -139,6 +139,10 @@ interface AssignmentStatisticsTimeBased {
     personalAssignments: number;
     totalAssignments: number;
     successRate: number;
+    leftoverFromPrevious?: number;
+    assignmentByDay?: { [key: string]: number };
+    assignmentPercentagesByDay?: { [key: string]: number };
+    totalAssigned?: number;
 }
 
 interface AssignmentStatisticsByVehicleType {
@@ -457,13 +461,18 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             setAssignmentStatistics(assignmentData);
             
             // Convert assignment statistics timeBased to StatisticsData format for backward compatibility
+            // شامل همه فیلدها از جمله assignmentPercentagesByDay و assignmentByDay
             const convertedStats: StatisticsData[] = assignmentData.timeBased.map(item => ({
                 timePeriod: item.timePeriod,
                 totalRequests: item.totalRequests,
                 companyAssignments: item.companyAssignments,
                 personalAssignments: item.personalAssignments,
                 totalAssignments: item.totalAssignments,
-                successRate: item.successRate
+                successRate: item.successRate,
+                leftoverFromPrevious: item.leftoverFromPrevious || 0,
+                assignmentByDay: item.assignmentByDay || {},
+                assignmentPercentagesByDay: item.assignmentPercentagesByDay || {},
+                totalAssigned: item.totalAssigned || 0
             }));
             setLineStats(convertedStats);
 

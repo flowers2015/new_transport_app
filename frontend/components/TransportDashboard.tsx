@@ -15,6 +15,10 @@ interface StatisticsData {
     personalAssignments: number;
     totalAssignments: number;
     successRate: number;
+    leftoverFromPrevious?: number;
+    assignmentByDay?: { [key: string]: number };
+    assignmentPercentagesByDay?: { [key: string]: number };
+    totalAssigned?: number;
 }
 
 // Interface برای آمار تفصیلی تخصیص (assignment statistics)
@@ -957,12 +961,25 @@ const LineRow: React.FC<{
                     // اگر بازه زمانی به فرمت YYYY/MM/DD یا YYYY-MM-DD باشد (10 کاراکتر)، روزانه است
                     // تبدیل - به / برای سازگاری
                     const normalizedPeriod = period.replace(/-/g, '/');
-                    return normalizedPeriod.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(normalizedPeriod);
-                }).map(stat => ({
-                    ...stat,
+                    // چک می‌کنیم که آیا به فرمت YYYY/MM/DD است (10 کاراکتر با / یا -)
+                    const isDaily = normalizedPeriod.length === 10 && /^\d{4}\/\d{2}\/\d{2}$/.test(normalizedPeriod);
+                    if (isDaily) {
+                        console.log(`✅ [DailySummary] Found daily data: ${period} -> ${normalizedPeriod}`);
+                    }
+                    return isDaily;
+                }).map(stat => {
                     // نرمال‌سازی timePeriod برای نمایش یکنواخت
-                    timePeriod: stat.timePeriod?.replace(/-/g, '/') || stat.timePeriod
-                }));
+                    const normalized = stat.timePeriod?.replace(/-/g, '/') || stat.timePeriod;
+                    console.log(`📅 [DailySummary] Mapping stat: ${stat.timePeriod} -> ${normalized}`, {
+                        totalRequests: stat.totalRequests,
+                        totalAssignments: stat.totalAssignments,
+                        assignmentPercentagesByDay: stat.assignmentPercentagesByDay
+                    });
+                    return {
+                        ...stat,
+                        timePeriod: normalized
+                    };
+                });
                 
                 const dailySummaryPageSize = 31; // 31 روز = یک ماه
                 const totalDailyPages = Math.ceil(dailyData.length / dailySummaryPageSize);
@@ -1104,6 +1121,11 @@ const LineRow: React.FC<{
                     {dailyData.length === 0 && (
                         <div className="text-center py-4 text-slate-500 text-sm">
                             داده روزانه برای نمایش وجود ندارد.
+                            {chartData.length > 0 && (
+                                <div className="mt-2 text-xs text-slate-400">
+                                    (تعداد کل داده‌ها: {chartData.length}، نمونه فرمت‌ها: {chartData.slice(0, 3).map(s => s.timePeriod).join(', ')})
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -2221,14 +2243,26 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             })()}
 
                             {/* Line Row - Only show selected line */}
-                            {selectedLine && lineStats.length > 0 && (
+                            {/* استفاده از assignmentStatistics.timeBased به جای lineStats برای نمایش خلاصه عملکرد روزانه */}
+                            {selectedLine && assignmentStatistics && assignmentStatistics.timeBased && assignmentStatistics.timeBased.length > 0 && (
                                 <LineRow 
                                     title={
                                         selectedLine === FreightLineType.IceCream ? 'بستنی' :
                                         selectedLine === FreightLineType.Dairy ? 'پاستوریزه' :
                                         'لبنیات-فروتلند'
                                     } 
-                                    stats={lineStats} 
+                                    stats={assignmentStatistics.timeBased.map(item => ({
+                                        timePeriod: item.timePeriod,
+                                        totalRequests: item.totalRequests,
+                                        companyAssignments: item.companyAssignments,
+                                        personalAssignments: item.personalAssignments,
+                                        totalAssignments: item.totalAssignments,
+                                        successRate: item.successRate,
+                                        leftoverFromPrevious: (item as any).leftoverFromPrevious || 0,
+                                        assignmentByDay: (item as any).assignmentByDay || {},
+                                        assignmentPercentagesByDay: (item as any).assignmentPercentagesByDay || {},
+                                        totalAssigned: (item as any).totalAssigned || 0
+                                    }))} 
                                     timeRange={detectTimeRange(lineStartDate, lineEndDate)} 
                                 />
                             )}
