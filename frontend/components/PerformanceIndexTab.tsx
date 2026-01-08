@@ -227,24 +227,24 @@ const PerformanceIndexTab: React.FC = () => {
             ) : (
                 <div className="bg-white rounded-lg shadow overflow-x-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-slate-600">
                             <tr>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">ماه</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">نوع خودرو</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">مجموع پیمایش کل</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">تعداد تور</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">پیمایش/تعداد تور</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">تعداد بار برگشتی</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">بار برگشتی/تور</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">تعداد تور اجرت ثابت</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">تعداد تور پورسانتی</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">پیمایش پورسانتی</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">پیمایش اجرت ثابت</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">پیمایش اجرت ثابت/تور اجرت ثابت</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">پیمایش پورسانتی/تور پورسانتی</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">جمع کل پیمایش تورها</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">تعداد کل تور</th>
-                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center text-slate-700">پیمایش کل/تعداد کل تور</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">ماه</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">نوع خودرو</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">مجموع پیمایش کل</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">تعداد تور</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">پیمایش/تعداد تور</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">تعداد بار برگشتی</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">بار برگشتی/تور (%)</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">تعداد تور اجرت ثابت</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">تعداد تور پورسانتی</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">پیمایش پورسانتی</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">پیمایش اجرت ثابت</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">پیمایش اجرت ثابت/تور اجرت ثابت</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">پیمایش پورسانتی/تور پورسانتی</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">جمع کل پیمایش تورها</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">تعداد کل تور</th>
+                                <th rowSpan={2} className="px-3 py-2 border border-slate-300 text-center bg-slate-600 text-white font-bold">پیمایش کل/تعداد کل تور</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -265,16 +265,20 @@ const PerformanceIndexTab: React.FC = () => {
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.tourCount.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.mileagePerTour.toFixed(2)}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.returnCargoCount.toLocaleString('fa-IR')}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{keshan.returnCargoPerTour.toFixed(2)}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{Math.round(keshan.returnCargoPerTour * 100)}%</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.fixedAllowanceTourCount.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.commissionTourCount.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.commissionMileage.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.fixedAllowanceMileage.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.fixedAllowanceMileagePerTour.toFixed(2)}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{keshan.commissionMileagePerTour.toFixed(2)}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{keshan.totalTourMileage.toLocaleString('fa-IR')}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{keshan.totalTours.toLocaleString('fa-IR')}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{keshan.totalMileagePerTotalTours.toFixed(2)}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center" rowSpan={dahCharkh ? 2 : 1}>{getMonthTotals(month).totalTourMileage.toLocaleString('fa-IR')}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center" rowSpan={dahCharkh ? 2 : 1}>{getMonthTotals(month).totalTours.toLocaleString('fa-IR')}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center" rowSpan={dahCharkh ? 2 : 1}>
+                                                    {getMonthTotals(month).totalTours > 0 
+                                                        ? (getMonthTotals(month).totalMileage / getMonthTotals(month).totalTours).toFixed(2)
+                                                        : '0'}
+                                                </td>
                                             </tr>
                                         )}
                                         {/* ده چرخ */}
@@ -286,16 +290,13 @@ const PerformanceIndexTab: React.FC = () => {
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.tourCount.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.mileagePerTour.toFixed(2)}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.returnCargoCount.toLocaleString('fa-IR')}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.returnCargoPerTour.toFixed(2)}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{Math.round(dahCharkh.returnCargoPerTour * 100)}%</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.fixedAllowanceTourCount.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.commissionTourCount.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.commissionMileage.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.fixedAllowanceMileage.toLocaleString('fa-IR')}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.fixedAllowanceMileagePerTour.toFixed(2)}</td>
                                                 <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.commissionMileagePerTour.toFixed(2)}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.totalTourMileage.toLocaleString('fa-IR')}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.totalTours.toLocaleString('fa-IR')}</td>
-                                                <td className="px-3 py-2 border border-slate-300 text-center">{dahCharkh.totalMileagePerTotalTours.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {/* جمع کل ماه */}
@@ -308,7 +309,7 @@ const PerformanceIndexTab: React.FC = () => {
                                             </td>
                                             <td className="px-3 py-2 border border-slate-300 text-center">{totals.totalReturnCargo.toLocaleString('fa-IR')}</td>
                                             <td className="px-3 py-2 border border-slate-300 text-center">
-                                                {totals.totalTours > 0 ? (totals.totalReturnCargo / totals.totalTours).toFixed(2) : '0'}
+                                                {totals.totalTours > 0 ? `${Math.round((totals.totalReturnCargo / totals.totalTours) * 100)}%` : '0%'}
                                             </td>
                                             <td className="px-3 py-2 border border-slate-300 text-center">{totals.totalFixedAllowanceTours.toLocaleString('fa-IR')}</td>
                                             <td className="px-3 py-2 border border-slate-300 text-center">{totals.totalCommissionTours.toLocaleString('fa-IR')}</td>

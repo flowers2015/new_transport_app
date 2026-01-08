@@ -134,6 +134,16 @@ const AdminResourceManagement: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  
+  // Debug: Log modal state changes
+  useEffect(() => {
+    console.log('🔍 [AdminResourceManagement] Modal State:', {
+      showModal,
+      modalMode,
+      selectedItemId: selectedItem?.id || null,
+      activeTab
+    });
+  }, [showModal, modalMode, selectedItem, activeTab]);
 
   const headers = {
     'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -266,6 +276,13 @@ const AdminResourceManagement: React.FC = () => {
 
   const handleSave = async (data: any) => {
     try {
+      console.log('💾 [AdminResourceManagement] Saving data:', {
+        modalMode,
+        activeTab,
+        selectedItemId: selectedItem?.id || null,
+        dataKeys: Object.keys(data)
+      });
+      
       let url = '';
       let method = modalMode === 'add' ? 'POST' : 'PUT';
 
@@ -292,6 +309,16 @@ const AdminResourceManagement: React.FC = () => {
           break;
       }
 
+      console.log('🌐 [AdminResourceManagement] API Request:', {
+        method,
+        url,
+        dataSample: {
+          name: data.name,
+          employeeId: data.employeeId,
+          nationalId: data.nationalId
+        }
+      });
+
       const res = await fetch(url, {
         method,
         headers,
@@ -300,8 +327,12 @@ const AdminResourceManagement: React.FC = () => {
 
       if (!res.ok) {
         const err = await res.json();
+        console.error('❌ [AdminResourceManagement] Save failed:', err);
         throw new Error(err.message || 'خطا در ذخیره');
       }
+
+      const responseData = await res.json();
+      console.log('✅ [AdminResourceManagement] Save successful:', responseData);
 
       alert(modalMode === 'add' ? 'با موفقیت ایجاد شد' : 'با موفقیت ویرایش شد');
       
@@ -311,6 +342,7 @@ const AdminResourceManagement: React.FC = () => {
       setModalMode('add');
       
       // پاک کردن cache و fetch مجدد داده‌ها
+      console.log('🔄 [AdminResourceManagement] Refreshing data for tab:', activeTab);
       if (activeTab === 'company-drivers') {
         const { apiCache } = await import('../utils/apiCache');
         // پاک کردن cache برای drivers?full=true
@@ -321,6 +353,7 @@ const AdminResourceManagement: React.FC = () => {
         apiCache.invalidate(cacheKeyWithoutFull);
         // fetch مجدد با forceRefresh
         await fetchCompanyDrivers(true);
+        console.log('✅ [AdminResourceManagement] Company drivers refreshed');
       } else if (activeTab === 'company-vehicles') {
         const { apiCache } = await import('../utils/apiCache');
         const cacheKey = `GET:${getApiUrl('vehicles')}`;
@@ -338,6 +371,7 @@ const AdminResourceManagement: React.FC = () => {
         await fetchPersonalVehicles();
       }
     } catch (err: any) {
+      console.error('❌ [AdminResourceManagement] Save error:', err);
       alert(err.message);
     }
   };
@@ -912,6 +946,12 @@ const CompanyDriverForm: React.FC<{
 
   // به‌روزرسانی form وقتی initialData تغییر می‌کند
   useEffect(() => {
+    console.log('📝 [CompanyDriverForm] initialData changed:', {
+      hasInitialData: !!initialData,
+      initialDataId: initialData?.id || null,
+      initialDataName: initialData?.name || null
+    });
+    
     if (initialData) {
       // تبدیل تاریخ‌ها به فرمت مناسب برای input type="date"
       const formatDateForInput = (dateStr: string | undefined | null): string => {
@@ -927,7 +967,7 @@ const CompanyDriverForm: React.FC<{
         return '';
       };
       
-      setForm({
+      const newForm = {
         employeeId: initialData.employeeId || '',
         name: initialData.name || '',
         fatherName: initialData.fatherName || '',
@@ -951,9 +991,18 @@ const CompanyDriverForm: React.FC<{
         licenseIssuePlace: initialData.licenseIssuePlace || '',
         licenseExpiryDate: formatDateForInput(initialData.licenseExpiryDate),
         accountNumber: initialData.accountNumber || '',
+      };
+      
+      console.log('📝 [CompanyDriverForm] Setting form with data:', {
+        name: newForm.name,
+        employeeId: newForm.employeeId,
+        nationalId: newForm.nationalId
       });
+      
+      setForm(newForm);
     } else {
       // اگر initialData null است، فرم را reset کن
+      console.log('📝 [CompanyDriverForm] Resetting form (no initialData)');
       setForm({
         employeeId: '',
         name: '',

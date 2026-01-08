@@ -139,10 +139,21 @@ async function getPerformanceIndex(req, res) {
       }
 
       // استخراج ماه از loading_date
-      const loadingDate = new Date(row.loading_date);
-      const jalaliDate = jalaliUtils.timestampToJalaliDate(loadingDate);
-      const [year, month] = jalaliDate.split('/');
-      const monthKey = `${year}/${String(month).padStart(2, '0')}`;
+      // loading_date به صورت Jalali string است (مثلاً "1404/09/05")
+      let monthKey;
+      if (typeof row.loading_date === 'string' && row.loading_date.includes('/')) {
+        // اگر loading_date به صورت Jalali string است، مستقیماً از آن استفاده می‌کنیم
+        const parts = row.loading_date.split('/');
+        const year = parts[0];
+        const month = parts[1];
+        monthKey = `${year}/${String(month).padStart(2, '0')}`;
+      } else {
+        // اگر loading_date به صورت Date object است، آن را به Jalali تبدیل می‌کنیم
+        const loadingDate = new Date(row.loading_date);
+        const jalaliDate = jalaliUtils.timestampToJalaliDate(loadingDate);
+        const [year, month] = jalaliDate.split('/');
+        monthKey = `${year}/${String(month).padStart(2, '0')}`;
+      }
 
       const key = `${monthKey}_${vehicleType}`;
       
