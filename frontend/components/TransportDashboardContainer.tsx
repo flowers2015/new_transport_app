@@ -168,6 +168,7 @@ interface AssignmentStatisticsMonthlyComparison {
 interface AssignmentStatisticsResponse {
     summary: AssignmentStatisticsSummary;
     timeBased: AssignmentStatisticsTimeBased[];
+    dailyTimeBased?: AssignmentStatisticsTimeBased[]; // داده‌های روزانه (همیشه موجود است)
     byVehicleType: AssignmentStatisticsByVehicleType[];
     vehicleTypeComparisons?: { [vehicleType: string]: AssignmentStatisticsVehicleTypeComparison };
     monthlyComparison: AssignmentStatisticsMonthlyComparison[];

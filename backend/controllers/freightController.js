@@ -5348,29 +5348,33 @@ async function getAssignmentStatistics(req, res) {
     };
     
     // 4. آمار تفکیک شده بر اساس زمان (روزانه/ماهانه بر اساس اندازه بازه)
+    // همیشه داده‌های روزانه را هم می‌گیریم (برای نمایش در "خلاصه عملکرد روزانه")
+    const dailyTimeBasedQuery = `
+      SELECT 
+        CAST(fa.loading_date AS TEXT) as time_period,
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
+        COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
+        COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
+      FROM freight_announcements fa
+      ${lateralJoin}
+      WHERE 1=1
+        ${dateFilter}
+        ${lineTypeFilter}
+        ${finalizedCondition}
+      GROUP BY CAST(fa.loading_date AS TEXT)
+      ORDER BY time_period ASC
+    `;
+    
+    // داده‌های ماهانه (برای نمایش در "خلاصه عملکرد ماهانه" و نمودارها)
     let timeBasedQuery = '';
     let groupBy = '';
     if (monthsDiff <= 1) {
-      // روزانه
+      // اگر بازه زمانی <= 1 ماه است، از داده‌های روزانه استفاده می‌کنیم
       groupBy = "CAST(fa.loading_date AS TEXT)";
-      timeBasedQuery = `
-        SELECT 
-          CAST(fa.loading_date AS TEXT) as time_period,
-          COUNT(*) as total_requests,
-          COUNT(CASE WHEN fa.assignment_type = 'company' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as company_assignments,
-          COUNT(CASE WHEN fa.assignment_type = 'personal' AND fa.assigned_driver_id IS NOT NULL THEN 1 END) as personal_assignments,
-          COUNT(CASE WHEN fa.assigned_driver_id IS NOT NULL THEN 1 END) as total_assignments
-        FROM freight_announcements fa
-        ${lateralJoin}
-        WHERE 1=1
-          ${dateFilter}
-          ${lineTypeFilter}
-          ${finalizedCondition}
-        GROUP BY CAST(fa.loading_date AS TEXT)
-        ORDER BY time_period ASC
-      `;
+      timeBasedQuery = dailyTimeBasedQuery;
     } else {
-      // ماهانه
+      // اگر بازه زمانی > 1 ماه است، داده‌های ماهانه را می‌گیریم
       groupBy = "SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 7)";
       timeBasedQuery = `
         SELECT 
@@ -5390,7 +5394,11 @@ async function getAssignmentStatistics(req, res) {
       `;
     }
     
-    const timeBasedResult = await pool.query(timeBasedQuery, dateParams);
+    // اجرای هر دو query
+    const [timeBasedResult, dailyTimeBasedResult] = await Promise.all([
+      pool.query(timeBasedQuery, dateParams),
+      pool.query(dailyTimeBasedQuery, dateParams)
+    ]);
     
     // برای محاسبه assignmentByDay و assignmentPercentagesByDay، باید جزئیات تخصیص‌ها را بگیریم
     // Fallback: اگر assigned_at در history پیدا نشد، از da2.created_at (تاریخ تخصیص در dispatch_assignments) استفاده می‌کنیم
@@ -5430,26 +5438,37 @@ async function getAssignmentStatistics(req, res) {
     
     const detailedResult = await pool.query(detailedQuery, dateParams);
     
-    // محاسبه اطلاعات برای هر time_period
+    // محاسبه اطلاعات برای هر time_period (هم برای روزانه و هم برای ماهانه)
     const periodDetailsMap = new Map();
+    const dailyPeriodDetailsMap = new Map(); // برای داده‌های روزانه
     
     for (const record of detailedResult.rows) {
-      let recordTimePeriod = null;
+      const loadingDateNormalized = record.loading_date?.replace(/-/g, '/');
+      if (!loadingDateNormalized) continue;
       
+      // همیشه برای روزانه هم محاسبه می‌کنیم
+      let dailyTimePeriod = loadingDateNormalized;
+      
+      // برای ماهانه (اگر لازم باشد)
+      let recordTimePeriod = null;
       if (monthsDiff <= 1) {
-        // روزانه
-        recordTimePeriod = record.loading_date?.replace(/-/g, '/');
+        recordTimePeriod = dailyTimePeriod;
       } else {
-        // ماهانه
-        const loadingDate = record.loading_date?.replace(/-/g, '/');
-        if (loadingDate) {
-          recordTimePeriod = loadingDate.substring(0, 7);
-        }
+        recordTimePeriod = loadingDateNormalized.substring(0, 7);
       }
       
-      if (!recordTimePeriod) continue;
+      // برای روزانه
+      if (!dailyPeriodDetailsMap.has(dailyTimePeriod)) {
+        dailyPeriodDetailsMap.set(dailyTimePeriod, {
+          period: dailyTimePeriod,
+          assignedRecords: [],
+          assignmentByDay: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, '11+': 0 },
+          leftoverFromPrevious: 0
+        });
+      }
       
-      if (!periodDetailsMap.has(recordTimePeriod)) {
+      // برای ماهانه (اگر لازم باشد)
+      if (recordTimePeriod && !periodDetailsMap.has(recordTimePeriod)) {
         periodDetailsMap.set(recordTimePeriod, {
           period: recordTimePeriod,
           assignedRecords: [],
@@ -5458,7 +5477,8 @@ async function getAssignmentStatistics(req, res) {
         });
       }
       
-      const periodDetails = periodDetailsMap.get(recordTimePeriod);
+      const dailyPeriodDetails = dailyPeriodDetailsMap.get(dailyTimePeriod);
+      const periodDetails = recordTimePeriod ? periodDetailsMap.get(recordTimePeriod) : null;
       
       // اگر assigned_driver_id وجود دارد، باید assigned_at را محاسبه کنیم
       if (record.assigned_driver_id) {
@@ -5471,7 +5491,6 @@ async function getAssignmentStatistics(req, res) {
         
         const assignedAtDate = new Date(record.assigned_at);
         const assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAtDate);
-        const loadingDateNormalized = record.loading_date?.replace(/-/g, '/');
         
         if (assignedAtJalali && loadingDateNormalized) {
           let daysDiff = jalaliUtils.daysDifferenceJalali(loadingDateNormalized, assignedAtJalali);
@@ -5499,22 +5518,40 @@ async function getAssignmentStatistics(req, res) {
           
           // فقط daysDiff >= 0 را در نظر می‌گیریم (تخصیص در همان روز یا بعد از loading_date)
           if (daysDiff !== null && daysDiff >= 0) {
-            periodDetails.assignedRecords.push({
+            const recordData = {
               daysDiff,
               loadingDate: loadingDateNormalized,
               assignedAt: assignedAtJalali
-            });
+            };
             
+            // اضافه کردن به روزانه
+            dailyPeriodDetails.assignedRecords.push(recordData);
             if (daysDiff === 0) {
-              periodDetails.assignmentByDay[0]++;
+              dailyPeriodDetails.assignmentByDay[0]++;
             } else if (daysDiff === 1) {
-              periodDetails.assignmentByDay[1]++;
+              dailyPeriodDetails.assignmentByDay[1]++;
             } else if (daysDiff === 2) {
-              periodDetails.assignmentByDay[2]++;
+              dailyPeriodDetails.assignmentByDay[2]++;
             } else if (daysDiff >= 3 && daysDiff <= 10) {
-              periodDetails.assignmentByDay[daysDiff]++;
+              dailyPeriodDetails.assignmentByDay[daysDiff]++;
             } else if (daysDiff > 10) {
-              periodDetails.assignmentByDay['11+']++;
+              dailyPeriodDetails.assignmentByDay['11+']++;
+            }
+            
+            // اضافه کردن به ماهانه (اگر لازم باشد)
+            if (periodDetails) {
+              periodDetails.assignedRecords.push(recordData);
+              if (daysDiff === 0) {
+                periodDetails.assignmentByDay[0]++;
+              } else if (daysDiff === 1) {
+                periodDetails.assignmentByDay[1]++;
+              } else if (daysDiff === 2) {
+                periodDetails.assignmentByDay[2]++;
+              } else if (daysDiff >= 3 && daysDiff <= 10) {
+                periodDetails.assignmentByDay[daysDiff]++;
+              } else if (daysDiff > 10) {
+                periodDetails.assignmentByDay['11+']++;
+              }
             }
           }
         } else {
@@ -5522,6 +5559,52 @@ async function getAssignmentStatistics(req, res) {
         }
       }
     }
+    
+    // محاسبه داده‌های روزانه (همیشه)
+    const dailyTimeBased = dailyTimeBasedResult.rows.map(row => {
+      const timePeriod = row.time_period?.replace(/-/g, '/') || row.time_period;
+      const periodDetails = dailyPeriodDetailsMap.get(timePeriod) || 
+                           dailyPeriodDetailsMap.get(timePeriod.replace(/\//g, '-')) ||
+                           dailyPeriodDetailsMap.get(timePeriod.replace(/-/g, '/'));
+      
+      const totalRequests = parseInt(row.total_requests) || 0;
+      const totalAssignments = parseInt(row.total_assignments) || 0;
+      const successRate = totalRequests > 0 ? Math.round((totalAssignments / totalRequests) * 100) : 0;
+      
+      // محاسبه درصد تخصیص در هر روز
+      const assignmentPercentagesByDay = {};
+      if (periodDetails && periodDetails.assignedRecords.length > 0) {
+        const totalAssigned = periodDetails.assignedRecords.length;
+        for (const [day, count] of Object.entries(periodDetails.assignmentByDay)) {
+          if (count > 0) {
+            assignmentPercentagesByDay[day] = Math.round((count / totalAssigned) * 100);
+          }
+        }
+      }
+      
+      const result = {
+        timePeriod,
+        totalRequests,
+        companyAssignments: parseInt(row.company_assignments) || 0,
+        personalAssignments: parseInt(row.personal_assignments) || 0,
+        totalAssignments,
+        successRate
+      };
+      
+      if (periodDetails) {
+        result.leftoverFromPrevious = periodDetails.leftoverFromPrevious;
+        result.assignmentByDay = periodDetails.assignmentByDay;
+        result.assignmentPercentagesByDay = assignmentPercentagesByDay;
+        result.totalAssigned = periodDetails.assignedRecords.length;
+      } else {
+        result.leftoverFromPrevious = 0;
+        result.assignmentByDay = {};
+        result.assignmentPercentagesByDay = {};
+        result.totalAssigned = 0;
+      }
+      
+      return result;
+    });
     
     const timeBased = timeBasedResult.rows.map(row => {
       let timePeriod = row.time_period;

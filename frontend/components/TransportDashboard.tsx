@@ -76,6 +76,7 @@ interface AssignmentStatisticsMonthlyComparison {
 interface AssignmentStatisticsResponse {
     summary: AssignmentStatisticsSummary;
     timeBased: AssignmentStatisticsTimeBased[];
+    dailyTimeBased?: AssignmentStatisticsTimeBased[]; // داده‌های روزانه (همیشه موجود است)
     byVehicleType: AssignmentStatisticsByVehicleType[];
     vehicleTypeComparisons?: { [vehicleType: string]: AssignmentStatisticsVehicleTypeComparison };
     monthlyComparison: AssignmentStatisticsMonthlyComparison[];
@@ -2243,15 +2244,15 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             })()}
 
                             {/* Line Row - Only show selected line */}
-                            {/* استفاده از assignmentStatistics.timeBased به جای lineStats برای نمایش خلاصه عملکرد روزانه */}
-                            {selectedLine && assignmentStatistics && assignmentStatistics.timeBased && assignmentStatistics.timeBased.length > 0 && (
+                            {/* استفاده از assignmentStatistics.dailyTimeBased برای نمایش خلاصه عملکرد روزانه */}
+                            {selectedLine && assignmentStatistics && assignmentStatistics.dailyTimeBased && assignmentStatistics.dailyTimeBased.length > 0 && (
                                 <LineRow 
                                     title={
                                         selectedLine === FreightLineType.IceCream ? 'بستنی' :
                                         selectedLine === FreightLineType.Dairy ? 'پاستوریزه' :
                                         'لبنیات-فروتلند'
                                     } 
-                                    stats={assignmentStatistics.timeBased.map(item => ({
+                                    stats={assignmentStatistics.dailyTimeBased.map(item => ({
                                         timePeriod: item.timePeriod,
                                         totalRequests: item.totalRequests,
                                         companyAssignments: item.companyAssignments,
