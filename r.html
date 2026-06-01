@@ -1,0 +1,160 @@
+import React, { useState } from 'react';
+import { 
+  ArrowRightLeft, 
+  TrendingUp, 
+  Clock, 
+  Truck, 
+  ShieldCheck, 
+  Wrench, 
+  Calculator, 
+  CheckCircle2, 
+  AlertCircle,
+  BarChart3,
+  Info
+} from 'lucide-react';
+
+const App = () => {
+  const [activeTab, setActiveTab] = useState('comparison');
+
+  const comparisonData = [
+    { id: 1, item: "اجرت پایه (حقوق ثابت)", old: "وجود داشت", new: "وجود دارد (تغییر اندک)", goal: "بدون تغییر عمده", impact: "ثابت و قابل پیش‌بینی", icon: <BarChart3 className="w-5 h-5" /> },
+    { id: 2, item: "اجرت پیمایش (کیلومتر)", old: "پلکانی (افزایشی)", new: "ثابت (به ازای کیلومتر)", goal: "حذف انگیزه پیمایش خطرناک", impact: "کاهش انگیزه مسافت بسیار طولانی", icon: <TrendingUp className="w-5 h-5" /> },
+    { id: 3, item: "تمرکز اصلی انگیزش", old: "پیمایش بیشتر", new: "تعداد سفر (روتیشن) + جبران معطلی", goal: "تغییر از کمیت به کیفیت و دفعات", impact: "تشویق به افزایش تعداد سفر", icon: <ArrowRightLeft className="w-5 h-5" /> },
+    { id: 4, item: "پاداش روتیشن", old: "ناچیز (فقط ۳ نفر اول)", new: "پاداش ویژه (بالاتر از میانگین)", goal: "ایجاد انگیزه برای سفرهای بیشتر", impact: "افزایش فاصله درآمدی فعالان", icon: <Truck className="w-5 h-5" /> },
+    { id: 5, item: "اجرت چندجا تخلیه", old: "ناچیز", new: "جبران معطلی ۳-۵ ساعته", goal: "جبران مأموریت‌های تحمیلی", impact: "جلوگیری از جریمه پنهانی راننده", icon: <Clock className="w-5 h-5" /> },
+    { id: 8, item: "پاداش نگهداری/تعمیرگاه", old: "نداشت", new: "پاداش ماهانه (خواب کم)", goal: "کاهش هزینه تعمیرات", impact: "رفتار مسئولانه‌تر با خودرو", icon: <Wrench className="w-5 h-5" /> },
+    { id: 12, item: "پاداش عدم حادثه", old: "سالیانه (بیمه)", new: "ماهیانه", goal: "امنیت مستمر", impact: "دقت بیشتر در رانندگی", icon: <ShieldCheck className="w-5 h-5" /> },
+  ];
+
+  const formulaData = [
+    { item: "اجرت کیلومتر", formula: "۲۲,۰۰۰ ریال × کیلومتر کل", detail: "پایه درآمد پیمایشی", color: "bg-blue-50 text-blue-700" },
+    { item: "پاداش روتیشن", formula: "۳۰,۰۰۰,۰۰۰ ریال (هر سفر بالای ۷)", detail: "انگیزه سفرهای کوتاه و سریع", color: "bg-green-50 text-green-700" },
+    { item: "چندجا تخلیه", formula: "۴۰۰km × ۲۲,۰۰۰ ریال (تخلیه اضافی)", detail: "جبران مراکز توزیع متعدد", color: "bg-purple-50 text-purple-700" },
+    { item: "بار برگشتی", formula: "۳۰٪ × اجرت سفر رفت", detail: "کاهش کیلومتر خالی", color: "bg-orange-50 text-orange-700" },
+    { item: "پاداش نگهداری", formula: "۵۰,۰۰۰,۰۰۰ ریال (خواب زیر ۳ روز)", detail: "بهره‌وری ناوگان", color: "bg-teal-50 text-teal-700" },
+    { item: "عدم حادثه", formula: "۵۰,۰۰۰,۰۰۰ ریال ماهیانه", detail: "رانندگی ایمن", color: "bg-red-50 text-red-700" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans" dir="rtl">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <header className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-slate-200">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">اینفوگرافیک تحول سیستم دستمزد</h1>
+          <p className="text-slate-500">مقایسه سیستم قدیم (پلکانی) با سیستم جدید (ثابت + پاداش روتیشن + جبرانی)</p>
+          
+          <div className="flex gap-4 mt-6">
+            <button 
+              onClick={() => setActiveTab('comparison')}
+              className={`px-6 py-2 rounded-full font-medium transition-all ${activeTab === 'comparison' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              مقایسه کلی
+            </button>
+            <button 
+              onClick={() => setActiveTab('formulas')}
+              className={`px-6 py-2 rounded-full font-medium transition-all ${activeTab === 'formulas' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              فرمول‌ها و اعداد
+            </button>
+          </div>
+        </header>
+
+        {activeTab === 'comparison' ? (
+          <div className="grid grid-cols-1 gap-4">
+            {/* Table Header */}
+            <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-slate-200 rounded-t-xl font-bold text-slate-700 text-sm">
+              <div className="col-span-3">آیتم / مؤلفه</div>
+              <div className="col-span-2 text-red-600">سیستم قدیم</div>
+              <div className="col-span-3 text-green-700">سیستم جدید</div>
+              <div className="col-span-2">هدف تغییر</div>
+              <div className="col-span-2 text-center">تأثیر بر راننده</div>
+            </div>
+
+            {/* List Items */}
+            {comparisonData.map((row) => (
+              <div key={row.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:border-blue-300 transition-colors">
+                <div className="md:grid md:grid-cols-12 flex flex-col p-4 md:p-6 gap-4 items-center">
+                  <div className="md:col-span-3 flex items-center gap-3 w-full">
+                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                      {row.icon}
+                    </div>
+                    <span className="font-bold text-slate-800">{row.item}</span>
+                  </div>
+                  
+                  <div className="md:col-span-2 w-full">
+                    <span className="md:hidden text-xs text-slate-400 block mb-1 font-bold">قدیم:</span>
+                    <span className="text-slate-500 text-sm">{row.old}</span>
+                  </div>
+
+                  <div className="md:col-span-3 w-full bg-green-50/50 p-2 rounded-lg md:bg-transparent">
+                    <span className="md:hidden text-xs text-green-600 block mb-1 font-bold">جدید:</span>
+                    <span className="text-green-700 font-medium text-sm flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" /> {row.new}
+                    </span>
+                  </div>
+
+                  <div className="md:col-span-2 w-full text-sm text-slate-600 border-t md:border-t-0 pt-2 md:pt-0">
+                    <span className="md:hidden text-xs text-slate-400 block mb-1 font-bold">هدف:</span>
+                    {row.goal}
+                  </div>
+
+                  <div className="md:col-span-2 w-full text-center">
+                    <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">
+                      {row.impact}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {formulaData.map((item, index) => (
+              <div key={index} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col hover:scale-[1.02] transition-transform">
+                <div className={`w-fit p-3 rounded-xl mb-4 ${item.color.split(' ')[0]}`}>
+                  <Calculator className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">{item.item}</h3>
+                <div className={`p-4 rounded-xl font-mono text-center text-lg font-bold mb-4 border ${item.color}`}>
+                  {item.formula}
+                </div>
+                <div className="flex items-start gap-2 text-slate-500 text-sm mt-auto">
+                  <Info className="w-4 h-4 flex-shrink-0 mt-1" />
+                  <p>{item.detail}</p>
+                </div>
+              </div>
+            ))}
+            
+            {/* Highlight Card */}
+            <div className="md:col-span-2 lg:col-span-3 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">نتیجه نهایی سیستم جدید</h2>
+                <p className="text-blue-100 max-w-xl text-lg leading-relaxed">
+                  سیستم جدید به جای فشار بر پیمایش کیلومترهای خطرناک، بر **بهره‌وری (روتیشن بیشتر)** و **عدالت (جبران معطلی)** تمرکز دارد. رانندگانی که نگهداری بهتری دارند و سفرهای بیشتری (حتی کوتاه‌تر) انجام می‌دهند، بیشترین سود را خواهند برد.
+                </p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md p-6 rounded-xl border border-white/20 text-center min-w-[200px]">
+                <div className="text-sm uppercase tracking-wider mb-1 opacity-80">پاداش ثابت ماهانه (ایمنی + فنی)</div>
+                <div className="text-4xl font-bold text-yellow-400">۱۰۰</div>
+                <div className="text-lg font-bold">میلیون ریال</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer Note */}
+        <div className="mt-12 p-6 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-4">
+          <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+          <div>
+            <h4 className="font-bold text-amber-800 mb-1 text-lg text-right">نکته مهم در شفاف‌سازی:</h4>
+            <p className="text-amber-700 text-right leading-relaxed">
+              با توجه به پیچیدگی سیستم جدید (آیتم‌های جبرانی)، استفاده از اپلیکیشن راننده برای نمایش شفاف محاسبات در پایان هر سفر الزامی است تا از هرگونه ابهام یا اختلاف محاسباتی جلوگیری شود.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
