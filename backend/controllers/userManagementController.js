@@ -315,6 +315,15 @@ async function createUser(req, res) {
       insertColumns.push(branchColumn);
       insertValues.push(branchId);
     }
+
+    const mustChangeCol = await pool.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name = 'must_change_password'
+    `);
+    if (mustChangeCol.rows.length > 0) {
+      insertColumns.push('must_change_password');
+      insertValues.push(true);
+    }
     
     const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
     
@@ -430,6 +439,21 @@ async function updateUser(req, res) {
       updates.push(`password_hash = $${paramIndex}`);
       params.push(passwordHash);
       paramIndex++;
+
+      const mustChangeCol = await pool.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'must_change_password'
+      `);
+      if (mustChangeCol.rows.length > 0) {
+        updates.push('must_change_password = TRUE');
+      }
+      const pwdChangedCol = await pool.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'password_changed_at'
+      `);
+      if (pwdChangedCol.rows.length > 0) {
+        updates.push('password_changed_at = NOW()');
+      }
     }
 
     if (updates.length === 0) {

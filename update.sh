@@ -63,6 +63,13 @@ if [ $? -ne 0 ]; then
     echo -e "${YELLOW}⚠️ هشدار: Migration add_user_security_columns اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
 fi
 
+echo -e "${YELLOW}🔄 در حال اجرای Migration برای ستون must_change_password...${NC}"
+node migrations/add_must_change_password.js
+
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}⚠️ هشدار: Migration add_must_change_password اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
+fi
+
 echo -e "${YELLOW}🔄 در حال اجرای Migration برای افزودن ستون vehicle_type به جدول vehicle_specifications...${NC}"
 node migrations/add_vehicle_type_column.js
 

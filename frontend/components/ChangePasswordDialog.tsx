@@ -1,13 +1,35 @@
 import React, { useState } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
 
+export type ForcePasswordReason = 'must_change' | 'expired';
+
 interface ChangePasswordDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    /** اجبار تغییر رمز — بدون انصراف و بستن با کلیک بیرون */
+    forced?: boolean;
+    forceReason?: ForcePasswordReason;
 }
 
-const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onClose, onSuccess }) => {
+const FORCE_MESSAGES: Record<ForcePasswordReason, { title: string; hint: string }> = {
+    must_change: {
+        title: 'تغییر رمز عبور الزامی است',
+        hint: 'رمز عبور شما توسط مدیر سیستم تنظیم شده است. لطفاً یک رمز شخصی جدید انتخاب کنید.',
+    },
+    expired: {
+        title: 'رمز عبور منقضی شده است',
+        hint: 'رمز عبور شما بیش از ۹۰ روز تغییر نکرده است. برای ادامه، رمز جدید انتخاب کنید.',
+    },
+};
+
+const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
+    isOpen,
+    onClose,
+    onSuccess,
+    forced = false,
+    forceReason = 'must_change',
+}) => {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -68,9 +90,13 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
             setNewPassword('');
             setConfirmPassword('');
             setError('');
-            onClose();
+            if (!forced) {
+                onClose();
+            }
             if (onSuccess) {
                 onSuccess();
+            } else if (forced) {
+                onClose();
             }
         } catch (err: any) {
             setError(err.message || 'خطا در تغییر رمز عبور');
@@ -81,10 +107,26 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
 
     if (!isOpen) return null;
 
+    const forceCopy = forced ? FORCE_MESSAGES[forceReason] : null;
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                <h2 className="text-xl font-bold mb-4">تغییر رمز عبور</h2>
+        <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]"
+            onClick={forced ? undefined : onClose}
+            role="presentation"
+        >
+            <div
+                className="bg-white rounded-lg p-6 w-full max-w-md"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h2 className="text-xl font-bold mb-2">
+                    {forceCopy?.title ?? 'تغییر رمز عبور'}
+                </h2>
+                {forceCopy && (
+                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+                        {forceCopy.hint}
+                    </p>
+                )}
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium mb-1">رمز عبور فعلی</label>
@@ -177,7 +219,8 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
                         </div>
                     </div>
                     {error && <p className="text-sm text-red-600">{error}</p>}
-                    <div className="flex gap-2 justify-end mt-6">
+                    <div className={`flex gap-2 mt-6 ${forced ? 'justify-stretch' : 'justify-end'}`}>
+                        {!forced && (
                         <button
                             type="button"
                             onClick={() => {
@@ -192,12 +235,13 @@ const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({ isOpen, onC
                         >
                             انصراف
                         </button>
+                        )}
                         <button
                             type="submit"
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 ${forced ? 'flex-1' : ''}`}
                             disabled={loading}
                         >
-                            {loading ? 'در حال تغییر...' : 'تغییر رمز عبور'}
+                            {loading ? 'در حال تغییر...' : forced ? 'ذخیره و ادامه' : 'تغییر رمز عبور'}
                         </button>
                     </div>
                 </form>

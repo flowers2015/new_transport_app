@@ -10,9 +10,18 @@ interface HeaderProps {
     currentUser?: User; // currentUser may be undefined before login
     onLogout: () => void;
     defaultDashboardView: View;
+    /** وقتی تغییر رمز اجباری است، منوهای هدر غیرفعال می‌شوند */
+    blockNavigation?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, onLogout, defaultDashboardView }) => {
+const Header: React.FC<HeaderProps> = ({
+    onNavigate,
+    alertsCount,
+    currentUser,
+    onLogout,
+    defaultDashboardView,
+    blockNavigation = false,
+}) => {
     const [isMgmtDropdownOpen, setMgmtDropdownOpen] = useState(false);
     const [isAdminDropdownOpen, setAdminDropdownOpen] = useState(false);
     const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
@@ -233,7 +242,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, alertsCount, currentUser, o
                                <button onClick={() => onNavigate(View.NewRepairOrder)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">ثبت سفارش تعمیر</button>
                             )}
                         </nav>
-                        {currentUser && (
+                        {currentUser && !blockNavigation && (
                             <button 
                                 onClick={() => setShowChangePasswordDialog(true)} 
                                 className="mr-4 px-3 py-2 rounded-md text-sm font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 transition"

@@ -20,7 +20,8 @@ const isTokenExpired = (token: string): boolean => {
 };
 // Lazy Loading برای بهبود عملکرد - فقط کامپوننت‌های مورد نیاز لود می‌شوند
 import Header from './components/Header'; // Header همیشه نیاز است
-import Login from './components/Login'; // Login همیشه نیاز است
+import Login, { LoginAuthFlags } from './components/Login'; // Login همیشه نیاز است
+import ChangePasswordDialog, { ForcePasswordReason } from './components/ChangePasswordDialog';
 
 // Lazy load همه کامپوننت‌های دیگر
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
@@ -84,6 +85,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [currentView, setCurrentView] = useState<View>(View.Login);
+    const [forcePasswordChange, setForcePasswordChange] = useState(false);
+    const [forcePasswordReason, setForcePasswordReason] = useState<ForcePasswordReason>('must_change');
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -159,9 +162,34 @@ const App: React.FC = () => {
     // تابع logout که در چند جا استفاده می‌شود
     const performLogout = useCallback(() => {
         setCurrentUser(null);
+        setForcePasswordChange(false);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('forcePasswordChange');
+        localStorage.removeItem('forcePasswordReason');
         setCurrentView(View.Login);
+    }, []);
+
+    const applyAuthFlags = useCallback((flags?: LoginAuthFlags) => {
+        const force = !!(flags?.forcePasswordChange || flags?.mustChangePassword || flags?.passwordExpired);
+        if (force) {
+            const reason: ForcePasswordReason =
+                flags?.passwordExpired && !flags?.mustChangePassword ? 'expired' : 'must_change';
+            localStorage.setItem('forcePasswordChange', '1');
+            localStorage.setItem('forcePasswordReason', reason);
+            setForcePasswordChange(true);
+            setForcePasswordReason(reason);
+        } else {
+            localStorage.removeItem('forcePasswordChange');
+            localStorage.removeItem('forcePasswordReason');
+            setForcePasswordChange(false);
+        }
+    }, []);
+
+    const handleForcedPasswordChangeSuccess = useCallback(() => {
+        localStorage.removeItem('forcePasswordChange');
+        localStorage.removeItem('forcePasswordReason');
+        setForcePasswordChange(false);
     }, []);
 
     useEffect(() => {
@@ -184,6 +212,11 @@ const App: React.FC = () => {
                 if (normalized) {
                     setCurrentUser(normalized);
                     setCurrentView(getDefaultViewForRole(normalized.role));
+                    if (localStorage.getItem('forcePasswordChange') === '1') {
+                        const reason = localStorage.getItem('forcePasswordReason');
+                        setForcePasswordReason(reason === 'expired' ? 'expired' : 'must_change');
+                        setForcePasswordChange(true);
+                    }
                 } else {
                     // role mismatch → clear storage
                     localStorage.removeItem('token');
@@ -211,7 +244,7 @@ const App: React.FC = () => {
         return () => clearInterval(checkTokenInterval);
     }, [performLogout]);
 
-    const handleLogin = (user: any, token: string) => {
+    const handleLogin = (user: any, token: string, authFlags?: LoginAuthFlags) => {
         const normalized = normalizeUser(user);
         if (!normalized) {
             // fallback: store raw for debugging
@@ -221,6 +254,7 @@ const App: React.FC = () => {
         setCurrentUser(normalized);
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(normalized));
+        applyAuthFlags(authFlags);
         setCurrentView(getDefaultViewForRole(normalized.role));
     };
 
@@ -416,6 +450,7 @@ const App: React.FC = () => {
     };
 
     const handleNavigate = (view: View) => {
+        if (forcePasswordChange) return;
         setCurrentView(view);
         setSelectedOrderId(null); // Reset selections when navigating away
         setSelectedInvoiceId(null);
@@ -681,13 +716,23 @@ const App: React.FC = () => {
                      currentUser={currentUser}
                      onLogout={handleLogout}
                      defaultDashboardView={defaultDashboardView}
+                     blockNavigation={forcePasswordChange}
                  />
              )}
-            <main className="p-4 sm:p-6 lg:p-8">
+            <main className={`p-4 sm:p-6 lg:p-8 ${forcePasswordChange ? 'pointer-events-none select-none opacity-40' : ''}`}>
                 <Suspense fallback={<div className="flex items-center justify-center h-screen text-lg">در حال بارگذاری...</div>}>
                     {renderView()}
                 </Suspense>
             </main>
+            {currentUser && forcePasswordChange && (
+                <ChangePasswordDialog
+                    isOpen
+                    forced
+                    forceReason={forcePasswordReason}
+                    onClose={() => {}}
+                    onSuccess={handleForcedPasswordChangeSuccess}
+                />
+            )}
         </div>
     );
 };

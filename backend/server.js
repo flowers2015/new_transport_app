@@ -187,6 +187,11 @@ addRegulationIdToMileage().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون regulation_id:', err);
 });
 
+const { runMigration: addMustChangePassword } = require('./migrations/add_must_change_password');
+addMustChangePassword().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون must_change_password:', err);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

@@ -3,8 +3,14 @@ import { User } from '../types';
 import { WrenchScrewdriverIcon } from './icons/WrenchScrewdriverIcon';
 import { getApiUrl } from '../utils/apiConfig';
 
+export interface LoginAuthFlags {
+    mustChangePassword?: boolean;
+    passwordExpired?: boolean;
+    forcePasswordChange?: boolean;
+}
+
 interface LoginProps {
-    onLogin: (user: User, token: string) => void;
+    onLogin: (user: User, token: string, authFlags?: LoginAuthFlags) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -55,15 +61,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             // Assuming the backend returns a token and user info
             // You might need to adjust this based on the actual API response
             if (data.token && data.user) {
-                // بررسی انقضای رمز عبور
-                if (data.passwordExpired) {
-                    // نمایش هشدار اما اجازه ورود
-                    alert('⚠️ رمز عبور شما منقضی شده است. لطفاً در اسرع وقت رمز خود را تغییر دهید.');
-                } else if (data.passwordExpiresIn !== null && data.passwordExpiresIn <= 7) {
-                    // هشدار 7 روز قبل از انقضا
-                    alert(`⚠️ رمز عبور شما در ${Math.ceil(data.passwordExpiresIn)} روز دیگر منقضی می‌شود. لطفاً رمز خود را تغییر دهید.`);
+                // هشدار نرم فقط وقتی اجبار تغییر رمز نیست
+                const willForce = data.forcePasswordChange || data.mustChangePassword || data.passwordExpired;
+                if (!willForce && data.passwordExpiresIn !== null && data.passwordExpiresIn <= 7) {
+                    alert(`⚠️ رمز عبور شما در ${Math.ceil(data.passwordExpiresIn)} روز دیگر منقضی می‌شود. لطفاً از منوی بالا رمز خود را تغییر دهید.`);
                 }
-                onLogin(data.user, data.token);
+                onLogin(data.user, data.token, {
+                    mustChangePassword: data.mustChangePassword,
+                    passwordExpired: data.passwordExpired,
+                    forcePasswordChange: data.forcePasswordChange,
+                });
             } else {
                  // If the backend only returns a token, you might need to decode it
                  // or make another request to get user data.
@@ -164,20 +171,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         </button>
                     </div>
                 </form>
-                <div className="text-center text-xs text-slate-400">
-                    <p>Enter your credentials to log in.</p>
-                </div>
-                <div className="text-center mt-4">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            // TODO: پیاده‌سازی فراموشی رمز عبور
-                            alert('قابلیت فراموشی رمز عبور به زودی اضافه خواهد شد.');
-                        }}
-                        className="text-sm text-sky-600 hover:text-sky-800 hover:underline"
-                    >
-                        رمز عبور را فراموش کرده‌ام
-                    </button>
+                <div className="text-center mt-4 p-3 bg-slate-50 rounded-md border border-slate-200">
+                    <p className="text-sm text-slate-600">
+                        رمز عبور را فراموش کرده‌اید؟
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                        با مدیر سیستم یا واحد فناوری اطلاعات تماس بگیرید تا رمز شما بازنشانی شود.
+                    </p>
                 </div>
             </div>
         </div>

@@ -127,6 +127,9 @@ async function login(req, res) {
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }); // 7 روز اعتبار
 
+    const mustChangePassword = user.must_change_password === true;
+    const forcePasswordChange = mustChangePassword || passwordExpired;
+
     // Return both token and user data
     res.json({ 
       token,
@@ -139,7 +142,9 @@ async function login(req, res) {
         email: user.email || null,
         branchCity: branchCityValue
       },
+      mustChangePassword,
       passwordExpired,
+      forcePasswordChange,
       passwordExpiresIn: passwordExpiresIn !== null ? Math.max(0, passwordExpiresIn) : null
     });
 
@@ -203,11 +208,13 @@ async function changePassword(req, res) {
 
     // به‌روزرسانی رمز عبور
     await pool.query(
-      'UPDATE users SET password_hash = $1, password_changed_at = NOW(), failed_login_attempts = 0, account_locked_until = NULL WHERE id = $2',
+      `UPDATE users SET password_hash = $1, password_changed_at = NOW(),
+       must_change_password = FALSE, failed_login_attempts = 0, account_locked_until = NULL
+       WHERE id = $2`,
       [passwordHash, userId]
     );
 
-    res.json({ message: 'رمز عبور با موفقیت تغییر یافت' });
+    res.json({ message: 'رمز عبور با موفقیت تغییر یافت', mustChangePassword: false });
   } catch (error) {
     console.error('❌ [changePassword] Error:', error);
     res.status(500).json({ message: 'خطا در تغییر رمز عبور: ' + error.message });
@@ -248,9 +255,11 @@ async function resetPassword(req, res) {
     // Hash کردن رمز جدید
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
-    // به‌روزرسانی رمز عبور
+    // به‌روزرسانی رمز عبور — کاربر باید در ورود بعدی رمز شخصی انتخاب کند
     await pool.query(
-      'UPDATE users SET password_hash = $1, password_changed_at = NOW(), failed_login_attempts = 0, account_locked_until = NULL WHERE id = $2',
+      `UPDATE users SET password_hash = $1, password_changed_at = NOW(),
+       must_change_password = TRUE, failed_login_attempts = 0, account_locked_until = NULL
+       WHERE id = $2`,
       [passwordHash, userId]
     );
 
