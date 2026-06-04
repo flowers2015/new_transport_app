@@ -22,6 +22,10 @@ const {
   getCityDetails,
   getLineAnalytics,
   cancelAssignment,
+  createFinanceExceptionTour,
+  updateFinanceExceptionTour,
+  finalizeFinanceExceptionMetadata,
+  FINANCE_EXCEPTION_TRANSPORT_ROLES,
   searchDispatchRoutes,
   createChangeRequest,
   listChangeRequests,
@@ -101,6 +105,26 @@ router.get(
   listChangeRequests
 );
 
+// تور استثنایی مالی ترابری (قبل از /:id)
+router.post(
+  '/finance-exception',
+  authenticateToken,
+  authorizeRole(FINANCE_EXCEPTION_TRANSPORT_ROLES),
+  createFinanceExceptionTour
+);
+router.put(
+  '/:id/finance-exception',
+  authenticateToken,
+  authorizeRole(FINANCE_EXCEPTION_TRANSPORT_ROLES),
+  updateFinanceExceptionTour
+);
+router.post(
+  '/:id/finance-exception/finalize-metadata',
+  authenticateToken,
+  authorizeRole(FINANCE_EXCEPTION_TRANSPORT_ROLES),
+  finalizeFinanceExceptionMetadata
+);
+
 router.get('/:id', authenticateToken, getFreightAnnouncementById);
 
 // Create a new freight announcement
@@ -147,10 +171,23 @@ router.put(
 );
 
 // Cancel an assignment on an announcement (returns it to its queue)
+const transportCancelRoles = [
+  'transport_user',
+  'personal_transport_user',
+  'کاربر ترابری (شرکت)',
+  'کاربر ترابری شرکت',
+  'کاربر ترابری (خودرو شخصی)',
+  'کاربر ترابری شخصی',
+  'کاربر ترابری (شخصی)',
+  'planner_manager',
+  'مدیر برنامه‌ریزی',
+  'admin',
+  'ادمین',
+];
 router.post(
   '/:id/cancel',
   authenticateToken,
-  authorizeRole(['transport_user', 'personal_transport_user']),
+  authorizeRole(transportCancelRoles),
   cancelAssignment
 );
 

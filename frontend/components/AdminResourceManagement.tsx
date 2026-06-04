@@ -17,6 +17,7 @@ import {
   getModelsForBrand
 } from '../utils/vehicleConstants';
 import VehicleFormDialog from './VehicleFormDialog';
+import IranianPlateInput, { DEFAULT_PLATE_LETTER } from './IranianPlateInput';
 import { Vehicle, Branch } from '../types';
 
 // ============================================
@@ -1259,7 +1260,7 @@ const PersonalVehicleForm: React.FC<{
   const [form, setForm] = useState({
     truckSmartId: initialData?.truckSmartId || '',
     platePart1: initialData?.platePart1 || '',
-    plateLetter: initialData?.plateLetter || '',
+    plateLetter: initialData?.plateLetter || DEFAULT_PLATE_LETTER,
     platePart2: initialData?.platePart2 || '',
     plateCityCode: initialData?.plateCityCode || '',
     vehicleType: initialData?.vehicleType || '',
@@ -1286,16 +1287,24 @@ const PersonalVehicleForm: React.FC<{
       </div>
       <div>
         <label className={labelClass}>پلاک *</label>
-        <div className="flex gap-2 items-center" dir="ltr">
-          <input type="text" value={form.platePart1} onChange={e => setForm({...form, platePart1: e.target.value.replace(/\D/g, '')})} className={inputClass + " w-14 text-center"} placeholder="12" maxLength={2} required />
-          <select value={form.plateLetter} onChange={e => setForm({...form, plateLetter: e.target.value})} className={inputClass + " w-16"} required>
-            <option value="">-</option>
-            {persianAlphabet.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-          <input type="text" value={form.platePart2} onChange={e => setForm({...form, platePart2: e.target.value.replace(/\D/g, '')})} className={inputClass + " w-16 text-center"} placeholder="345" maxLength={3} required />
-          <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded">ایران</span>
-          <input type="text" value={form.plateCityCode} onChange={e => setForm({...form, plateCityCode: e.target.value.replace(/\D/g, '')})} className={inputClass + " w-14 text-center"} placeholder="67" maxLength={2} required />
-        </div>
+        <IranianPlateInput
+          inputClassName={inputClass}
+          value={{
+            part1: form.platePart1,
+            letter: form.plateLetter || DEFAULT_PLATE_LETTER,
+            part2: form.platePart2,
+            cityCode: form.plateCityCode,
+          }}
+          onChange={(p) =>
+            setForm({
+              ...form,
+              platePart1: p.part1,
+              plateLetter: p.letter,
+              platePart2: p.part2,
+              plateCityCode: p.cityCode,
+            })
+          }
+        />
       </div>
       <div>
         <label className={labelClass}>نوع خودرو *</label>

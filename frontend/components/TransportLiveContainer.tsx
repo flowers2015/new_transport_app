@@ -6,6 +6,16 @@ import { getApiUrl } from '../utils/apiConfig';
 import { cachedFetch } from '../utils/apiCache';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { OptimisticUpdateManager, applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import {
+    pickAssignmentFieldsFromApi,
+    mergeAssignmentDisplayFields,
+    TransportLiveTab,
+    lineTypeToBackend,
+    isPendingBillOfLadingTab,
+    isPersonalAssignmentType,
+    hasBillOfLadingNumber,
+    parseNumericField,
+} from '../utils/freightDisplay';
 
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     console.log('🔄 [TransportLiveContainer] Component rendering', { 
@@ -21,7 +31,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
+    const [activeLine, setActiveLine] = useState<TransportLiveTab>(FreightLineType.IceCream);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
     const [sseConnected, setSseConnected] = useState(false);
 
@@ -218,11 +228,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
                         vehicleType: a.vehicle_type || a.vehicleType || '',
                         notes: a.notes,
-                        assignmentType: a.assignment_type || a.assignmentType,
-                        assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
-                        assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
-                        totalFreightCost: a.total_freight_cost ?? a.totalFreightCost,
-                        billOfLadingNumber: a.bill_of_lading_number ?? a.billOfLadingNumber,
+                        ...pickAssignmentFieldsFromApi(a),
                         originCity: a.origin_city || a.originCity,
                         brand: a.brand,
                         representativeType: a.representative_type || a.representativeType || null,
@@ -236,7 +242,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             id: d.id,
                             city: d.city,
                             representativeName: d.representative_name || d.representativeName,
-                            tonnage: d.tonnage,
+                            tonnage: d.tonnage != null && d.tonnage !== '' ? parseNumericField(d.tonnage) : undefined,
                             unloadTime: d.unload_time || d.unloadTime,
                             freightCost: d.freight_cost ?? d.freightCost,
                             deliveryDate: d.delivery_date || d.deliveryDate,
@@ -244,6 +250,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         })) : [],
                         history: a.history || [],
                         assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,
+                        awaitingBillOfLadingAt: a.awaiting_bill_of_lading_at || a.awaitingBillOfLadingAt,
                         // اطلاعات کارمند اعلام‌کننده
                         creator_full_name: a.creator_full_name || a.creatorFullName,
                         creator_username: a.creator_username || a.creatorUsername,
@@ -300,7 +307,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     userId: currentUser?.id
                 });
 
-                setAnnouncements(filteredAnnouncements);
+                setAnnouncements((prev) =>
+                    filteredAnnouncements.map((ann) =>
+                        mergeAssignmentDisplayFields(ann, prev.find((p) => p.id === ann.id))
+                    )
+                );
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
                 setDrivers(Array.isArray(driversData) ? driversData : []);
                 // فقط اگر personal resources لود شده باشند، set کن
@@ -481,11 +492,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                     cargoValue: Number(data.cargoValue ?? data.cargo_value ?? 0),
                                     vehicleType: data.vehicleType || data.vehicle_type || '',
                                     notes: data.notes || null,
-                                    assignmentType: data.assignmentType || data.assignment_type || null,
-                                    assignedDriverId: data.assignedDriverId || data.assigned_driver_id || null,
-                                    assignedVehicleId: data.assignedVehicleId || data.assigned_vehicle_id || null,
-                                    totalFreightCost: data.totalFreightCost ?? data.total_freight_cost ?? null,
-                                    billOfLadingNumber: data.billOfLadingNumber || data.bill_of_lading_number || null,
+                                    ...pickAssignmentFieldsFromApi(data),
                                     originCity: data.originCity || data.origin_city || null,
                                     brand: data.brand || null,
                                     representativeType: data.representativeType || data.representative_type || null,
@@ -499,7 +506,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                         id: d.id,
                                         city: d.city,
                                         representativeName: d.representativeName || d.representative_name,
-                                        tonnage: d.tonnage,
+                                        tonnage: d.tonnage != null && d.tonnage !== '' ? parseNumericField(d.tonnage) : undefined,
                                         unloadTime: d.unloadTime || d.unload_time,
                                         freightCost: d.freightCost ?? d.freight_cost,
                                         deliveryDate: d.deliveryDate || d.delivery_date,
@@ -551,13 +558,27 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         return prev.filter(a => a.id !== announcementId);
                     }
                     
+                    const existing = prev.find((a) => a.id === announcementId);
+                    const assignmentPatch = pickAssignmentFieldsFromApi(data as Record<string, unknown>);
+                    const awaitingFromFinalizeError =
+                        updateType === 'finalize_error' &&
+                        (data as { error?: string }).error === 'missing_bill_of_lading';
                     const updated = applyOptimisticUpdate(prev, announcementId, {
-                        status: data.status as FreightAnnouncementStatus,
-                        assignmentType: data.assignmentType,
-                        ...data
+                        status: (data.status as FreightAnnouncementStatus) || existing?.status,
+                        ...assignmentPatch,
+                        ...(awaitingFromFinalizeError
+                            ? {
+                                  awaitingBillOfLadingAt:
+                                      (data as { awaitingBillOfLadingAt?: string }).awaitingBillOfLadingAt ||
+                                      new Date().toISOString(),
+                              }
+                            : {}),
                     });
-                    
-                    return updated;
+                    return updated.map((ann) =>
+                        ann.id === announcementId
+                            ? mergeAssignmentDisplayFields(ann, existing || null)
+                            : ann
+                    );
                 });
             }
         },
@@ -581,6 +602,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             assignmentType: assignment.assignmentType,
             assignedDriverId: assignment.driverId,
             assignedVehicleId: assignment.vehicleId,
+            assignedDriverName: assignment.assignedDriverName,
+            assignedDriverContact: assignment.assignedDriverContact,
+            assignedVehiclePlate: assignment.assignedVehiclePlate,
             totalFreightCost: assignment.totalFreightCost,
             billOfLadingNumber: assignment.billOfLadingNumber,
             notes: assignment.notes
@@ -604,6 +628,38 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             
             const responseData = await res.json();
             console.log('✅ [TransportLive] Assignment successful:', responseData);
+
+            const fromApi = responseData?.announcement
+                ? pickAssignmentFieldsFromApi(responseData.announcement as Record<string, unknown>)
+                : {};
+
+            // تثبیت نمایش در state قبل از refresh
+            setAnnouncements((prev) =>
+                prev.map((ann) => {
+                    if (ann.id !== announcementId) return ann;
+                    const merged = mergeAssignmentDisplayFields(
+                        {
+                            ...ann,
+                            status: FreightAnnouncementStatus.Assigned,
+                            assignmentType: assignment.assignmentType,
+                            assignedDriverId: assignment.driverId || ann.assignedDriverId,
+                            assignedVehicleId: assignment.vehicleId || ann.assignedVehicleId,
+                            assignedDriverName: assignment.assignedDriverName,
+                            assignedDriverContact: assignment.assignedDriverContact,
+                            assignedVehiclePlate: assignment.assignedVehiclePlate,
+                            billOfLadingNumber: assignment.billOfLadingNumber,
+                            totalFreightCost: assignment.totalFreightCost,
+                            notes: assignment.notes,
+                            ...fromApi,
+                            awaitingBillOfLadingAt:
+                                ann.awaitingBillOfLadingAt ??
+                                (fromApi as { awaitingBillOfLadingAt?: string }).awaitingBillOfLadingAt,
+                        },
+                        ann
+                    );
+                    return merged;
+                })
+            );
             
             // بعد از تخصیص موفق، داده‌ها را refresh کن تا تغییرات در UI نمایش داده شود
             // این برای اطمینان از نمایش صحیح در جدول و تابلو اعلام بار است
@@ -636,11 +692,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
-    const onFinalize = async (announcementIds: string[]) => {
+    const onFinalize = async (announcementIds: string[], lineTypeOverride?: string) => {
         console.log('🏁 [TransportLive] Finalize Request:', {
             announcementIds,
             count: announcementIds.length,
             activeLine,
+            lineTypeOverride,
             timestamp: new Date().toISOString()
         });
         
@@ -649,26 +706,36 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             return;
         }
         
-        // تبدیل activeLine به فرمت backend (مثلاً 'IceCream' یا 'بستنی')
-        let lineTypeForBackend = '';
-        if (activeLine === FreightLineType.IceCream || activeLine === 'بستنی') {
-            lineTypeForBackend = 'IceCream';
-        } else if (activeLine === FreightLineType.Dairy || activeLine === 'پاستوریزه') {
-            lineTypeForBackend = 'Dairy';
-        } else if (activeLine === FreightLineType.Ambient || activeLine === 'لبنیات-فروتلند') {
-            lineTypeForBackend = 'Ambient';
-        } else {
-            lineTypeForBackend = activeLine;
+        let lineTypeForBackend = lineTypeOverride || '';
+        if (!lineTypeForBackend) {
+            if (isPendingBillOfLadingTab(activeLine)) {
+                console.warn('⚠️ [TransportLive] Finalize on pending tab requires lineTypeOverride');
+                return;
+            }
+            lineTypeForBackend = lineTypeToBackend(activeLine as FreightLineType);
         }
         
-        // Optimistic Update: فوراً از لیست حذف کن (قبل از API call)
+        // Optimistic: فقط مواردی که احتمالاً finalize می‌شوند از لیست حذف شوند
+        // (شخصی بدون بارنامه تا پاسخ سرور در تب خط می‌ماند)
         const originalAnnouncements = [...announcements];
-        setAnnouncements(prev => {
-            const filtered = prev.filter(a => !announcementIds.includes(a.id));
-            console.log('🗑️ [TransportLiveContainer] Optimistic: Removing finalized announcements immediately', {
+        const idsForOptimisticRemove = announcementIds.filter((id) => {
+            const ann = announcements.find((a) => a.id === id);
+            if (!ann) return true;
+            if (
+                isPersonalAssignmentType(ann.assignmentType) &&
+                !hasBillOfLadingNumber(ann)
+            ) {
+                return false;
+            }
+            return true;
+        });
+        setAnnouncements((prev) => {
+            const filtered = prev.filter((a) => !idsForOptimisticRemove.includes(a.id));
+            console.log('🗑️ [TransportLiveContainer] Optimistic: Removing finalized announcements', {
                 before: prev.length,
                 after: filtered.length,
-                removedIds: announcementIds
+                removedIds: idsForOptimisticRemove,
+                skippedPersonalNoBill: announcementIds.filter((id) => !idsForOptimisticRemove.includes(id)),
             });
             return filtered;
         });
@@ -704,19 +771,50 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!response.ok) {
                 // Rollback در صورت خطا (فقط اگر هیچ کدام finalize نشدند)
                 if (!result.partial) {
-                    console.log('❌ [TransportLiveContainer] Finalize failed completely, rolling back optimistic update');
-                    setAnnouncements(originalAnnouncements);
+                    const failedIds = (result.missingBillOfLadingIds || []) as string[];
+                    if (failedIds.length > 0) {
+                        const nowIso = new Date().toISOString();
+                        console.log(
+                            '⚠️ [TransportLiveContainer] Finalize blocked: missing bill of lading — move to pending tab',
+                            { failedIds }
+                        );
+                        setAnnouncements(
+                            originalAnnouncements.map((a) =>
+                                failedIds.includes(a.id)
+                                    ? { ...a, awaitingBillOfLadingAt: nowIso }
+                                    : a
+                            )
+                        );
+                    } else {
+                        console.log('❌ [TransportLiveContainer] Finalize failed completely, rolling back optimistic update');
+                        setAnnouncements(originalAnnouncements);
+                    }
                 } else {
                     // اگر برخی finalize شدند، فقط آنهایی که finalize نشدند را برگردان
                     console.log('⚠️ [TransportLiveContainer] Partial finalize - some succeeded, some failed');
                     if (result.missingBillOfLadingIds && result.missingBillOfLadingIds.length > 0) {
-                        // فقط اعلام بارهایی که finalize نشدند را برگردان
-                        setAnnouncements(prev => {
-                            const failedIds = result.missingBillOfLadingIds || [];
-                            const restored = originalAnnouncements.filter(a => failedIds.includes(a.id));
-                            return [...prev, ...restored];
+                        const failedIds = result.missingBillOfLadingIds as string[];
+                        const nowIso = new Date().toISOString();
+                        setAnnouncements((prev) => {
+                            const restored = originalAnnouncements
+                                .filter((a) => failedIds.includes(a.id))
+                                .map((a) => ({ ...a, awaitingBillOfLadingAt: nowIso }));
+                            const merged = [...prev];
+                            for (const r of restored) {
+                                if (!merged.some((m) => m.id === r.id)) merged.push(r);
+                            }
+                            return merged.map((a) =>
+                                failedIds.includes(a.id)
+                                    ? { ...a, awaitingBillOfLadingAt: a.awaitingBillOfLadingAt || nowIso }
+                                    : a
+                            );
                         });
                     }
+                }
+                if (result.missingBillOfLadingIds?.length) {
+                    setTimeout(() => {
+                        fetchDataRef.current(true, needsPersonalResourcesRef.current);
+                    }, 500);
                 }
                 throw new Error(result.message || 'خطا در اتمام تخصیص');
             }
@@ -751,7 +849,6 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
-            // فقط alert برای خطا (نه موفقیت - آن را نگه می‌داریم)
             alert(error.message || 'خطا در اتمام تخصیص');
         }
     };
@@ -926,6 +1023,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onCancel = async (announcementId: string) => {
+        const ann = announcements.find((a) => a.id === announcementId);
+        const code = ann?.announcementCode || announcementId;
+        if (
+            !window.confirm(
+                `آیا از لغو تخصیص اعلام بار «${code}» مطمئن هستید؟\nراننده، خودرو و کرایه پاک می‌شود و بار به صف تخصیص برمی‌گردد.`
+            )
+        ) {
+            return;
+        }
         try {
             console.log('❌ [TransportLive] Cancel Request:', {
                 announcementId,
@@ -939,18 +1045,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     'Authorization': `Bearer ${token}`
                 }
             });
-            if (!res.ok) {
-                const text = await res.text();
-                console.error('❌ [TransportLive] Cancel API error:', text);
-                throw new Error(JSON.parse(text)?.message || 'خطا در لغو تخصیص');
+            let payload: { message?: string } = {};
+            try {
+                payload = await res.json();
+            } catch {
+                payload = {};
             }
-            const data = await res.json();
-            console.log('✅ [TransportLive] Cancelled:', data);
-            // Real-time update will handle the UI update
-            // Refresh data to reflect new status (should now be Pending* and show "ارجاع" button)
+            if (!res.ok) {
+                console.error('❌ [TransportLive] Cancel API error:', payload);
+                throw new Error(payload.message || 'خطا در لغو تخصیص');
+            }
+            console.log('✅ [TransportLive] Cancelled:', payload);
+            alert(payload.message || 'تخصیص با موفقیت لغو شد.');
             await fetchData();
         } catch (e: any) {
             console.error('❌ [TransportLive] Cancel error:', e);
+            alert(e?.message || 'خطا در لغو تخصیص');
         }
     };
 

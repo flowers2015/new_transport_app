@@ -650,6 +650,8 @@ export interface FreightAnnouncement {
     assignedDriverContact?: string;
     assignedVehiclePlate?: string;
     assignmentFinalizedAt?: string | Date;
+    /** پس از اتمام تخصیص بدون بارنامه — نمایش در تب «در انتظار بارنامه» */
+    awaitingBillOfLadingAt?: string | Date;
     originCity?: string;
     brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
     representativeType?: 'agent' | 'distributor';

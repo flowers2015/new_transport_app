@@ -16,6 +16,13 @@ import {
     PaymentRecord 
 } from './InvoiceImageHelper';
 import CityManagement from './CityManagement';
+import FinanceExceptionTourDialog from './FinanceExceptionTourDialog';
+import {
+    enrichAnnouncementsWithRouteMileage,
+    getTotalKilometersFromCalculation,
+    getTourTotalKilometers,
+    resolveTourRouteMileageForTour,
+} from '../utils/tourMileage';
 
 interface TransportFinanceCalculationProps {
     currentUser: User;
@@ -260,6 +267,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     
     // State برای دیالوگ مدیریت شهرها
     const [cityManagementDialogOpen, setCityManagementDialogOpen] = useState(false);
+
+    const [financeExceptionDialogOpen, setFinanceExceptionDialogOpen] = useState(false);
+    const [financeExceptionEditAnn, setFinanceExceptionEditAnn] = useState<FreightAnnouncement | null>(null);
     
     // بررسی نقش کاربر (فقط برای مالی ترابری)
     const isTransportFinance = currentUser?.role === 'مالی ترابری' || currentUser?.role === 'TransportationFinance';
@@ -560,16 +570,28 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             setDrivers(Array.isArray(driversData) ? driversData : []);
             setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
             
-            // فیلتر کردن فقط بارهای تخصیص داده شده به رانندگان و خودروهای شرکت
+            // تورهای شرکتی نهایی‌شده + تورهای استثنایی مالی
             const companyAnnouncements = (Array.isArray(announcementsData) ? announcementsData : []).filter(
-                (ann: any) => 
-                    ann.assignment_type === 'company' && 
-                    ann.assigned_driver_id && 
-                    ann.assigned_vehicle_id &&
-                    (ann.status === 'Finalized' || ann.status === 'InTransit')
+                (ann: any) => {
+                    const isFinanceException = ann.announcement_source === 'finance_exception';
+                    if (isFinanceException) {
+                        return (
+                            ann.assigned_driver_id &&
+                            ann.assigned_vehicle_id &&
+                            ann.status === 'Finalized'
+                        );
+                    }
+                    return (
+                        ann.assignment_type === 'company' &&
+                        ann.assigned_driver_id &&
+                        ann.assigned_vehicle_id &&
+                        (ann.status === 'Finalized' || ann.status === 'InTransit')
+                    );
+                }
             );
-            
-            setAnnouncements(companyAnnouncements);
+
+            const enrichedAnnouncements = await enrichAnnouncementsWithRouteMileage(companyAnnouncements);
+            setAnnouncements(enrichedAnnouncements);
             
         } catch (err: any) {
             console.error('❌ [TransportFinanceCalculation] Failed to fetch data:', err);
@@ -597,11 +619,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const existing = driverMap.get(driverId);
 
             // محاسبه roundTripKm از route (باید از API گرفته شود)
-            const roundTripKm = ann.route?.round_trip_km || 0;
+            const roundTripKm = Number(ann.route?.round_trip_km) || 0;
 
             const tourDetail: DriverTourDetailWithCalculation = {
                 announcementId: ann.id,
                 announcementCode: ann.announcement_code || '',
+                ...(ann.announcement_source === 'finance_exception'
+                    ? { isFinanceException: true as const }
+                    : {}),
                 vehicleType: ann.vehicle_type || '',
                 vehicleId: vehicle.id,
                 vehicleCode: vehicle.vehicleCode,
@@ -941,6 +966,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         calculationDate: saved.calculation_date || saved.calculationDate || '',
                                         approvedKilometers: saved.approved_kilometers || saved.approvedKilometers || 0,
                                         excessKilometers: saved.excess_kilometers || saved.excessKilometers || 0,
+                                        total_kilometers: saved.total_kilometers ?? undefined,
+                                        totalKilometers: saved.total_kilometers ?? undefined,
                                         approvedMissionDays: saved.approved_mission_days || saved.approvedMissionDays || 1,
                                         excessMissionDays: saved.excess_mission_days || saved.excessMissionDays || 0,
                                         tollCost: saved.toll_cost || saved.tollCost || 0,
@@ -997,10 +1024,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             
                             // محاسبه مجموع هزینه کل و پیمایش کل (از مجموع مصوب + مازاد)
                             const totalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
-                            const totalKm = updatedTours.reduce((sum, tour) => {
-                                const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                                return sum + tourTotalKm;
-                            }, 0);
+                            const totalKm = updatedTours.reduce(
+                                (sum, tour) => sum + getTourTotalKilometers(tour),
+                                0
+                            );
                             
                             return {
                                 ...calc,
@@ -1036,12 +1063,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             plateNumber: saved.plate_number || '',
                             lineType: saved.line_type || '',
                             destinations: saved.destinations ? (typeof saved.destinations === 'string' ? [saved.destinations] : saved.destinations) : [],
-                            roundTripKm: saved.approved_kilometers || 0,
                             billOfLadingNumber: saved.bill_of_lading_number || '',
                             billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
                             calculationDate: saved.calculation_date || '',
                             approvedKilometers: saved.approved_kilometers || 0,
                             excessKilometers: saved.excess_kilometers || 0,
+                            total_kilometers: saved.total_kilometers ?? undefined,
+                            totalKilometers: saved.total_kilometers ?? undefined,
                             approvedMissionDays: saved.approved_mission_days || 1,
                             excessMissionDays: saved.excess_mission_days || 0,
                             tollCost: saved.toll_cost || 0,
@@ -1089,7 +1117,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             existingCalc.tours.push(tourFromSaved);
                             existingCalc.tourCount = existingCalc.tours.length;
                             existingCalc.tourCost += Number(saved.total_cost) || 0;
-                            existingCalc.totalKilometers += (Number(saved.approved_kilometers) || 0) + (Number(saved.excess_kilometers) || 0);
+                            existingCalc.totalKilometers += getTotalKilometersFromCalculation(saved);
                         } else {
                             // راننده جدید اضافه کن
                             updated.push({
@@ -1099,7 +1127,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 driverName: driver.name,
                                 queueType: (saved.queue_type || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
                                 tourCount: 1,
-                                totalKilometers: (Number(saved.approved_kilometers) || 0) + (Number(saved.excess_kilometers) || 0),
+                                totalKilometers: getTotalKilometersFromCalculation(saved),
                                 tourCost: Number(saved.total_cost) || 0,
                                 tours: [tourFromSaved],
                             });
@@ -1193,11 +1221,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const updated = prev.map(calc => {
                 // محاسبه هزینه کل از مجموع totalCost تورها
                 const totalCost = calc.tours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
-                // محاسبه پیمایش کل از مجموع مصوب + مازاد
-                const totalKm = calc.tours.reduce((sum, tour) => {
-                    const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                    return sum + tourTotalKm;
-                }, 0);
+                // محاسبه پیمایش کل (مصوب + مازاد + دپو؛ قبل از ثبت از مسیر مصوب)
+                const totalKm = calc.tours.reduce((sum, tour) => sum + getTourTotalKilometers(tour), 0);
                 
                 // فقط اگر تغییر کرده باشد، object جدید بساز
                 if (calc.tourCost === totalCost && calc.totalKilometers === totalKm) {
@@ -1589,13 +1614,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const recordedToursCount = recordedTours.length;
             const unrecordedTours = calc.tours.length - recordedToursCount;
             
-            // محاسبه کل پیمایش شامل دپو: مصوب + مازاد + دپو
-            const totalKm = calc.tours.reduce((sum, tour) => {
-                const approvedKm = Number(tour.approvedKilometers) || 0;
-                const excessKm = Number(tour.excessKilometers) || 0;
-                const depotKm = Number((tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0);
-                return sum + approvedKm + excessKm + depotKm;
-            }, 0);
+            const totalKm = calc.tours.reduce((sum, tour) => sum + getTourTotalKilometers(tour), 0);
             
             // محاسبه اجرت (tourCost برای پورسانتی یا fixedAllowance برای اجرت ثابت)
             const totalTourCost = calc.tours.reduce((sum, tour) => {
@@ -1961,6 +1980,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         console.log('✅ [handleEditData] راننده و تور پیدا شدند');
 
+        const resolvedRoute = await resolveTourRouteMileageForTour({
+            announcementId: tour.announcementId,
+            destinations: tour.destinations,
+        });
+        const routeApprovedKm =
+            resolvedRoute.approvedKm > 0
+                ? resolvedRoute.approvedKm
+                : Number(tour.roundTripKm) || Number(tour.approvedKilometers) || 0;
+        const routeApprovedDays =
+            resolvedRoute.approvedKm > 0
+                ? resolvedRoute.approvedDays
+                : Number(tour.approvedMissionDays) || 1;
+
         // اگر داده‌ای ثبت شده، آن را نمایش بده
         if (tour.isDataRecorded) {
             // تاریخ محاسبه پیش‌فرض: امروز
@@ -1997,14 +2029,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 }
                 
                 if (matchedSpec && matchedSpec.fuelConsumptionPercentage && matchedSpec.fuelPricePerLiter) {
-                    const totalKmForFuel = (tour.approvedKilometers || 0) + (tour.excessKilometers || 0) + (tour.depotTotalMileage || 0);
+                    const totalKmForFuel =
+                        routeApprovedKm + (tour.excessKilometers || 0) + (tour.depotTotalMileage || 0);
                     initialFuelCost = Math.round(totalKmForFuel * (matchedSpec.fuelConsumptionPercentage / 100) * matchedSpec.fuelPricePerLiter) || 0;
                 } else {
                     // Fallback: استفاده از بخشنامه قدیمی
                     const vehicleTypeForFuel = tour.vehicleType || '';
                     const fuelReg = fuelConsumptionRegulations[vehicleTypeForFuel];
                     if (fuelReg) {
-                        const totalKmForFuel = (tour.approvedKilometers || 0) + (tour.excessKilometers || 0);
+                        const totalKmForFuel = routeApprovedKm + (tour.excessKilometers || 0);
                         initialFuelCost = Math.round((totalKmForFuel / 100) * fuelReg.consumptionPercentage * fuelReg.fuelPrice) || 0;
                     }
                 }
@@ -2030,9 +2063,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
                 billOfLadingCost: (tour as any).billOfLadingCost || 0,
-                approvedKilometers: tour.approvedKilometers || 0,
+                approvedKilometers: routeApprovedKm,
                 excessKilometers: tour.excessKilometers || 0,
-                approvedMissionDays: tour.approvedMissionDays || 1,
+                approvedMissionDays: routeApprovedDays,
                 excessMissionDays: tour.excessMissionDays || 0,
                 multiUnloadCount: multiUnloadCount,
                 tollCost: tour.tollCost || 0,
@@ -2122,9 +2155,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingNumber: tour.billOfLadingNumber || '',
                 billOfLadingDate: billDateStr,
                 billOfLadingCost: 0,
-                approvedKilometers: tour.roundTripKm || 0,
+                approvedKilometers: routeApprovedKm,
                 excessKilometers: 0,
-                approvedMissionDays: 1,
+                approvedMissionDays: routeApprovedDays,
                 excessMissionDays: 0,
                 multiUnloadCount: multiUnloadCount,
                 tollCost: 0,
@@ -2897,70 +2930,26 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 // دریافت شماره بارنامه
                 billOfLading = announcementData.bill_of_lading_number || announcementData.billOfLadingNumber || '';
                 
-                // دریافت اطلاعات مصوب از dispatch_routes بر اساس آخرین شهر مقصد (برای مسیرهای چندمقصدی)
-                if (tour.destinations && tour.destinations.length > 0) {
-                    // استفاده از آخرین شهر مقصد (آخرین مقصد)
-                    const lastCity = tour.destinations[tour.destinations.length - 1];
-                    try {
-                        const routeRes = await fetch(
-                            getApiUrl(`freight-announcements/routes/search?city=${encodeURIComponent(lastCity)}`), 
-                            { headers }
-                        );
-                        
-                        if (routeRes.ok) {
-                            const routeData = await routeRes.json();
-                            console.log('🛣️ [handleRecordData] داده‌های مسیر دریافت شده:', {
-                                lastCity,
-                                routeDataCount: routeData?.length || 0,
-                                routeData
-                            });
-                            
-                            if (routeData && routeData.length > 0) {
-                                // استفاده از اولین route پیدا شده (بزرگترین round_trip_km)
-                                const route = routeData[0];
-                                approvedKm = route.roundTripKm || route.round_trip_km || tour.roundTripKm || 0;
-                                // استفاده از approved_allowance از dispatch_routes برای مدت ماموریت مصوب (بر حسب روز)
-                                // approved_allowance در dispatch_routes به معنای مدت ماموریت مصوب بر حسب روز است
-                                if (route.approvedAllowance !== undefined && route.approvedAllowance !== null) {
-                                    approvedDays = Number(route.approvedAllowance);
-                                } else if (route.approved_allowance !== undefined && route.approved_allowance !== null) {
-                                    approvedDays = Number(route.approved_allowance);
-                                } else if (route.expectedDays !== undefined && route.expectedDays !== null) {
-                                    approvedDays = Number(route.expectedDays);
-                                } else if (route.expected_days !== undefined && route.expected_days !== null) {
-                                    approvedDays = Number(route.expected_days);
-                                } else {
-                                    approvedDays = announcementData.approved_mission_days || 1;
-                                }
-                                console.log('✅ [handleRecordData] اطلاعات مصوب از dispatch_routes:', {
-                                    lastCity,
-                                    allDestinations: tour.destinations,
-                                    approvedKm,
-                                    approvedDays,
-                                    routeExpectedDays: route.expectedDays,
-                                    routeExpected_days: route.expected_days,
-                                    routeApprovedAllowance: route.approvedAllowance,
-                                    routeApproved_allowance: route.approved_allowance,
-                                    announcementApprovedDays: announcementData.approved_mission_days,
-                                    route
-                                });
-                            } else {
-                                console.warn('⚠️ [handleRecordData] هیچ مسیری برای شهر پیدا نشد:', lastCity);
-                            }
-                        } else {
-                            console.warn('⚠️ [handleRecordData] خطا در دریافت route:', routeRes.status, routeRes.statusText);
-                        }
-                    } catch (routeErr) {
-                        console.warn('⚠️ [handleRecordData] خطا در دریافت اطلاعات مسیر:', routeErr);
-                    }
+                const resolvedRoute = await resolveTourRouteMileageForTour({
+                    announcementId: tourId,
+                    destinations:
+                        tour.destinations && tour.destinations.length > 0
+                            ? tour.destinations
+                            : (announcementData.destinations || [])
+                                  .map((d: { city?: string }) => d.city || '')
+                                  .filter(Boolean),
+                });
+                if (resolvedRoute.approvedKm > 0) {
+                    approvedKm = resolvedRoute.approvedKm;
+                    approvedDays = resolvedRoute.approvedDays;
+                } else if (tour.roundTripKm) {
+                    approvedKm = tour.roundTripKm;
                 }
-                
-                // اگر از API اطلاعات مصوب نیامد، از announcementData استفاده کن
-                if (announcementData.approved_kilometers && approvedKm === 0) {
-                    approvedKm = announcementData.approved_kilometers;
+                if (approvedKm === 0 && announcementData.approved_kilometers) {
+                    approvedKm = Number(announcementData.approved_kilometers) || 0;
                 }
-                if (announcementData.approved_mission_days && approvedDays === 1) {
-                    approvedDays = announcementData.approved_mission_days;
+                if (approvedDays === 1 && announcementData.approved_mission_days) {
+                    approvedDays = Number(announcementData.approved_mission_days) || 1;
                 }
             } else {
                 console.warn('⚠️ [handleRecordData] خطا در دریافت اعلام بار:', announcementRes.status, announcementRes.statusText);
@@ -3658,15 +3647,32 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // دریافت userId از currentUser
             const userId = currentUser?.id || currentUser?.userId || '';
             console.log('💾 [SAVE_BEFORE] userId:', userId);
+
+            const resolvedForSave = await resolveTourRouteMileageForTour({
+                announcementId: savedInputDialogData.tourId,
+                destinations: savedInputDialogData.destinations,
+            });
+            const finalApprovedKm = Math.max(
+                Number(savedInputDialogData.approvedKilometers) || 0,
+                resolvedForSave.approvedKm || 0
+            );
+            const finalApprovedDays =
+                resolvedForSave.approvedKm > 0
+                    ? resolvedForSave.approvedDays
+                    : Number(savedInputDialogData.approvedMissionDays) || 0;
+            const finalExcessKm = Number(savedInputDialogData.excessKilometers) || 0;
+            const finalDepotKm = Number(savedInputDialogData.depotTotalMileage) || 0;
+            const finalTotalKm = finalApprovedKm + finalExcessKm + finalDepotKm;
             
             const requestBody = {
                 driverId: savedInputDialogData.driverId,
                 announcementId: savedInputDialogData.tourId,
                 billOfLadingNumber: savedInputDialogData.billOfLadingNumber,
                 billOfLadingCost: billOfLadingCostNum,
-                approvedKilometers: Number(savedInputDialogData.approvedKilometers) || 0,
-                excessKilometers: Number(savedInputDialogData.excessKilometers) || 0,
-                approvedMissionDays: Number(savedInputDialogData.approvedMissionDays) || 0,
+                approvedKilometers: finalApprovedKm,
+                totalKilometers: finalTotalKm,
+                excessKilometers: finalExcessKm,
+                approvedMissionDays: finalApprovedDays || Number(savedInputDialogData.approvedMissionDays) || 0,
                 excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
                 tollCost: tollCostNum,
                 loadingCost: 0,
@@ -3756,8 +3762,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
                             billOfLadingDate: billOfLadingDateValue,
                             calculationDate: savedInputDialogData.calculationDate || '',
-                            approvedKilometers: Number(savedInputDialogData.approvedKilometers) || 0,
-                            excessKilometers: Number(savedInputDialogData.excessKilometers) || 0,
+                            approvedKilometers: finalApprovedKm,
+                            total_kilometers: finalTotalKm,
+                            totalKilometers: finalTotalKm,
+                            excessKilometers: finalExcessKm,
                             approvedMissionDays: Number(savedInputDialogData.approvedMissionDays) || 0,
                             excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
                             tollCost: tollCostNum,
@@ -3805,10 +3813,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     // محاسبه مجدد مجموع هزینه و پیمایش
                     // استفاده از نام متفاوت برای جلوگیری از مشکل TDZ (Cannot access 's' before initialization)
                     const recalculatedTotalCost = updatedTours.reduce((sum, tour) => sum + (Number(tour.totalCost) || 0), 0);
-                    const recalculatedTotalKm = updatedTours.reduce((sum, tour) => {
-                        const tourTotalKm = (Number(tour.approvedKilometers) || 0) + (Number(tour.excessKilometers) || 0);
-                        return sum + tourTotalKm;
-                    }, 0);
+                    const recalculatedTotalKm = updatedTours.reduce(
+                        (sum, tour) => sum + getTourTotalKilometers(tour),
+                        0
+                    );
                     
                     return {
                         ...calc,
@@ -3842,9 +3850,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
                         billOfLadingDate: billOfLadingDateValue,
                         calculationDate: savedInputDialogData.calculationDate || '',
-                        approvedKilometers: Number(savedInputDialogData.approvedKilometers) || 0,
-                        excessKilometers: Number(savedInputDialogData.excessKilometers) || 0,
-                        approvedMissionDays: Number(savedInputDialogData.approvedMissionDays) || 0,
+                        approvedKilometers: finalApprovedKm,
+                        total_kilometers: finalTotalKm,
+                        totalKilometers: finalTotalKm,
+                        excessKilometers: finalExcessKm,
+                        approvedMissionDays: finalApprovedDays || Number(savedInputDialogData.approvedMissionDays) || 0,
                         excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
                         tollCost: tollCostNum,
                         loadingCost: loadingCostNum,
@@ -4026,6 +4036,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     title="ویرایش شماره حساب رانندگان"
                                 >
                                     ✏️ ویرایش شماره حساب
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setFinanceExceptionEditAnn(null);
+                                        setFinanceExceptionDialogOpen(true);
+                                    }}
+                                    className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs hover:bg-rose-700 font-medium whitespace-nowrap"
+                                    title="ثبت بار خارج از روال اعلام/تخصیص"
+                                >
+                                    + تور استثنایی
                                 </button>
                                 <button
                                     onClick={() => setCityManagementDialogOpen(true)}
@@ -4300,12 +4320,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 </span>
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-left font-medium">
-                                                {calc.tours.reduce((sum, tour) => {
-                                                    const approvedKm = Number(tour.approvedKilometers) || 0;
-                                                    const excessKm = Number(tour.excessKilometers) || 0;
-                                                    const depotKm = Number((tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0);
-                                                    return sum + approvedKm + excessKm + depotKm;
-                                                }, 0).toLocaleString('fa-IR')}
+                                                {calc.tours
+                                                    .reduce((sum, tour) => sum + getTourTotalKilometers(tour), 0)
+                                                    .toLocaleString('fa-IR')}
                                             </td>
                                             <td className="p-3 border-l border-slate-200 text-left font-semibold text-green-700">
                                                 {(() => {
@@ -5782,11 +5799,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         {selectedTourDetails.map((tour, tourIdx) => {
                                             const isExpanded = expandedTours.has(tour.announcementId);
                                             
-                                            // محاسبه پیمایش کل (مصوب + مازاد + دپو)
-                                            const approvedKm = Number(tour.approvedKilometers) || 0;
-                                            const excessKm = Number(tour.excessKilometers) || 0;
-                                            const depotKm = Number((tour as any).depotTotalMileage || (tour as any).depot_total_mileage || 0);
-                                            const totalMileage = approvedKm + excessKm + depotKm;
+                                            const totalMileage = getTourTotalKilometers(tour);
                                             
                                             // محاسبه مجموع ماموریت (مصوب + مازاد + دپو)
                                             const approvedMission = Number(tour.approvedMissionDays) || 0;
@@ -5879,7 +5892,23 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         <td className="p-3 border-l border-slate-200">{tour.vehicleType}</td>
                                                         <td className="p-3 border-l border-slate-200">{tour.vehicleCode || '-'} * {tour.plateNumber || '-'}</td>
                                                         <td className="p-3 border-l border-slate-200">{tour.lineType}</td>
-                                                        <td className="p-3 border-l border-slate-200">{Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')}</td>
+                                                        <td className="p-3 border-l border-slate-200">
+                                                            <div className="flex flex-col gap-1 items-start">
+                                                                {(tour as any).isFinanceException && (
+                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-semibold">
+                                                                        استثنایی
+                                                                    </span>
+                                                                )}
+                                                                <span>
+                                                                    {Array.isArray(tour.destinations)
+                                                                        ? tour.destinations.join('، ')
+                                                                        : tour.destinations || '-'}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-500">
+                                                                    {tour.announcementCode}
+                                                                </span>
+                                                            </div>
+                                                        </td>
                                                         <td className="p-3 border-l border-slate-200">
                                                             {tour.billOfLadingNumber || '-'}
                                                         </td>
@@ -5899,7 +5928,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             {totalCost > 0 ? totalCost.toLocaleString('fa-IR') : '-'}
                                                         </td>
                                                         <td className="p-3">
-                                                            <div className="flex gap-2 items-center justify-end">
+                                                            <div className="flex gap-2 items-center justify-end flex-wrap">
+                                                                {(tour as any).isFinanceException && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const ann = announcements.find(
+                                                                                (a: any) => a.id === tour.announcementId
+                                                                            );
+                                                                            if (ann) {
+                                                                                setFinanceExceptionEditAnn(ann as FreightAnnouncement);
+                                                                                setFinanceExceptionDialogOpen(true);
+                                                                            }
+                                                                        }}
+                                                                        className="px-2 py-1 rounded-md text-xs bg-rose-100 text-rose-800 hover:bg-rose-200"
+                                                                    >
+                                                                        ویرایش پایه
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     onClick={() => {
                                                                         setExpandedTours(prev => {
@@ -6610,6 +6656,21 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 </div>
             )}
             
+            <FinanceExceptionTourDialog
+                open={financeExceptionDialogOpen && isTransportFinance}
+                onClose={() => {
+                    setFinanceExceptionDialogOpen(false);
+                    setFinanceExceptionEditAnn(null);
+                }}
+                drivers={drivers}
+                vehicles={vehicles}
+                editAnnouncement={financeExceptionEditAnn}
+                onSaved={async () => {
+                    await fetchData();
+                    setRefreshTrigger((t) => t + 1);
+                }}
+            />
+
             {/* دیالوگ مدیریت شهرها */}
             {cityManagementDialogOpen && isTransportFinance && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">

@@ -5,6 +5,7 @@ import { formatJalali, formatPlateNumber } from '../utils/jalali';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { generateUUID } from '../utils/uuid';
+import IranianPlateInput, { DEFAULT_PLATE_LETTER } from './IranianPlateInput';
 
 interface VehicleAllocationManagementProps {
     vehicles: Vehicle[];
@@ -168,7 +169,7 @@ const VehicleAllocationManagement: React.FC<VehicleAllocationManagementProps> = 
     const [processType, setProcessType] = useState<'delivery' | 'return' | null>(null);
     
     const [searchType, setSearchType] = useState<'plate' | 'serial'>('plate');
-    const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+    const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: DEFAULT_PLATE_LETTER, part2: '', cityCode: '' });
     const [serialNumber, setSerialNumber] = useState('');
     const [foundVehicle, setFoundVehicle] = useState<Vehicle | null>(null);
     
@@ -239,7 +240,7 @@ const VehicleAllocationManagement: React.FC<VehicleAllocationManagementProps> = 
     const resetForm = () => {
         setProcessType(null);
         setSerialNumber('');
-        setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+        setPlate({ part1: '', letter: DEFAULT_PLATE_LETTER, part2: '', cityCode: '' });
         setSearchType('plate');
         setFoundVehicle(null);
         setDeliveryState({ receiverId: '', mileage: '', deliveryType: 'temporary', newLocation: '', isSigned: false });
@@ -354,13 +355,12 @@ const VehicleAllocationManagement: React.FC<VehicleAllocationManagementProps> = 
                             <div className="flex items-end gap-2">
                                 <div className="flex-grow">
                                     {searchType === 'plate' ? (
-                                        <div className="flex items-center gap-2 p-2 border rounded-lg bg-white">
-                                            <span className="font-mono text-slate-500 pl-2">ایران</span>
-                                            <input name="cityCode" value={plate.cityCode} onChange={handlePlateChange} placeholder="78" className="input-style w-12 text-center" maxLength={2} disabled={!!foundVehicle}/>
-                                            <span className="font-bold">-</span>
-                                            <input name="part2" value={plate.part2} onChange={handlePlateChange} placeholder="956" className="input-style w-16 text-center" maxLength={3} disabled={!!foundVehicle}/>
-                                            <select name="letter" value={plate.letter} onChange={handlePlateChange} className="input-style w-16 text-center" disabled={!!foundVehicle}>{persianAlphabet.map(l => <option key={l} value={l}>{l}</option>)}</select>
-                                            <input name="part1" value={plate.part1} onChange={handlePlateChange} placeholder="24" className="input-style w-12 text-center" maxLength={2} disabled={!!foundVehicle}/>
+                                        <div className="p-2 border rounded-lg bg-white">
+                                            <IranianPlateInput
+                                                value={plate}
+                                                onChange={setPlate}
+                                                disabled={!!foundVehicle}
+                                            />
                                         </div>
                                     ) : (
                                         <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="شماره بدنه یا سریال دستگاه را وارد کنید" className="input-style" disabled={!!foundVehicle}/>

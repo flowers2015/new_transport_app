@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Vehicle, Branch, PlateNumber, VehicleStatus, VehicleCategory } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import VehicleSpecsDialog from './VehicleSpecsDialog';
+import IranianPlateInput, { DEFAULT_PLATE_LETTER } from './IranianPlateInput';
 
 interface VehicleFormDialogProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
   showSpecsButton = false,
   externalSpec
 }) => {
-  const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+  const [plate, setPlate] = useState<PlateNumber>({ part1: '', letter: DEFAULT_PLATE_LETTER, part2: '', cityCode: '' });
   const [serialNumber, setSerialNumber] = useState('');
   const [vehicleCode, setVehicleCode] = useState('');
   const [isPlate, setIsPlate] = useState(true);
@@ -138,13 +139,13 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
       } else {
         setIsPlate(false);
         setSerialNumber(initialData.serialNumber || '');
-        setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+        setPlate({ part1: '', letter: DEFAULT_PLATE_LETTER, part2: '', cityCode: '' });
       }
       setVehicleCode(initialData.vehicleCode || '');
     } else {
       // Reset form for new vehicle
       setFormState(initialFormState);
-      setPlate({ part1: '', letter: 'الف', part2: '', cityCode: '' });
+      setPlate({ part1: '', letter: DEFAULT_PLATE_LETTER, part2: '', cityCode: '' });
       setSerialNumber('');
       setVehicleCode('');
       setIsPlate(true);
@@ -548,15 +549,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
                     <label><input type="radio" name="idType" checked={!isPlate} onChange={() => setIsPlate(false)} /> شماره بدنه/سریال</label>
                   </div>
                   {isPlate ? (
-                    <div className="flex items-center gap-1 p-2 border rounded-lg bg-slate-50 mt-2">
-                      <span className="font-mono text-slate-500 text-xs">ایران</span>
-                      <input name="cityCode" value={plate.cityCode} onChange={handlePlateChange} placeholder="78" className="input-style w-10 text-center text-xs" maxLength={2} required={isPlate} />
-                      <span className="font-bold text-xs">-</span>
-                      <input name="part2" value={plate.part2} onChange={handlePlateChange} placeholder="956" className="input-style w-12 text-center text-xs" maxLength={3} required={isPlate} />
-                      <select name="letter" value={plate.letter} onChange={handlePlateChange} className="input-style w-12 text-center text-xs">
-                        {persianAlphabet.map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                      <input name="part1" value={plate.part1} onChange={handlePlateChange} placeholder="24" className="input-style w-10 text-center text-xs" maxLength={2} required={isPlate} />
+                    <div className="p-2 border rounded-lg bg-slate-50 mt-2">
+                      <IranianPlateInput value={plate} onChange={setPlate} inputClassName="input-style text-xs" />
                     </div>
                   ) : (
                     <input name="serialNumber" value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="شماره بدنه یا سریال دستگاه" className="input-style w-full mt-2" required={!isPlate} />

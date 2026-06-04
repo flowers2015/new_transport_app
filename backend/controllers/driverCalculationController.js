@@ -1,6 +1,32 @@
 const pool = require('../db');
 const crypto = require('crypto');
 
+/** بیشترین کیلومتر رفت‌وبرگشت از شهرهای مقصد اعلام بار */
+async function resolveApprovedKmFromAnnouncement(announcementId) {
+  const destRows = await pool.query(
+    'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+    [announcementId]
+  );
+  let maxKm = 0;
+  for (const dest of destRows.rows) {
+    const city = (dest.city || '').trim();
+    if (!city) continue;
+    const routeRows = await pool.query(
+      `SELECT round_trip_km
+       FROM dispatch_routes
+       WHERE is_active = TRUE AND city ILIKE $1
+       ORDER BY round_trip_km DESC
+       LIMIT 1`,
+      [city]
+    );
+    if (routeRows.rows.length > 0) {
+      const km = Number(routeRows.rows[0].round_trip_km) || 0;
+      if (km > maxKm) maxKm = km;
+    }
+  }
+  return maxKm;
+}
+
 /**
  * ذخیره محاسبات اجرت پیمایش برای یک تور
  */
@@ -110,10 +136,28 @@ async function saveDriverCalculation(req, res) {
       return res.status(400).json({ message: 'driverId و announcementId الزامی است.' });
     }
 
+    let approvedKmToStore = parseNumber(approvedKilometers, 0);
+    try {
+      const routeKm = await resolveApprovedKmFromAnnouncement(announcementId);
+      if (routeKm > approvedKmToStore) {
+        console.log(
+          `📏 [saveDriverCalculation] پیمایش مصوب از مسیر: ${approvedKmToStore} → ${routeKm} (اعلام بار ${announcementId})`
+        );
+        approvedKmToStore = routeKm;
+      }
+    } catch (routeErr) {
+      console.warn('⚠️ [saveDriverCalculation] خطا در resolve پیمایش مسیر:', routeErr.message);
+    }
+
+    const excessKmToStore = parseNumber(excessKilometers, 0);
+    const depotKmToStore = parseNumber(depotTotalMileage, 0);
+    const totalKmToStore = approvedKmToStore + excessKmToStore + depotKmToStore;
+
     console.log('💾 [saveDriverCalculation] دریافت درخواست:', {
       driverId,
       announcementId,
-      approvedKilometers,
+      approvedKilometers: approvedKmToStore,
+      totalKilometers: totalKmToStore,
       approvedMissionDays,
       excessKilometers,
       excessMissionDays,
@@ -139,6 +183,7 @@ async function saveDriverCalculation(req, res) {
         ADD COLUMN IF NOT EXISTS depot_rows JSONB,
         ADD COLUMN IF NOT EXISTS commission_status VARCHAR(30) DEFAULT 'recorded',
         ADD COLUMN IF NOT EXISTS period_id VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS total_kilometers INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS created_by VARCHAR(255),
         ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255)
       `);
@@ -321,17 +366,18 @@ async function saveDriverCalculation(req, res) {
           depot_food_cost = $41,
           depot_mission_cost = $42,
           depot_rows = CASE WHEN $43::text = '' THEN NULL ELSE $43::jsonb END,
-          updated_by = NULLIF($44, ''),
+          total_kilometers = $44,
+          updated_by = NULLIF($45, ''),
           updated_at = NOW()
           -- is_paid حفظ می‌شود (اگر قبلاً TRUE بود، همچنان TRUE می‌ماند)
-        WHERE driver_id = $45 AND announcement_id = $46
+        WHERE driver_id = $46 AND announcement_id = $47
       `;
       
       const updateParams = [
         safeString(billOfLadingNumber),
         safeString(billOfLadingDate),
         parseNumber(billOfLadingCost, 0),
-        approvedKilometers !== undefined ? approvedKilometers : null,
+        approvedKmToStore > 0 ? approvedKmToStore : null,
         excessKilometers || 0,
         approvedMissionDays !== undefined ? approvedMissionDays : null,
         excessMissionDays || 0,
@@ -371,6 +417,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
         (depotRows ? JSON.stringify(depotRows) : ''),
+        totalKmToStore,
         safeString(userId),
         driverId,
         announcementId,
@@ -570,7 +617,7 @@ async function saveDriverCalculation(req, res) {
           food_cost, fuel_cost, tour_cost, total_cost,
           notes, queue_type, calculation_date, vehicle_code, vehicle_plate, destinations, multi_unload_count, advance_payment, 
           depot_total_mileage, depot_shipment_count, depot_cargo_handling_cost, depot_mission_days, depot_kilometer_rate, depot_food_cost, depot_mission_cost, depot_rows,
-          created_by, updated_by
+          total_kilometers, created_by, updated_by
         ) VALUES (
           $1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8, $9, $10, 
           $11, $12, $13, $14, $15, $16, $17, $18, $19, 
@@ -578,7 +625,7 @@ async function saveDriverCalculation(req, res) {
           $28, $29, $30, $31, 
           NULLIF($32, ''), NULLIF($33, ''), NULLIF($34, ''), NULLIF($35, ''), NULLIF($36, ''), NULLIF($37, ''), $38, $39, 
           $40, $41, $42, $43, $44, $45, $46, CASE WHEN $47::text = '' THEN NULL ELSE $47::jsonb END,
-          NULLIF($48, ''), NULLIF($49, '')
+          $48, NULLIF($49, ''), NULLIF($50, '')
         )
       `;
       
@@ -589,7 +636,7 @@ async function saveDriverCalculation(req, res) {
         safeString(billOfLadingNumber),
         safeString(billOfLadingDate),
         parseNumber(billOfLadingCost, 0),
-        approvedKilometers !== undefined ? approvedKilometers : null,
+        approvedKmToStore > 0 ? approvedKmToStore : null,
         excessKilometers || 0,
         approvedMissionDays !== undefined ? approvedMissionDays : null,
         excessMissionDays || 0,
@@ -630,6 +677,7 @@ async function saveDriverCalculation(req, res) {
         parseNumber(depotFoodCost, 0),
         parseNumber(depotMissionCost, 0),
         depotRows ? JSON.stringify(depotRows) : '',
+        totalKmToStore,
         safeString(userId), // created_by
         safeString(userId), // updated_by
       ];

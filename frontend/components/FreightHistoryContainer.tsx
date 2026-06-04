@@ -3,6 +3,7 @@ import FreightHistory from './FreightHistory';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
 import { gregorianToJalali } from '../utils/jalali';
 import { getApiUrl } from '../utils/apiConfig';
+import { pickAssignmentFieldsFromApi } from '../utils/freightDisplay';
 
 const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -111,11 +112,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                     cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
                     vehicleType: a.vehicle_type || a.vehicleType || '',
                     notes: a.notes,
-                    assignmentType: a.assignment_type || a.assignmentType,
-                    assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
-                    assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
-                    totalFreightCost: a.total_freight_cost ?? a.totalFreightCost,
-                    billOfLadingNumber: a.bill_of_lading_number ?? a.billOfLadingNumber,
+                    ...pickAssignmentFieldsFromApi(a),
                     originCity: a.origin_city || a.originCity,
                     brand: a.brand,
                     representativeType: a.representative_type || a.representativeType,

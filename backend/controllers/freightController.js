@@ -147,15 +147,31 @@ async function getFreightAnnouncements(req, res) {
         ALTER TABLE freight_announcements 
         ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
       `);
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS awaiting_bill_of_lading_at TIMESTAMPTZ
+      `);
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS announcement_source VARCHAR(50) DEFAULT 'standard'
+      `);
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS exception_reason TEXT
+      `);
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS finance_exception_metadata_locked BOOLEAN DEFAULT FALSE
+      `);
     } catch (alterError) {
       // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
-      console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment_finalized_at column exists:', alterError.message);
+      console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment/finalize columns exist:', alterError.message);
     }
     
     // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
     // ChangeRequested باید نمایش داده شود تا planner بتواند آن را ببیند و تأیید/رد کند
     // اگر includeFinalized=true باشد، Finalized و InTransit را هم شامل می‌کند (برای Freight Finance)
-    const { includeLeftover, includeFinalized } = req.query;
+    const { includeLeftover, includeFinalized, includeFinanceExceptions } = req.query;
     
     let whereClause = "WHERE fa.status NOT IN (";
     if (includeFinalized === 'true') {
@@ -170,7 +186,13 @@ async function getFreightAnnouncements(req, res) {
     }
     whereClause += ")";
     
-    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, includeFinalized=${includeFinalized}, whereClause=${whereClause}`);
+    // تور استثنایی مالی: در کارتابل ترابری/برنامه‌ریزی مخفی؛ در مالی ترابری (includeFinalized) نمایش داده شود
+    let financeExceptionFilter = '';
+    if (includeFinalized !== 'true' && includeFinanceExceptions !== 'true') {
+      financeExceptionFilter = ` AND COALESCE(fa.announcement_source, 'standard') <> 'finance_exception'`;
+    }
+
+    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, includeFinalized=${includeFinalized}, includeFinanceExceptions=${includeFinanceExceptions}, whereClause=${whereClause}`);
     
     // Get user role and ID for filtering
     const userRole = req.user?.role || req.user?.userRole;
@@ -246,6 +268,8 @@ async function getFreightAnnouncements(req, res) {
         u_creator.username as creator_username,
         -- اگر admin مقدار صریح set کرده، از آن استفاده کن، در غیر این صورت از JOIN
         COALESCE(fa.assigned_driver_name, d.name, pd.name) as assigned_driver_name,
+        COALESCE(fa.assigned_driver_name, d.name, pd.name) as resolved_driver_name,
+        COALESCE(d.mobile, pd.mobile) as resolved_driver_contact,
         COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
         COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
         COALESCE(fa.assigned_vehicle_brand, v.brand) as assigned_vehicle_brand,
@@ -277,7 +301,7 @@ async function getFreightAnnouncements(req, res) {
         ORDER BY created_at DESC
         LIMIT 1
       ) da ON true
-      ${whereClause}${userFilter}${branchCityFilter}
+      ${whereClause}${userFilter}${branchCityFilter}${financeExceptionFilter}
       ORDER BY fa.id, fa.created_at DESC
     `);
     
@@ -413,27 +437,37 @@ async function getFreightAnnouncementById(req, res) {
       announcement.delivery_date = normalizeJalaliDate(announcement.delivery_date);
     }
     
-    // دریافت مقاصد برای گرفتن اطلاعات مصوب از dispatch_routes
+    // پیمایش مصوب = بیشترین round_trip_km بین همه شهرهای مقصد (نه فقط اولین مقصد)
     const destRows = await pool.query(
-      'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 1',
+      'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
       [id]
     );
-    
+
     if (destRows.rows.length > 0) {
-      const mainCity = destRows.rows[0].city;
-      // دریافت اطلاعات مصوب از dispatch_routes
-      const routeRows = await pool.query(
-        `SELECT round_trip_km, expected_days 
-         FROM dispatch_routes 
-         WHERE city = $1 
-         ORDER BY round_trip_km DESC 
-         LIMIT 1`,
-        [mainCity]
-      );
-      
-      if (routeRows.rows.length > 0) {
-        announcement.approved_kilometers = routeRows.rows[0].round_trip_km || null;
-        announcement.approved_mission_days = routeRows.rows[0].expected_days || null;
+      let maxKm = 0;
+      let maxDays = null;
+      for (const dest of destRows.rows) {
+        const city = (dest.city || '').trim();
+        if (!city) continue;
+        const routeRows = await pool.query(
+          `SELECT round_trip_km, expected_days
+           FROM dispatch_routes
+           WHERE is_active = TRUE AND city ILIKE $1
+           ORDER BY round_trip_km DESC
+           LIMIT 1`,
+          [city]
+        );
+        if (routeRows.rows.length > 0) {
+          const km = Number(routeRows.rows[0].round_trip_km) || 0;
+          if (km > maxKm) {
+            maxKm = km;
+            maxDays = routeRows.rows[0].expected_days ?? null;
+          }
+        }
+      }
+      if (maxKm > 0) {
+        announcement.approved_kilometers = maxKm;
+        announcement.approved_mission_days = maxDays;
       }
     }
     
@@ -1496,6 +1530,24 @@ async function rejectAnnouncement(req, res) {
   }
 }
 
+/** کد ملی یکتا برای ثبت سریع (فرم ساده) */
+async function generateUniquePersonalNationalId(client, mobile) {
+  const digits = String(mobile || '').replace(/\D/g, '');
+  let candidate =
+    digits.length >= 10
+      ? digits.slice(0, 10)
+      : `9${Date.now().toString().slice(-9)}`;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const exists = await client.query(
+      'SELECT 1 FROM personal_drivers WHERE national_id = $1',
+      [candidate]
+    );
+    if (exists.rows.length === 0) return candidate;
+    candidate = `${digits.slice(0, 6) || '9'}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+  }
+  return `9${Date.now()}`;
+}
+
 // Helper function for personal driver and vehicle assignment
 async function assignPersonalDriverAndVehicle(req, res) {
   const { id: announcementId } = req.params;
@@ -1510,8 +1562,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
     destinations,
     totalFreightCost,
     billOfLadingNumber,
-    notes
+    notes,
+    assignmentFormMode,
   } = req.body;
+  const formMode = assignmentFormMode === 'detailed' ? 'detailed' : 'simple';
   const userId = req.user?.userId || req.user?.id;
   // ساخت userName به فرمت "username - name - role"
   // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
@@ -1585,9 +1639,15 @@ async function assignPersonalDriverAndVehicle(req, res) {
     return 'کاربر';
   })();
 
-  if (!nationalId || !driverName || !driverContact || !driverSmartId || !vehicleType || !vehiclePlate || !truckSmartId) {
-    return res.status(400).json({ 
-      message: 'کد ملی، نام راننده، شماره تماس، هوشمند راننده، نوع خودرو، پلاک خودرو و هوشمند کامیون الزامی است.' 
+  if (!driverName || !driverContact || !vehicleType || !vehiclePlate) {
+    return res.status(400).json({
+      message: 'نام راننده، شماره تماس، نوع خودرو و پلاک خودرو الزامی است.',
+    });
+  }
+
+  if (formMode === 'detailed' && (!nationalId || !driverSmartId || !truckSmartId)) {
+    return res.status(400).json({
+      message: 'در فرم تفصیلی، کد ملی، هوشمند راننده و هوشمند کامیون الزامی است.',
     });
   }
 
@@ -1627,27 +1687,65 @@ async function assignPersonalDriverAndVehicle(req, res) {
     }
     
     const [, platePart1, plateLetter, platePart2, plateCityCode] = plateMatch;
+
+    let effectiveNationalId = (nationalId || '').trim();
+    let effectiveDriverSmartId = (driverSmartId || '').trim();
+    let effectiveTruckSmartId = (truckSmartId || '').trim();
+
+    if (formMode === 'simple') {
+      const driverByMobile = await client.query(
+        'SELECT id, national_id, driver_smart_id FROM personal_drivers WHERE mobile = $1 LIMIT 1',
+        [driverContact]
+      );
+      if (driverByMobile.rows.length > 0) {
+        effectiveNationalId = driverByMobile.rows[0].national_id;
+        if (!effectiveDriverSmartId && driverByMobile.rows[0].driver_smart_id) {
+          effectiveDriverSmartId = driverByMobile.rows[0].driver_smart_id;
+        }
+      } else if (!effectiveNationalId) {
+        effectiveNationalId = await generateUniquePersonalNationalId(client, driverContact);
+      }
+      if (!effectiveDriverSmartId) {
+        effectiveDriverSmartId = `DRV-${Date.now()}`;
+      }
+
+      const vehicleByPlate = await client.query(
+        `SELECT id, truck_smart_id FROM personal_vehicles
+         WHERE plate_part1 = $1 AND plate_letter = $2 AND plate_part2 = $3 AND plate_city_code = $4
+         LIMIT 1`,
+        [platePart1, plateLetter, platePart2, plateCityCode]
+      );
+      if (vehicleByPlate.rows.length > 0) {
+        effectiveTruckSmartId = vehicleByPlate.rows[0].truck_smart_id;
+      } else if (!effectiveTruckSmartId) {
+        effectiveTruckSmartId = `TRK-${platePart1}${platePart2}${plateCityCode}-${Date.now()}`.slice(0, 64);
+      }
+    } else {
+      effectiveNationalId = effectiveNationalId || nationalId;
+      effectiveDriverSmartId = effectiveDriverSmartId || driverSmartId;
+      effectiveTruckSmartId = effectiveTruckSmartId || truckSmartId;
+    }
     
     // Check if personal driver exists, if not create
     let personalDriverId;
     const existingDriver = await client.query(
       'SELECT id FROM personal_drivers WHERE national_id = $1',
-      [nationalId]
+      [effectiveNationalId]
     );
     
     if (existingDriver.rows.length > 0) {
       personalDriverId = existingDriver.rows[0].id;
       // Update driver info (only if driver_smart_id is different and not already used by another driver)
-      if (driverSmartId) {
+      if (effectiveDriverSmartId) {
         const existingSmartId = await client.query(
           'SELECT id FROM personal_drivers WHERE driver_smart_id = $1 AND id != $2',
-          [driverSmartId, personalDriverId]
+          [effectiveDriverSmartId, personalDriverId]
         );
         
         if (existingSmartId.rows.length === 0) {
           await client.query(
             'UPDATE personal_drivers SET name = $1, mobile = $2, driver_smart_id = $3, updated_at = NOW() WHERE id = $4',
-            [driverName, driverContact, driverSmartId, personalDriverId]
+            [driverName, driverContact, effectiveDriverSmartId, personalDriverId]
           );
         } else {
           // Keep existing driver_smart_id if new one is already used
@@ -1668,10 +1766,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
       personalDriverId = crypto.randomUUID();
       
       // Check if driver_smart_id is already used
-      if (driverSmartId) {
+      if (effectiveDriverSmartId) {
         const existingSmartId = await client.query(
           'SELECT id FROM personal_drivers WHERE driver_smart_id = $1',
-          [driverSmartId]
+          [effectiveDriverSmartId]
         );
         
         if (existingSmartId.rows.length > 0) {
@@ -1679,12 +1777,12 @@ async function assignPersonalDriverAndVehicle(req, res) {
           const newSmartId = `DRV-${Date.now()}`;
           await client.query(
             'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
-            [personalDriverId, nationalId, driverName, driverContact, newSmartId]
+            [personalDriverId, effectiveNationalId, driverName, driverContact, newSmartId]
           );
         } else {
           await client.query(
             'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
-            [personalDriverId, nationalId, driverName, driverContact, driverSmartId]
+            [personalDriverId, effectiveNationalId, driverName, driverContact, effectiveDriverSmartId]
           );
         }
       } else {
@@ -1692,7 +1790,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
         const newSmartId = `DRV-${Date.now()}`;
         await client.query(
           'INSERT INTO personal_drivers (id, national_id, name, mobile, driver_smart_id) VALUES ($1, $2, $3, $4, $5)',
-          [personalDriverId, nationalId, driverName, driverContact, newSmartId]
+          [personalDriverId, effectiveNationalId, driverName, driverContact, newSmartId]
         );
       }
     }
@@ -1701,7 +1799,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     let personalVehicleId;
     const existingVehicle = await client.query(
       'SELECT id FROM personal_vehicles WHERE truck_smart_id = $1',
-      [truckSmartId]
+      [effectiveTruckSmartId]
     );
     
     if (existingVehicle.rows.length > 0) {
@@ -1717,7 +1815,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
       personalVehicleId = crypto.randomUUID();
       await client.query(
         'INSERT INTO personal_vehicles (id, truck_smart_id, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_type) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [personalVehicleId, truckSmartId, platePart1, plateLetter, platePart2, plateCityCode, vehicleType]
+        [personalVehicleId, effectiveTruckSmartId, platePart1, plateLetter, platePart2, plateCityCode, vehicleType]
       );
     }
     
@@ -1737,6 +1835,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     // Update freight announcement
     const updateFields = ['status = $1', 'assigned_driver_id = $2', 'assigned_vehicle_id = $3', 'bill_of_lading_number = $4', 'total_freight_cost = $5', 'updated_at = NOW()'];
     const updateValues = ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, totalFreightCost || null];
+    // awaiting_bill_of_lading_at فقط با «اتمام تخصیص» موفق پاک می‌شود — ثبت بارنامه ردیف را از تب pending خارج نمی‌کند
     let paramIndex = 6;
     
     if (notes !== undefined) {
@@ -1971,11 +2070,29 @@ async function assignVehicleAndDriverInternal(req, res) {
 
     // کنترل تطابق نوع خودرو با اعلام بار
     if (announcementVehicleType && (announcementVehicleType === 'تریلی' || announcementVehicleType === 'مینی تریلی' || announcementVehicleType === 'ده چرخ')) {
-      // گرفتن vehicle_type خودرو
-      const vehicleCheck = await client.query(
-        'SELECT id, vehicle_type, current_vehicle_type, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_code FROM vehicles WHERE id = $1',
-        [vehicleId]
-      );
+      // نوع عملیاتی خودرو: current_vehicle_type یا type (جدول vehicles ستون vehicle_type ندارد)
+      let vehicleCheck;
+      try {
+        vehicleCheck = await client.query(
+          `SELECT id, current_vehicle_type, type, vehicle_category,
+                  plate_part1, plate_letter, plate_part2, plate_city_code,
+                  vehicle_code, serial_number
+           FROM vehicles WHERE id = $1`,
+          [vehicleId]
+        );
+      } catch (vehicleColErr) {
+        if (vehicleColErr.code === '42703') {
+          vehicleCheck = await client.query(
+            `SELECT id, type, vehicle_category,
+                    plate_part1, plate_letter, plate_part2, plate_city_code,
+                    serial_number
+             FROM vehicles WHERE id = $1`,
+            [vehicleId]
+          );
+        } else {
+          throw vehicleColErr;
+        }
+      }
       
       if (vehicleCheck.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -1983,13 +2100,16 @@ async function assignVehicleAndDriverInternal(req, res) {
       }
       
       const vehicle = vehicleCheck.rows[0];
-      const vehicleType = vehicle.current_vehicle_type || vehicle.vehicle_type;
+      const vehicleType =
+        vehicle.current_vehicle_type || vehicle.type || vehicle.vehicle_category || '';
+      const plateLabel =
+        vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2
+          ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}`
+          : vehicle.vehicle_code || vehicle.serial_number || 'این خودرو';
       
-      // اگر vehicle_type خالی است
+      // اگر نوع عملیاتی خودرو خالی است
       if (!vehicleType || vehicleType.trim() === '') {
-        const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
-          ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
-          : (vehicle.vehicle_code || 'این خودرو');
+        const plateInfo = plateLabel;
         await client.query('ROLLBACK');
         return res.status(400).json({ 
           message: `نوع خودرو برای ${plateInfo} تعریف نشده است. لطفاً به قسمت "مدیریت خودروها" بروید و نوع خودرو را تعریف کنید.` 
@@ -2000,23 +2120,17 @@ async function assignVehicleAndDriverInternal(req, res) {
       if (announcementVehicleType === 'تریلی' || announcementVehicleType === 'مینی تریلی') {
         // باید خودرو "کشنده" باشد
         if (vehicleType !== 'کشنده') {
-          const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
-            ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
-            : (vehicle.vehicle_code || 'این خودرو');
           await client.query('ROLLBACK');
           return res.status(400).json({ 
-            message: `این اعلام بار برای "${announcementVehicleType}" است، اما خودروی تخصیص داده شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "کشنده" تخصیص دهید.` 
+            message: `این اعلام بار برای "${announcementVehicleType}" است، اما خودروی تخصیص داده شده (${plateLabel}) از نوع "${vehicleType}" است. لطفاً یک خودروی "کشنده" تخصیص دهید.` 
           });
         }
       } else if (announcementVehicleType === 'ده چرخ') {
         // باید خودرو "ده چرخ" باشد
         if (vehicleType !== 'ده چرخ') {
-          const plateInfo = vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2 
-            ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}` 
-            : (vehicle.vehicle_code || 'این خودرو');
           await client.query('ROLLBACK');
           return res.status(400).json({ 
-            message: `این اعلام بار برای "ده چرخ" است، اما خودروی تخصیص داده شده (${plateInfo}) از نوع "${vehicleType}" است. لطفاً یک خودروی "ده چرخ" تخصیص دهید.` 
+            message: `این اعلام بار برای "ده چرخ" است، اما خودروی تخصیص داده شده (${plateLabel}) از نوع "${vehicleType}" است. لطفاً یک خودروی "ده چرخ" تخصیص دهید.` 
           });
         }
       }
@@ -2099,6 +2213,53 @@ async function assignVehicleAndDriverInternal(req, res) {
         updateFields.push(`notes = $${paramIndex++}`);
         updateValues.push(notes || null);
       }
+    }
+
+    // ذخیره نام/پلاک برای نمایش در جدول ترابری (بدون وابستگی به JOIN)
+    let assignmentDriverName = null;
+    let assignmentDriverMobile = null;
+    let assignmentVehiclePlate = null;
+    try {
+      const { rows: driverRows } = await client.query(
+        'SELECT name, mobile, employee_id FROM drivers WHERE id = $1',
+        [driverId]
+      );
+      const driverRow = driverRows[0];
+      assignmentDriverName = driverRow?.name || null;
+      assignmentDriverMobile = driverRow?.mobile || null;
+      if (driverRow?.name) {
+        updateFields.push(`assigned_driver_name = $${paramIndex++}`);
+        updateValues.push(driverRow.name);
+      }
+      if (driverRow?.employee_id) {
+        updateFields.push(`assigned_driver_employee_id = $${paramIndex++}`);
+        updateValues.push(driverRow.employee_id);
+      }
+      const { rows: vehicleRows } = await client.query(
+        'SELECT plate_part1, plate_letter, plate_part2, plate_city_code, model, brand FROM vehicles WHERE id = $1',
+        [vehicleId]
+      );
+      const vehicleRow = vehicleRows[0];
+      if (vehicleRow?.plate_part1 && vehicleRow?.plate_letter && vehicleRow?.plate_part2) {
+        const plateStr = `${vehicleRow.plate_part1}${vehicleRow.plate_letter}${vehicleRow.plate_part2}${
+          vehicleRow.plate_city_code ? `-${vehicleRow.plate_city_code}` : ''
+        }`;
+        updateFields.push(`vehicle_plate = $${paramIndex++}`);
+        updateValues.push(plateStr);
+        assignmentVehiclePlate = plateStr;
+      }
+      if (vehicleRow?.model) {
+        updateFields.push(`assigned_vehicle_model = $${paramIndex++}`);
+        updateValues.push(vehicleRow.model);
+      }
+      if (vehicleRow?.brand) {
+        updateFields.push(`assigned_vehicle_brand = $${paramIndex++}`);
+        updateValues.push(vehicleRow.brand);
+      }
+      updateFields.push(`assignment_type = $${paramIndex++}`);
+      updateValues.push('company');
+    } catch (snapshotError) {
+      console.warn('⚠️ [assignVehicleAndDriver] Could not save assignment snapshot fields:', snapshotError.message);
     }
     
     updateValues.push(announcementId);
@@ -2370,10 +2531,33 @@ async function assignVehicleAndDriverInternal(req, res) {
     // ارسال real-time notification
     try {
       const realtimeService = require('../services/realtimeService');
+      const { rows: notifyDriverRows } = await pool.query(
+        'SELECT name, mobile FROM drivers WHERE id = $1',
+        [driverId]
+      );
+      const { rows: notifyVehicleRows } = await pool.query(
+        'SELECT plate_part1, plate_letter, plate_part2, plate_city_code FROM vehicles WHERE id = $1',
+        [vehicleId]
+      );
+      const nd = notifyDriverRows[0];
+      const nv = notifyVehicleRows[0];
+      let notifyPlate = null;
+      if (nv?.plate_part1 && nv?.plate_letter && nv?.plate_part2) {
+        notifyPlate = `${nv.plate_part1}${nv.plate_letter}${nv.plate_part2}${nv.plate_city_code ? `-${nv.plate_city_code}` : ''}`;
+      }
       realtimeService.notifyAnnouncementUpdate(
         announcementId,
         'assigned',
-        { status: newStatus, assignmentType, vehicleId, driverId },
+        {
+          status: newStatus,
+          assignmentType: 'company',
+          assigned_driver_id: driverId,
+          assigned_vehicle_id: vehicleId,
+          assigned_driver_name: nd?.name || null,
+          resolved_driver_contact: nd?.mobile || null,
+          vehicle_plate: notifyPlate,
+          bill_of_lading_number: billOfLadingNumber || null,
+        },
         userId
       );
     } catch (realtimeError) {
@@ -2381,7 +2565,20 @@ async function assignVehicleAndDriverInternal(req, res) {
       // خطا را ignore می‌کنیم تا assignment موفق باشد
     }
     
-    return res.status(200).json({ message: 'Assignment successful.' });
+    return res.status(200).json({
+      message: 'Assignment successful.',
+      announcement: {
+        id: announcementId,
+        status: newStatus,
+        assignment_type: 'company',
+        assigned_driver_id: driverId,
+        assigned_vehicle_id: vehicleId,
+        assigned_driver_name: assignmentDriverName,
+        resolved_driver_contact: assignmentDriverMobile,
+        vehicle_plate: assignmentVehiclePlate,
+        bill_of_lading_number: billOfLadingNumber || null,
+      },
+    });
   } catch (e) {
     console.error('❌ [assignVehicleAndDriver] ========== ASSIGNMENT FAILED ==========');
     console.error('❌ [assignVehicleAndDriver] Error message:', e.message);
@@ -3027,10 +3224,13 @@ async function finalizeAssignments(req, res) {
         ALTER TABLE freight_announcements 
         ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
       `);
-      console.log('✅ [finalizeAssignments] Column assignment_finalized_at exists or was added to freight_announcements');
+      await client.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS awaiting_bill_of_lading_at TIMESTAMPTZ
+      `);
+      console.log('✅ [finalizeAssignments] Finalize columns exist or were added on freight_announcements');
     } catch (alterError) {
-      // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
-      console.warn('⚠️ [finalizeAssignments] Could not ensure assignment_finalized_at column exists:', alterError.message);
+      console.warn('⚠️ [finalizeAssignments] Could not ensure finalize columns exist:', alterError.message);
     }
     
     const finalizedIds = [];
@@ -3126,6 +3326,20 @@ async function finalizeAssignments(req, res) {
           console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) missing bill_of_lading_number - SKIPPING finalization`);
           console.log(`   Vehicle ID: ${ann.assigned_vehicle_id}, Driver ID: ${ann.assigned_driver_id}, Line Type: ${ann.line_type}`);
           missingBillOfLadingIds.push(annId);
+          try {
+            await client.query(`
+              ALTER TABLE freight_announcements 
+              ADD COLUMN IF NOT EXISTS awaiting_bill_of_lading_at TIMESTAMPTZ
+            `);
+            await client.query(
+              `UPDATE freight_announcements 
+               SET awaiting_bill_of_lading_at = NOW(), updated_at = NOW() 
+               WHERE id = $1`,
+              [annId]
+            );
+          } catch (awaitingErr) {
+            console.warn(`⚠️ [finalizeAssignments] Could not set awaiting_bill_of_lading_at for ${annId}:`, awaitingErr.message);
+          }
           continue; // این اعلام بار را finalize نکن
         } else {
           console.log(`✅ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) has bill_of_lading_number: ${billOfLadingNumber}`);
@@ -3175,7 +3389,7 @@ async function finalizeAssignments(req, res) {
             try {
               await client.query(
                 `UPDATE freight_announcements 
-                 SET status = $1, assignment_finalized_at = NOW(), updated_at = NOW() 
+                 SET status = $1, assignment_finalized_at = NOW(), awaiting_bill_of_lading_at = NULL, updated_at = NOW() 
                  WHERE id = $2`,
                 [newStatus, annId]
               );
@@ -3190,7 +3404,7 @@ async function finalizeAssignments(req, res) {
                 // دوباره تلاش کن
                 await client.query(
                   `UPDATE freight_announcements 
-                   SET status = $1, assignment_finalized_at = NOW(), updated_at = NOW() 
+                   SET status = $1, assignment_finalized_at = NOW(), awaiting_bill_of_lading_at = NULL, updated_at = NOW() 
                    WHERE id = $2`,
                   [newStatus, annId]
                 );
@@ -3374,6 +3588,7 @@ async function finalizeAssignments(req, res) {
               status: 'Assigned', // وضعیت را تغییر نمی‌دهیم
               lineType,
               error: 'missing_bill_of_lading',
+              awaitingBillOfLadingAt: new Date().toISOString(),
               message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`
             },
             currentUserId
@@ -5979,6 +6194,464 @@ async function getAssignmentStatistics(req, res) {
   }
 }
 
+const FINANCE_EXCEPTION_TRANSPORT_ROLES = [
+  'transport_finance',
+  'مالی ترابری',
+  'TransportationFinance',
+  'admin',
+  'ادمین',
+];
+
+async function ensureFinanceExceptionColumns(clientOrPool = pool) {
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS announcement_source VARCHAR(50) DEFAULT 'standard'
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS exception_reason TEXT
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS finance_exception_metadata_locked BOOLEAN DEFAULT FALSE
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS bill_of_lading_date VARCHAR(20)
+  `);
+}
+
+function normalizeLineTypeForFinanceException(lineType) {
+  const map = {
+    IceCream: 'بستنی',
+    Dairy: 'پاستوریزه',
+    Ambient: 'لبنیات-فروتلند',
+    بستنی: 'بستنی',
+    پاستوریزه: 'پاستوریزه',
+    'لبنیات-فروتلند': 'لبنیات-فروتلند',
+  };
+  return map[lineType] || lineType;
+}
+
+const FINANCE_EXCEPTION_VEHICLE_TYPES = [
+  'تریلی',
+  'مینی تریلی',
+  'ده چرخ',
+  'تک',
+  'مینی تک',
+  'خاور',
+];
+
+function resolveFinanceExceptionVehicleType(userVehicleType) {
+  const v = (userVehicleType || '').toString().trim();
+  if (!v) return null;
+  if (!FINANCE_EXCEPTION_VEHICLE_TYPES.includes(v)) {
+    const err = new Error(
+      `نوع خودرو نامعتبر است. یکی از این موارد را انتخاب کنید: ${FINANCE_EXCEPTION_VEHICLE_TYPES.join('، ')}`
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  return v;
+}
+
+function defaultLoadingDateJalali() {
+  return formatJalali(new Date());
+}
+
+function destinationRowHasData(dest) {
+  if (!dest || typeof dest !== 'object') return false;
+  const city = (dest.city || '').toString().trim();
+  const rep = (dest.representativeName || dest.representative_name || '').toString().trim();
+  const tonnage = dest.tonnage != null && dest.tonnage !== '';
+  const unload = (dest.unloadTime || dest.unload_time || '').toString().trim();
+  const freight = dest.freightCost != null && dest.freightCost !== '' && Number(dest.freightCost) > 0;
+  return Boolean(city || rep || tonnage || unload || freight);
+}
+
+async function insertFinanceExceptionDestinations(client, announcementId, destinations) {
+  if (!Array.isArray(destinations)) return;
+  for (const dest of destinations) {
+    if (!destinationRowHasData(dest)) continue;
+    const destId = crypto.randomUUID();
+    const city = (dest.city || '').toString().trim() || '—';
+    await client.query(
+      `INSERT INTO freight_destinations (
+        id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [
+        destId,
+        announcementId,
+        city,
+        (dest.representativeName || dest.representative_name || '').toString().trim() || null,
+        dest.tonnage != null && dest.tonnage !== '' ? Number(dest.tonnage) : null,
+        dest.freightCost != null && dest.freightCost !== '' ? Number(dest.freightCost) : null,
+        (dest.unloadTime || dest.unload_time || '').toString().trim() || null,
+      ]
+    );
+  }
+}
+
+async function assertCompanyDriverAndVehicle(client, driverId, vehicleId) {
+  const personalDriver = await client.query('SELECT id FROM personal_drivers WHERE id = $1 LIMIT 1', [driverId]);
+  if (personalDriver.rowCount > 0) {
+    const err = new Error('فقط راننده شرکتی مجاز است.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const driverRes = await client.query('SELECT id, name, employee_id FROM drivers WHERE id = $1', [driverId]);
+  if (!driverRes.rowCount) {
+    const err = new Error('راننده شرکتی یافت نشد.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const personalVehicle = await client.query('SELECT id FROM personal_vehicles WHERE id = $1 LIMIT 1', [vehicleId]);
+  if (personalVehicle.rowCount > 0) {
+    const err = new Error('فقط خودرو شرکتی مجاز است.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const vehicleRes = await client.query(
+    `SELECT id, model, brand, type, current_vehicle_type,
+            plate_part1, plate_letter, plate_part2, plate_city_code
+     FROM vehicles WHERE id = $1`,
+    [vehicleId]
+  );
+  if (!vehicleRes.rowCount) {
+    const err = new Error('خودرو شرکتی یافت نشد.');
+    err.statusCode = 400;
+    throw err;
+  }
+  return { driver: driverRes.rows[0], vehicle: vehicleRes.rows[0] };
+}
+
+/**
+ * ثبت تور استثنایی توسط مالی ترابری (حداقل اطلاعات — بقیه اختیاری)
+ * POST /api/v1/freight-announcements/finance-exception
+ */
+async function createFinanceExceptionTour(req, res) {
+  const userId = req.user?.userId || req.user?.id;
+  const {
+    lineType,
+    driverId,
+    vehicleId,
+    vehicleType,
+    loadingDate,
+    billOfLadingNumber,
+    billOfLadingDate,
+    exceptionReason,
+    notes,
+    destinations = [],
+  } = req.body || {};
+
+  if (!lineType || !driverId || !vehicleId) {
+    return res.status(400).json({ message: 'خط، راننده و خودرو الزامی است.' });
+  }
+
+  let resolvedVehicleType;
+  try {
+    resolvedVehicleType = resolveFinanceExceptionVehicleType(vehicleType);
+  } catch (e) {
+    return res.status(e.statusCode || 400).json({ message: e.message });
+  }
+  if (!resolvedVehicleType) {
+    return res.status(400).json({
+      message: 'نوع خودرو (مبنای محاسبه) الزامی است — تریلی، مینی تریلی، ده چرخ و ...',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await ensureFinanceExceptionColumns(client);
+    await client.query('BEGIN');
+
+    const { driver, vehicle } = await assertCompanyDriverAndVehicle(client, driverId, vehicleId);
+    const persianLineType = normalizeLineTypeForFinanceException(lineType);
+    const id = crypto.randomUUID();
+    const announcementCode = `EXC-${Date.now()}`;
+    const loadingDateStored = loadingDate
+      ? ensureJalaliDateFormat(normalizeJalaliDate(loadingDate))
+      : defaultLoadingDateJalali();
+
+    const plate =
+      vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2
+        ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}-${vehicle.plate_city_code || ''}`
+        : null;
+
+    const totalFreightCost = Array.isArray(destinations)
+      ? destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0)
+      : 0;
+
+    await client.query(
+      `INSERT INTO freight_announcements (
+        id, announcement_code, loading_date, line_type, status, cargo_value, vehicle_type,
+        assignment_type, assigned_driver_id, assigned_vehicle_id, assigned_driver_name,
+        vehicle_plate, bill_of_lading_number, total_freight_cost, notes,
+        announcement_source, exception_reason, finance_exception_metadata_locked,
+        created_by_user_id, assignment_finalized_at, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, 'Finalized', 0, $5,
+        'company', $6, $7, $8,
+        $9, $10, $11, $12,
+        'finance_exception', $13, FALSE,
+        $14, NOW(), NOW(), NOW()
+      )`,
+      [
+        id,
+        announcementCode,
+        loadingDateStored,
+        persianLineType,
+        resolvedVehicleType,
+        driverId,
+        vehicleId,
+        driver.name,
+        plate,
+        billOfLadingNumber ? String(billOfLadingNumber).trim() : null,
+        totalFreightCost > 0 ? totalFreightCost : null,
+        notes || null,
+        exceptionReason ? String(exceptionReason).trim() : null,
+        userId || null,
+      ]
+    );
+
+    await insertFinanceExceptionDestinations(client, id, destinations);
+
+    await logFreightHistory({
+      announcementId: id,
+      userId: userId || null,
+      userName: req.user?.username || 'مالی ترابری',
+      action: 'FINANCE_EXCEPTION_CREATED',
+      oldStatus: null,
+      newStatus: 'Finalized',
+      description: `ثبت تور استثنایی مالی (${announcementCode})`,
+      ipAddress: req.ip,
+      client,
+    });
+
+    if (billOfLadingDate && String(billOfLadingDate).trim()) {
+      await client.query(
+        `UPDATE freight_announcements SET bill_of_lading_date = $1 WHERE id = $2`,
+        [ensureJalaliDateFormat(String(billOfLadingDate).trim()), id]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const destRows = await pool.query(
+      'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    const annRows = await pool.query('SELECT * FROM freight_announcements WHERE id = $1', [id]);
+    const announcement = annRows.rows[0];
+    announcement.destinations = destRows.rows;
+    if (announcement.loading_date) {
+      announcement.loading_date = normalizeJalaliDate(announcement.loading_date);
+    }
+
+    return res.status(201).json({
+      message: 'تور استثنایی ثبت شد. اکنون می‌توانید «ثبت اطلاعات» محاسباتی را انجام دهید.',
+      announcement,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [createFinanceExceptionTour]', error);
+    return res.status(error.statusCode || 500).json({
+      message: error.message || 'خطا در ثبت تور استثنایی.',
+    });
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * ویرایش متادیتای تور استثنایی (تا قبل از قفل نهایی‌سازی)
+ * PUT /api/v1/freight-announcements/:id/finance-exception
+ */
+async function updateFinanceExceptionTour(req, res) {
+  const { id } = req.params;
+  const userId = req.user?.userId || req.user?.id;
+  const body = req.body || {};
+
+  const client = await pool.connect();
+  try {
+    await ensureFinanceExceptionColumns(client);
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      `SELECT * FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
+    if (!existing.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    const ann = existing.rows[0];
+    if (ann.announcement_source !== 'finance_exception') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'این رکورد تور استثنایی مالی نیست.' });
+    }
+    if (ann.finance_exception_metadata_locked) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'اطلاعات این تور نهایی شده و قابل ویرایش نیست.' });
+    }
+
+    const driverId = body.driverId || ann.assigned_driver_id;
+    const vehicleId = body.vehicleId || ann.assigned_vehicle_id;
+    const { driver, vehicle } = await assertCompanyDriverAndVehicle(client, driverId, vehicleId);
+
+    const persianLineType = body.lineType
+      ? normalizeLineTypeForFinanceException(body.lineType)
+      : ann.line_type;
+    const loadingDateStored = body.loadingDate
+      ? ensureJalaliDateFormat(normalizeJalaliDate(body.loadingDate))
+      : ann.loading_date;
+    let resolvedVehicleType = ann.vehicle_type;
+    if (body.vehicleType !== undefined && String(body.vehicleType).trim()) {
+      resolvedVehicleType = resolveFinanceExceptionVehicleType(body.vehicleType);
+    } else if (body.vehicleType !== undefined && !String(body.vehicleType).trim()) {
+      const err = new Error('نوع خودرو (مبنای محاسبه) نمی‌تواند خالی باشد.');
+      err.statusCode = 400;
+      throw err;
+    }
+    const plate =
+      vehicle.plate_part1 && vehicle.plate_letter && vehicle.plate_part2
+        ? `${vehicle.plate_part1}${vehicle.plate_letter}${vehicle.plate_part2}-${vehicle.plate_city_code || ''}`
+        : ann.vehicle_plate;
+
+    let totalFreightCost = ann.total_freight_cost;
+    if (Array.isArray(body.destinations)) {
+      totalFreightCost = body.destinations.reduce((sum, d) => sum + (Number(d.freightCost) || 0), 0);
+    }
+
+    await client.query(
+      `UPDATE freight_announcements SET
+        line_type = $1,
+        loading_date = $2,
+        vehicle_type = $3,
+        assigned_driver_id = $4,
+        assigned_vehicle_id = $5,
+        assigned_driver_name = $6,
+        vehicle_plate = $7,
+        bill_of_lading_number = COALESCE($8, bill_of_lading_number),
+        total_freight_cost = $9,
+        notes = COALESCE($10, notes),
+        exception_reason = $11,
+        updated_at = NOW()
+       WHERE id = $12`,
+      [
+        persianLineType,
+        loadingDateStored,
+        resolvedVehicleType,
+        driverId,
+        vehicleId,
+        driver.name,
+        plate,
+        body.billOfLadingNumber != null ? String(body.billOfLadingNumber).trim() || null : ann.bill_of_lading_number,
+        totalFreightCost > 0 ? totalFreightCost : null,
+        body.notes !== undefined ? body.notes : ann.notes,
+        body.exceptionReason !== undefined
+          ? (body.exceptionReason ? String(body.exceptionReason).trim() : null)
+          : ann.exception_reason,
+        id,
+      ]
+    );
+
+    if (Array.isArray(body.destinations)) {
+      await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);
+      await insertFinanceExceptionDestinations(client, id, body.destinations);
+    }
+
+    if (body.billOfLadingDate !== undefined && String(body.billOfLadingDate).trim()) {
+      await client.query(
+        `UPDATE freight_announcements SET bill_of_lading_date = $1 WHERE id = $2`,
+        [ensureJalaliDateFormat(String(body.billOfLadingDate).trim()), id]
+      );
+    }
+
+    await logFreightHistory({
+      announcementId: id,
+      userId: userId || null,
+      userName: req.user?.username || 'مالی ترابری',
+      action: 'FINANCE_EXCEPTION_UPDATED',
+      oldStatus: ann.status,
+      newStatus: ann.status,
+      description: 'ویرایش تور استثنایی مالی',
+      ipAddress: req.ip,
+      client,
+    });
+
+    await client.query('COMMIT');
+
+    const destRows = await pool.query(
+      'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    const annRows = await pool.query('SELECT * FROM freight_announcements WHERE id = $1', [id]);
+    const announcement = annRows.rows[0];
+    announcement.destinations = destRows.rows;
+    if (announcement.loading_date) {
+      announcement.loading_date = normalizeJalaliDate(announcement.loading_date);
+    }
+    return res.json({ message: 'تور استثنایی به‌روزرسانی شد.', announcement });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [updateFinanceExceptionTour]', error);
+    return res.status(error.statusCode || 500).json({
+      message: error.message || 'خطا در ویرایش تور استثنایی.',
+    });
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * نهایی‌سازی اطلاعات پایه تور استثنایی (بعد از ثبت اطلاعات محاسباتی توصیه می‌شود)
+ * POST /api/v1/freight-announcements/:id/finance-exception/finalize-metadata
+ */
+async function finalizeFinanceExceptionMetadata(req, res) {
+  const { id } = req.params;
+  const userId = req.user?.userId || req.user?.id;
+
+  try {
+    await ensureFinanceExceptionColumns();
+    const existing = await pool.query(
+      `SELECT id, announcement_source, finance_exception_metadata_locked FROM freight_announcements WHERE id = $1`,
+      [id]
+    );
+    if (!existing.rowCount) {
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    const ann = existing.rows[0];
+    if (ann.announcement_source !== 'finance_exception') {
+      return res.status(400).json({ message: 'این رکورد تور استثنایی مالی نیست.' });
+    }
+    if (ann.finance_exception_metadata_locked) {
+      return res.json({ message: 'اطلاعات پایه قبلاً نهایی شده است.' });
+    }
+
+    await pool.query(
+      `UPDATE freight_announcements
+       SET finance_exception_metadata_locked = TRUE, updated_at = NOW()
+       WHERE id = $1`,
+      [id]
+    );
+
+    await logFreightHistory({
+      announcementId: id,
+      userId: userId || null,
+      userName: req.user?.username || 'مالی ترابری',
+      action: 'FINANCE_EXCEPTION_METADATA_FINALIZED',
+      description: 'نهایی‌سازی اطلاعات پایه تور استثنایی',
+      ipAddress: req.ip,
+    });
+
+    return res.json({ message: 'اطلاعات پایه تور استثنایی نهایی شد.' });
+  } catch (error) {
+    console.error('❌ [finalizeFinanceExceptionMetadata]', error);
+    return res.status(500).json({ message: 'خطا در نهایی‌سازی.' });
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -6000,6 +6673,10 @@ module.exports = {
   getLineAnalytics,
   searchDispatchRoutes,
   getAssignmentStatistics,
+  createFinanceExceptionTour,
+  updateFinanceExceptionTour,
+  finalizeFinanceExceptionMetadata,
+  FINANCE_EXCEPTION_TRANSPORT_ROLES,
 };
 
 /**
@@ -6109,8 +6786,15 @@ async function cancelAssignment(req, res) {
       `UPDATE freight_announcements
          SET assigned_driver_id = NULL,
              assigned_vehicle_id = NULL,
+             assigned_driver_name = NULL,
+             assigned_driver_employee_id = NULL,
+             assigned_vehicle_model = NULL,
+             assigned_vehicle_brand = NULL,
+             vehicle_plate = NULL,
              bill_of_lading_number = NULL,
              total_freight_cost = NULL,
+             assignment_finalized_at = NULL,
+             awaiting_bill_of_lading_at = NULL,
              status = $1,
              updated_at = NOW()
        WHERE id = $2`,

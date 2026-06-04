@@ -12,6 +12,8 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
+import { getDestinationCitiesLabel } from '../utils/freightDisplay';
+import CityAutocomplete from './CityAutocomplete';
 
 // --- Constants from user request ---
 const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پانلا', 'آلینوس'];
@@ -57,6 +59,140 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 const formatCurrency = (amount?: number) => amount ? `${amount.toLocaleString('fa-IR')}` : '-';
 
+/** هر «مسیر» بستنی: مبدا + برند + مقصد + نماینده (جدا برای هر مقصد) */
+type IceCreamLeg = {
+    originCity: string;
+    brand: string;
+    destinationCity: string;
+    representativeType: 'agent' | 'distributor';
+    representativeName: string;
+};
+
+const normalizeIceCreamRepType = (value?: string): 'agent' | 'distributor' => {
+    if (value === 'distributor' || value === 'distribution') return 'distributor';
+    return 'agent';
+};
+
+const createInitialIceCreamLeg = (): IceCreamLeg => ({
+    originCity: '',
+    brand: 'میهن',
+    destinationCity: '',
+    representativeType: 'agent',
+    representativeName: '',
+});
+
+const splitCombinedField = (value: string): [string, string] => {
+    if (!value || !value.includes(' و ')) {
+        return [value || '', ''];
+    }
+    const parts = value.split(' و ').map((p) => p.trim()).filter(Boolean);
+    return [parts[0] || '', parts[1] || ''];
+};
+
+const buildIceCreamFromLegs = (
+    routeType: 'single' | 'double',
+    legs: [IceCreamLeg, IceCreamLeg]
+): {
+    originCity: string;
+    brand: string;
+    destinations: Destination[];
+    loadingType: 'single' | 'double';
+    originCity1: string;
+    originCity2: string | null;
+    brandType: 'single' | 'double';
+    brand1: string;
+    brand2: string | null;
+    representativeType: 'agent' | 'distributor';
+    representativeName: string;
+} | null => {
+    const activeLegs = routeType === 'double' ? legs : [legs[0]];
+    for (let i = 0; i < activeLegs.length; i++) {
+        const leg = activeLegs[i];
+        if (!leg.originCity.trim() || !leg.brand.trim() || !leg.destinationCity.trim()) {
+            return null;
+        }
+    }
+    const originCity = activeLegs.map((l) => l.originCity.trim()).join(' و ');
+    const brand = activeLegs.map((l) => l.brand.trim()).join(' و ');
+    const destinations: Destination[] = activeLegs.map((leg) => ({
+        id: generateUUID(),
+        city: leg.destinationCity.trim(),
+        brand: leg.brand.trim() as Destination['brand'],
+        representativeName: leg.representativeName.trim(),
+        representativeType: leg.representativeType as Destination['representativeType'],
+    }));
+    const repNames = activeLegs.map((l) => l.representativeName.trim()).filter(Boolean);
+    return {
+        originCity,
+        brand,
+        destinations,
+        loadingType: routeType,
+        originCity1: legs[0].originCity.trim(),
+        originCity2: routeType === 'double' ? legs[1].originCity.trim() : null,
+        brandType: routeType,
+        brand1: legs[0].brand.trim(),
+        brand2: routeType === 'double' ? legs[1].brand.trim() : null,
+        representativeType: activeLegs[0].representativeType,
+        representativeName: repNames.length > 0 ? repNames.join(' و ') : '',
+    };
+};
+
+const parseIceCreamLegsFromAnnouncement = (
+    data: FreightAnnouncement & {
+        loadingType?: string;
+        originCity1?: string;
+        originCity2?: string;
+        brandType?: string;
+        brand1?: string;
+        brand2?: string;
+    }
+): { routeType: 'single' | 'double'; legs: [IceCreamLeg, IceCreamLeg] } => {
+    const dests = data.destinations || [];
+    const routeType: 'single' | 'double' =
+        data.loadingType === 'double' ||
+        data.brandType === 'double' ||
+        dests.length >= 2
+            ? 'double'
+            : 'single';
+
+    const [originA, originB] = data.originCity1
+        ? [data.originCity1, data.originCity2 || '']
+        : splitCombinedField(data.originCity || '');
+    const [brandA, brandB] = data.brand1
+        ? [data.brand1, data.brand2 || '']
+        : splitCombinedField((data.brand as string) || '');
+
+    const [repNameA, repNameB] = splitCombinedField(data.representativeName || '');
+    const annRepType = normalizeIceCreamRepType(data.representativeType as string);
+
+    const leg1: IceCreamLeg = {
+        originCity: originA,
+        brand: brandA || 'میهن',
+        destinationCity: dests[0]?.city?.trim() || '',
+        representativeType: dests[0]?.representativeType
+            ? normalizeIceCreamRepType(dests[0].representativeType as string)
+            : annRepType,
+        representativeName: (dests[0]?.representativeName || repNameA || data.representativeName || '').trim(),
+    };
+    const leg2: IceCreamLeg = {
+        originCity: originB,
+        brand: brandB || 'میهن',
+        destinationCity: dests[1]?.city?.trim() || '',
+        representativeType: dests[1]?.representativeType
+            ? normalizeIceCreamRepType(dests[1].representativeType as string)
+            : annRepType,
+        representativeName: (dests[1]?.representativeName || repNameB || '').trim(),
+    };
+
+    if (routeType === 'single') {
+        if (!leg1.destinationCity && dests[0]?.city) {
+            leg1.destinationCity = dests[0].city;
+        }
+        return { routeType: 'single', legs: [leg1, createInitialIceCreamLeg()] };
+    }
+
+    return { routeType: 'double', legs: [leg1, leg2] };
+};
 
 const columnsConfig = (props: { 
     currentUser: User, 
@@ -104,7 +240,7 @@ const columnsConfig = (props: {
         { header: 'ردیف', width: '70px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
         { header: 'نماینده (پخش/نماینده)', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
-        { header: 'مقصد', accessor: (ann: FreightAnnouncement) => ann.destinations[0]?.city, width: '150px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city || '-'}</span> },
+        { header: 'مقصد', accessor: (ann: FreightAnnouncement) => getDestinationCitiesLabel(ann), width: '200px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
         { header: 'مبدا', accessor: 'originCity', width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'محصولات', accessor: (ann: FreightAnnouncement) => ann.products?.join(', '), width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
@@ -1003,7 +1139,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             const lowerFilter = filter.toLowerCase();
             data = data.filter(a => 
                 a.announcementCode.toLowerCase().includes(lowerFilter) || 
-                a.destinations.some(d => d.city.toLowerCase().includes(lowerFilter))
+                (a.destinations || []).some(d => d.city && String(d.city).toLowerCase().includes(lowerFilter))
             );
         }
 
@@ -1353,7 +1489,7 @@ const AnnouncementPanel: React.FC<{
     const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: '', vehicleType: '', notes: '' };
-    const initialIceCreamState = { originCity: '', destinationCity: '', brand: 'میهن', representativeType: 'agent', representativeName: '', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
+    const initialIceCreamState = { originCity: '', brand: 'میهن', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
     const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }];
     const initialLoadingLocationState = { loadingType: 'single' as 'single' | 'double', originCity1: '', originCity2: '' };
@@ -1365,18 +1501,29 @@ const AnnouncementPanel: React.FC<{
     const [multiDestState, setMultiDestState] = useState(initialMultiDestState);
     const [loadingLocationState, setLoadingLocationState] = useState(initialLoadingLocationState);
     const [brandState, setBrandState] = useState(initialBrandState);
+    const [iceCreamRouteType, setIceCreamRouteType] = useState<'single' | 'double'>('single');
+    const [iceCreamLegs, setIceCreamLegs] = useState<[IceCreamLeg, IceCreamLeg]>([
+        createInitialIceCreamLeg(),
+        createInitialIceCreamLeg(),
+    ]);
     // cargoPreview حذف شد - دیگر نیازی به تبدیل نیست
     const [destinations, setDestinations] = useState<Partial<Destination>[]>(initialDestinations);
-    
+    const [destCityValid, setDestCityValid] = useState<Record<string, boolean>>({});
+    const [iceCreamDestCityValid, setIceCreamDestCityValid] = useState<[boolean, boolean]>([false, false]);
+
     const resetForm = () => {
         // Don't reset lineType to allow multiple entries of the same type
         // Don't reset loadingDate to preserve the selected date
         // Don't reset platformArrivalTime to preserve the selected time
         setCommonState(prev => ({ ...initialCommonState, loadingDate: prev.loadingDate }));
         setIceCreamState(initialIceCreamState);
+        setIceCreamRouteType('single');
+        setIceCreamLegs([createInitialIceCreamLeg(), createInitialIceCreamLeg()]);
         setMultiDestState(prev => ({ ...initialMultiDestState, platformArrivalTime: prev.platformArrivalTime }));
         setDestinations(initialDestinations);
-        
+        setDestCityValid({});
+        setIceCreamDestCityValid([false, false]);
+
         // بارگذاری آخرین انتخاب‌های کاربر از localStorage بعد از reset
         const getLastUserChoices = (lineTypeKey: string) => {
             try {
@@ -1523,26 +1670,39 @@ const AnnouncementPanel: React.FC<{
                 setBrandState(brandData);
                 
                 if (data.lineType === FreightLineType.IceCream) {
+                    const parsedLegs = parseIceCreamLegsFromAnnouncement(data as any);
+                    setIceCreamRouteType(parsedLegs.routeType);
+                    setIceCreamLegs(parsedLegs.legs);
+                    setIceCreamDestCityValid([
+                        !!parsedLegs.legs[0].destinationCity?.trim(),
+                        !!parsedLegs.legs[1].destinationCity?.trim(),
+                    ]);
                     setIceCreamState({
-                        originCity: loadingLocationData.loadingType === 'double' 
-                            ? `${loadingLocationData.originCity1} و ${loadingLocationData.originCity2}`
-                            : loadingLocationData.originCity1,
-                        destinationCity: data.destinations[0]?.city || '', 
-                        brand: brandData.brandType === 'double' 
-                            ? `${brandData.brand1} و ${brandData.brand2}`
-                            : brandData.brand1,
-                        representativeType: data.representativeType || 'agent', 
-                        representativeName: data.representativeName || '', 
-                        cartonCount: String(data.cartonCount || ''), 
-                        priority: data.priority || 'normal', 
-                        products: data.products || []
+                        originCity: parsedLegs.routeType === 'double'
+                            ? `${parsedLegs.legs[0].originCity} و ${parsedLegs.legs[1].originCity}`
+                            : parsedLegs.legs[0].originCity,
+                        brand: parsedLegs.routeType === 'double'
+                            ? `${parsedLegs.legs[0].brand} و ${parsedLegs.legs[1].brand}`
+                            : parsedLegs.legs[0].brand,
+                        cartonCount: String(data.cartonCount || ''),
+                        priority: data.priority || 'normal',
+                        products: data.products || [],
                     });
                 } else {
                     setMultiDestState({ platformArrivalTime: data.platformArrivalTime || '' });
-                    setDestinations(data.destinations.length > 0 ? data.destinations.map(d => ({
-                        ...d,
-                        representativeType: d.representativeType || 'agent' // اگر representativeType وجود نداشت، پیش‌فرض 'agent' است
-                    })) : initialDestinations);
+                    const mappedDests =
+                        data.destinations.length > 0
+                            ? data.destinations.map((d) => ({
+                                  ...d,
+                                  representativeType: d.representativeType || ('agent' as const),
+                              }))
+                            : initialDestinations;
+                    setDestinations(mappedDests);
+                    const cityValidity: Record<string, boolean> = {};
+                    mappedDests.forEach((d) => {
+                        if (d.id) cityValidity[d.id] = !!d.city?.trim();
+                    });
+                    setDestCityValid(cityValidity);
                 }
             } else { // Create mode: ensure form is clear
                 resetForm();
@@ -1635,13 +1795,25 @@ const AnnouncementPanel: React.FC<{
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
 
-    const addDestination = () => { if(destinations.length < 4) setDestinations([...destinations, { id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }]); };
+    const addDestination = () => {
+        if (destinations.length < 4) {
+            const id = generateUUID();
+            setDestinations([
+                ...destinations,
+                { id, city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' },
+            ]);
+            setDestCityValid((prev) => ({ ...prev, [id]: false }));
+        }
+    };
     const removeDestination = (id: string) => setDestinations(destinations.filter(d => d.id !== id));
     const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
-        if (field === 'city' && typeof value === 'string') {
-            onRouteQueryChange(value);
-        }
-        setDestinations(destinations.map(d => d.id === id ? { ...d, [field]: value } : d));
+        setDestinations(destinations.map((d) => (d.id === id ? { ...d, [field]: value } : d)));
+    };
+
+    const handleDestinationCitySelect = (id: string, city: string) => {
+        onRouteQueryChange(city);
+        setDestinations(destinations.map((d) => (d.id === id ? { ...d, city } : d)));
+        setDestCityValid((prev) => ({ ...prev, [id]: true }));
     };
     const handleProductChange = (product: string, checked: boolean) => setIceCreamState(s => ({ ...s, products: checked ? [...s.products, product] : s.products.filter(p => p !== product)}));
 
@@ -1678,13 +1850,38 @@ const AnnouncementPanel: React.FC<{
             return;
         }
         console.log(`📅 [FreightDashboard] Submitting with loadingDate:`, jalaliDate);
-        // محاسبه originCity بر اساس نوع بارگیری
-        const finalOriginCity = loadingLocationState.loadingType === 'double' 
+
+        let iceCreamBuilt: ReturnType<typeof buildIceCreamFromLegs> = null;
+        if (lineType === FreightLineType.IceCream) {
+            const activeLegCount = iceCreamRouteType === 'double' ? 2 : 1;
+            for (let i = 0; i < activeLegCount; i++) {
+                const leg = iceCreamLegs[i];
+                if (!leg.destinationCity.trim()) continue;
+                if (!iceCreamDestCityValid[i]) {
+                    alert('شهر مقصد را از لیست پیشنهادها انتخاب کنید.');
+                    return;
+                }
+            }
+            iceCreamBuilt = buildIceCreamFromLegs(iceCreamRouteType, iceCreamLegs);
+            if (!iceCreamBuilt) {
+                alert(
+                    iceCreamRouteType === 'double'
+                        ? 'برای هر مقصد، مبدا بارگیری، برند و شهر مقصد الزامی است.'
+                        : 'مبدا بارگیری، برند و شهر مقصد الزامی است.'
+                );
+                return;
+            }
+        }
+
+        const finalOriginCity = lineType === FreightLineType.IceCream && iceCreamBuilt
+            ? iceCreamBuilt.originCity
+            : loadingLocationState.loadingType === 'double'
             ? `${loadingLocationState.originCity1} و ${loadingLocationState.originCity2}`
             : loadingLocationState.originCity1;
-        
-        // محاسبه brand بر اساس نوع برند
-        const finalBrand = brandState.brandType === 'double' 
+
+        const finalBrand = lineType === FreightLineType.IceCream && iceCreamBuilt
+            ? iceCreamBuilt.brand
+            : brandState.brandType === 'double'
             ? `${brandState.brand1} و ${brandState.brand2}`
             : brandState.brand1;
         
@@ -1707,7 +1904,17 @@ const AnnouncementPanel: React.FC<{
             alert('حداقل یک مقصد با تمام فیلدهای اجباری (شهر، نوع نماینده، تناژ، تاریخ تحویل) الزامی است.');
             return;
         }
-        
+
+        if (lineType !== FreightLineType.IceCream) {
+            const badCity = destinations.filter(
+                (d) => d.city?.trim() && d.id && !destCityValid[d.id]
+            );
+            if (badCity.length > 0) {
+                alert('شهر مقصد را از لیست پیشنهادها انتخاب کنید.');
+                return;
+            }
+        }
+
         // بررسی اینکه تمام مقاصد معتبر هستند (برای Dairy و Ambient)
         if (lineType !== FreightLineType.IceCream && validDestinations.length !== destinations.length) {
             alert('تمام مقاصد باید دارای شهر، نوع نماینده، تناژ و تاریخ تحویل معتبر باشند.');
@@ -1719,7 +1926,7 @@ const AnnouncementPanel: React.FC<{
             alert('تاریخ تحویل نامعتبر است. قالب صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)');
             return;
         }
-        
+
         // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی
         if (!isEditMode && currentUser) {
             const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
@@ -1744,18 +1951,18 @@ const AnnouncementPanel: React.FC<{
                 notes: commonState.notes, 
                 originCity: finalOriginCity, 
                 brand: finalBrand as any, 
-                representativeType: iceCreamState.representativeType as any, 
-                representativeName: iceCreamState.representativeName, 
+                representativeType: iceCreamBuilt!.representativeType as any,
+                representativeName: iceCreamBuilt!.representativeName,
                 cartonCount: Number(iceCreamState.cartonCount), 
                 priority: iceCreamState.priority, 
                 products: iceCreamState.products, 
-                destinations: [{id: generateUUID(), city: iceCreamState.destinationCity, representativeName: iceCreamState.representativeName }],
-                loadingType: loadingLocationState.loadingType,
-                originCity1: loadingLocationState.originCity1,
-                originCity2: loadingLocationState.originCity2 || null,
-                brandType: brandState.brandType,
-                brand1: brandState.brand1,
-                brand2: brandState.brand2 || null
+                destinations: iceCreamBuilt!.destinations,
+                loadingType: iceCreamBuilt!.loadingType,
+                originCity1: iceCreamBuilt!.originCity1,
+                originCity2: iceCreamBuilt!.originCity2,
+                brandType: iceCreamBuilt!.brandType,
+                brand1: iceCreamBuilt!.brand1,
+                brand2: iceCreamBuilt!.brand2,
             } as any
             : { 
                 loadingDate: jalaliDate, 
@@ -2034,181 +2241,188 @@ const AnnouncementPanel: React.FC<{
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">مسیر و بار</legend>
                             <div className="mb-3">
-                                <label className="text-xs font-semibold mb-2 block">نوع بارگیری</label>
+                                <label className="text-xs font-semibold mb-2 block">تعداد مقصد</label>
                                 <div className="flex gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
                                             type="radio"
-                                            name="loadingType"
+                                            name="iceCreamRouteType"
                                             value="single"
-                                            checked={loadingLocationState.loadingType === 'single'}
-                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'single' as 'single' | 'double', originCity2: '' }))}
+                                            checked={iceCreamRouteType === 'single'}
+                                            onChange={() => {
+                                                setIceCreamRouteType('single');
+                                                setIceCreamLegs(([a, b]) => [a, createInitialIceCreamLeg()]);
+                                            }}
                                             className="cursor-pointer"
                                         />
-                                        <span className="text-xs">تک مبدا</span>
+                                        <span className="text-xs">یک مقصد</span>
                                     </label>
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
                                             type="radio"
-                                            name="loadingType"
+                                            name="iceCreamRouteType"
                                             value="double"
-                                            checked={loadingLocationState.loadingType === 'double'}
-                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'double' as 'single' | 'double' }))}
+                                            checked={iceCreamRouteType === 'double'}
+                                            onChange={() => setIceCreamRouteType('double')}
                                             className="cursor-pointer"
                                         />
-                                        <span className="text-xs">دو مبدا بارگیری</span>
+                                        <span className="text-xs">دو مقصد (هر مقصد با مبدا و برند جدا)</span>
                                     </label>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                {loadingLocationState.loadingType === 'single' ? (
-                                    <div className="col-span-1">
-                                        <label className="text-xs">مبدا بارگیری*</label>
-                                        <input 
-                                            value={loadingLocationState.originCity1} 
-                                            onChange={e=>{
-                                                const value = e.target.value; 
-                                                onRouteQueryChange(value); 
-                                                setLoadingLocationState(s=>({...s, originCity1: value}));
-                                                setIceCreamState(s=>({...s, originCity: value}));
-                                            }} 
-                                            className="input-style mt-1" 
-                                            list="cities" 
-                                            required
-                                        />
+
+                            {([0, 1] as const)
+                                .filter((idx) => iceCreamRouteType === 'double' || idx === 0)
+                                .map((legIndex) => (
+                                <fieldset
+                                    key={legIndex}
+                                    className="p-3 mb-3 border border-slate-200 rounded-lg bg-slate-50"
+                                >
+                                    <legend className="font-semibold px-1 text-sm text-sky-800">
+                                        {iceCreamRouteType === 'double' ? `مقصد ${legIndex + 1}` : 'مقصد'}
+                                    </legend>
+                                    <div className="grid grid-cols-2 gap-3 mb-3">
+                                        <div>
+                                            <label className="text-xs">مبدا بارگیری*</label>
+                                            <input
+                                                value={iceCreamLegs[legIndex].originCity}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    onRouteQueryChange(value);
+                                                    setIceCreamLegs((prev) => {
+                                                        const next: [IceCreamLeg, IceCreamLeg] = [
+                                                            { ...prev[0] },
+                                                            { ...prev[1] },
+                                                        ];
+                                                        next[legIndex] = { ...next[legIndex], originCity: value };
+                                                        return next;
+                                                    });
+                                                }}
+                                                className="input-style mt-1"
+                                                list="cities"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs">برند*</label>
+                                            <select
+                                                value={iceCreamLegs[legIndex].brand}
+                                                onChange={(e) => {
+                                                    setIceCreamLegs((prev) => {
+                                                        const next: [IceCreamLeg, IceCreamLeg] = [
+                                                            { ...prev[0] },
+                                                            { ...prev[1] },
+                                                        ];
+                                                        next[legIndex] = { ...next[legIndex], brand: e.target.value };
+                                                        return next;
+                                                    });
+                                                }}
+                                                className="input-style mt-1"
+                                                required
+                                            >
+                                                {BRANDS.map((b) => (
+                                                    <option key={b} value={b}>{b}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs">شهر مقصد*</label>
+                                            <CityAutocomplete
+                                                value={iceCreamLegs[legIndex].destinationCity}
+                                                onChange={(city) => {
+                                                    onRouteQueryChange(city);
+                                                    setIceCreamLegs((prev) => {
+                                                        const next: [IceCreamLeg, IceCreamLeg] = [
+                                                            { ...prev[0] },
+                                                            { ...prev[1] },
+                                                        ];
+                                                        next[legIndex] = {
+                                                            ...next[legIndex],
+                                                            destinationCity: city,
+                                                        };
+                                                        return next;
+                                                    });
+                                                    setIceCreamDestCityValid((prev) => {
+                                                        const n: [boolean, boolean] = [...prev];
+                                                        n[legIndex] = !!city.trim();
+                                                        return n;
+                                                    });
+                                                }}
+                                                onValidityChange={(valid) => {
+                                                    setIceCreamDestCityValid((prev) => {
+                                                        const n: [boolean, boolean] = [...prev];
+                                                        n[legIndex] = valid;
+                                                        return n;
+                                                    });
+                                                }}
+                                                requireSelection
+                                                className="input-style mt-1"
+                                                required
+                                            />
+                                        </div>
                                     </div>
-                                ) : (
-                                    <>
+                                    <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <label className="text-xs">مبدا بارگیری اول*</label>
-                                            <input 
-                                                value={loadingLocationState.originCity1} 
-                                                onChange={e=>{
-                                                    const value = e.target.value; 
-                                                    onRouteQueryChange(value); 
-                                                    setLoadingLocationState(s=>({...s, originCity1: value}));
-                                                    const combined = loadingLocationState.originCity2 
-                                                        ? `${value} و ${loadingLocationState.originCity2}` 
-                                                        : value;
-                                                    setIceCreamState(s=>({...s, originCity: combined}));
-                                                }} 
-                                                className="input-style mt-1" 
-                                                list="cities" 
-                                                required
-                                            />
+                                            <label className="text-xs">نوع*</label>
+                                            <select
+                                                value={iceCreamLegs[legIndex].representativeType}
+                                                onChange={(e) => {
+                                                    setIceCreamLegs((prev) => {
+                                                        const next: [IceCreamLeg, IceCreamLeg] = [
+                                                            { ...prev[0] },
+                                                            { ...prev[1] },
+                                                        ];
+                                                        next[legIndex] = {
+                                                            ...next[legIndex],
+                                                            representativeType: e.target.value as 'agent' | 'distributor',
+                                                        };
+                                                        return next;
+                                                    });
+                                                }}
+                                                className="input-style mt-1"
+                                            >
+                                                <option value="agent">نماینده</option>
+                                                <option value="distributor">پخش</option>
+                                            </select>
                                         </div>
                                         <div>
-                                            <label className="text-xs">مبدا بارگیری دوم*</label>
-                                            <input 
-                                                value={loadingLocationState.originCity2} 
-                                                onChange={e=>{
-                                                    const value = e.target.value; 
-                                                    onRouteQueryChange(value); 
-                                                    setLoadingLocationState(s=>({...s, originCity2: value}));
-                                                    const combined = loadingLocationState.originCity1 
-                                                        ? `${loadingLocationState.originCity1} و ${value}` 
-                                                        : value;
-                                                    setIceCreamState(s=>({...s, originCity: combined}));
-                                                }} 
-                                                className="input-style mt-1" 
-                                                list="cities" 
-                                                required
+                                            <label className="text-xs">نام نماینده/پخش</label>
+                                            <input
+                                                value={iceCreamLegs[legIndex].representativeName}
+                                                onChange={(e) => {
+                                                    setIceCreamLegs((prev) => {
+                                                        const next: [IceCreamLeg, IceCreamLeg] = [
+                                                            { ...prev[0] },
+                                                            { ...prev[1] },
+                                                        ];
+                                                        next[legIndex] = {
+                                                            ...next[legIndex],
+                                                            representativeName: e.target.value,
+                                                        };
+                                                        return next;
+                                                    });
+                                                }}
+                                                className="input-style mt-1"
                                             />
                                         </div>
-                                    </>
-                                )}
-                                <div><label className="text-xs">شهر مقصد*</label><input value={iceCreamState.destinationCity} onChange={e=>{const value = e.target.value; onRouteQueryChange(value); setIceCreamState(s=>({...s, destinationCity: value}));}} className="input-style mt-1" list="cities" required/></div>
-                                <div><label className="text-xs">تعداد کارتن*</label><input type="number" value={iceCreamState.cartonCount} onChange={e=>setIceCreamState(s=>({...s, cartonCount: e.target.value}))} className="input-style mt-1" required/></div>
+                                    </div>
+                                </fieldset>
+                            ))}
+
+                            <div className="max-w-xs">
+                                <label className="text-xs">تعداد کارتن*</label>
+                                <input
+                                    type="number"
+                                    value={iceCreamState.cartonCount}
+                                    onChange={(e) => setIceCreamState((s) => ({ ...s, cartonCount: e.target.value }))}
+                                    className="input-style mt-1"
+                                    required
+                                />
                             </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-white">
-                            <legend className="font-semibold px-1 text-sm">جزئیات نماینده و محصول</legend>
-                            <div className="mb-3">
-                                <label className="text-xs font-semibold mb-2 block">نوع برند</label>
-                                <div className="flex gap-4">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="brandType"
-                                            value="single"
-                                            checked={brandState.brandType === 'single'}
-                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'single' as 'single' | 'double', brand2: '' }))}
-                                            className="cursor-pointer"
-                                        />
-                                        <span className="text-xs">تک برند</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="brandType"
-                                            value="double"
-                                            checked={brandState.brandType === 'double'}
-                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'double' as 'single' | 'double' }))}
-                                            className="cursor-pointer"
-                                        />
-                                        <span className="text-xs">دو برند</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                {brandState.brandType === 'single' ? (
-                                    <div>
-                                        <label className="text-xs">برند*</label>
-                                        <select 
-                                            value={brandState.brand1} 
-                                            onChange={e=>{
-                                                setBrandState(s=>({...s, brand1: e.target.value}));
-                                                setIceCreamState(s=>({...s, brand: e.target.value as any}));
-                                            }} 
-                                            className="input-style mt-1"
-                                            required
-                                        >
-                                            {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
-                                        </select>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div>
-                                            <label className="text-xs">برند اول*</label>
-                                            <select 
-                                                value={brandState.brand1} 
-                                                onChange={e=>{
-                                                    setBrandState(s=>({...s, brand1: e.target.value}));
-                                                    const combined = brandState.brand2 
-                                                        ? `${e.target.value} و ${brandState.brand2}` 
-                                                        : e.target.value;
-                                                    setIceCreamState(s=>({...s, brand: combined as any}));
-                                                }} 
-                                                className="input-style mt-1"
-                                                required
-                                            >
-                                                {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs">برند دوم*</label>
-                                            <select 
-                                                value={brandState.brand2} 
-                                                onChange={e=>{
-                                                    setBrandState(s=>({...s, brand2: e.target.value}));
-                                                    const combined = brandState.brand1 
-                                                        ? `${brandState.brand1} و ${e.target.value}` 
-                                                        : e.target.value;
-                                                    setIceCreamState(s=>({...s, brand: combined as any}));
-                                                }} 
-                                                className="input-style mt-1"
-                                                required
-                                            >
-                                                <option value="">-- انتخاب کنید --</option>
-                                                {BRANDS.map(b=><option key={b} value={b}>{b}</option>)}
-                                            </select>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                            <legend className="font-semibold px-1 text-sm">اولویت و محصول (مشترک برای کل بار)</legend>
                             <div className="grid grid-cols-2 gap-3">
-                                <div><label className="text-xs">نوع*</label><select value={iceCreamState.representativeType} onChange={e=>setIceCreamState(s=>({...s, representativeType: e.target.value as any}))} className="input-style mt-1"><option value="agent">نماینده</option><option value="distributor">پخش</option></select></div>
-                                <div><label className="text-xs">نام نماینده/پخش</label><input value={iceCreamState.representativeName} onChange={e=>setIceCreamState(s=>({...s, representativeName: e.target.value}))} className="input-style mt-1" /></div>
                                 <div><label className="text-xs">اولویت*</label><select value={iceCreamState.priority} onChange={e=>setIceCreamState(s=>({...s, priority: e.target.value as any}))} className="input-style mt-1">{Object.entries(PRIORITIES).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></div>
                                 <div className="col-span-2"><label className="text-xs">محصولات</label><div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">{ICE_CREAM_PRODUCTS.map(p => <label key={p} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={iceCreamState.products.includes(p)} onChange={e => handleProductChange(p, e.target.checked)} />{p}</label>)}</div></div>
                             </div>
@@ -2384,7 +2598,26 @@ const AnnouncementPanel: React.FC<{
                                         <span className="absolute top-2 left-2 bg-slate-300 text-slate-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{index + 1}</span>
                                         {destinations.length > 1 && <button type="button" onClick={() => removeDestination(dest.id!)} className="absolute top-2 right-2 text-red-500 text-xs">حذف</button>}
                                         <div className="grid grid-cols-2 gap-2">
-                                            <div><label className="text-xs">شهر مقصد*</label><input value={dest.city || ''} onChange={e => handleDestinationChange(dest.id!, 'city', e.target.value)} list="cities" className="input-style" required/></div>
+                                            <div>
+                                                <label className="text-xs">شهر مقصد*</label>
+                                                <CityAutocomplete
+                                                    value={dest.city || ''}
+                                                    onChange={(city) =>
+                                                        dest.id && handleDestinationCitySelect(dest.id, city)
+                                                    }
+                                                    onValidityChange={(valid) => {
+                                                        if (dest.id) {
+                                                            setDestCityValid((prev) => ({
+                                                                ...prev,
+                                                                [dest.id!]: valid,
+                                                            }));
+                                                        }
+                                                    }}
+                                                    requireSelection
+                                                    className="input-style"
+                                                    required
+                                                />
+                                            </div>
                                             <div>
                                                 <label className="text-xs">نوع نماینده*</label>
                                                 <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style" required>

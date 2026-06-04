@@ -2,6 +2,31 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
+import IranianPlateInput, {
+    DEFAULT_PLATE_LETTER,
+    formatIranianPlateString,
+    type IranianPlateParts,
+} from './IranianPlateInput';
+import {
+    getDestinationCitiesLabel,
+    getAssignedDriverDisplayName,
+    getAssignedDriverContact,
+    getAssignedVehiclePlate,
+    formatCompanyVehiclePlate,
+    checkVehicleMatchesAnnouncement,
+    getVehicleOperationalType,
+    PENDING_BILL_OF_LADING_TAB,
+    TransportLiveTab,
+    isPendingBillOfLadingTab,
+    isPendingBillOfLading,
+    matchesFreightLine,
+    lineTypeFromAnnouncement,
+    parseNumericField,
+    formatTonnageKg,
+    formatTotalTonnageFromDestinations,
+    sumDestinationTonnageKg,
+    formatPersianGroupedNumber,
+} from '../utils/freightDisplay';
 import { getApiUrl } from '../utils/apiConfig';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
@@ -32,8 +57,11 @@ interface TransportLiveProps {
         vehicleType?: string;
         vehiclePlate?: string;
         destinations?: Destination[];
+        assignedDriverName?: string;
+        assignedDriverContact?: string;
+        assignedVehiclePlate?: string;
     }) => void;
-    onFinalize: (announcementIds: string[]) => void;
+    onFinalize: (announcementIds: string[], lineTypeForBackend?: string) => void | Promise<void>;
     finalizePermissions?: Record<string, boolean>;
     onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => void;
     onForward: (announcementId: string) => void;
@@ -43,8 +71,8 @@ interface TransportLiveProps {
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     onOpenAssignmentDialog?: (announcement: FreightAnnouncement) => void;
     currentUser: User;
-    activeLine: FreightLineType;
-    setActiveLine: (line: FreightLineType) => void;
+    activeLine: TransportLiveTab;
+    setActiveLine: (line: TransportLiveTab) => void;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
@@ -64,41 +92,17 @@ const formatCurrency = (amount?: number | string | null) => {
     }).format(numAmount) + ' تومان';
 };
 
-// تابع برای فرمت کرایه کل (واحد: ریال)
-const formatTotalFreightCost = (amount?: number | string | null) => {
-    if (amount === null || amount === undefined || amount === '') {
-        return '-';
-    }
-    // تبدیل به number اگر string است
-    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : Number(amount);
-    if (isNaN(numAmount) || numAmount === 0) {
-        return '-';
-    }
-    // استفاده از Intl.NumberFormat برای فرمت فارسی با جداکننده 3 رقمی و بدون اعشار
-    return new Intl.NumberFormat('fa-IR', {
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0,
-        useGrouping: true
-    }).format(Math.round(numAmount)) + ' ریال';
+const TOTAL_FREIGHT_HEADER = 'کرایه کل (ریال)';
+
+/** عدد کرایه — واحد فقط در هدر ستون */
+const formatFreightAmount = (amount?: number | string | null): string => {
+    const numAmount = parseNumericField(amount);
+    if (numAmount <= 0) return '-';
+    return formatPersianGroupedNumber(Math.round(numAmount), 0);
 };
 
-// تابع برای فرمت کرایه مقاصد (واحد: ریال)
-const formatDestinationFreightCost = (amount?: number | string | null) => {
-    if (amount === null || amount === undefined || amount === '') {
-        return '-';
-    }
-    // تبدیل به number اگر string است
-    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : Number(amount);
-    if (isNaN(numAmount) || numAmount === 0) {
-        return '-';
-    }
-    // استفاده از Intl.NumberFormat برای فرمت فارسی با جداکننده 3 رقمی و بدون اعشار
-    return new Intl.NumberFormat('fa-IR', {
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0,
-        useGrouping: true
-    }).format(Math.round(numAmount)) + ' ریال';
-};
+const formatTotalFreightCost = formatFreightAmount;
+const formatDestinationFreightCost = formatFreightAmount;
 
 const isToday = (someDate: any) => {
     if (!someDate) return false;
@@ -412,7 +416,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             destRepType = 'نماینده';
                         }
                     }
-                    const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                    const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
                     const deliveryDate = (d as any).deliveryDate;
                     const unloadTime = d.unloadTime;
                     return (
@@ -430,22 +434,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
             // Assignment Info (for all views)
             { header: 'نام راننده', display: () => true, render: (ann: FreightAnnouncement) => {
-                const result = ann.assignmentType === 'company' 
-                    ? getDriverName(ann.assignedDriverId, drivers, props.personalDrivers)
-                    : getPersonalDriverName(ann.assignedDriverId, props.personalDrivers);
+                const result = getAssignedDriverDisplayName(ann, drivers, props.personalDrivers);
                 // console.log('🔍 [Render] Driver name for', ann.id, ':', result);
                 return result;
             }},
             { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => {
-                const result = ann.assignmentType === 'company' 
-                    ? getDriverContact(ann.assignedDriverId, drivers, props.personalDrivers)
-                    : getPersonalDriverContact(ann.assignedDriverId, props.personalDrivers);
+                const result = getAssignedDriverContact(ann, drivers, props.personalDrivers);
                 return <span className="font-mono">{result}</span>;
             }},
             { header: 'پلاک خودرو', display: () => true, render: (ann: FreightAnnouncement) => {
-                const result = ann.assignmentType === 'company' 
-                    ? getVehicleIdentifier(ann.assignedVehicleId, vehicles, props.personalVehicles)
-                    : getPersonalVehicleIdentifier(ann.assignedVehicleId, props.personalVehicles);
+                const result = getAssignedVehiclePlate(ann, vehicles, props.personalVehicles);
                 // console.log('🔍 [Render] Vehicle plate for', ann.id, ':', result);
                 return <span className="font-mono whitespace-nowrap">{result}</span>;
             }},
@@ -454,7 +452,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
                 return result;
             }},
-            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatTotalFreightCost(ann.totalFreightCost)}</span> },
+            { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatTotalFreightCost(ann.totalFreightCost) },
             
             // Full View Specific - Ice Cream
             { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
@@ -595,10 +593,66 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return filtered.sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
     }, [announcements, currentUser]);
 
+    const tabCounts = useMemo(() => {
+        const pendingBill = liveAnnouncements.filter(isPendingBillOfLading).length;
+        const byLine = Object.values(FreightLineType).reduce(
+            (acc, line) => {
+                acc[line] = liveAnnouncements.filter(
+                    (a) => matchesFreightLine(a, line) && !isPendingBillOfLading(a)
+                ).length;
+                return acc;
+            },
+            {} as Record<FreightLineType, number>
+        );
+        return { pendingBill, byLine };
+    }, [liveAnnouncements]);
+
     const filteredAnnouncements = useMemo(() => {
-        const filtered = liveAnnouncements.filter(a => a.lineType === activeLine);
-        return filtered;
+        if (isPendingBillOfLadingTab(activeLine)) {
+            return liveAnnouncements.filter(isPendingBillOfLading);
+        }
+        return liveAnnouncements.filter(
+            (a) => matchesFreightLine(a, activeLine as FreightLineType) && !isPendingBillOfLading(a)
+        );
     }, [liveAnnouncements, activeLine]);
+
+    const canFinalizeCurrentTab = useMemo(() => {
+        if (currentUser.role === 'ادمین' || currentUser.role === 'Admin') return true;
+        if (isPendingBillOfLadingTab(activeLine)) {
+            return Object.values(finalizePermissions).some(Boolean);
+        }
+        return Boolean(finalizePermissions[activeLine as FreightLineType]);
+    }, [activeLine, currentUser.role, finalizePermissions]);
+
+    const handleFinalizeClick = useCallback(
+        (idsToFinalize: string[]) => {
+            if (idsToFinalize.length === 0) {
+                alert('اعلام باری برای اتمام تخصیص انتخاب نشده است.');
+                return;
+            }
+            const groups = new Map<string, string[]>();
+            for (const id of idsToFinalize) {
+                const ann = announcements.find((a) => a.id === id);
+                if (!ann) continue;
+                const backendLine = lineTypeFromAnnouncement(ann);
+                if (!groups.has(backendLine)) groups.set(backendLine, []);
+                groups.get(backendLine)!.push(id);
+            }
+            if (groups.size <= 1) {
+                const onlyLine = groups.keys().next().value;
+                onFinalize(idsToFinalize, onlyLine);
+                setSelectedIds(new Set());
+                return;
+            }
+            void (async () => {
+                for (const [backendLine, ids] of groups) {
+                    await onFinalize(ids, backendLine);
+                }
+                setSelectedIds(new Set());
+            })();
+        },
+        [announcements, onFinalize]
+    );
     
     const handleSelectRow = (id: string) => {
         setSelectedIds(prev => {
@@ -611,15 +665,45 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
 
     const visibleColumns = useMemo(() => {
+        const lineForColumns = isPendingBillOfLadingTab(activeLine)
+            ? FreightLineType.Dairy
+            : (activeLine as FreightLineType);
+
         // Extra transport columns (for both modes, position differs)
         const extraCols = [
-            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, props.drivers, props.personalDrivers) },
-            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)}</span> },
-            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)}</span> },
-            { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
-            { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatTotalFreightCost(ann.totalFreightCost)}</span> },
+            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
+            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
+            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{getAssignedVehiclePlate(ann, props.vehicles, props.personalVehicles)}</span> },
+            { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => (ann.billOfLadingNumber || '').trim() || '-' },
+            { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatTotalFreightCost(ann.totalFreightCost) },
             { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
+
+        // تب «در انتظار بارنامه»: همه خطوط — ستون‌های فشرده + خط
+        if (isPendingBillOfLadingTab(activeLine)) {
+            const pendingBase = [
+                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'خط', render: (ann: FreightAnnouncement) => <span className="font-medium">{ann.lineType}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
+                {
+                    header: 'مقاصد',
+                    render: (ann: FreightAnnouncement) => (
+                        <div className="flex flex-col text-xs space-y-1">
+                            {ann.destinations.map((d, i) => (
+                                <div key={d.id || i} className="flex items-center justify-center gap-2 flex-wrap">
+                                    <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                                    <span className="font-semibold text-slate-800">{d.city}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ),
+                },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
+            ];
+            return [...pendingBase, ...extraCols];
+        }
 
         // Ice Cream: mirror planner order, then extras
         if (activeLine === FreightLineType.IceCream) {
@@ -628,7 +712,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
-                { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city || '-'}</span> },
+                { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
@@ -644,7 +728,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Dairy compact: mirror planner (kg), then extras
-        if (activeLine === FreightLineType.Dairy && viewMode === 'compact') {
+        if (lineForColumns === FreightLineType.Dairy && viewMode === 'compact' && activeLine === FreightLineType.Dairy) {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
@@ -697,7 +781,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }},
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => {
                     // بررسی نوع نماینده - ابتدا از announcement
                     let repType = '';
@@ -738,7 +822,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 destRepType = 'نماینده';
                             }
                         }
-                        const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                        const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
                         const deliveryDate = (d as any).deliveryDate;
                         const unloadTime = d.unloadTime;
                         return (
@@ -816,7 +900,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }},
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => {
                     // بررسی نوع نماینده - ابتدا از announcement
                     let repType = '';
@@ -857,7 +941,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 destRepType = 'نماینده';
                             }
                         }
-                        const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                        const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
                         const deliveryDate = (d as any).deliveryDate;
                         const unloadTime = d.unloadTime;
                         return (
@@ -935,7 +1019,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }},
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -999,7 +1083,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }},
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -1011,18 +1095,31 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
         // Default fallback
         const colsAll = columnsConfig(viewMode);
-        const cols = colsAll.filter(c => c.display(activeLine)).filter(c => c.header !== 'کد اعلام بار');
+        const cols = colsAll.filter(c => c.display(lineForColumns)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [viewMode, activeLine, props, columnsConfig, editingVehicleTypeId]);
+    }, [viewMode, activeLine, props, columnsConfig, editingVehicleTypeId, props.drivers, props.personalDrivers, props.vehicles, props.personalVehicles]);
 
-    const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+    const isFullDairyAmbient =
+        viewMode === 'full' &&
+        !isPendingBillOfLadingTab(activeLine) &&
+        [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine as FreightLineType);
+    /** جدول کامل پاستوریزه/لبنیات (۴ مقصد) یا سایر خطوط در حالت کامل — نیاز به اسکرول افقی */
+    const tableNeedsHorizontalScroll =
+        isFullDairyAmbient ||
+        (viewMode === 'full' && !isPendingBillOfLadingTab(activeLine));
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
     const generateExcelExport = (mode: 'compact' | 'full') => {
         const cols = columnsConfig(mode);
-        const visibleCols = cols.filter(c => c.display(activeLine));
-        const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+        const lineForExport = isPendingBillOfLadingTab(activeLine) ? FreightLineType.Dairy : (activeLine as FreightLineType);
+        const visibleCols = isPendingBillOfLadingTab(activeLine)
+            ? visibleColumns
+            : cols.filter(c => c.display(lineForExport));
+        const isFullDairyAmbientMode =
+            mode === 'full' &&
+            !isPendingBillOfLadingTab(activeLine) &&
+            [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine as FreightLineType);
         
         // Get headers - دقیقاً همان ترتیب frontend
         const headers: string[] = [];
@@ -1240,9 +1337,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     // Function to download Excel with styling
     const downloadExcel = async (mode: 'compact' | 'full') => {
-        const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
-                            activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
-                            'لبنیات-فروتلند';
+        const lineTypeName = isPendingBillOfLadingTab(activeLine)
+            ? 'در_انتظار_بارنامه'
+            : activeLine === FreightLineType.IceCream
+              ? 'بستنی'
+              : activeLine === FreightLineType.Dairy
+                ? 'پاستوریزه'
+                : 'لبنیات-فروتلند';
         const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
         const dateStr = new Date().toISOString().split('T')[0];
         const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
@@ -1254,8 +1355,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             
             // Get headers and data - استفاده از همان منطق generateExcelExport
             const cols = columnsConfig(mode);
-            const visibleCols = cols.filter((c: any) => c.display(activeLine));
-            const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+            const lineForExport = isPendingBillOfLadingTab(activeLine) ? FreightLineType.Dairy : (activeLine as FreightLineType);
+            const visibleCols = isPendingBillOfLadingTab(activeLine)
+                ? visibleColumns
+                : cols.filter((c: any) => c.display(lineForExport));
+            const isFullDairyAmbientMode =
+                mode === 'full' &&
+                !isPendingBillOfLadingTab(activeLine) &&
+                [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine as FreightLineType);
             
             const headers: string[] = [];
             if (canPerformActions) {
@@ -1269,8 +1376,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             });
             
             // اطمینان از وجود "کرایه کل" و "ارزش بار" در headers
-            if (!headers.includes('کرایه کل') && !headers.some(h => h.includes('کرایه کل'))) {
-                headers.push('کرایه کل');
+            if (!headers.includes(TOTAL_FREIGHT_HEADER) && !headers.some(h => h.includes('کرایه کل'))) {
+                headers.push(TOTAL_FREIGHT_HEADER);
             }
             if (mode === 'full' && !headers.includes('ارزش بار') && !headers.includes('ارزش بار (ریال)') && !headers.some(h => h.includes('ارزش بار'))) {
                 headers.push('ارزش بار');
@@ -1310,7 +1417,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
                 
                 // Handle special columns directly - اولویت با اینهاست
-                if (header === 'کرایه کل') {
+                if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                     const value = ann.totalFreightCost || 0;
                     if (typeof value === 'number') {
                         return value;
@@ -1498,15 +1605,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     };
 
     return (
-        <div className="max-w-screen-2xl mx-auto space-y-4">
-            <div className="bg-white p-4 rounded-xl shadow-md">
-                <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />پیگیری اعلام بار زنده و تخصیص</h2>
+        <div className="w-full max-w-none space-y-4">
+            <div className="bg-white p-3 sm:p-4 rounded-xl shadow-md w-full">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                        <h2 className="text-xl font-bold text-slate-800 flex items-center whitespace-nowrap shrink-0">
+                            <TruckIcon className="w-6 h-6 ml-2 text-sky-600" />
+                            پیگیری اعلام بار زنده و تخصیص
+                        </h2>
                         {onRefresh && (
                             <button
                                 onClick={() => onRefresh()}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 transition-colors"
+                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 transition-colors shrink-0"
                                 title="به‌روزرسانی دستی اطلاعات"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1515,24 +1625,38 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 به‌روزرسانی
                             </button>
                         )}
+                        <div className="flex items-center p-1 bg-slate-100 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0">
+                            <button
+                                key={PENDING_BILL_OF_LADING_TAB}
+                                onClick={() => setActiveLine(PENDING_BILL_OF_LADING_TAB)}
+                                className={`shrink-0 px-3 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${activeLine === PENDING_BILL_OF_LADING_TAB ? 'bg-amber-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
+                            >
+                                در انتظار بارنامه ({tabCounts.pendingBill.toLocaleString('fa-IR')})
+                            </button>
+                            {Object.values(FreightLineType).map(lt => (
+                                <button
+                                    key={lt}
+                                    onClick={() => setActiveLine(lt)}
+                                    className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${activeLine === lt ? 'bg-sky-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
+                                >
+                                    {lt} ({tabCounts.byLine[lt].toLocaleString('fa-IR')})
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                        {canPerformActions && filteredAnnouncements.length > 0 && (currentUser.role === 'ادمین' || currentUser.role === 'Admin' || finalizePermissions[activeLine]) && (
+                    <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
+                        {canPerformActions && filteredAnnouncements.length > 0 && canFinalizeCurrentTab && (
                             <button 
                                 onClick={() => {
-                                    // اگر اعلام بار انتخاب شده باشد، فقط همان‌ها را نهایی می‌کند
-                                    // اما فقط IDهایی که در filteredAnnouncements هستند (یعنی لاین فعلی)
-                                    // در غیر این صورت، همه اعلام بارهای لاین فعلی را نهایی می‌کند
                                     let idsToFinalize: string[];
                                     
                                     if (selectedIds.size > 0) {
-                                        // فقط IDهایی که در filteredAnnouncements هستند را بگیر
                                         const filteredIds = filteredAnnouncements
                                             .filter(a => selectedIds.has(a.id))
                                             .map(a => a.id);
                                         
                                         if (filteredIds.length === 0) {
-                                            alert('هیچ اعلام باری از لاین فعلی انتخاب نشده است');
+                                            alert('هیچ اعلام باری از تب فعلی انتخاب نشده است');
                                             return;
                                         }
                                         
@@ -1541,29 +1665,19 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         idsToFinalize = filteredAnnouncements.map(a => a.id);
                                     }
                                     
-                                    console.log('🔍 [TransportLive] Finalizing:', {
-                                        selectedIdsCount: selectedIds.size,
-                                        filteredIdsCount: idsToFinalize.length,
-                                        idsToFinalize,
-                                        activeLine
-                                    });
-                                    
-                                    onFinalize(idsToFinalize);
-                                    setSelectedIds(new Set()); // پاک کردن انتخاب‌ها بعد از نهایی‌سازی
+                                    handleFinalizeClick(idsToFinalize);
                                 }} 
                                 className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
                                 title={
                                     selectedIds.size > 0 
                                         ? `اتمام تخصیص برای ${selectedIds.size} اعلام بار انتخاب شده`
-                                        : `اتمام تخصیص برای تمام ${filteredAnnouncements.length} اعلام بار ${activeLine}`
+                                        : `اتمام تخصیص برای تمام ${filteredAnnouncements.length} اعلام بار این تب`
                                 }
                             >
                                 <CheckCircleIcon className="w-4 h-4" />
                                 اتمام تخصیص {selectedIds.size > 0 ? `(${selectedIds.size} انتخاب شده)` : `(${filteredAnnouncements.length})`}
                             </button>
                         )}
-                        <div className="flex items-center p-1 bg-slate-100 rounded-lg">
-                        </div>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg">
                             <button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button>
                             <button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button>
@@ -1591,26 +1705,32 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             </button>
                         </div>
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
-                        <div className="flex items-center p-1 bg-slate-100 rounded-lg">
-                            {Object.values(FreightLineType).map(lt => (
-                                <button key={lt} onClick={() => setActiveLine(lt)} className={`flex-1 px-3 py-1 rounded-md text-sm font-semibold transition-colors ${activeLine === lt ? 'bg-sky-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>{lt}</button>
-                            ))}
-                        </div>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-right">
+                <div
+                    className={`w-full ${tableNeedsHorizontalScroll ? 'overflow-x-auto overscroll-x-contain' : ''}`}
+                    style={tableNeedsHorizontalScroll ? { WebkitOverflowScrolling: 'touch' } : undefined}
+                >
+                    <table
+                        className={`text-xs sm:text-sm text-center border-collapse [&_th]:px-1.5 [&_th]:py-2 [&_td]:px-1.5 [&_td]:py-2 ${
+                            isFullDairyAmbient
+                                ? 'min-w-[2800px] w-max'
+                                : tableNeedsHorizontalScroll
+                                  ? 'min-w-[1400px] w-max'
+                                  : 'w-full'
+                        }`}
+                    >
                          <thead className="text-xs uppercase bg-gray-50">
                              {isFullDairyAmbient ? (
                                 <>
                                     <tr>
-                                        {canPerformActions && <th rowSpan={2} className="p-2 sticky left-0 bg-gray-50 z-10"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(filteredAnnouncements.map(a=>a.id)) : new Set())}/></th>}
+                                        {canPerformActions && <th rowSpan={2} className="p-2 text-center align-middle sticky left-0 bg-gray-50 z-10"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(filteredAnnouncements.map(a=>a.id)) : new Set())}/></th>}
                                         {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center">{col.header}</th>)}
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
-                                        <th rowSpan={2} className="p-2 sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
+                                        <th rowSpan={2} className="p-2 text-center align-middle sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
                                     </tr>
                                     <tr>
                                         {[1, 2, 3, 4].map(i => (
@@ -1620,16 +1740,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 <th className="p-2 text-center font-normal border">تناژ</th>
                                                 <th className="p-2 text-center font-normal border">تاریخ تحویل</th>
                                                 <th className="p-2 text-center font-normal border">ساعت تخلیه</th>
-                                                <th className="p-2 text-center font-normal border">کرایه</th>
+                                                <th className="p-2 text-center font-normal border">کرایه (ریال)</th>
                                             </React.Fragment>
                                         ))}
                                     </tr>
                                 </>
                              ) : (
                                 <tr>
-                                    {canPerformActions && <th className="p-2 sticky left-0 bg-gray-50 z-10"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(filteredAnnouncements.map(a=>a.id)) : new Set())}/></th>}
-                                    {visibleColumns.map(col => <th key={col.header} className="p-2" style={{ textAlign: (col.align || 'right') as any }}>{col.header}</th>)}
-                                    <th className="p-2 sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
+                                    {canPerformActions && <th className="p-2 text-center align-middle sticky left-0 bg-gray-50 z-10"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(filteredAnnouncements.map(a=>a.id)) : new Set())}/></th>}
+                                    {visibleColumns.map(col => <th key={col.header} className="p-2 text-center align-middle whitespace-nowrap">{col.header}</th>)}
+                                    <th className="p-2 text-center align-middle sticky -left-px bg-gray-50 z-10 whitespace-nowrap" style={{width: '180px'}}>عملیات</th>
                                 </tr>
                              )}
                         </thead>
@@ -1738,7 +1858,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
                                 return (
                                 <tr key={ann.id} className={`border-b ${selectedIds.has(ann.id) ? 'bg-sky-50' : rowColorClass}`}>
-                                    {canPerformActions && <td className="p-2 sticky left-0 z-10" style={{backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}><input type="checkbox" checked={selectedIds.has(ann.id)} onChange={() => handleSelectRow(ann.id)}/></td>}
+                                    {canPerformActions && <td className="p-2 text-center align-middle sticky left-0 z-10" style={{backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}><input type="checkbox" checked={selectedIds.has(ann.id)} onChange={() => handleSelectRow(ann.id)}/></td>}
                                     
                                      {isFullDairyAmbient ? (
                                         <>
@@ -1749,24 +1869,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                     <React.Fragment key={i}>
                                                         <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.city || '-'}</td>
-                                                        <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
+                                                        <td className="p-2 text-center border">{dest?.tonnage != null ? formatTonnageKg(parseNumericField(dest.tonnage)) : '-'}</td>
                                                         <td className="p-2 text-center border">{(dest as any)?.deliveryDate || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
-                                                        <td className="p-2 text-center border font-mono">{formatDestinationFreightCost(dest?.freightCost)}</td>
+                                                        <td className="p-2 text-center border">{formatDestinationFreightCost(dest?.freightCost)}</td>
                                                     </React.Fragment>
                                                 );
                                             })}
                                         </>
                                     ) : (
-                                        visibleColumns.map(col => <td key={col.header} className="p-2" style={{textAlign: (col.align || 'right') as any}}>{col.render(ann, idx, props)}</td>)
+                                        visibleColumns.map(col => <td key={col.header} className="p-2 text-center align-middle">{col.render(ann, idx, props)}</td>)
                                     )}
 
-                                    <td className="p-2 sticky -left-px z-10" style={{width: '260px', backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}>
-                                        <div className="flex gap-1 flex-wrap">
+                                    <td className="p-1.5 text-center align-middle sticky -left-px z-10" style={{width: '220px', backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}>
+                                        <div className="flex gap-1 flex-wrap justify-center">
                                             {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                                             {canPerformActions && (ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه' || ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
                                             {canPerformActions && <button disabled={!canForward} onClick={() => onForward(ann.id)} title="ارجاع به ترابری دیگر" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed`}>ارجاع</button>}
-                                            {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو اعلام بار" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
+                                            {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو تخصیص (راننده و خودرو پاک می‌شود)" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
                                             {canPerformActions && <button disabled={isAssignedToOtherTransport} onClick={() => handleOpenDialog('change', ann)} title="درخواست تغییر/تقسیم" className={`px-3 py-1 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 ${disabledClasses}`}>درخواست تغییر</button>}
                                             {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
                                         </div>
@@ -1789,7 +1909,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     </div>
                 </div>
              )}
-             <style>{`.input-style { display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; } `}</style>
+             <style>{`.input-style { display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; } .input-compact { display: block; width: 11rem; max-width: 100%; padding: 0.4rem 0.6rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-compact:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-compact-w36 { width: 9rem; } .input-compact-w32 { width: 8rem; } .input-compact-w28 { width: 7rem; } `}</style>
         </div>
     );
 };
@@ -1820,8 +1940,24 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [foundPersonalDriver, setFoundPersonalDriver] = useState<any | null | 'not_found'>(null);
     const [personalDriverDetails, setPersonalDriverDetails] = useState({ name: '', mobile: '', driverSmartId: '' });
     const [personalVehicleDetails, setPersonalVehicleDetails] = useState({ type: '', plate: '', truckSmartId: '' });
-    const [plateParts, setPlateParts] = useState({ part1: '', letter: 'ع', part2: '', cityCode: '' });
+    const [plateParts, setPlateParts] = useState<IranianPlateParts>({
+        part1: '',
+        letter: DEFAULT_PLATE_LETTER,
+        part2: '',
+        cityCode: '',
+    });
+
+    const isIceCreamAnnouncement =
+        announcement.lineType === FreightLineType.IceCream ||
+        announcement.lineType === 'IceCream' ||
+        announcement.lineType === 'بستنی';
+
+    const handlePlatePartsChange = (next: IranianPlateParts) => {
+        setPlateParts(next);
+        setPersonalVehicleDetails((s) => ({ ...s, plate: formatIranianPlateString(next) }));
+    };
     const [foundPersonalVehicle, setFoundPersonalVehicle] = useState<any | null | 'not_found'>(null);
+    const [personalFormMode, setPersonalFormMode] = useState<'simple' | 'detailed'>('simple');
     const [destinations, setDestinations] = useState<Destination[]>([]);
     const [costMode, setCostMode] = useState<'manual' | 'auto'>('auto'); // پیش‌فرض: خودکار
     const [autoTotalCost, setAutoTotalCost] = useState(''); // فقط string با فرمت (مثل "1,234,567")
@@ -1858,6 +1994,13 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 setNationalId(driver.nationalId);
                 setFoundPersonalDriver(driver);
                 setPersonalDriverDetails({ name: driver.name, mobile: driver.mobile, driverSmartId: driver.driverSmartId || '' });
+                // پیش‌فرض ویرایش: فرم ساده (کاربر در صورت نیاز تفصیلی را انتخاب می‌کند)
+                setPersonalFormMode('simple');
+            } else if (announcement.vehicleType) {
+                setPersonalVehicleDetails(s => ({
+                    ...s,
+                    type: s.type || announcement.vehicleType || '',
+                }));
             }
             
             // Set vehicle details if assigned
@@ -1897,7 +2040,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         // اگر تخصیص شخصی است، کرایه‌ها را مدیریت کن
         if (announcement.assignmentType === 'personal' && destsCopy.length > 0) {
             const existingTotalCost = destsCopy.reduce((sum: number, d: any) => sum + (Number(d.freightCost) || 0), 0);
-            const totalTonnage = destsCopy.reduce((sum: number, d: any) => sum + (Number(d.tonnage) || 0), 0);
+            const totalTonnage = sumDestinationTonnageKg(destsCopy);
             
             if (existingTotalCost > 0) {
                 // اگر کرایه قبلاً ثبت شده، از آن استفاده کن و حالت خودکار را فعال کن
@@ -1929,7 +2072,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             const cleanedCost = autoTotalCost.replace(/,/g, '');
             const totalCost = cleanedCost ? Number(cleanedCost) : 0;
             if(totalCost > 0) {
-                const totalTonnage = destinations.reduce((sum, d) => sum + (Number(d.tonnage) || 0), 0);
+                const totalTonnage = sumDestinationTonnageKg(destinations);
                 if(totalTonnage > 0) {
                     // محاسبه کرایه هر مقصد بر اساس نسبت تناژ
                     setDestinations(prevDests => {
@@ -1942,7 +2085,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         }
                         
                         const updatedDests = prevDests.map(dest => {
-                            const tonnageRatio = (Number(dest.tonnage) || 0) / totalTonnage;
+                            const tonnageRatio = parseNumericField(dest.tonnage) / totalTonnage;
                             return {...dest, freightCost: Math.round(totalCost * tonnageRatio)};
                         });
                         
@@ -2187,25 +2330,42 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const handleSave = async () => {
         if (currentUser.role === UserRole.TransportationUser) {
             if (!foundCompanyDriver || !foundVehicle) { alert('لطفا راننده و خودروی شرکتی را با جستجو مشخص کنید.'); return; }
+            const vehicleCheck = checkVehicleMatchesAnnouncement(announcement.vehicleType, foundVehicle as any);
+            if (!vehicleCheck.ok) {
+                alert(vehicleCheck.message);
+                return;
+            }
+            const bl = blNumber.trim();
             // برای کاربر ترابری شرکت، کرایه وجود ندارد (null)
             onUpdateAssignment(announcement.id, {
                 driverId: foundCompanyDriver.id, 
                 vehicleId: foundVehicle.id, 
-                billOfLadingNumber: blNumber, 
+                billOfLadingNumber: bl || undefined, 
                 assignmentType: 'company',
                 totalFreightCost: null, // برای شرکت کرایه نداریم - null می‌فرستیم تا backend آن را ignore کند
                 destinations: destinations.length > 0 ? destinations : undefined,
                 notes: notes,
+                assignedDriverName: foundCompanyDriver.name,
+                assignedDriverContact: foundCompanyDriver.mobile,
+                assignedVehiclePlate: formatCompanyVehiclePlate(foundVehicle),
             });
         } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
-            // موبایل و کد هوشمند راننده اگر خالی باشند، باید از کاربر گرفته شوند
-            if (!nationalId || !personalDriverDetails.name || !personalDriverDetails.mobile || !personalDriverDetails.driverSmartId || !personalVehicleDetails.type || !personalVehicleDetails.plate || !personalVehicleDetails.truckSmartId) {
-                alert('کد ملی، نام راننده، شماره تماس، هوشمند راننده، نوع خودرو، پلاک خودرو و هوشمند کامیون الزامی است.');
+            if (!personalDriverDetails.name?.trim() || !personalDriverDetails.mobile?.trim() || !personalVehicleDetails.type?.trim()) {
+                alert('نام راننده، شماره تماس و نوع خودرو الزامی است.');
                 return;
             }
+            if (personalFormMode === 'detailed') {
+                if (!nationalId?.trim() || !personalDriverDetails.driverSmartId?.trim() || !personalVehicleDetails.truckSmartId?.trim()) {
+                    alert('در فرم تفصیلی، کد ملی، هوشمند راننده و هوشمند کامیون الزامی است.');
+                    return;
+                }
+            }
             
-            // اگر راننده پیدا شده بود و موبایل یا کد هوشمند تغییر کرده، در دیتابیس به‌روزرسانی کن
-            if (foundPersonalDriver && foundPersonalDriver.id && typeof foundPersonalDriver === 'object' && foundPersonalDriver !== 'not_found') {
+            // اگر راننده پیدا شده بود و موبایل یا کد هوشمند تغییر کرده، در دیتابیس به‌روزرسانی کن (فقط فرم تفصیلی)
+            if (
+                personalFormMode === 'detailed' &&
+                foundPersonalDriver && foundPersonalDriver.id && typeof foundPersonalDriver === 'object' && foundPersonalDriver !== 'not_found'
+            ) {
                 const originalDriver = foundPersonalDriver;
                 const mobileChanged = originalDriver.mobile !== personalDriverDetails.mobile;
                 const driverSmartIdChanged = originalDriver.driverSmartId !== personalDriverDetails.driverSmartId;
@@ -2240,7 +2400,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             
             // Format plate number for backend (ensure Iranian format)
             // Build plate from parts: 12ع345-67 (two digits, Persian letter, three digits, dash, two digits)
-            const formattedPlate = `${plateParts.part1}${plateParts.letter}${plateParts.part2}-${plateParts.cityCode}`;
+            const formattedPlate = formatIranianPlateString(plateParts);
             
             // Validate plate format: must match Iranian plate format (12ع345-67)
             if (!plateParts.part1 || plateParts.part1.length !== 2 || 
@@ -2268,18 +2428,22 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             onUpdateAssignment(announcement.id, {
                 driverId: foundPersonalDriver?.id,
                 vehicleId: foundPersonalVehicle?.id,
-                nationalId,
-                driverName: personalDriverDetails.name,
-                driverContact: personalDriverDetails.mobile,
-                driverSmartId: personalDriverDetails.driverSmartId,
-                vehicleType: personalVehicleDetails.type,
+                assignmentFormMode: personalFormMode,
+                nationalId: personalFormMode === 'detailed' ? nationalId : undefined,
+                driverName: personalDriverDetails.name.trim(),
+                driverContact: personalDriverDetails.mobile.trim(),
+                driverSmartId: personalFormMode === 'detailed' ? personalDriverDetails.driverSmartId : undefined,
+                vehicleType: personalVehicleDetails.type.trim(),
                 vehiclePlate: formattedPlate,
-                truckSmartId: personalVehicleDetails.truckSmartId,
+                truckSmartId: personalFormMode === 'detailed' ? personalVehicleDetails.truckSmartId : undefined,
                 destinations,
                 totalFreightCost: personalTotalCost,
                 billOfLadingNumber: blNumber,
                 assignmentType: 'personal',
                 notes: notes,
+                assignedDriverName: personalDriverDetails.name.trim(),
+                assignedDriverContact: personalDriverDetails.mobile.trim(),
+                assignedVehiclePlate: formattedPlate,
             });
         }
         onClose();
@@ -2348,34 +2512,24 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 ) : (
                                     <>
                                         <div>
-                                            <strong className="text-slate-800">فیلدهای اجباری:</strong>
+                                            <strong className="text-slate-800">فرم ساده (پیش‌فرض):</strong>
                                             <ul className="list-disc list-inside mr-4 mt-2 space-y-1">
-                                                <li>کد ملی راننده</li>
-                                                <li>نام راننده</li>
-                                                <li>شماره تماس راننده</li>
-                                                <li>هوشمند راننده</li>
-                                                <li>نوع خودرو</li>
-                                                <li>شماره پلاک خودرو (فرمت: 12ع345-67)</li>
-                                                <li>هوشمند کامیون</li>
-                                                <li>کرایه کل: باید بیشتر از صفر باشد</li>
+                                                <li>نام و نام خانوادگی، شماره تماس، نوع خودرو، پلاک</li>
+                                                <li>کرایه (اجباری) — شماره بارنامه و توضیحات اختیاری</li>
                                             </ul>
                                         </div>
                                         <div>
-                                            <strong className="text-slate-800">فیلدهای اختیاری:</strong>
+                                            <strong className="text-slate-800">فرم تفصیلی:</strong>
                                             <ul className="list-disc list-inside mr-4 mt-2 space-y-1">
-                                                <li>شماره بارنامه</li>
-                                                <li>توضیحات</li>
-                                                <li>کرایه مقاصد (در صورت نیاز می‌توانید برای هر مقصد جداگانه وارد کنید)</li>
+                                                <li>همه فیلدهای فرم ساده به‌علاوه کد ملی، هوشمند راننده و هوشمند کامیون</li>
+                                                <li>جستجو بر اساس کد ملی / هوشمند و نمایش وضعیت راننده/خودرو در سیستم</li>
                                             </ul>
                                         </div>
                                         <div>
                                             <strong className="text-slate-800">نکات مهم:</strong>
                                             <ul className="list-disc list-inside mr-4 mt-2 space-y-1">
-                                                <li>اگر راننده با کد ملی وارد شده در سیستم موجود باشد، اطلاعات موجود نمایش داده می‌شود</li>
-                                                <li>اگر راننده جدید است، اطلاعات جدید به‌صورت خودکار در سیستم ثبت می‌شود</li>
-                                                <li>اگر خودرو با کد هوشمند وارد شده در سیستم موجود باشد، اطلاعات موجود نمایش داده می‌شود</li>
-                                                <li>اگر خودرو جدید است، اطلاعات جدید به‌صورت خودکار در سیستم ثبت می‌شود</li>
-                                                <li>کرایه می‌تواند به دو صورت «خودکار» (یک مبلغ کل) یا «دستی» (برای هر مقصد جداگانه) وارد شود</li>
+                                                <li>در فرم ساده، در صورت تکراری بودن موبایل یا پلاک، رکورد موجود به‌روزرسانی می‌شود</li>
+                                                <li>کرایه می‌تواند «خودکار» (یک مبلغ کل) یا «دستی» (برای هر مقصد) باشد</li>
                                             </ul>
                                         </div>
                                     </>
@@ -2462,7 +2616,16 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 <input placeholder="کد خودرو یا شناسه خودرو..." value={vehicleInternalId} onChange={e => setVehicleInternalId(e.target.value)} className="input-style flex-grow"/>
                                 <button onClick={handleVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
                             </div>
-                            {foundVehicle && <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded"><strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles)} | <strong>کد:</strong> {foundVehicle.vehicleCode || 'ندارد'} | <strong>نوع:</strong> {foundVehicle.type}</div>}
+                            {foundVehicle && (() => {
+                                const opType = getVehicleOperationalType(foundVehicle as any);
+                                const compat = checkVehicleMatchesAnnouncement(announcement.vehicleType, foundVehicle as any);
+                                return (
+                                    <div className={`mt-2 p-2 text-sm rounded ${compat.ok ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-900 border border-amber-200'}`}>
+                                        <strong>خودرو:</strong> {getVehicleIdentifier(foundVehicle.id, vehicles)} | <strong>کد:</strong> {foundVehicle.vehicleCode || 'ندارد'} | <strong>نوع عملیاتی:</strong> {opType || foundVehicle.type || 'نامشخص'}
+                                        {!compat.ok && <p className="mt-1 text-xs font-medium">{compat.message}</p>}
+                                    </div>
+                                );
+                            })()}
                         </div>
                         {/* برای کاربر ترابری شرکت، فیلد کرایه نمایش داده نمی‌شود */}
                          <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
@@ -2472,8 +2635,31 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
 
                 {isPersonalUser && (
                      <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                        <div className="flex flex-wrap items-center gap-4 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <span className="text-sm font-semibold text-slate-700">نوع فرم:</span>
+                            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="personalFormMode"
+                                    checked={personalFormMode === 'simple'}
+                                    onChange={() => setPersonalFormMode('simple')}
+                                />
+                                فرم ساده
+                            </label>
+                            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="personalFormMode"
+                                    checked={personalFormMode === 'detailed'}
+                                    onChange={() => setPersonalFormMode('detailed')}
+                                />
+                                فرم تفصیلی
+                            </label>
+                        </div>
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
                              <legend className="font-semibold px-1 text-sm">۱. اطلاعات راننده و خودرو</legend>
+                             {personalFormMode === 'detailed' && (
+                             <>
                              <div className="flex items-end gap-2">
                                 <div className="flex-grow"><label className="text-xs">کد ملی راننده*</label><input placeholder="کدملی..." value={nationalId} onChange={e => {setNationalId(e.target.value); if(e.target.value !== nationalId) {setFoundPersonalDriver(null); setShowDriverDropdown(false);}}} className="input-style"/></div>
                                 <button onClick={handlePersonalDriverLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
@@ -2559,16 +2745,62 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     ) : null}
                                 </div>
                             )}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                                <div><label className="text-xs">نام و نام خانوادگی*</label><input value={personalDriverDetails.name || ''} onChange={e => setPersonalDriverDetails(s=>({...s, name: e.target.value}))} className="input-style"/></div>
-                                <div><label className="text-xs">شماره تماس*</label><input value={personalDriverDetails.mobile || ''} onChange={e => setPersonalDriverDetails(s=>({...s, mobile: e.target.value}))} className="input-style"/></div>
-                                <div><label className="text-xs">هوشمند راننده*</label><input placeholder="DRV001" value={personalDriverDetails.driverSmartId || ''} onChange={e => setPersonalDriverDetails(s=>({...s, driverSmartId: e.target.value}))} className="input-style"/></div>
+                            </>
+                            )}
+                            {personalFormMode === 'simple' && (
+                                <p className="text-xs text-slate-600 pb-1">
+                                    ثبت سریع: نام، تماس، نوع خودرو و پلاک کافی است. کد ملی و کدهای هوشمند در پس‌زمینه ساخته می‌شوند.
+                                </p>
+                            )}
+                            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 pt-2">
+                                <div className="w-fit max-w-full">
+                                    <label className="text-xs block mb-0.5">نام و نام خانوادگی*</label>
+                                    <input
+                                        value={personalDriverDetails.name || ''}
+                                        onChange={(e) => setPersonalDriverDetails((s) => ({ ...s, name: e.target.value }))}
+                                        className="input-compact"
+                                    />
+                                </div>
+                                <div className="w-fit max-w-full">
+                                    <label className="text-xs block mb-0.5">شماره تماس*</label>
+                                    <input
+                                        value={personalDriverDetails.mobile || ''}
+                                        onChange={(e) => setPersonalDriverDetails((s) => ({ ...s, mobile: e.target.value }))}
+                                        className="input-compact input-compact-w36"
+                                        dir="ltr"
+                                    />
+                                </div>
+                                {personalFormMode === 'detailed' && (
+                                    <div className="w-fit max-w-full">
+                                        <label className="text-xs block mb-0.5">هوشمند راننده*</label>
+                                        <input
+                                            placeholder="DRV001"
+                                            value={personalDriverDetails.driverSmartId || ''}
+                                            onChange={(e) => setPersonalDriverDetails((s) => ({ ...s, driverSmartId: e.target.value }))}
+                                            className="input-compact input-compact-w32"
+                                            dir="ltr"
+                                        />
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex items-end gap-2 mt-3">
-                                <div className="flex-grow"><label className="text-xs">هوشمند کامیون*</label><input placeholder="TRK001" value={personalVehicleDetails.truckSmartId} onChange={e => setPersonalVehicleDetails(s=>({...s, truckSmartId: e.target.value}))} className="input-style"/></div>
-                                <button onClick={handlePersonalVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700">جستجو</button>
+                            {personalFormMode === 'detailed' && (
+                            <div className="flex flex-wrap items-end gap-2 mt-3">
+                                <div className="w-fit max-w-full">
+                                    <label className="text-xs block mb-0.5">هوشمند کامیون*</label>
+                                    <input
+                                        placeholder="TRK001"
+                                        value={personalVehicleDetails.truckSmartId}
+                                        onChange={(e) => setPersonalVehicleDetails((s) => ({ ...s, truckSmartId: e.target.value }))}
+                                        className="input-compact input-compact-w36"
+                                        dir="ltr"
+                                    />
+                                </div>
+                                <button onClick={handlePersonalVehicleLookup} className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 shrink-0">جستجو</button>
                             </div>
+                            )}
                             
+                            {personalFormMode === 'detailed' && (
+                            <>
                             {/* Dropdown for multiple vehicle results */}
                             {showVehicleDropdown && searchVehicleResults.length > 0 && (
                                 <div className="mt-2 p-3 border rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto">
@@ -2652,106 +2884,23 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     ) : null}
                                 </div>
                             )}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                                <div><label className="text-xs">نوع خودرو*</label><input type="text" value={personalVehicleDetails.type} onChange={e => setPersonalVehicleDetails(s=>({...s, type: e.target.value}))} className="input-style" autoComplete="off"/></div>
-                                <div>
-                                    <label className="text-xs">شماره پلاک*</label>
-                                    <div className="flex items-center gap-1.5">
-                                        <input 
-                                            type="text" 
-                                            value={plateParts.part1} 
-                                            onChange={e => {
-                                                const val = e.target.value.replace(/\D/g, '').slice(0, 2);
-                                                setPlateParts(p => {
-                                                    const newParts = {...p, part1: val};
-                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
-                                                    return newParts;
-                                                });
-                                            }}
-                                            placeholder="12" 
-                                            className="input-style w-12 text-center" 
-                                            maxLength={2}
-                                            autoComplete="off"
-                                        />
-                                        <select 
-                                            value={plateParts.letter} 
-                                            onChange={e => {
-                                                const val = e.target.value;
-                                                setPlateParts(p => {
-                                                    const newParts = {...p, letter: val};
-                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
-                                                    return newParts;
-                                                });
-                                            }}
-                                            className="input-style w-12 text-center px-1"
-                                        >
-                                            <option value="الف">الف</option>
-                                            <option value="ب">ب</option>
-                                            <option value="پ">پ</option>
-                                            <option value="ت">ت</option>
-                                            <option value="ث">ث</option>
-                                            <option value="ج">ج</option>
-                                            <option value="چ">چ</option>
-                                            <option value="ح">ح</option>
-                                            <option value="خ">خ</option>
-                                            <option value="د">د</option>
-                                            <option value="ذ">ذ</option>
-                                            <option value="ر">ر</option>
-                                            <option value="ز">ز</option>
-                                            <option value="ژ">ژ</option>
-                                            <option value="س">س</option>
-                                            <option value="ش">ش</option>
-                                            <option value="ص">ص</option>
-                                            <option value="ض">ض</option>
-                                            <option value="ط">ط</option>
-                                            <option value="ظ">ظ</option>
-                                            <option value="ع">ع</option>
-                                            <option value="غ">غ</option>
-                                            <option value="ف">ف</option>
-                                            <option value="ق">ق</option>
-                                            <option value="ک">ک</option>
-                                            <option value="گ">گ</option>
-                                            <option value="ل">ل</option>
-                                            <option value="م">م</option>
-                                            <option value="ن">ن</option>
-                                            <option value="و">و</option>
-                                            <option value="ه">ه</option>
-                                            <option value="ی">ی</option>
-                                        </select>
-                                        <input 
-                                            type="text" 
-                                            value={plateParts.part2} 
-                                            onChange={e => {
-                                                const val = e.target.value.replace(/\D/g, '').slice(0, 3);
-                                                setPlateParts(p => {
-                                                    const newParts = {...p, part2: val};
-                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
-                                                    return newParts;
-                                                });
-                                            }}
-                                            placeholder="345" 
-                                            className="input-style w-14 text-center" 
-                                            maxLength={3}
-                                            autoComplete="off"
-                                        />
-                                        <span className="font-bold text-slate-600">-</span>
-                                        <input 
-                                            type="text" 
-                                            value={plateParts.cityCode} 
-                                            onChange={e => {
-                                                const val = e.target.value.replace(/\D/g, '').slice(0, 2);
-                                                setPlateParts(p => {
-                                                    const newParts = {...p, cityCode: val};
-                                                    setPersonalVehicleDetails(s => ({...s, plate: `${newParts.part1}${newParts.letter}${newParts.part2}-${newParts.cityCode}`}));
-                                                    return newParts;
-                                                });
-                                            }}
-                                            placeholder="67" 
-                                            className="input-style w-12 text-center" 
-                                            maxLength={2}
-                                            autoComplete="off"
-                                        />
-                                    </div>
+                            </>
+                            )}
+                            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 pt-1">
+                                <div className="w-fit max-w-full">
+                                    <label className="text-xs block mb-0.5">نوع خودرو*</label>
+                                    <input
+                                        type="text"
+                                        value={personalVehicleDetails.type}
+                                        onChange={(e) => setPersonalVehicleDetails((s) => ({ ...s, type: e.target.value }))}
+                                        className="input-compact input-compact-w28"
+                                        autoComplete="off"
+                                        placeholder={announcement.vehicleType || ''}
+                                    />
+                                </div>
+                                <div className="w-fit max-w-full">
+                                    <label className="text-xs block mb-0.5">شماره پلاک*</label>
+                                    <IranianPlateInput value={plateParts} onChange={handlePlatePartsChange} />
                                 </div>
                             </div>
                         </fieldset>
@@ -2791,7 +2940,14 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             <div className="space-y-2">
                                 {destinations.map((dest, i) => (
                                     <div key={dest.id} className="grid grid-cols-5 gap-2 items-center text-sm p-1">
-                                        <div className="col-span-2"><strong>مقصد {i+1}:</strong> {dest.city} ({dest.tonnage ? Number(dest.tonnage).toLocaleString('fa-IR') : 0} کیلوگرم)</div>
+                                        <div className="col-span-2">
+                                            <strong>مقصد {i + 1}:</strong> {dest.city}{' '}
+                                            (
+                                            {isIceCreamAnnouncement
+                                                ? `${announcement.cartonCount != null ? Number(announcement.cartonCount).toLocaleString('fa-IR') : '-'} کارتن`
+                                                : `${dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : 0} کیلوگرم`}
+                                            )
+                                        </div>
                                         <div className="col-span-3 flex items-center gap-2"><label>کرایه:</label><input 
                                             type="text" 
                                             value={(() => {
@@ -2855,8 +3011,19 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     );
 };
 
-const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnouncement, allAnnouncements: FreightAnnouncement[], activeLine: FreightLineType, onClose: ()=>void, onSave: TransportLiveProps['onTransferDestination']}> = 
+const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnouncement, allAnnouncements: FreightAnnouncement[], activeLine: TransportLiveTab, onClose: ()=>void, onSave: TransportLiveProps['onTransferDestination']}> = 
 ({ sourceAnnouncement, allAnnouncements, activeLine, onClose, onSave }) => {
+    const sourceLine = useMemo(() => {
+        const backend = lineTypeFromAnnouncement(sourceAnnouncement);
+        if (backend === 'IceCream') return FreightLineType.IceCream;
+        if (backend === 'Dairy') return FreightLineType.Dairy;
+        return FreightLineType.Ambient;
+    }, [sourceAnnouncement]);
+
+    const sameLineAnnouncements = useMemo(
+        () => allAnnouncements.filter((a) => matchesFreightLine(a, sourceLine)),
+        [allAnnouncements, sourceLine]
+    );
     const [destinationId, setDestinationId] = useState('');
     const [targetAnnouncementId, setTargetAnnouncementId] = useState('');
     const [newPosition, setNewPosition] = useState(1);
@@ -2910,8 +3077,7 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
     
     // پیدا کردن شماره ردیف برای هر اعلام بار (فقط در لاین فعلی)
     const getRowNumber = (announcementId: string): number => {
-        const filteredAnnouncements = allAnnouncements.filter(a => a.lineType === activeLine);
-        const index = filteredAnnouncements.findIndex(a => a.id === announcementId);
+        const index = sameLineAnnouncements.findIndex(a => a.id === announcementId);
         return index >= 0 ? index + 1 : 0;
     };
     
@@ -2957,7 +3123,7 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
             }
         }
         
-        const tonnage = dest.tonnage ? `${Number(dest.tonnage).toLocaleString('fa-IR')}` : '';
+        const tonnage = dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : '';
         const rowNum = getRowNumber(sourceAnnouncement.id);
         // برای استفاده در dropdown، باید string برگردانیم
         return `ردیف ${rowNum} - ${destIndex + 1}-${repType ? `(${repType}) ` : ''}${dest.city}${tonnage ? ` (${tonnage})` : ''}`;
@@ -3000,7 +3166,7 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
             }
         }
         
-        const tonnage = dest.tonnage ? `${Number(dest.tonnage).toLocaleString('fa-IR')}` : '';
+        const tonnage = dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : '';
         const rowNum = getRowNumber(sourceAnnouncement.id);
         const city = dest.city;
         return `ردیف ${rowNum} - ${destIndex + 1}-${repType ? `(${repType}) ` : ''}<strong style="font-weight: bold; color: #1e40af;">${city}</strong>${tonnage ? ` (${tonnage})` : ''}`;
@@ -3049,7 +3215,7 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
                         destRepType = 'نماینده';
                     }
                 }
-                const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
                 // برای استفاده در dropdown، باید string برگردانیم
                 return `${idx + 1}-${destRepType ? `(${destRepType}) ` : ''}${d.city}${tonnage ? ` (${tonnage})` : ''}`;
             })
@@ -3096,7 +3262,7 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
                         destRepType = 'نماینده';
                     }
                 }
-                const tonnage = d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')}` : '';
+                const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
                 const city = d.city;
                 return `${idx + 1}-${destRepType ? `(${destRepType}) ` : ''}<strong style="font-weight: bold; color: #1e40af;">${city}</strong>${tonnage ? ` (${tonnage})` : ''}`;
             })
@@ -3116,7 +3282,7 @@ const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnounceme
                             <option value={sourceAnnouncement.id} className="font-semibold bg-blue-50" style={{fontWeight: '600'}}>
                                 ردیف {getRowNumber(sourceAnnouncement.id)} (همان ردیف - تغییر ترتیب)
                             </option>
-                            {allAnnouncements.filter(a => a.id !== sourceAnnouncement.id && a.lineType === activeLine).map(a=>
+                            {sameLineAnnouncements.filter(a => a.id !== sourceAnnouncement.id).map(a=>
                                 <option key={a.id} value={a.id} style={{fontWeight: '600'}}>
                                     {formatTargetAnnouncement(a)}
                                 </option>

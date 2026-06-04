@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, parseJalaliDateString, gregorianToJalali } from '../utils/jalali';
+import { getTotalKilometersFromCalculation } from '../utils/tourMileage';
 import * as XLSX from 'xlsx';
 
 interface MonthlyCommissionCalculationProps {
@@ -256,13 +257,13 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
             console.log('📦 [MonthlyCommission] داده‌های دریافتی:', data.length, 'رکورد');
             setCalculations(data);
             
-            // تورهای جداگانه
+            // تورهای جداگانه — پیمایش فقط از رکورد ذخیره‌شده محاسبه هزینه تور
             const details: DriverTourDetail[] = data.map((calc: any) => {
                 const queueType = calc.queue_type || 'porsant';
                 const vehicleType = calc.vehicle_type || '';
                 const approvedKm = Number(calc.approved_kilometers) || 0;
                 const excessKm = Number(calc.excess_kilometers) || 0;
-                const totalKm = approvedKm + excessKm;
+                const totalKm = getTotalKilometersFromCalculation(calc);
                 const billOfLadingDate = calc.bill_of_lading_date || '';
                 
                 let commission = 0;
@@ -312,7 +313,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                 
                 const approvedKm = Number(calc.approved_kilometers) || 0;
                 const excessKm = Number(calc.excess_kilometers) || 0;
-                const totalKm = approvedKm + excessKm;
+                const totalKm = getTotalKilometersFromCalculation(calc);
                 const billOfLadingDate = calc.bill_of_lading_date || '';
                 
                 // محاسبه اجرت بر اساس صف

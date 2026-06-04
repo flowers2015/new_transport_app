@@ -2,6 +2,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
+import {
+    getDestinationCitiesLabel,
+    getAssignedDriverDisplayName,
+    getAssignedDriverContact,
+    getAssignedVehiclePlate,
+    TOTAL_FREIGHT_HEADER,
+    formatFreightAmountCell,
+} from '../utils/freightDisplay';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -214,7 +222,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 // console.log('🔍 [Render] Bill of lading for', ann.id, ':', result);
                 return result;
             }},
-            { header: 'کرایه کل', display: () => true, render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
             
             // Full View Specific - Ice Cream
             { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
@@ -339,11 +347,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             // Helper to get value for a column header - دقیقاً مطابق با ترتیب headers
             const getValueForHeader = (header: string): any => {
                 // بررسی اینکه آیا این ستون عددی است
-                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
                 const isNumericColumn = numericHeaders.some(h => header.includes(h));
                 
                 // Handle special columns directly - اولویت با اینهاست
-                if (header === 'کرایه کل') {
+                if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                     const value = ann.totalFreightCost || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
                 }
@@ -480,7 +488,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         
         // تنظیم فرمت اعداد برای ستون‌های عددی
         headers.forEach((header, colIdx) => {
-            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
             if (isNumericColumn) {
                 for (let row = 1; row <= filteredAnnouncements.length; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
@@ -533,8 +541,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     }
                 });
                 
-                if (!seenHeaders.has('کرایه کل')) {
-                    headers.push('کرایه کل');
+                if (!seenHeaders.has(TOTAL_FREIGHT_HEADER) && !seenHeaders.has('کرایه کل')) {
+                    headers.push(TOTAL_FREIGHT_HEADER);
                 }
                 if (!seenHeaders.has('ارزش بار') && !seenHeaders.has('ارزش بار (ریال)')) {
                     headers.push('ارزش بار');
@@ -566,10 +574,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 
                 // Helper to get value for header
                 const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
-                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
                     const isNumericColumn = numericHeaders.some(h => header.includes(h));
                     
-                    if (header === 'کرایه کل') {
+                    if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                         return ann.totalFreightCost || 0;
                     }
                     if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
@@ -696,7 +704,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         
                         // Format numbers
                         const header = headers[colNumber - 1];
-                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
+                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
                         if (isNumericColumn && typeof cell.value === 'number') {
                             // برای اعداد بزرگ، از فرمت عددی بدون نماد علمی استفاده می‌کنیم
                             if (cell.value > 1e15) {
@@ -749,11 +757,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const visibleColumns = useMemo(() => {
         // Extra transport columns (for both modes, position differs)
         const extraCols = [
-            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getDriverName(ann.assignedDriverId, props.drivers, props.personalDrivers) },
-            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getDriverContact(ann.assignedDriverId, props.drivers, props.personalDrivers)}</span> },
-            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{ann.assignmentType === 'company' ? getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles) : getVehicleIdentifier(ann.assignedVehicleId, props.vehicles, props.personalVehicles)}</span> },
+            { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
+            { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
+            { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{getAssignedVehiclePlate(ann, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
-            { header: 'کرایه کل', render: (ann: FreightAnnouncement) => <span className="font-mono">{formatCurrency(ann.totalFreightCost)}</span> },
+            { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
         ];
 
         // Ice Cream: mirror planner order, then extras
@@ -762,7 +770,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
-                { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{ann.destinations[0]?.city || '-'}</span> },
+                { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
@@ -960,7 +968,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-right">
+          <table className="w-full text-sm text-center">
             <thead className="text-xs uppercase bg-gray-50">
                              {isFullDairyAmbient ? (
                                 <>
@@ -999,7 +1007,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                         if (visibleColumnHeaders.size > 0 && !visibleColumnHeaders.has(col.header)) {
                                             return null;
                                         }
-                                        return <th key={col.header} className="p-2" style={{ textAlign: (col.align || 'right') as any }}>
+                                        return <th key={col.header} className="p-2 text-center align-middle">
                                             <span>{col.header}</span>
                                         </th>;
                                     })}
@@ -1024,7 +1032,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                                         <td className="p-2 text-center border">{dest?.city || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
-                                                        <td className="p-2 text-center border font-mono">{formatCurrency(dest?.freightCost)}</td>
+                                                        <td className="p-2 text-center border">{formatFreightAmountCell(dest?.freightCost)}</td>
                                                     </React.Fragment>
                                                 );
                                             })}
@@ -1035,7 +1043,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                             if (visibleColumnHeaders.size > 0 && !visibleColumnHeaders.has(col.header)) {
                                                 return null;
                                             }
-                                            return <td key={col.header} className="p-2" style={{textAlign: (col.align || 'right') as any}}>{col.render(ann, idx, props)}</td>;
+                                            return <td key={col.header} className="p-2 text-center align-middle">{col.render(ann, idx, props)}</td>;
                                         })
                                     )}
 
