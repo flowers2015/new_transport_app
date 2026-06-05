@@ -1301,7 +1301,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
             {/* دیالوگ بستن دوره */}
             {showClosePeriodDialog && periodCheckData && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold text-slate-800 mb-4">
                             🔒 بستن دوره مالی پورسانت
                         </h2>
@@ -1323,15 +1323,59 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                             {/* تورهای ثبت شده */}
                             <div className="bg-green-50 rounded p-3 mb-3">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-green-800 font-medium">✅ تورهای هزینه ثبت شده (محاسبه می‌شوند):</span>
+                                    <span className="text-green-800 font-medium">✅ تورهای هزینه ثبت‌شده در این بازه (بسته می‌شوند):</span>
                                     <span className="font-bold text-green-700 text-lg">{periodCheckData.recordedTours} تور</span>
                                 </div>
-                                <div className="flex justify-between items-center mt-2">
-                                    <span className="text-sm text-green-600">مجموع پورسانت/اجرت قابل پرداخت:</span>
-                                    <span className="font-bold text-green-700">{periodCheckData.totalAmount?.toLocaleString('fa-IR')} ریال</span>
+
+                                <div className="mt-3 space-y-2 border-t border-green-200 pt-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-medium text-green-900">جمع هزینه کل تورها (total_cost):</span>
+                                        <span className="font-bold text-green-800">
+                                            {(periodCheckData.totalCost ?? periodCheckData.totalAmount)?.toLocaleString('fa-IR')} ریال
+                                        </span>
+                                    </div>
+                                    {periodCheckData.commissionPayableEstimate != null && (
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-green-700">جمع قابل پرداخت (مثل جدول پورسانت — بدون بارنامه، کمکی، دپو):</span>
+                                            <span className="font-semibold text-green-800">
+                                                {Number(periodCheckData.commissionPayableEstimate).toLocaleString('fa-IR')} ریال
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
+
+                                {Array.isArray(periodCheckData.costBreakdown) && periodCheckData.costBreakdown.length > 0 && (
+                                    <div className="mt-3 bg-white/70 rounded border border-green-200 overflow-hidden">
+                                        <p className="text-xs font-medium text-green-900 px-3 py-2 border-b border-green-100">
+                                            تفکیک سهم هر بخش از هزینه کل
+                                        </p>
+                                        <table className="w-full text-xs">
+                                            <thead>
+                                                <tr className="bg-green-100/80 text-green-900">
+                                                    <th className="text-right p-2 font-medium">بخش</th>
+                                                    <th className="text-left p-2 font-medium">مبلغ (ریال)</th>
+                                                    <th className="text-center p-2 font-medium w-16">٪ کل</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {periodCheckData.costBreakdown.map((row: { key: string; label: string; amount: number; percent: number }) => (
+                                                    <tr key={row.key} className="border-t border-green-50">
+                                                        <td className="p-2 text-slate-700">{row.label}</td>
+                                                        <td className="p-2 text-left font-medium text-slate-800">
+                                                            {Number(row.amount).toLocaleString('fa-IR')}
+                                                        </td>
+                                                        <td className="p-2 text-center text-slate-600">
+                                                            {row.percent.toLocaleString('fa-IR')}٪
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
                                 <p className="text-xs text-green-600 mt-2">
-                                    این تورها به بایگانی منتقل می‌شوند و از کارتابل محاسبه هزینه تور حذف می‌شوند.
+                                    این تورها از کارتابل «محاسبه هزینه تور» حذف می‌شوند و ویرایش آن‌ها قفل می‌شود.
                                 </p>
                             </div>
                             

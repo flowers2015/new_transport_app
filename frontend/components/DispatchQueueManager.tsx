@@ -68,6 +68,8 @@ type AssignDialogState = {
     data: StageResponse | null;
     selectedAnnouncementId: string;
     assigning: boolean;
+    preferenceBriefText: string | null;
+    preferenceBriefLoading: boolean;
 };
 
 type PreferencesDialogState = {
@@ -102,6 +104,8 @@ const initialAssignDialogState: AssignDialogState = {
     data: null,
     selectedAnnouncementId: '',
     assigning: false,
+    preferenceBriefText: null,
+    preferenceBriefLoading: false,
 };
 
 const initialPreferencesDialogState: PreferencesDialogState = {
@@ -1121,6 +1125,30 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 data: payload,
                 selectedAnnouncementId: '',
             }));
+            const driverId = entry.driver?.id || entry.driverId;
+            if (driverId) {
+                setAssignDialog(prev => ({ ...prev, preferenceBriefLoading: true, preferenceBriefText: null }));
+                try {
+                    const briefParams = new URLSearchParams();
+                    if (categoryKey) briefParams.append('category', categoryKey);
+                    const briefRes = await fetch(
+                        getApiUrl(`bale/preference-brief/${driverId}?${briefParams.toString()}`),
+                        { headers }
+                    );
+                    if (briefRes.ok) {
+                        const brief = (await briefRes.json()) as { operatorText?: string };
+                        setAssignDialog(prev => ({
+                            ...prev,
+                            preferenceBriefText: brief.operatorText || null,
+                            preferenceBriefLoading: false,
+                        }));
+                    } else {
+                        setAssignDialog(prev => ({ ...prev, preferenceBriefLoading: false }));
+                    }
+                } catch {
+                    setAssignDialog(prev => ({ ...prev, preferenceBriefLoading: false }));
+                }
+            }
         } catch (error) {
             console.error('Failed to load assignment data', error);
             setAssignDialog(prev => ({
@@ -2092,6 +2120,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                     )}
                                                 </div>
                                             )}
+                                        {(assignDialog.preferenceBriefLoading || assignDialog.preferenceBriefText) && (
+                                            <div className="border-t border-violet-200 pt-2 space-y-1 text-violet-900">
+                                                <div className="font-semibold">خلاصه ترجیحات (بله / اپراتور)</div>
+                                                {assignDialog.preferenceBriefLoading ? (
+                                                    <div className="text-slate-400">در حال بارگذاری...</div>
+                                                ) : (
+                                                    <pre className="whitespace-pre-wrap text-[10px] leading-relaxed font-sans">
+                                                        {assignDialog.preferenceBriefText}
+                                                    </pre>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="space-y-3">

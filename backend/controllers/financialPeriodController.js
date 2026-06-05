@@ -164,6 +164,128 @@ async function getFinancialPeriods(req, res) {
   }
 }
 
+/** تفکیک هزینه تورهای ثبت‌شده برای دیالوگ بستن دوره */
+function buildPeriodCostBreakdown(recordedTours) {
+  const n = (v) => parseInt(v, 10) || 0;
+
+  const sums = {
+    tourCost: 0,
+    fixedAllowance: 0,
+    billOfLading: 0,
+    fuel: 0,
+    food: 0,
+    toll: 0,
+    helper: 0,
+    returnCargo: 0,
+    returnInterBranch: 0,
+    returnBill: 0,
+    multiUnload: 0,
+    excessMission: 0,
+    depot: 0,
+    loading: 0,
+  };
+
+  for (const r of recordedTours) {
+    sums.tourCost += n(r.tour_cost);
+    sums.fixedAllowance += n(r.fixed_allowance);
+    sums.billOfLading += n(r.bill_of_lading_cost);
+    sums.fuel += n(r.fuel_cost);
+    sums.food += n(r.food_cost);
+    sums.toll += n(r.toll_cost);
+    sums.helper += n(r.helper_driver_cost);
+    sums.returnCargo += n(r.return_cargo_cost);
+    sums.returnInterBranch += n(r.return_inter_branch_cargo_cost);
+    sums.returnBill += n(r.return_bill_of_lading_cost);
+    sums.multiUnload += n(r.multi_unload_cost);
+    sums.excessMission += n(r.excess_mission_cost);
+    sums.depot +=
+      n(r.depot_cargo_handling_cost) +
+      n(r.depot_kilometer_rate) +
+      n(r.depot_food_cost) +
+      n(r.depot_mission_cost);
+    sums.loading += n(r.loading_cost);
+  }
+
+  const totalCost = recordedTours.reduce((s, r) => s + n(r.total_cost), 0);
+  const commissionAllowance = sums.tourCost + sums.fixedAllowance;
+
+  // همان منطق «جمع قابل پرداخت» صفحه محاسبه پورسانت (بدون بارنامه، کمکی، دپو، برگشتی بین‌شعب)
+  const commissionPayableEstimate =
+    commissionAllowance +
+    sums.food +
+    sums.fuel +
+    sums.toll +
+    sums.loading +
+    sums.returnCargo +
+    sums.returnBill +
+    sums.multiUnload +
+    sums.excessMission;
+
+  const amountByKey = {
+    commission: commissionAllowance,
+    billOfLading: sums.billOfLading,
+    fuel: sums.fuel,
+    food: sums.food,
+    toll: sums.toll,
+    helper: sums.helper,
+    returnCargo: sums.returnCargo,
+    returnInterBranch: sums.returnInterBranch,
+    returnBill: sums.returnBill,
+    multiUnload: sums.multiUnload,
+    excessMission: sums.excessMission,
+    depot: sums.depot,
+    loading: sums.loading,
+  };
+
+  const lineDefs = [
+    { key: 'commission', label: 'پورسانت / اجرت تور' },
+    { key: 'billOfLading', label: 'هزینه بارنامه' },
+    { key: 'fuel', label: 'سوخت' },
+    { key: 'food', label: 'غذا' },
+    { key: 'toll', label: 'عوارض جاده' },
+    { key: 'helper', label: 'راننده کمکی' },
+    { key: 'returnCargo', label: 'بار برگشتی' },
+    { key: 'returnInterBranch', label: 'بار برگشتی بین شعب' },
+    { key: 'returnBill', label: 'بارنامه برگشتی' },
+    { key: 'multiUnload', label: 'چندجا تخلیه' },
+    { key: 'excessMission', label: 'ماموریت مازاد' },
+    { key: 'depot', label: 'هزینه‌های دپو' },
+    { key: 'loading', label: 'بارگیری' },
+  ];
+
+  const breakdown = lineDefs
+    .map(({ key, label }) => {
+      const amount = amountByKey[key] || 0;
+      return {
+        key,
+        label,
+        amount,
+        percent: totalCost > 0 ? Math.round((amount / totalCost) * 1000) / 10 : 0,
+      };
+    })
+    .filter((item) => item.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+
+  const breakdownSum = breakdown.reduce((s, i) => s + i.amount, 0);
+  const otherAmount = Math.max(0, totalCost - breakdownSum);
+
+  if (otherAmount > 0) {
+    breakdown.push({
+      key: 'other',
+      label: 'سایر / اختلاف گرد',
+      amount: otherAmount,
+      percent: totalCost > 0 ? Math.round((otherAmount / totalCost) * 1000) / 10 : 0,
+    });
+  }
+
+  return {
+    totalCost,
+    commissionPayableEstimate,
+    commissionAllowance,
+    breakdown,
+  };
+}
+
 /**
  * بررسی وضعیت قبل از بستن دوره
  */
@@ -317,8 +439,9 @@ async function checkPeriodStatus(req, res) {
       console.log('📋 [checkPeriodStatus] نمونه راننده:', Object.values(unrecordedByDriver)[0]);
     }
 
-    // محاسبه مبلغ کل (فقط تورهای در بازه تاریخ)
-    const totalAmount = recordedTours.reduce((sum, r) => sum + (parseInt(r.total_cost) || 0), 0);
+    // تفکیک هزینه (فقط تورهای در بازه تاریخ)
+    const costSummary = buildPeriodCostBreakdown(recordedTours);
+    const totalAmount = costSummary.totalCost;
     
     // تعداد کل تورهای ثبت نشده (بدون فیلتر تاریخ - مثل کارتابل)
     const totalUnrecorded = unrecordedFromAnnouncements + unrecordedWithZeroCost;
@@ -335,6 +458,9 @@ async function checkPeriodStatus(req, res) {
       // آمار بازه تاریخ (برای بستن دوره)
       recordedTours: recordedTours.length,
       totalAmount,
+      totalCost: costSummary.totalCost,
+      commissionPayableEstimate: costSummary.commissionPayableEstimate,
+      costBreakdown: costSummary.breakdown,
       alreadyCalculatedTours: alreadyCalculated.length,
       // آمار کلی (بدون فیلتر تاریخ - مثل کارتابل)
       unrecordedTours: totalUnrecorded,

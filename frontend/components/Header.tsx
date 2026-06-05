@@ -91,6 +91,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.TransportDashboard, label: 'داشبورد ترابری', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.TransportDispatchQueue, label: 'ثبت نوبت', roles: [UserRole.TransportationUser] },
       { view: View.TransportDispatchBoard, label: 'تابلو اعلام بار', roles: [UserRole.TransportationUser] },
+      { view: View.TransportBaleSession, label: 'جلسه بله', roles: [UserRole.TransportationUser] },
       { type: 'divider', roles: Object.values(UserRole) },
       // Workshop & Fleet Management
       { view: View.Branches, label: 'مدیریت شعب', roles: [UserRole.Transportation, UserRole.VehicleAllocationExpert] },

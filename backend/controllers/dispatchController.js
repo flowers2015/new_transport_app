@@ -1261,13 +1261,20 @@ async function assignFreight(req, res) {
 
     let actingUserName = req.user?.name || req.user?.username || null;
 
-    if ((!actingUserName || actingUserName.trim() === '') && actingUserId) {
+    if (actingUserId) {
       const { rows: userRows } = await client.query(
-        `SELECT name, username, full_name FROM users WHERE id = $1`,
+        `SELECT id, name, username, full_name FROM users WHERE id = $1`,
         [actingUserId]
       );
-      const userRow = userRows[0] || {};
-      actingUserName = userRow.name || userRow.full_name || userRow.username || null;
+      if (!userRows.length) {
+        actingUserId = null;
+        actingUserName = null;
+      } else {
+        const userRow = userRows[0];
+        if (!actingUserName || actingUserName.trim() === '') {
+          actingUserName = userRow.name || userRow.full_name || userRow.username || null;
+        }
+      }
     }
 
     if (!actingUserId || !actingUserName) {

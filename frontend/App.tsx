@@ -46,6 +46,7 @@ const TransportLiveContainer = React.lazy(() => import('./components/TransportLi
 const DispatchQueueManager = React.lazy(() => import('./components/DispatchQueueManager'));
 const DispatchAssignmentManager = React.lazy(() => import('./components/DispatchAssignmentManager'));
 const DispatchBoardView = React.lazy(() => import('./components/DispatchBoardView'));
+const BaleDispatchSession = React.lazy(() => import('./components/BaleDispatchSession'));
 const FreightHistoryContainer = React.lazy(() => import('./components/FreightHistoryContainer'));
 const TransportDashboardContainer = React.lazy(() => import('./components/TransportDashboardContainer'));
 const FreightDashboard = React.lazy(() => import('./components/FreightDashboard'));
@@ -622,6 +623,9 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.TransportDispatchBoard);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <DispatchBoardView />;
+            case View.TransportBaleSession:
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <BaleDispatchSession currentUser={currentUser} />;
             case View.FreightPlanning:
                 console.log('[App] Render view:', View.FreightPlanning);
                 return (

@@ -1,0 +1,367 @@
+const pool = require('../db');
+const baleApi = require('../services/bale/baleApi');
+const sessionEngine = require('../services/bale/baleSessionEngine');
+const { buildPreferenceBrief } = require('../services/bale/balePreferenceBrief');
+const { modeLabel } = require('../services/bale/baleFormat');
+
+function mapSession(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    mode: row.mode,
+    modeLabel: modeLabel(row.mode),
+    stage: row.stage,
+    vehicleCategory: row.vehicle_category,
+    groupChannelSlot: row.group_channel_slot,
+    currentTurnIndex: row.current_turn_index,
+    turnTimeoutSec: row.turn_timeout_sec,
+    turnDeadlineAt: row.turn_deadline_at,
+    pendingSelection: row.pending_selection,
+    queueSnapshot: row.queue_snapshot,
+    eligibleAnnouncements: row.eligible_announcements,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function webhook(req, res) {
+  try {
+    if (!baleApi.isConfigured()) {
+      return res.status(503).json({ ok: false });
+    }
+    const secret = process.env.BALE_WEBHOOK_SECRET;
+    if (secret && req.headers['x-bale-webhook-secret'] !== secret) {
+      return res.status(401).json({ ok: false });
+    }
+    sessionEngine.ensureTickTimer();
+    await sessionEngine.processWebhookUpdate(req.body || {});
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('❌ [bale] webhook error:', error);
+    res.json({ ok: true });
+  }
+}
+
+async function getStatus(req, res) {
+  try {
+    const configured = baleApi.isConfigured();
+    let bot = null;
+    if (configured) {
+      try {
+        bot = await baleApi.getMe();
+      } catch (e) {
+        bot = { error: e.message };
+      }
+    }
+    const activeSessions = await sessionEngine.getActiveSessions();
+    const { rows: channels } = await pool.query(
+      `SELECT slot_number, chat_id, vehicle_category, label, is_active
+       FROM bale_channels ORDER BY slot_number`
+    );
+    res.json({
+      configured,
+      bot,
+      activeSession: activeSessions[0] ? mapSession(activeSessions[0]) : null,
+      activeSessions: activeSessions.map(mapSession),
+      channels,
+    });
+  } catch (error) {
+    console.error('❌ [bale] getStatus:', error);
+    res.status(500).json({ message: 'خطا در وضعیت بله' });
+  }
+}
+
+async function updateChannel(req, res) {
+  const slot = Number(req.params.slot);
+  if (!slot || slot < 1 || slot > 4) {
+    return res.status(400).json({ message: 'اسلات نامعتبر' });
+  }
+  const { chatId, vehicleCategory, label, isActive } = req.body || {};
+  try {
+    await pool.query(
+      `UPDATE bale_channels SET
+         chat_id = COALESCE($2, chat_id),
+         vehicle_category = COALESCE($3, vehicle_category),
+         label = COALESCE($4, label),
+         is_active = COALESCE($5, is_active),
+         updated_at = NOW()
+       WHERE slot_number = $1`,
+      [
+        slot,
+        chatId != null ? Number(chatId) : null,
+        vehicleCategory ?? null,
+        label ?? null,
+        isActive != null ? Boolean(isActive) : null,
+      ]
+    );
+    const { rows } = await pool.query(
+      `SELECT * FROM bale_channels WHERE slot_number = $1`,
+      [slot]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('❌ [bale] updateChannel:', error);
+    res.status(500).json({ message: 'خطا در به‌روزرسانی کانال' });
+  }
+}
+
+async function listDriverOutreach(req, res) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT o.*, d.name AS driver_name
+       FROM bale_driver_outreach o
+       LEFT JOIN drivers d ON d.id = o.driver_id
+       ORDER BY d.name ASC`
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'خطا در لیست رانندگان بله' });
+  }
+}
+
+async function upsertDriverOutreach(req, res) {
+  const { driverId } = req.params;
+  const { outreachChatId, employeeId, isTestSimulation, notes } = req.body || {};
+  if (!driverId || outreachChatId == null) {
+    return res.status(400).json({ message: 'driverId و outreachChatId الزامی است' });
+  }
+  try {
+    let emp = employeeId;
+    if (!emp) {
+      const { rows } = await pool.query(`SELECT employee_id FROM drivers WHERE id = $1`, [driverId]);
+      emp = rows[0]?.employee_id;
+    }
+    if (!emp) {
+      return res.status(400).json({ message: 'کد پرسنلی راننده یافت نشد' });
+    }
+    await pool.query(
+      `INSERT INTO bale_driver_outreach
+        (driver_id, employee_id, outreach_chat_id, is_test_simulation, notes, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (driver_id)
+       DO UPDATE SET
+         employee_id = EXCLUDED.employee_id,
+         outreach_chat_id = EXCLUDED.outreach_chat_id,
+         is_test_simulation = EXCLUDED.is_test_simulation,
+         notes = EXCLUDED.notes,
+         updated_at = NOW()`,
+      [driverId, emp, Number(outreachChatId), Boolean(isTestSimulation), notes || null]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: 'خطا در ذخیره ارتباط راننده' });
+  }
+}
+
+async function seedTestDrivers(req, res) {
+  const { outreachChatId, limit } = req.body || {};
+  if (outreachChatId == null) {
+    return res.status(400).json({ message: 'outreachChatId الزامی است' });
+  }
+  try {
+    const linked = await sessionEngine.seedTestDrivers(Number(outreachChatId), limit || 10);
+    res.json({ linked, count: linked.length });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'خطا در seed' });
+  }
+}
+
+async function testPing(req, res) {
+  const { chatId, text } = req.body || {};
+  if (!chatId) return res.status(400).json({ message: 'chatId الزامی است' });
+  try {
+    const result = await baleApi.sendMessage(
+      Number(chatId),
+      text || '✅ تست اتصال بازوی اعلام بار'
+    );
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
+async function setWebhookUrl(req, res) {
+  const { url } = req.body || {};
+  if (!url) return res.status(400).json({ message: 'url الزامی است' });
+  try {
+    await baleApi.setWebhook(url);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
+async function startSession(req, res) {
+  try {
+    const {
+      mode = 'hybrid',
+      stage = 'stage1',
+      turnTimeoutSec = 180,
+      forceStage2 = false,
+    } = req.body || {};
+    sessionEngine.ensureTickTimer();
+    const result = await sessionEngine.startAllCategorySessions({
+      mode,
+      stage,
+      turnTimeoutSec,
+      userId: req.user?.id,
+      forceStage2,
+    });
+    res.json({
+      sessions: result.sessions.map(mapSession),
+      started: result.started,
+      errors: result.errors,
+      skipped: result.skipped,
+      pilotCombined: result.pilotCombined,
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
+async function resolveSessionFromRequest(req) {
+  const { sessionId } = req.body || {};
+  if (sessionId) {
+    const session = await sessionEngine.loadSession(sessionId);
+    if (!session) return { error: 'جلسه یافت نشد', status: 404 };
+    if (!['running', 'awaiting_admin', 'awaiting_confirm'].includes(session.status)) {
+      return { error: 'این جلسه فعال نیست', status: 400 };
+    }
+    return { session };
+  }
+
+  const sessions = await sessionEngine.getActiveSessions();
+  if (sessions.length === 0) return { error: 'جلسه فعالی نیست', status: 404 };
+  if (sessions.length > 1) {
+    return {
+      error: 'چند جلسه فعال است — sessionId را مشخص کنید',
+      status: 400,
+      sessionIds: sessions.map(s => s.id),
+    };
+  }
+  return { session: sessions[0] };
+}
+
+async function stopSession(req, res) {
+  try {
+    const sessions = await sessionEngine.getActiveSessions();
+    if (sessions.length === 0) return res.status(404).json({ message: 'جلسه فعالی نیست' });
+    const stopped = await sessionEngine.stopAllSessions();
+    res.json({ sessions: stopped.map(mapSession) });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
+async function skipTurn(req, res) {
+  try {
+    const resolved = await resolveSessionFromRequest(req);
+    if (resolved.error) {
+      return res.status(resolved.status).json({
+        message: resolved.error,
+        sessionIds: resolved.sessionIds,
+      });
+    }
+    const updated = await sessionEngine.skipCurrentTurn(resolved.session.id);
+    res.json(mapSession(updated));
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
+async function extendTurn(req, res) {
+  try {
+    const resolved = await resolveSessionFromRequest(req);
+    if (resolved.error) {
+      return res.status(resolved.status).json({
+        message: resolved.error,
+        sessionIds: resolved.sessionIds,
+      });
+    }
+    const extraSec = Number(req.body?.extraSec) || 120;
+    const updated = await sessionEngine.extendCurrentTurn(resolved.session.id, extraSec);
+    res.json(mapSession(updated));
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
+async function manualAssign(req, res) {
+  try {
+    const resolved = await resolveSessionFromRequest(req);
+    if (resolved.error) {
+      return res.status(resolved.status).json({
+        message: resolved.error,
+        sessionIds: resolved.sessionIds,
+      });
+    }
+    const updated = await sessionEngine.manualAssign(resolved.session.id, req.body, req.user?.id);
+    res.json(mapSession(updated));
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
+async function getSessionLogs(req, res) {
+  const sessionId = req.params.sessionId;
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM bale_session_logs WHERE session_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      [sessionId]
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'خطا در لاگ' });
+  }
+}
+
+async function getPreferenceBrief(req, res) {
+  const { driverId } = req.params;
+  const { freightAnnouncementId } = req.query || {};
+  try {
+    let announcement = null;
+    if (freightAnnouncementId) {
+      const { rows } = await pool.query(
+        `SELECT fa.id, fa.announcement_code, fa.line_type, fa.origin_city,
+                (SELECT string_agg(city, '-') FROM freight_destinations fd
+                 WHERE fd.freight_announcement_id = fa.id) AS destination_cities
+         FROM freight_announcements fa WHERE fa.id = $1`,
+        [freightAnnouncementId]
+      );
+      if (rows[0]) {
+        announcement = {
+          announcementCode: rows[0].announcement_code,
+          lineType: rows[0].line_type,
+          originCity: rows[0].origin_city,
+          destinationCity: rows[0].destination_cities,
+        };
+      }
+    }
+    const brief = await buildPreferenceBrief(driverId, {
+      category: req.query.category,
+      announcement,
+    });
+    res.json(brief);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'خطا در ترجیحات' });
+  }
+}
+
+module.exports = {
+  webhook,
+  getStatus,
+  updateChannel,
+  listDriverOutreach,
+  upsertDriverOutreach,
+  seedTestDrivers,
+  testPing,
+  setWebhookUrl,
+  startSession,
+  stopSession,
+  skipTurn,
+  extendTurn,
+  manualAssign,
+  getSessionLogs,
+  getPreferenceBrief,
+};

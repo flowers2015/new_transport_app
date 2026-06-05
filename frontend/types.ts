@@ -35,6 +35,7 @@ export enum View {
     TransportDispatchQueue = 'transport-dispatch-queue',
     TransportDispatchAssignment = 'transport-dispatch-assignment',
     TransportDispatchBoard = 'transport-dispatch-board',
+    TransportBaleSession = 'transport-bale-session',
     CentralFinance = 'central-finance',
     TransportFinance = 'transport-finance',
     TransportFinanceCalculation = 'transport-finance-calculation',

@@ -21,6 +21,23 @@ interface CityOption {
     province?: string;
     roundTripKm?: number;
     expectedDays?: number;
+    distanceCategory?: string | null;
+    routeCategory?: string | null;
+}
+
+export function formatCityRouteLabel(suggestion: CityOption): string {
+    const distance =
+        suggestion.distanceCategory?.trim() ||
+        suggestion.routeCategory?.trim() ||
+        '';
+    const km =
+        suggestion.roundTripKm != null && !Number.isNaN(Number(suggestion.roundTripKm))
+            ? `${Math.round(Number(suggestion.roundTripKm))}`
+            : '';
+    if (distance && km) return `${suggestion.city} (${distance} — رفت‌وبرگشت ${km} کیلومتر)`;
+    if (distance) return `${suggestion.city} (${distance})`;
+    if (km) return `${suggestion.city} (رفت‌وبرگشت ${km} کیلومتر)`;
+    return suggestion.city;
 }
 
 const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
@@ -121,14 +138,21 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
                         province?: string;
                         roundTripKm?: number;
                         expectedDays?: number;
+                        distanceCategory?: string | null;
+                        routeCategory?: string | null;
                     }) => {
-                        if (item.city && !uniqueCities.has(item.city)) {
+                        if (!item.city) return;
+                        const km = item.roundTripKm != null ? Number(item.roundTripKm) : 0;
+                        const existing = uniqueCities.get(item.city);
+                        if (!existing || (km > (existing.roundTripKm || 0))) {
                             uniqueCities.set(item.city, {
                                 id: item.id || item.city,
                                 city: item.city,
                                 province: item.province,
                                 roundTripKm: item.roundTripKm,
                                 expectedDays: item.expectedDays,
+                                distanceCategory: item.distanceCategory,
+                                routeCategory: item.routeCategory,
                             });
                         }
                     });
@@ -236,7 +260,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleSuggestionClick(suggestion)}
                 >
-                    <div className="font-medium text-gray-900 text-sm">{suggestion.city}</div>
+                    <div className="font-medium text-gray-900 text-sm">{formatCityRouteLabel(suggestion)}</div>
                     {suggestion.province && (
                         <div className="text-xs text-gray-600">{suggestion.province}</div>
                     )}

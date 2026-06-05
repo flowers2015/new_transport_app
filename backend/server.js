@@ -35,6 +35,7 @@ const finalizePermissionRoutes = require('./routes/finalizePermissionRoutes');
 const planningManagerApprovalPermissionRoutes = require('./routes/planningManagerApprovalPermissionRoutes');
 const realtimeRoutes = require('./routes/realtimeRoutes');
 const cityRoutes = require('./routes/cityRoutes');
+const baleRoutes = require('./routes/baleRoutes');
 
 const app = express();
 
@@ -141,6 +142,7 @@ app.use('/api/v1/finalize-permissions', finalizePermissionRoutes);
 app.use('/api/v1/planning-manager-approval-permissions', planningManagerApprovalPermissionRoutes);
 app.use('/api/v1/realtime', realtimeRoutes);
 app.use('/api/v1/cities', cityRoutes);
+app.use('/api/v1/bale', baleRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
@@ -191,6 +193,18 @@ const { runMigration: addMustChangePassword } = require('./migrations/add_must_c
 addMustChangePassword().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون must_change_password:', err);
 });
+
+const createBaleTables = require('./migrations/create_bale_tables');
+createBaleTables().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جداول بله:', err);
+});
+
+const baleSessionEngine = require('./services/bale/baleSessionEngine');
+const { startBalePolling } = require('./services/bale/balePolling');
+if (process.env.BALE_BOT_TOKEN) {
+  baleSessionEngine.ensureTickTimer();
+  startBalePolling();
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
