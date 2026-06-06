@@ -1,4 +1,7 @@
 const pool = require('../db');
+const { isVeryFarAnnouncement } = require('../services/dispatch/dispatchRouteRules');
+const { computeJalaliCycleRange } = require('../services/dispatch/dispatchCycle');
+const { formatJalali } = require('../utils/jalali');
 const {
   jalaliToGregorian,
   parseJalaliDateString,
@@ -144,24 +147,19 @@ async function logDriverOpportunities(
 }
 
 function computeCycleRange(referenceDate = new Date()) {
-  const date = new Date(referenceDate);
-  const day = date.getDate();
+  return computeJalaliCycleRange(referenceDate);
+}
 
-  const start = new Date(date);
-  if (day >= 26) {
-    start.setDate(26);
-  } else {
-    start.setMonth(start.getMonth() - 1);
-    start.setDate(26);
-  }
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
-  end.setDate(25);
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
+function mapVeryFarHistoryRow(row) {
+  const at = row.created_at ? new Date(row.created_at) : null;
+  return {
+    id: row.id,
+    at: row.created_at,
+    atJalali: at ? formatJalali(at) : null,
+    city: row.city || null,
+    announcementCode: row.announcement_code || null,
+    stage: row.stage || null,
+  };
 }
 
 async function getQueue(req, res) {
@@ -552,6 +550,28 @@ async function deleteQueueEntry(req, res) {
   }
 }
 
+async function setQueueEntryPosition(client, entryId, position, actingUserId) {
+  try {
+    await client.query(
+      `UPDATE dispatch_queue_entries
+       SET position = $1,
+           updated_by_user_id = $2,
+           updated_at = NOW()
+       WHERE id = $3`,
+      [position, actingUserId, entryId]
+    );
+  } catch (error) {
+    if (error?.code === '42703') {
+      await client.query(`UPDATE dispatch_queue_entries SET position = $1 WHERE id = $2`, [
+        position,
+        entryId,
+      ]);
+      return;
+    }
+    throw error;
+  }
+}
+
 async function updateQueuePosition(req, res) {
   const { id } = req.params;
   let { position } = req.body || {};
@@ -566,7 +586,7 @@ async function updateQueuePosition(req, res) {
     await client.query('BEGIN');
 
     const { rows: entryRows } = await client.query(
-      `SELECT id, queue_type, vehicle_category
+      `SELECT id, queue_type, vehicle_category, position
        FROM dispatch_queue_entries
        WHERE id = $1
        FOR UPDATE`,
@@ -580,9 +600,25 @@ async function updateQueuePosition(req, res) {
 
     const entry = entryRows[0];
     const { queue_type, vehicle_category } = entry;
+    const oldPosition = Number(entry.position) || 0;
+    const targetPosition = Math.trunc(numericPosition);
+    const actingUserId = req.user?.id || null;
+
+    if (targetPosition === oldPosition) {
+      await client.query('COMMIT');
+      return res.json({ success: true, mode: 'unchanged' });
+    }
+
+    await client.query(
+      `SELECT id FROM dispatch_queue_entries
+       WHERE queue_type = $1
+         AND (vehicle_category IS NOT DISTINCT FROM $2)
+       FOR UPDATE`,
+      [queue_type, vehicle_category || null]
+    );
 
     const { rows: siblingRows } = await client.query(
-      `SELECT id
+      `SELECT id, position
        FROM dispatch_queue_entries
        WHERE queue_type = $1
          AND (vehicle_category IS NOT DISTINCT FROM $2)
@@ -590,30 +626,35 @@ async function updateQueuePosition(req, res) {
       [queue_type, vehicle_category || null]
     );
 
+    const peer = siblingRows.find(
+      row => row.id !== id && Number(row.position) === targetPosition
+    );
+
+    if (peer) {
+      await setQueueEntryPosition(client, peer.id, oldPosition, actingUserId);
+      await setQueueEntryPosition(client, id, targetPosition, actingUserId);
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        mode: 'swap',
+        from: oldPosition,
+        to: targetPosition,
+      });
+    }
+
     const total = siblingRows.length;
-    const targetPosition = Math.max(1, Math.min(Math.trunc(numericPosition), total));
+    const rank = Math.max(1, Math.min(targetPosition, total));
+    const orderedIds = siblingRows.map(row => row.id).filter(rowId => rowId !== id);
+    orderedIds.splice(rank - 1, 0, id);
 
-    const orderedIds = siblingRows
-      .map(row => row.id)
-      .filter(rowId => rowId !== id);
-    orderedIds.splice(targetPosition - 1, 0, id);
-
-    const actingUserId = req.user?.id || null;
     let newPos = 1;
     for (const rowId of orderedIds) {
-      await client.query(
-        `UPDATE dispatch_queue_entries
-         SET position = $1,
-             updated_by_user_id = $2,
-             updated_at = NOW()
-         WHERE id = $3`,
-        [newPos, actingUserId, rowId]
-      );
+      await setQueueEntryPosition(client, rowId, newPos, actingUserId);
       newPos += 1;
     }
 
     await client.query('COMMIT');
-    res.json({ success: true });
+    res.json({ success: true, mode: 'reorder', rank });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [dispatch] updateQueuePosition failed:', error);
@@ -623,8 +664,151 @@ async function updateQueuePosition(req, res) {
   }
 }
 
-async function getDriverLongRouteHistory(driverId, since) {
-  // Check for very far routes (خیلی دور) only - these block stage1 eligibility
+const CATEGORY_KEY_TO_LABEL = {
+  trailer: 'تریلی',
+  'mini-trailer': 'مینی تریلی',
+  'ten-wheel': 'ده چرخ',
+};
+
+function normalizeQueueVehicleCategory(vehicleCategory) {
+  if (!vehicleCategory) return null;
+  return CATEGORY_KEY_TO_LABEL[vehicleCategory] || vehicleCategory;
+}
+
+function normalizeQueueType(rawQueueType, stage) {
+  const value = (rawQueueType || '').toString().trim().toLowerCase();
+  if (value === 'far' || value === 'near') return value;
+  if (value.includes('نزدیک')) return 'near';
+  if (value.includes('دور')) return 'far';
+  return stage === 'stage2' ? 'near' : 'far';
+}
+
+async function restoreDriverToDispatchQueue(
+  client,
+  { driverId, vehicleId, queueType, vehicleCategory, queuePosition, createdByUserId }
+) {
+  if (!driverId || !vehicleId || !queueType) {
+    return { restored: false, reason: 'missing_fields' };
+  }
+
+  const { rows: existing } = await client.query(
+    `SELECT id, position FROM dispatch_queue_entries WHERE driver_id = $1`,
+    [driverId]
+  );
+  if (existing.length > 0) {
+    return {
+      restored: false,
+      reason: 'already_in_queue',
+      entryId: existing[0].id,
+      position: existing[0].position,
+    };
+  }
+
+  const category = normalizeQueueVehicleCategory(vehicleCategory);
+  let position = Number(queuePosition);
+
+  if (!Number.isFinite(position) || position < 1) {
+    const { rows: maxRows } = await client.query(
+      `SELECT COALESCE(MAX(position), 0) + 1 AS next_pos
+       FROM dispatch_queue_entries
+       WHERE queue_type = $1 AND (vehicle_category IS NOT DISTINCT FROM $2)`,
+      [queueType, category]
+    );
+    position = maxRows[0]?.next_pos || 1;
+  } else {
+    try {
+      await client.query(
+        `UPDATE dispatch_queue_entries
+         SET position = position + 1, updated_at = NOW()
+         WHERE queue_type = $1
+           AND (vehicle_category IS NOT DISTINCT FROM $2)
+           AND position >= $3`,
+        [queueType, category, position]
+      );
+    } catch (shiftError) {
+      if (shiftError?.code === '42703') {
+        await client.query(
+          `UPDATE dispatch_queue_entries
+           SET position = position + 1
+           WHERE queue_type = $1
+             AND (vehicle_category IS NOT DISTINCT FROM $2)
+             AND position >= $3`,
+          [queueType, category, position]
+        );
+      } else {
+        throw shiftError;
+      }
+    }
+  }
+
+  const { rows: inserted } = await client.query(
+    `INSERT INTO dispatch_queue_entries
+      (vehicle_id, driver_id, vehicle_category, queue_type, position, created_by_user_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, position`,
+    [vehicleId, driverId, category, queueType, position, createdByUserId || null]
+  );
+
+  return {
+    restored: true,
+    entryId: inserted[0]?.id,
+    position: inserted[0]?.position,
+    queueType,
+    vehicleCategory: category,
+  };
+}
+
+async function restoreDriversFromCancelledAssignment(client, announcementId, createdByUserId) {
+  const { rows: assignments } = await client.query(
+    `SELECT DISTINCT ON (da.driver_id)
+       da.driver_id,
+       da.vehicle_id,
+       da.queue_type,
+       da.vehicle_category,
+       da.queue_position,
+       da.stage
+     FROM dispatch_assignments da
+     WHERE da.freight_announcement_id = $1
+       AND da.driver_id IS NOT NULL
+       AND da.vehicle_id IS NOT NULL
+       AND COALESCE(da.is_cancelled, FALSE) = FALSE
+     ORDER BY da.driver_id, da.created_at DESC`,
+    [announcementId]
+  );
+
+  const results = [];
+  for (const row of assignments) {
+    const queueType = normalizeQueueType(row.queue_type, row.stage);
+    const result = await restoreDriverToDispatchQueue(client, {
+      driverId: row.driver_id,
+      vehicleId: row.vehicle_id,
+      queueType,
+      vehicleCategory: row.vehicle_category,
+      queuePosition: row.queue_position,
+      createdByUserId,
+    });
+    results.push({ driverId: row.driver_id, ...result });
+
+    if (result.restored) {
+      await client.query(
+        `UPDATE dispatch_driver_opportunities
+         SET taken = FALSE, taken_at = NULL
+         WHERE driver_id = $1 AND freight_announcement_id = $2`,
+        [row.driver_id, announcementId]
+      );
+    }
+  }
+  return results;
+}
+
+async function getDriverLongRouteHistory(driverId, since, until) {
+  const params = [driverId, since];
+  let untilSql = '';
+  if (until) {
+    untilSql = 'AND da.created_at <= $3';
+    params.push(until);
+  }
+
   const { rows } = await pool.query(
     `
       SELECT
@@ -642,6 +826,8 @@ async function getDriverLongRouteHistory(driverId, since) {
       LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
       WHERE da.driver_id = $1
         AND da.created_at >= $2
+        ${untilSql}
+        AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
         AND fa.status NOT IN ('Cancelled')
         AND (
           LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلی‌دور%'
@@ -653,10 +839,10 @@ async function getDriverLongRouteHistory(driverId, since) {
         )
       ORDER BY da.created_at DESC
     `,
-    [driverId, since]
+    params
   );
-  
-  return rows;
+
+  return rows.map(mapVeryFarHistoryRow);
 }
 
 const presetCategories = [
@@ -752,15 +938,19 @@ const vehicleMatchesCategory = (vehicleType, categoryValue) => {
 async function getStageCandidates(req, res) {
   const stage = req.query.stage || 'stage1';
   const forceStage2 = req.query.forceStage2 === 'true';
+  const subPhase = (req.query.subPhase || '').trim();
   const categoryFilter = req.query.category || '';
   const queueEntryIdParam = req.query.queueEntryId || null;
   if (!['stage1', 'stage2'].includes(stage)) {
     return res.status(400).json({ message: 'پارامتر stage نامعتبر است.' });
   }
+  if (subPhase && !['far', 'near_vf', 'near_all'].includes(subPhase)) {
+    return res.status(400).json({ message: 'پارامتر subPhase نامعتبر است.' });
+  }
 
   try {
     await ensureDriverOpportunityTable();
-    const { start } = computeCycleRange();
+    const { start, end, fromJalali, toJalali } = computeCycleRange();
 
     const queueRows = await pool.query(
       `SELECT q.*, d.name AS driver_name, d.mobile, d.employee_id,
@@ -774,17 +964,21 @@ async function getStageCandidates(req, res) {
     const queue = queueRows.rows || [];
     const driverHistoryMap = {};
 
-    if (stage === 'stage1') {
-      const longQueueDrivers = queue.filter(q => q.queue_type === 'far');
-      const ids = [...new Set(longQueueDrivers.map(q => q.driver_id).filter(Boolean))];
-      if (ids.length > 0) {
-        await Promise.all(
-          ids.map(async (driverId) => {
-            const history = await getDriverLongRouteHistory(driverId, start);
-            driverHistoryMap[driverId] = history;
-          })
-        );
-      }
+    const dispatchDriverIds = [
+      ...new Set(
+        queue
+          .filter(q => q.queue_type === 'far' || q.queue_type === 'near')
+          .map(q => q.driver_id)
+          .filter(Boolean)
+      ),
+    ];
+    if (dispatchDriverIds.length > 0) {
+      await Promise.all(
+        dispatchDriverIds.map(async driverId => {
+          const history = await getDriverLongRouteHistory(driverId, start, end);
+          driverHistoryMap[driverId] = history;
+        })
+      );
     }
 
     // ابتدا اعلام بارها را بدون join با destinations بگیریم
@@ -824,15 +1018,7 @@ async function getStageCandidates(req, res) {
     }
 
     const announcements = [];
-    const normalizeDistanceText = (value) =>
-      (value || '')
-        .toString()
-        .replace(/ي/g, 'ی')
-        .replace(/ك/g, 'ک')
-        .replace(/[\s_\-‌]/g, '')
-        .toLowerCase();
-    const farDistanceTokens = ['خیلی‌دور', 'خیلیدور', 'veryfar'];
-    
+
     // برای هر اعلام بار، همه مقاصد را بگیریم
     for (const row of freightRows.rows) {
       // گرفتن همه مقاصد این اعلام بار
@@ -942,91 +1128,105 @@ async function getStageCandidates(req, res) {
       });
     }
 
-    const isFarRouteAnnouncement = (announcement) => {
-      const distanceCategoryNormalized = normalizeDistanceText(
-        announcement.route?.distance_category || ''
-      );
-      if (distanceCategoryNormalized) {
-        return farDistanceTokens.some(token => distanceCategoryNormalized.includes(token));
-      }
-      const routeCategoryNormalized = normalizeDistanceText(
-        announcement.route?.route_category || ''
-      );
-      if (routeCategoryNormalized) {
-        return farDistanceTokens.some(token => routeCategoryNormalized.includes(token));
-      }
-      return false;
-    };
+    const veryFarAnnouncements = announcements.filter(isVeryFarAnnouncement);
+    const baleControlledStage2 =
+      stage === 'stage2' && ['far', 'near_vf', 'near_all'].includes(subPhase);
+    const filteredAnnouncements =
+      stage === 'stage1'
+        ? veryFarAnnouncements
+        : stage === 'stage2' && subPhase === 'near_vf'
+          ? veryFarAnnouncements
+          : announcements;
 
-    const farAnnouncements = announcements.filter(isFarRouteAnnouncement);
-    const filteredAnnouncements = stage === 'stage1' ? farAnnouncements : announcements;
+    const veryFarForCategory = categoryFilter
+      ? veryFarAnnouncements.filter(ann => vehicleMatchesCategory(ann.vehicleType, categoryFilter))
+      : veryFarAnnouncements;
 
-    const farAnnouncementsForCategory = categoryFilter
-      ? farAnnouncements.filter(ann => vehicleMatchesCategory(ann.vehicleType, categoryFilter))
-      : farAnnouncements;
-
-    const pendingStage1Count = farAnnouncementsForCategory.length;
-    const globalPendingStage1Count = farAnnouncements.length;
-    const stage2Forced = stage === 'stage2' && forceStage2;
-    const stage2Locked = stage === 'stage2' && pendingStage1Count > 0 && !forceStage2;
+    const pendingStage1Count = veryFarForCategory.length;
+    const globalPendingStage1Count = veryFarAnnouncements.length;
+    const stage2Forced = stage === 'stage2' && (forceStage2 || baleControlledStage2);
+    const stage2Locked =
+      stage === 'stage2' && pendingStage1Count > 0 && !forceStage2 && !baleControlledStage2;
     const finalAnnouncements = stage2Locked ? [] : filteredAnnouncements;
 
-    // Stage 1: Order by far queue first (by position), then near queue (by position)
-    // Stage 2: All drivers except those who got assignments in stage1
+    const sortByPosition = list =>
+      [...list].sort((a, b) => (a.position || 0) - (b.position || 0));
+
     let baseStageQueue = [];
     if (stage === 'stage1') {
-      // First get far queue drivers, sorted by position
-      const farQueue = queue
-        .filter(q => q.queue_type === 'far')
-        .sort((a, b) => (a.position || 0) - (b.position || 0));
-      
-      // Then get near queue drivers, sorted by position
-      const nearQueue = queue
-        .filter(q => q.queue_type === 'near')
-        .sort((a, b) => (a.position || 0) - (b.position || 0));
-      
-      // Combine: far queue first, then near queue
-      baseStageQueue = [...farQueue, ...nearQueue];
-    } else {
-      // Stage 2: All drivers from both queues, sorted by queue_type (far first) then position
-      baseStageQueue = queue
-        .filter(q => q.queue_type === 'near' || q.queue_type === 'far')
-        .sort((a, b) => {
-          if (a.queue_type !== b.queue_type) {
-            return a.queue_type === 'far' ? -1 : 1;
-          }
-          return (a.position || 0) - (b.position || 0);
-        });
+      baseStageQueue = sortByPosition(queue.filter(q => q.queue_type === 'far'));
+    } else if (stage === 'stage2') {
+      if (subPhase === 'far') {
+        baseStageQueue = sortByPosition(queue.filter(q => q.queue_type === 'far'));
+      } else if (subPhase === 'near_vf' || subPhase === 'near_all') {
+        baseStageQueue = sortByPosition(queue.filter(q => q.queue_type === 'near'));
+      } else {
+        baseStageQueue = queue
+          .filter(q => q.queue_type === 'near' || q.queue_type === 'far')
+          .sort((a, b) => {
+            if (a.queue_type !== b.queue_type) {
+              return a.queue_type === 'far' ? -1 : 1;
+            }
+            return (a.position || 0) - (b.position || 0);
+          });
+      }
     }
 
-    // Filter: Stage 1 only allows drivers who haven't taken very far routes in current cycle
-    const stageQueue = baseStageQueue.filter(item =>
-      stage === 'stage1' ? (driverHistoryMap[item.driver_id] || []).length === 0 : true
-    );
+    const driverNeverWentVeryFar = driverId =>
+      (driverHistoryMap[driverId] || []).length === 0;
 
-    const queueWithHistory = stageQueue.map(item => ({
-      id: item.id,
-      driverId: item.driver_id,
-      vehicleId: item.vehicle_id,
-      queueType: item.queue_type,
-      vehicleCategory: item.vehicle_category,
-      position: item.position,
-      notes: item.notes,
-      driver: {
-        id: item.driver_id,
-        name: item.driver_name,
-        mobile: item.mobile,
-        employeeId: item.employee_id,
-      },
-      vehicle: {
-        id: item.vehicle_id,
-        model: item.vehicle_model,
-        brand: item.vehicle_brand,
-        vehicleCode: item.vehicle_code,
-      },
-      longRouteHistory: driverHistoryMap[item.driver_id] || [],
-      blockedStage1: stage === 'stage1' && (driverHistoryMap[item.driver_id] || []).length > 0,
-    }));
+    const stageQueue = baseStageQueue.filter(item => {
+      if (stage === 'stage1') {
+        return driverNeverWentVeryFar(item.driver_id);
+      }
+      if (stage === 'stage2' && subPhase === 'near_vf') {
+        return driverNeverWentVeryFar(item.driver_id);
+      }
+      return true;
+    });
+
+    const mapQueueItemWithHistory = item => {
+      const history = driverHistoryMap[item.driver_id] || [];
+      return {
+        id: item.id,
+        driverId: item.driver_id,
+        vehicleId: item.vehicle_id,
+        queueType: item.queue_type,
+        vehicleCategory: item.vehicle_category,
+        position: item.position,
+        notes: item.notes,
+        driver: {
+          id: item.driver_id,
+          name: item.driver_name,
+          mobile: item.mobile,
+          employeeId: item.employee_id,
+        },
+        vehicle: {
+          id: item.vehicle_id,
+          model: item.vehicle_model,
+          brand: item.vehicle_brand,
+          vehicleCode: item.vehicle_code,
+        },
+        longRouteHistory: history,
+        lastVeryFarAtJalali: history[0]?.atJalali || null,
+        hasVeryFarHistory: history.length > 0,
+        blockedStage1:
+          stage === 'stage1' &&
+          (item.queue_type !== 'far' || history.length > 0),
+      };
+    };
+
+    const queueWithHistory = stageQueue.map(mapQueueItemWithHistory);
+
+    let displayBase = sortByPosition(
+      queue.filter(q => q.queue_type === 'far' || q.queue_type === 'near')
+    );
+    if (categoryFilter) {
+      displayBase = displayBase.filter(q =>
+        vehicleMatchesCategory(q.vehicle_category, categoryFilter)
+      );
+    }
+    const displayQueue = displayBase.map(mapQueueItemWithHistory);
 
     if (queueEntryIdParam) {
       const targetEntry = queueWithHistory.find(item => item.id === queueEntryIdParam);
@@ -1044,8 +1244,13 @@ async function getStageCandidates(req, res) {
 
     res.json({
       stage,
+      subPhase: subPhase || null,
       cycleStart: start,
+      cycleEnd: end,
+      cycleFromJalali: fromJalali,
+      cycleToJalali: toJalali,
       queue: queueWithHistory,
+      displayQueue,
       announcements: finalAnnouncements,
       pendingStage1Count,
       globalPendingStage1Count,
@@ -1263,7 +1468,7 @@ async function assignFreight(req, res) {
 
     if (actingUserId) {
       const { rows: userRows } = await client.query(
-        `SELECT id, name, username, full_name FROM users WHERE id = $1`,
+        `SELECT id, name, username FROM users WHERE id = $1`,
         [actingUserId]
       );
       if (!userRows.length) {
@@ -1272,7 +1477,7 @@ async function assignFreight(req, res) {
       } else {
         const userRow = userRows[0];
         if (!actingUserName || actingUserName.trim() === '') {
-          actingUserName = userRow.name || userRow.full_name || userRow.username || null;
+          actingUserName = userRow.name || userRow.username || null;
         }
       }
     }
@@ -2127,5 +2332,6 @@ module.exports = {
   getBoard,
   searchVehicles,
   searchDrivers,
+  restoreDriversFromCancelledAssignment,
 };
 

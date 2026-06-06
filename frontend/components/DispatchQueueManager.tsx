@@ -921,7 +921,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
     useEffect(() => {
         fetchQueue();
+        const onQueueUpdate = () => {
+            fetchQueue();
+        };
+        window.addEventListener('dispatch-board:update', onQueueUpdate);
         return () => {
+            window.removeEventListener('dispatch-board:update', onQueueUpdate);
             (Object.values(searchTimers.current) as Array<{
                 vehicle?: ReturnType<typeof setTimeout>;
                 driver?: ReturnType<typeof setTimeout>;
@@ -1453,7 +1458,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         <table className="min-w-full text-right">
                             <thead className="text-[11px] text-slate-500 uppercase tracking-wide">
                                 <tr className="border-b border-slate-200 bg-slate-50/80">
-                                    <th className="px-2 py-2 text-center font-medium">ردیف</th>
+                                    <th className="px-2 py-2 text-center font-medium" title="تغییر به شمارهٔ موجود = جابه‌جایی با آن ردیف">
+                                        ردیف
+                                    </th>
                                     <th className="px-2 py-2 font-medium">نام راننده</th>
                                     <th className="px-2 py-2 font-medium">کد خودرو</th>
                                     <th className="px-2 py-2 text-center font-medium">شماره تماس</th>
@@ -1507,17 +1514,32 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 headers,
                 body: JSON.stringify({ position: targetPosition }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            let payload: { message?: string; mode?: string } = {};
+            const raw = await res.text();
+            try {
+                payload = raw ? JSON.parse(raw) : {};
+            } catch {
+                payload = { message: raw };
+            }
+            if (!res.ok) {
+                throw new Error(payload.message || raw || 'بروزرسانی ردیف انجام نشد.');
+            }
 
             setPositionEdits(prev => {
                 const next = { ...prev };
                 delete next[entry.id];
                 return next;
             });
-            fetchQueue();
+            await fetchQueue();
+            window.dispatchEvent(new CustomEvent('dispatch-board:update'));
         } catch (error: any) {
             console.error('Failed to update position', error);
-            alert(error?.message || 'بروزرسانی ردیف انجام نشد.');
+            const msg = error?.message || '';
+            alert(
+                msg.includes('Failed to fetch')
+                    ? 'ارتباط با سرور برقرار نشد. بک‌اند را بررسی کنید و دوباره تلاش کنید.'
+                    : msg || 'بروزرسانی ردیف انجام نشد.'
+            );
             setPositionEdits(prev => ({
                 ...prev,
                 [entry.id]: { value: editState.value, saving: false },

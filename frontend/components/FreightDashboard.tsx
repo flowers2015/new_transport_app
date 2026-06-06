@@ -20,12 +20,6 @@ const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پا�
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 const PRIORITIES = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
 const ICE_CREAM_PRODUCTS = ['کره', 'کترینگ', 'پنیر پیتزا', 'خامه قنادی'];
-const LOADING_ORIGIN_OPTIONS: Partial<Record<FreightLineType, string[]>> = {
-    [FreightLineType.Dairy]: ['کارخانه شهرلبنیات'],
-    [FreightLineType.Ambient]: ['انبار مرکزی'],
-    [FreightLineType.IceCream]: ['کارخانه بستنی', 'انبار سردخانه'],
-};
-
 const RequiredField: React.FC<{
     label: string;
     children: React.ReactNode;
@@ -1597,6 +1591,9 @@ const AnnouncementPanel: React.FC<{
     const [destinations, setDestinations] = useState<Partial<Destination>[]>(initialDestinations);
     const [destCityValid, setDestCityValid] = useState<Record<string, boolean>>({});
     const [iceCreamDestCityValid, setIceCreamDestCityValid] = useState<[boolean, boolean]>([false, false]);
+    const [iceCreamOriginCityValid, setIceCreamOriginCityValid] = useState<[boolean, boolean]>([false, false]);
+    const [originCity1Valid, setOriginCity1Valid] = useState(false);
+    const [originCity2Valid, setOriginCity2Valid] = useState(false);
 
     const resetForm = () => {
         // Don't reset lineType to allow multiple entries of the same type
@@ -1610,6 +1607,9 @@ const AnnouncementPanel: React.FC<{
         setDestinations(initialDestinations);
         setDestCityValid({});
         setIceCreamDestCityValid([false, false]);
+        setIceCreamOriginCityValid([false, false]);
+        setOriginCity1Valid(false);
+        setOriginCity2Valid(false);
 
         // بارگذاری آخرین انتخاب‌های کاربر از localStorage بعد از reset
         const getLastUserChoices = (lineTypeKey: string) => {
@@ -1720,6 +1720,8 @@ const AnnouncementPanel: React.FC<{
                     }
                 }
                 setLoadingLocationState(loadingLocationData);
+                setOriginCity1Valid(!!loadingLocationData.originCity1?.trim());
+                setOriginCity2Valid(!!loadingLocationData.originCity2?.trim());
                 
                 // بارگذاری داده‌های برند از data
                 let brandData: { brandType: 'single' | 'double', brand1: string, brand2: string };
@@ -1757,6 +1759,10 @@ const AnnouncementPanel: React.FC<{
                     setIceCreamDestCityValid([
                         !!parsedLegs.legs[0].destinationCity?.trim(),
                         !!parsedLegs.legs[1].destinationCity?.trim(),
+                    ]);
+                    setIceCreamOriginCityValid([
+                        !!parsedLegs.legs[0].originCity?.trim(),
+                        !!parsedLegs.legs[1].originCity?.trim(),
                     ]);
                     setIceCreamState({
                         originCity: parsedLegs.routeType === 'double'
@@ -1906,6 +1912,11 @@ const AnnouncementPanel: React.FC<{
             const activeLegCount = iceCreamRouteType === 'double' ? 2 : 1;
             for (let i = 0; i < activeLegCount; i++) {
                 const leg = iceCreamLegs[i];
+                if (!leg.originCity.trim()) continue;
+                if (!iceCreamOriginCityValid[i]) {
+                    alert('مبدا بارگیری را از لیست پیشنهادها انتخاب کنید.');
+                    return;
+                }
                 if (!leg.destinationCity.trim()) continue;
                 if (!iceCreamDestCityValid[i]) {
                     alert('شهر مقصد را از لیست پیشنهادها انتخاب کنید.');
@@ -1956,6 +1967,17 @@ const AnnouncementPanel: React.FC<{
         }
 
         if (lineType !== FreightLineType.IceCream) {
+            if (!loadingLocationState.originCity1.trim() || !originCity1Valid) {
+                alert('مبدا بارگیری را از لیست پیشنهادها انتخاب کنید.');
+                return;
+            }
+            if (
+                loadingLocationState.loadingType === 'double' &&
+                (!loadingLocationState.originCity2.trim() || !originCity2Valid)
+            ) {
+                alert('مبدا بارگیری دوم را از لیست پیشنهادها انتخاب کنید.');
+                return;
+            }
             const badCity = destinations.filter(
                 (d) => d.city?.trim() && d.id && !destCityValid[d.id]
             );
@@ -2336,27 +2358,31 @@ const AnnouncementPanel: React.FC<{
                                     </legend>
                                     <div className="grid grid-cols-2 gap-3 mb-3">
                                         <RequiredField label="مبدا بارگیری*">
-                                            <select
+                                            <CityAutocomplete
                                                 value={iceCreamLegs[legIndex].originCity}
-                                                onChange={(e) => {
-                                                    const value = e.target.value;
+                                                onChange={(city) => {
+                                                    onRouteQueryChange(city);
                                                     setIceCreamLegs((prev) => {
                                                         const next: [IceCreamLeg, IceCreamLeg] = [
                                                             { ...prev[0] },
                                                             { ...prev[1] },
                                                         ];
-                                                        next[legIndex] = { ...next[legIndex], originCity: value };
+                                                        next[legIndex] = { ...next[legIndex], originCity: city };
                                                         return next;
                                                     });
                                                 }}
+                                                onValidityChange={(valid) => {
+                                                    setIceCreamOriginCityValid((prev) => {
+                                                        const n: [boolean, boolean] = [...prev];
+                                                        n[legIndex] = valid;
+                                                        return n;
+                                                    });
+                                                }}
+                                                requireSelection
+                                                placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
-                                            >
-                                                <option value="">-- انتخاب کنید --</option>
-                                                {(LOADING_ORIGIN_OPTIONS[FreightLineType.IceCream] || []).map(opt => (
-                                                    <option key={opt} value={opt}>{opt}</option>
-                                                ))}
-                                            </select>
+                                            />
                                         </RequiredField>
                                         <div>
                                             <label className="text-xs">برند*</label>
@@ -2498,7 +2524,14 @@ const AnnouncementPanel: React.FC<{
                                             name="loadingType"
                                             value="single"
                                             checked={loadingLocationState.loadingType === 'single'}
-                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'single' as 'single' | 'double', originCity2: '' }))}
+                                            onChange={() => {
+                                                setLoadingLocationState(s => ({
+                                                    ...s,
+                                                    loadingType: 'single' as 'single' | 'double',
+                                                    originCity2: '',
+                                                }));
+                                                setOriginCity2Valid(false);
+                                            }}
                                             className="cursor-pointer"
                                         />
                                         <span className="text-xs">تک مبدا</span>
@@ -2519,51 +2552,48 @@ const AnnouncementPanel: React.FC<{
                             <div className="grid grid-cols-2 gap-3 mb-3">
                                 {loadingLocationState.loadingType === 'single' ? (
                                     <RequiredField label="مبدا بارگیری*">
-                                        <select
+                                        <CityAutocomplete
                                             value={loadingLocationState.originCity1}
-                                            onChange={e =>
-                                                setLoadingLocationState(s => ({ ...s, originCity1: e.target.value }))
-                                            }
+                                            onChange={(city) => {
+                                                onRouteQueryChange(city);
+                                                setLoadingLocationState(s => ({ ...s, originCity1: city }));
+                                            }}
+                                            onValidityChange={setOriginCity1Valid}
+                                            requireSelection
+                                            placeholder="جستجوی مبدا..."
                                             className="input-style mt-1 w-full"
                                             required
-                                        >
-                                            <option value="">-- انتخاب کنید --</option>
-                                            {(LOADING_ORIGIN_OPTIONS[lineType] || []).map(opt => (
-                                                <option key={opt} value={opt}>{opt}</option>
-                                            ))}
-                                        </select>
+                                        />
                                     </RequiredField>
                                 ) : (
                                     <>
                                         <RequiredField label="مبدا بارگیری اول*">
-                                            <select
+                                            <CityAutocomplete
                                                 value={loadingLocationState.originCity1}
-                                                onChange={e =>
-                                                    setLoadingLocationState(s => ({ ...s, originCity1: e.target.value }))
-                                                }
+                                                onChange={(city) => {
+                                                    onRouteQueryChange(city);
+                                                    setLoadingLocationState(s => ({ ...s, originCity1: city }));
+                                                }}
+                                                onValidityChange={setOriginCity1Valid}
+                                                requireSelection
+                                                placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
-                                            >
-                                                <option value="">-- انتخاب کنید --</option>
-                                                {(LOADING_ORIGIN_OPTIONS[lineType] || []).map(opt => (
-                                                    <option key={opt} value={opt}>{opt}</option>
-                                                ))}
-                                            </select>
+                                            />
                                         </RequiredField>
                                         <RequiredField label="مبدا بارگیری دوم*">
-                                            <select
+                                            <CityAutocomplete
                                                 value={loadingLocationState.originCity2}
-                                                onChange={e =>
-                                                    setLoadingLocationState(s => ({ ...s, originCity2: e.target.value }))
-                                                }
+                                                onChange={(city) => {
+                                                    onRouteQueryChange(city);
+                                                    setLoadingLocationState(s => ({ ...s, originCity2: city }));
+                                                }}
+                                                onValidityChange={setOriginCity2Valid}
+                                                requireSelection
+                                                placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
-                                            >
-                                                <option value="">-- انتخاب کنید --</option>
-                                                {(LOADING_ORIGIN_OPTIONS[lineType] || []).map(opt => (
-                                                    <option key={opt} value={opt}>{opt}</option>
-                                                ))}
-                                            </select>
+                                            />
                                         </RequiredField>
                                     </>
                                 )}

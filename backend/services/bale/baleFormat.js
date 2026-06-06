@@ -129,10 +129,14 @@ function formatAnnouncementListHtml(announcements, max = 30) {
 }
 
 function formatGroupStageTitle(stage, vehicleCategory) {
-  const stagePart =
-    stage === 'stage1'
-      ? 'اعلام بار مرحله اول — دور و نزدیک'
-      : 'اعلام بار مرحله دوم — بارهای باقی‌مانده';
+  const titles = {
+    stage1: 'اعلام بار مرحله اول — مسیرهای خیلی‌دور (نوبت دور)',
+    stage2_far: 'مرحله دوم — نوبت دور (همه بارهای باقی‌مانده)',
+    stage2_near_vf: 'مرحله دوم — خیلی‌دور برای نوبت نزدیک',
+    stage2_near_all: 'مرحله دوم — نوبت نزدیک (بارهای باقی‌مانده)',
+    stage2: 'اعلام بار مرحله دوم — بارهای باقی‌مانده',
+  };
+  const stagePart = titles[stage] || titles.stage2;
   const categoryPart = vehicleCategory ? `\nدسته: ${escapeHtml(vehicleCategory)}` : '';
   return `<b>${stagePart}</b>${categoryPart}`;
 }
@@ -146,9 +150,20 @@ const QUEUE_TYPE_FA = {
   other: 'سایر',
 };
 
+const { computeJalaliCycleRange } = require('../dispatch/dispatchCycle');
+
+function veryFarHistorySuffixHtml(item) {
+  const jalali =
+    item.lastVeryFarAtJalali || item.longRouteHistory?.[0]?.atJalali || null;
+  if (!jalali) return '';
+  const city = item.longRouteHistory?.[0]?.city;
+  const destPart = city ? ` — ${escapeHtml(city)}` : '';
+  return ` <i>خیلی‌دور: ${escapeHtml(jalali)}${destPart}</i>`;
+}
+
 function formatQueueLine(item, index) {
-  const name = item.driver?.name || item.driver_name || '—';
-  return `${index}. ${name}`;
+  const name = escapeHtml(item.driver?.name || item.driver_name || '—');
+  return `${index}. ${name}${veryFarHistorySuffixHtml(item)}`;
 }
 
 function formatQueueSnapshot(queue) {
@@ -185,11 +200,22 @@ function formatQueueSnapshot(queue) {
     });
   }
 
+  const { fromJalali, toJalali } = computeJalaliCycleRange();
+  if (parts.length) parts.push('────────────────');
+  parts.push(`📅 <i>دوره جاری: ${escapeHtml(fromJalali)} تا ${escapeHtml(toJalali)}</i>`);
+
   return parts.join('\n');
 }
 
 function stageLabel(stage) {
-  return stage === 'stage1' ? 'مرحله اول (مسیرهای دور)' : 'مرحله دوم';
+  const labels = {
+    stage1: 'مرحله اول (خیلی‌دور — نوبت دور)',
+    stage2_far: 'مرحله دوم — نوبت دور',
+    stage2_near_vf: 'مرحله دوم — خیلی‌دور (نوبت نزدیک)',
+    stage2_near_all: 'مرحله دوم — نوبت نزدیک',
+    stage2: 'مرحله دوم',
+  };
+  return labels[stage] || labels.stage2;
 }
 
 function modeLabel(mode) {

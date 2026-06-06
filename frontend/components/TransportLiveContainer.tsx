@@ -1057,6 +1057,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
             console.log('✅ [TransportLive] Cancelled:', payload);
             alert(payload.message || 'تخصیص با موفقیت لغو شد.');
+            window.dispatchEvent(new CustomEvent('dispatch-board:update'));
             await fetchData();
         } catch (e: any) {
             console.error('❌ [TransportLive] Cancel error:', e);

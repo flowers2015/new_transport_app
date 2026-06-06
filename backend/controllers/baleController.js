@@ -2,7 +2,7 @@ const pool = require('../db');
 const baleApi = require('../services/bale/baleApi');
 const sessionEngine = require('../services/bale/baleSessionEngine');
 const { buildPreferenceBrief } = require('../services/bale/balePreferenceBrief');
-const { modeLabel } = require('../services/bale/baleFormat');
+const { modeLabel, stageLabel } = require('../services/bale/baleFormat');
 
 function mapSession(row) {
   if (!row) return null;
@@ -12,6 +12,7 @@ function mapSession(row) {
     mode: row.mode,
     modeLabel: modeLabel(row.mode),
     stage: row.stage,
+    stageLabel: stageLabel(row.stage),
     vehicleCategory: row.vehicle_category,
     groupChannelSlot: row.group_channel_slot,
     currentTurnIndex: row.current_turn_index,
@@ -199,6 +200,7 @@ async function startSession(req, res) {
       stage = 'stage1',
       turnTimeoutSec = 180,
       forceStage2 = false,
+      forceRestart = true,
     } = req.body || {};
     sessionEngine.ensureTickTimer();
     const result = await sessionEngine.startAllCategorySessions({
@@ -207,6 +209,7 @@ async function startSession(req, res) {
       turnTimeoutSec,
       userId: req.user?.id,
       forceStage2,
+      forceRestart,
     });
     res.json({
       sessions: result.sessions.map(mapSession),
@@ -214,6 +217,8 @@ async function startSession(req, res) {
       errors: result.errors,
       skipped: result.skipped,
       pilotCombined: result.pilotCombined,
+      stoppedPrior: result.stoppedPrior,
+      forceRestart: result.forceRestart,
     });
   } catch (error) {
     res.status(400).json({ message: error.message });

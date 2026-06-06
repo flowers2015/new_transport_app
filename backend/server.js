@@ -69,7 +69,7 @@ const corsOrigins = [
 app.use(cors({
   origin: corsOrigins,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 })); // Enable CORS for all routes
 

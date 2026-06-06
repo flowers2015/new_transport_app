@@ -196,6 +196,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     mode,
                     stage,
                     turnTimeoutSec,
+                    forceRestart: true,
                 }),
             });
             if (!res.ok) {
@@ -204,6 +205,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             }
             const data = await res.json();
             const notes: string[] = [`${data.started} جلسه شروع شد`];
+            if (data.stoppedPrior > 0) {
+                notes.push(`(${data.stoppedPrior} جلسه قبلی متوقف شد — صف از ثبت نوبت خوانده شد)`);
+            }
             if (data.pilotCombined) notes.push('(حالت پایلوت — فقط دسته‌های دارای صف)');
             if (data.skipped?.length) {
                 notes.push(
@@ -276,8 +280,12 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         تست (هر ۳ دسته همزمان در همان گروه).
                     </li>
                     <li>
-                        <strong>شروع جلسه:</strong> سه جلسه موازی — هر کدام نوبت و بارهای همان دسته
-                        خودرو.
+                        <strong>شروع جلسه:</strong> جلسه قبلی خودکار متوقف می‌شود و صف تازه از «ثبت
+                        نوبت» خوانده می‌شود. مرحله ۱ فقط <strong>نوبت دور</strong> است.
+                    </li>
+                    <li>
+                        <strong>تست مجدد:</strong> بعد از لغو مسیر، راننده قدیمی ممکن است دوباره در
+                        صف باشد — در ثبت نوبت حذف/جایگزین کنید.
                     </li>
                     <li>
                         <strong>در گروه:</strong> فقط نام راننده (بدون کد پرسنلی) — شماره بار مثل «۶.
@@ -430,7 +438,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                     value={stage}
                                     onChange={e => setStage(e.target.value)}
                                 >
-                                    <option value="stage1">مرحله ۱ — دور</option>
+                                    <option value="stage1">مرحله ۱ — خیلی‌دور (نوبت دور)</option>
                                     <option value="stage2">مرحله ۲</option>
                                 </select>
                             </label>
@@ -545,7 +553,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                         </div>
                                         <div>وضعیت: {s.status}</div>
                                         <div>
-                                            حالت: {s.modeLabel} — {s.stage}
+                                            حالت: {s.modeLabel} — {(s as { stageLabel?: string }).stageLabel || s.stage}
                                         </div>
                                         <div>نوبت جاری: {turn?.driver?.name || '—'}</div>
                                         <div>

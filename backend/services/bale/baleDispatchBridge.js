@@ -30,16 +30,20 @@ async function fetchStageCandidates({
   stage = 'stage1',
   category = '',
   forceStage2 = false,
+  subPhase = '',
   queueEntryId = null,
   userId = null,
 }) {
+  const query = {
+    stage,
+    category,
+    forceStage2: forceStage2 ? 'true' : 'false',
+    queueEntryId: queueEntryId || '',
+  };
+  if (subPhase) query.subPhase = subPhase;
+
   const { statusCode, data } = await invokeExpressHandler(getStageCandidates, {
-    query: {
-      stage,
-      category,
-      forceStage2: forceStage2 ? 'true' : 'false',
-      queueEntryId: queueEntryId || '',
-    },
+    query,
     user: userId ? { id: userId, name: 'سیستم بله' } : null,
   });
   if (statusCode >= 400) {

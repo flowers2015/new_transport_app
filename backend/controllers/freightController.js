@@ -6773,6 +6773,13 @@ async function cancelAssignment(req, res) {
     const oldVehicleId = ann.assigned_vehicle_id || null;
     const oldTotalFreightCost = ann.total_freight_cost || null;
 
+    const { restoreDriversFromCancelledAssignment } = require('./dispatchController');
+    const queueRestoreResults = await restoreDriversFromCancelledAssignment(
+      client,
+      announcementId,
+      userId
+    );
+
     // تعیین وضعیت جدید برای بازگشت به صف مربوطه
     let newStatus = 'PendingCompanyAssignment';
     if (ann.assignment_type === 'personal') {
@@ -6846,7 +6853,26 @@ async function cancelAssignment(req, res) {
     });
 
     await client.query('COMMIT');
-    return res.status(200).json({ message: 'تخصیص با موفقیت لغو شد', newStatus });
+
+    const restoredCount = queueRestoreResults.filter(r => r.restored).length;
+    let message = 'تخصیص با موفقیت لغو شد';
+    if (restoredCount > 0) {
+      const positions = queueRestoreResults
+        .filter(r => r.restored)
+        .map(r => `ردیف ${r.position}`)
+        .join('، ');
+      message += `. ${restoredCount} راننده به صف نوبت برگشت (${positions})`;
+    } else if (oldDriverId && queueRestoreResults.some(r => r.reason === 'already_in_queue')) {
+      message += '. راننده از قبل در صف نوبت بود';
+    } else if (oldDriverId) {
+      message += '. راننده به صف نوبت برنگشت (اطلاعات نوبت قبلی موجود نبود)';
+    }
+
+    return res.status(200).json({
+      message,
+      newStatus,
+      queueRestore: queueRestoreResults,
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [freight] cancelAssignment failed:', error);
