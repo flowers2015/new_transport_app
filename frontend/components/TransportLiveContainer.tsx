@@ -9,6 +9,8 @@ import { OptimisticUpdateManager, applyOptimisticUpdate } from '../utils/optimis
 import {
     pickAssignmentFieldsFromApi,
     mergeAssignmentDisplayFields,
+    clearAssignmentFromAnnouncement,
+    isPendingAssignmentStatus,
     TransportLiveTab,
     lineTypeToBackend,
     isPendingBillOfLadingTab,
@@ -123,19 +125,40 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 }
                 
                 // Force invalidate cache برای اطمینان از دریافت داده جدید
+                const transportLiveCacheKeys = [
+                    `GET:${getApiUrl('freight-announcements')}`,
+                    `GET:${getApiUrl('vehicles')}`,
+                    `GET:${getApiUrl('drivers')}`,
+                    `GET:${getApiUrl('personal-drivers?page=1&limit=500')}`,
+                    `GET:${getApiUrl('personal-vehicles?page=1&limit=500')}`,
+                ];
                 try {
                     const { apiCache } = await import('../utils/apiCache');
-                    const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
-                    apiCache.invalidate(cacheKey);
-                    console.log('🗑️ [fetchData] Cache invalidated for fresh data');
+                    for (const cacheKey of transportLiveCacheKeys) {
+                        apiCache.invalidate(cacheKey);
+                    }
+                    if (!silent) {
+                        console.log('🗑️ [fetchData] All TransportLive caches invalidated (manual refresh)');
+                    }
                 } catch (err) {
                     // ignore
                 }
-                
+
+                const fetchJson = async (url: string) => {
+                    const response = await fetch(url, { headers });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                };
+
+                const loadCachedOrFresh = (url: string, ttl: number) =>
+                    silent ? cachedFetch(url, { headers }, ttl) : fetchJson(url);
+
                 const fetchPromises: Promise<any>[] = [
-                    cachedFetch(getApiUrl('freight-announcements'), { headers }, 30 * 1000),
-                    cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 minutes
-                    cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 minutes
+                    loadCachedOrFresh(getApiUrl('freight-announcements'), 30 * 1000),
+                    loadCachedOrFresh(getApiUrl('vehicles'), 10 * 60 * 1000),
+                    loadCachedOrFresh(getApiUrl('drivers'), 10 * 60 * 1000),
                 ];
                 
                 // فقط اگر نیاز باشد، personal resources را لود کن
@@ -146,8 +169,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     // برای dropdown ها از Search API استفاده می‌شود (در AssignmentDialog)
                     // افزایش limit به 500 برای اطمینان از نمایش راننده‌ها/خودروهای جدید
                     fetchPromises.push(
-                        cachedFetch(getApiUrl('personal-drivers?page=1&limit=500'), { headers }, 10 * 60 * 1000), // 10 minutes
-                        cachedFetch(getApiUrl('personal-vehicles?page=1&limit=500'), { headers }, 10 * 60 * 1000) // 10 minutes
+                        loadCachedOrFresh(getApiUrl('personal-drivers?page=1&limit=500'), 10 * 60 * 1000),
+                        loadCachedOrFresh(getApiUrl('personal-vehicles?page=1&limit=500'), 10 * 60 * 1000)
                     );
                 } else {
                     // اگر لود نمی‌کنیم، empty arrays برگردان
@@ -308,9 +331,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 });
 
                 setAnnouncements((prev) =>
-                    filteredAnnouncements.map((ann) =>
-                        mergeAssignmentDisplayFields(ann, prev.find((p) => p.id === ann.id))
-                    )
+                    silent
+                        ? filteredAnnouncements.map((ann) =>
+                              mergeAssignmentDisplayFields(ann, prev.find((p) => p.id === ann.id))
+                          )
+                        : filteredAnnouncements
                 );
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
                 setDrivers(Array.isArray(driversData) ? driversData : []);
@@ -563,8 +588,34 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     const awaitingFromFinalizeError =
                         updateType === 'finalize_error' &&
                         (data as { error?: string }).error === 'missing_bill_of_lading';
+
+                    const statusFromEvent =
+                        (data.status as FreightAnnouncementStatus) || existing?.status;
+
+                    const cancelledOrUnassigned =
+                        updateType === 'cancelled' ||
+                        (isPendingAssignmentStatus(statusFromEvent) &&
+                            existing &&
+                            Boolean(existing.assignedDriverId || existing.assignedVehicleId) &&
+                            !assignmentPatch.assignedDriverId &&
+                            !assignmentPatch.assignedVehicleId);
+
+                    if (cancelledOrUnassigned && existing) {
+                        const cleared = clearAssignmentFromAnnouncement(existing, {
+                            status: statusFromEvent || existing.status,
+                            ...(awaitingFromFinalizeError
+                                ? {
+                                      awaitingBillOfLadingAt:
+                                          (data as { awaitingBillOfLadingAt?: string })
+                                              .awaitingBillOfLadingAt || new Date().toISOString(),
+                                  }
+                                : {}),
+                        });
+                        return prev.map((ann) => (ann.id === announcementId ? cleared : ann));
+                    }
+
                     const updated = applyOptimisticUpdate(prev, announcementId, {
-                        status: (data.status as FreightAnnouncementStatus) || existing?.status,
+                        status: statusFromEvent,
                         ...assignmentPatch,
                         ...(awaitingFromFinalizeError
                             ? {
@@ -1032,6 +1083,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         ) {
             return;
         }
+
+        const originalAnnouncements = [...announcements];
+        const optimisticStatus =
+            ann?.assignmentType === 'personal' ||
+            ann?.status === FreightAnnouncementStatus.PendingPersonalAssignment
+                ? FreightAnnouncementStatus.PendingPersonalAssignment
+                : FreightAnnouncementStatus.PendingCompanyAssignment;
+
+        setAnnouncements((prev) =>
+            prev.map((row) =>
+                row.id === announcementId
+                    ? clearAssignmentFromAnnouncement(row, { status: optimisticStatus })
+                    : row
+            )
+        );
+
         try {
             console.log('❌ [TransportLive] Cancel Request:', {
                 announcementId,
@@ -1045,21 +1112,46 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     'Authorization': `Bearer ${token}`
                 }
             });
-            let payload: { message?: string } = {};
+            let payload: { message?: string; newStatus?: string } = {};
             try {
                 payload = await res.json();
             } catch {
                 payload = {};
             }
             if (!res.ok) {
+                setAnnouncements(originalAnnouncements);
                 console.error('❌ [TransportLive] Cancel API error:', payload);
                 throw new Error(payload.message || 'خطا در لغو تخصیص');
             }
             console.log('✅ [TransportLive] Cancelled:', payload);
+
+            const resolvedStatus =
+                payload.newStatus === 'PendingPersonalAssignment'
+                    ? FreightAnnouncementStatus.PendingPersonalAssignment
+                    : payload.newStatus === 'PendingCompanyAssignment'
+                      ? FreightAnnouncementStatus.PendingCompanyAssignment
+                      : optimisticStatus;
+
+            setAnnouncements((prev) =>
+                prev.map((row) =>
+                    row.id === announcementId
+                        ? clearAssignmentFromAnnouncement(row, { status: resolvedStatus })
+                        : row
+                )
+            );
+
+            try {
+                const { apiCache } = await import('../utils/apiCache');
+                apiCache.invalidate(`GET:${getApiUrl('freight-announcements')}`);
+            } catch {
+                /* ignore */
+            }
+
             alert(payload.message || 'تخصیص با موفقیت لغو شد.');
             window.dispatchEvent(new CustomEvent('dispatch-board:update'));
-            await fetchData();
+            await fetchData(true);
         } catch (e: any) {
+            setAnnouncements(originalAnnouncements);
             console.error('❌ [TransportLive] Cancel error:', e);
             alert(e?.message || 'خطا در لغو تخصیص');
         }

@@ -15,12 +15,25 @@ function formatRial(value) {
   return `${n.toLocaleString('en-US')} ریال`;
 }
 
-function escapeHtml(text) {
+/** بله/Telegram Markdown — کاراکترهای خاص داخل متن پویا */
+function escapeMarkdown(text) {
   return String(text || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/\\/g, '\\\\')
+    .replace(/\*/g, '\\*')
+    .replace(/_/g, '\\_')
+    .replace(/\[/g, '\\[')
+    .replace(/`/g, '\\`');
 }
+
+function mdBold(text) {
+  return `*${escapeMarkdown(text)}*`;
+}
+
+function mdItalic(text) {
+  return `_${escapeMarkdown(text)}_`;
+}
+
+const BALE_PARSE_MODE = 'Markdown';
 
 function getOriginDisplay(ann) {
   const origin = ann.originCity || ann.origin_city;
@@ -88,32 +101,32 @@ function formatAnnouncementRow(index, ann) {
   return text;
 }
 
-function formatAnnouncementRowHtml(index, ann) {
-  const line = escapeHtml(ann.lineType || '—');
-  const dest = escapeHtml(getDestinationDisplay(ann));
-  const km = escapeHtml(formatRouteKm(ann));
-  const origin = escapeHtml(getOriginDisplay(ann));
-  const brand = escapeHtml(ann.brand || '—');
-  const cargo = escapeHtml(formatRial(ann.cargoValue));
-  const delivery = escapeHtml(formatDeliveryDate(ann));
+function formatAnnouncementRowMarkdown(index, ann) {
+  const line = escapeMarkdown(ann.lineType || '—');
+  const dest = escapeMarkdown(getDestinationDisplay(ann));
+  const km = escapeMarkdown(formatRouteKm(ann));
+  const origin = escapeMarkdown(getOriginDisplay(ann));
+  const brand = escapeMarkdown(ann.brand || '—');
+  const cargo = escapeMarkdown(formatRial(ann.cargoValue));
+  const delivery = escapeMarkdown(formatDeliveryDate(ann));
   const note =
     ann.notes && String(ann.notes).trim() && String(ann.notes).trim() !== formatRouteKm(ann)
-      ? escapeHtml(String(ann.notes).trim())
+      ? escapeMarkdown(String(ann.notes).trim())
       : null;
 
   let text =
-    `<b>${index}.</b> بار ${line}\n` +
-    `   📍 <b>${dest}</b>  |  📏 <b>${km}</b>\n` +
-    `   🏭 بارگیری از <b>${origin}</b>\n` +
+    `${mdBold(`${index}.`)} بار ${line}\n` +
+    `   📍 ${mdBold(dest)}  |  📏 ${mdBold(km)}\n` +
+    `   🏭 بارگیری از ${mdBold(origin)}\n` +
     `   برند ${brand} | ارزش ${cargo} | تحویل ${delivery}`;
   if (note) text += `\n   ${note}`;
   return text;
 }
 
 function formatAssignmentGroupMessage(driverName, rowNumber, ann) {
-  const name = escapeHtml(driverName || '—');
-  const barLine = formatAnnouncementRowHtml(rowNumber || 1, ann);
-  return `✅ <b>${name}</b> انتخاب کرد\n\n${barLine}`;
+  const name = mdBold(driverName || '—');
+  const barLine = formatAnnouncementRowMarkdown(rowNumber || 1, ann);
+  return `✅ ${name} انتخاب کرد\n\n${barLine}`;
 }
 
 function formatAnnouncementList(announcements, max = 30) {
@@ -122,10 +135,10 @@ function formatAnnouncementList(announcements, max = 30) {
   return list.map((ann, i) => formatAnnouncementRow(i + 1, ann)).join('\n\n');
 }
 
-function formatAnnouncementListHtml(announcements, max = 30) {
+function formatAnnouncementListMarkdown(announcements, max = 30) {
   const list = (announcements || []).slice(0, max);
   if (list.length === 0) return 'بار مجازی برای این نوبت موجود نیست.';
-  return list.map((ann, i) => formatAnnouncementRowHtml(i + 1, ann)).join('\n\n');
+  return list.map((ann, i) => formatAnnouncementRowMarkdown(i + 1, ann)).join('\n\n');
 }
 
 function formatGroupStageTitle(stage, vehicleCategory) {
@@ -137,8 +150,10 @@ function formatGroupStageTitle(stage, vehicleCategory) {
     stage2: 'اعلام بار مرحله دوم — بارهای باقی‌مانده',
   };
   const stagePart = titles[stage] || titles.stage2;
-  const categoryPart = vehicleCategory ? `\nدسته: ${escapeHtml(vehicleCategory)}` : '';
-  return `<b>${stagePart}</b>${categoryPart}`;
+  const categoryPart = vehicleCategory
+    ? `\nدسته: ${escapeMarkdown(vehicleCategory)}`
+    : '';
+  return `${mdBold(stagePart)}${categoryPart}`;
 }
 
 const QUEUE_TYPE_FA = {
@@ -152,18 +167,18 @@ const QUEUE_TYPE_FA = {
 
 const { computeJalaliCycleRange } = require('../dispatch/dispatchCycle');
 
-function veryFarHistorySuffixHtml(item) {
+function veryFarHistorySuffix(item) {
   const jalali =
     item.lastVeryFarAtJalali || item.longRouteHistory?.[0]?.atJalali || null;
   if (!jalali) return '';
   const city = item.longRouteHistory?.[0]?.city;
-  const destPart = city ? ` — ${escapeHtml(city)}` : '';
-  return ` <i>خیلی‌دور: ${escapeHtml(jalali)}${destPart}</i>`;
+  const destPart = city ? ` — ${escapeMarkdown(city)}` : '';
+  return ` ${mdItalic(`خیلی‌دور: ${jalali}${destPart}`)}`;
 }
 
 function formatQueueLine(item, index) {
-  const name = escapeHtml(item.driver?.name || item.driver_name || '—');
-  return `${index}. ${name}${veryFarHistorySuffixHtml(item)}`;
+  const name = escapeMarkdown(item.driver?.name || item.driver_name || '—');
+  return `${index}. ${name}${veryFarHistorySuffix(item)}`;
 }
 
 function formatQueueSnapshot(queue) {
@@ -178,7 +193,7 @@ function formatQueueSnapshot(queue) {
   const parts = [];
 
   if (far.length) {
-    parts.push('🟢 <b>دور</b>');
+    parts.push(`🟢 ${mdBold('دور')}`);
     far.forEach((item, i) => parts.push(formatQueueLine(item, i + 1)));
   }
 
@@ -187,22 +202,24 @@ function formatQueueSnapshot(queue) {
   }
 
   if (near.length) {
-    parts.push('🟠 <b>نزدیک</b>');
+    parts.push(`🟠 ${mdBold('نزدیک')}`);
     near.forEach((item, i) => parts.push(formatQueueLine(item, i + 1)));
   }
 
   if (other.length) {
     if (parts.length) parts.push('────────────────');
-    parts.push('<b>سایر</b>');
+    parts.push(mdBold('سایر'));
     other.forEach((item, i) => {
       const t = QUEUE_TYPE_FA[item.queueType || item.queue_type] || item.queue_type;
-      parts.push(`${formatQueueLine(item, i + 1)} — ${t}`);
+      parts.push(`${formatQueueLine(item, i + 1)} — ${escapeMarkdown(t)}`);
     });
   }
 
   const { fromJalali, toJalali } = computeJalaliCycleRange();
   if (parts.length) parts.push('────────────────');
-  parts.push(`📅 <i>دوره جاری: ${escapeHtml(fromJalali)} تا ${escapeHtml(toJalali)}</i>`);
+  parts.push(
+    `📅 ${mdItalic(`دوره جاری: ${fromJalali} تا ${toJalali}`)}`
+  );
 
   return parts.join('\n');
 }
@@ -235,7 +252,6 @@ function toAsciiDigits(text) {
     .replace(/[۰-۹]/g, c => String(persian.indexOf(c)));
 }
 
-/** فقط ۱–۲ رقم (یا کد پرسنلی + ۱–۲ رقم) — نه شماره‌های بلند گروه */
 function parseRowNumber(text) {
   const ascii = toAsciiDigits(text);
   const withEmp = ascii.match(/^(\d{1,10})\s+(\d{1,2})$/);
@@ -251,12 +267,21 @@ function looksLikeDriverSelectionAttempt(text) {
   return /^\d{1,2}$/.test(ascii) || /^\d{1,10}\s+\d{1,2}$/.test(ascii);
 }
 
+/** حذف نشانه‌گذاری Markdown برای fallback بدون parse_mode */
+function stripMarkdown(text) {
+  return String(text || '')
+    .replace(/\\([*_`\[])/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1');
+}
+
 module.exports = {
+  BALE_PARSE_MODE,
   formatCountdown,
   formatAnnouncementRow,
-  formatAnnouncementRowHtml,
+  formatAnnouncementRowMarkdown,
   formatAnnouncementList,
-  formatAnnouncementListHtml,
+  formatAnnouncementListMarkdown,
   formatAssignmentGroupMessage,
   formatRouteKm,
   getOriginDisplay,
@@ -268,4 +293,6 @@ module.exports = {
   looksLikeDriverSelectionAttempt,
   formatRial,
   getDestinationDisplay,
+  stripMarkdown,
+  mdBold,
 };

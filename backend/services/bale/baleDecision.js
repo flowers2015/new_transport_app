@@ -49,7 +49,6 @@ function filterEligibleForDriver(announcements, driverEntry, stage, rejectedAnno
 
     if (stage === 'stage2_near_all') {
       if (queueType !== 'near') return false;
-      if (hasVfHistory && isVeryFarAnnouncement(ann)) return false;
       return true;
     }
 

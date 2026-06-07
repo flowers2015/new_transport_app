@@ -12,6 +12,9 @@ const {
   getBoard,
   searchVehicles,
   searchDrivers,
+  getAssignmentContext,
+  getQueueAssignmentHints,
+  deferQueueTurn,
 } = require('../controllers/dispatchController');
 
 const transportRoles = ['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin'];
@@ -84,6 +87,27 @@ router.get(
   authenticateToken,
   authorizeRole([...transportRoles, 'system_user']),
   searchDrivers
+);
+
+router.get(
+  '/assignments/context',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  getAssignmentContext
+);
+
+router.get(
+  '/queue/assign-hints',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  getQueueAssignmentHints
+);
+
+router.post(
+  '/queue/:id/defer',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  deferQueueTurn
 );
 
 module.exports = router;

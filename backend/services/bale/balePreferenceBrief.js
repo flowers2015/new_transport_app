@@ -75,6 +75,14 @@ async function buildPreferenceBrief(driverId, options = {}) {
     lines.push(`بار پیشنهادی: ${annLine}`);
   }
 
+  const cycleSummary = prefs.cycleSummary || { veryFar: [], far: [], near: [] };
+  const stats = prefs.stats || {
+    finalizedCount: taken.filter(t => t.certainty === 'finalized').length,
+    pendingCount: taken.filter(t => t.certainty === 'pending').length,
+    cancelledCount: (prefs.taken || []).filter(t => t.isCancelled).length,
+    totalTaken: (prefs.taken || []).length,
+  };
+
   const operatorHtml = lines.join('\n');
 
   const driverAutoPv =
@@ -88,6 +96,7 @@ async function buildPreferenceBrief(driverId, options = {}) {
 
   return {
     driver: prefs.driver,
+    category: prefs.category || null,
     takenCount: taken.length,
     peerCount,
     autoAssignCount: autoStats.autoAssignCount,
@@ -96,6 +105,8 @@ async function buildPreferenceBrief(driverId, options = {}) {
     recentTaken,
     fromJalali: prefs.fromJalali,
     toJalali: prefs.toJalali,
+    cycleSummary,
+    stats,
   };
 }
 

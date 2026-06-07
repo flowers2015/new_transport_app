@@ -18,9 +18,12 @@ const {
   formatAnnouncementList,
   formatQueueSnapshot,
   formatAnnouncementRow,
-  formatAnnouncementRowHtml,
-  formatAnnouncementListHtml,
+  formatAnnouncementRowMarkdown,
+  formatAnnouncementListMarkdown,
   formatAssignmentGroupMessage,
+  BALE_PARSE_MODE,
+  stripMarkdown,
+  mdBold,
   formatGroupStageTitle,
   stageLabel,
   parseRowNumber,
@@ -191,6 +194,38 @@ function parseRejected(session) {
   }
 }
 
+function queueEntryDriverId(entry) {
+  return entry?.driverId || entry?.driver_id || null;
+}
+
+async function getPhaseDeferredDriverIds(sessionId, stage) {
+  const eventType =
+    stage === 'stage1' ? 'deferred_to_stage2' : 'deferred_to_near_all';
+  if (!['stage1', 'stage2_near_vf'].includes(stage)) {
+    return new Set();
+  }
+  const { rows } = await pool.query(
+    `SELECT payload->>'driverId' AS driver_id, payload->>'stage' AS log_stage
+     FROM bale_session_logs
+     WHERE session_id = $1 AND event_type = $2
+     ORDER BY created_at ASC`,
+    [sessionId, eventType]
+  );
+  const ids = new Set();
+  for (const row of rows) {
+    if (!row.driver_id) continue;
+    if (!row.log_stage || row.log_stage === stage) {
+      ids.add(row.driver_id);
+    }
+  }
+  return ids;
+}
+
+function filterQueueForActiveTurn(queue, deferredIds) {
+  if (!deferredIds?.size) return queue || [];
+  return (queue || []).filter(entry => !deferredIds.has(queueEntryDriverId(entry)));
+}
+
 function currentTurnEntry(session) {
   const queue = parseQueueSnapshot(session);
   return queue[session.current_turn_index] || null;
@@ -292,7 +327,7 @@ async function sendGroupMessage(session, text, options = {}) {
   } catch (err) {
     if (options.parseMode) {
       try {
-        await baleApi.sendMessage(Number(groupChatId), text.replace(/<[^>]+>/g, ''));
+        await baleApi.sendMessage(Number(groupChatId), stripMarkdown(text));
         return;
       } catch (_) {}
     }
@@ -323,18 +358,18 @@ async function broadcastSessionStartToGroup(
 
   await sendGroupMessage(
     session,
-    `📋 <b>نوبت</b>${vehicleCategory ? ` — ${vehicleCategory}` : ''}\n\n${formatQueueSnapshot(queueForGroup)}`,
-    { parseMode: 'HTML' }
+    `📋 ${mdBold('نوبت')}${vehicleCategory ? ` — ${vehicleCategory}` : ''}\n\n${formatQueueSnapshot(queueForGroup)}`,
+    { parseMode: BALE_PARSE_MODE }
   );
 
   await sendGroupMessage(
     session,
-    `📦 <b>لیست بارها</b>\n\n${formatAnnouncementListHtml(announcements)}`,
-    { parseMode: 'HTML' }
+    `📦 ${mdBold('لیست بارها')}\n\n${formatAnnouncementListMarkdown(announcements)}`,
+    { parseMode: BALE_PARSE_MODE }
   );
 
   await sendGroupMessage(session, formatGroupStageTitle(stage, vehicleCategory), {
-    parseMode: 'HTML',
+    parseMode: BALE_PARSE_MODE,
   });
 
   await logEvent(session.id, 'group_broadcast', {
@@ -432,36 +467,62 @@ async function loadStagePayload(sessionStage, vehicleCategory, { userId, forceSt
   return { queue, displayQueue, announcements };
 }
 
+async function countRawQueueForCategory(vehicleCategory) {
+  const label = normalizeCategoryLabel(vehicleCategory);
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS c FROM dispatch_queue_entries
+     WHERE queue_type IN ('far', 'near')
+       AND vehicle_category = $1`,
+    [label]
+  );
+  return rows[0]?.c || 0;
+}
+
 async function resolveInitialStage({ stage = 'stage1', vehicleCategory, userId, forceStage2 = false }) {
+  const tryPhases = async (phases, { autoPromoted = false } = {}) => {
+    for (const phase of phases) {
+      const payload = await loadStagePayload(phase, vehicleCategory, {
+        userId,
+        forceStage2: forceStage2 || phase !== 'stage1',
+      });
+      if (payload.announcements.length > 0 && payload.queue.length > 0) {
+        return { effectiveStage: phase, ...payload, autoPromoted };
+      }
+    }
+    return null;
+  };
+
   if (stage === 'stage2' || stage === 'stage2_far') {
-    const s2 = await loadStagePayload('stage2_far', vehicleCategory, { userId, forceStage2 });
-    if (s2.queue.length === 0) {
-      throw new Error(`صف نوبت «${vehicleCategory}» خالی است. ابتدا در «ثبت نوبت» راننده اضافه کنید.`);
+    const resolved = await tryPhases(['stage2_far', 'stage2_near_vf', 'stage2_near_all']);
+    if (resolved) return { ...resolved, autoPromoted: false };
+    if ((await countRawQueueForCategory(vehicleCategory)) === 0) {
+      throw new Error(
+        `صف نوبت «${vehicleCategory}» خالی است. ابتدا در «ثبت نوبت» راننده اضافه کنید.`
+      );
     }
-    if (s2.announcements.length === 0) {
-      throw new Error('بار مرحله دوم موجود نیست.');
-    }
-    return { effectiveStage: 'stage2_far', ...s2, autoPromoted: false };
+    throw new Error('بار مرحله دوم برای این دسته موجود نیست.');
   }
 
   const s1 = await loadStagePayload('stage1', vehicleCategory, { userId, forceStage2 });
-  if (s1.announcements.length > 0) {
-    if (s1.queue.length === 0) {
-      throw new Error(`صف نوبت «${vehicleCategory}» خالی است. ابتدا در «ثبت نوبت» راننده اضافه کنید.`);
-    }
-    return { effectiveStage: 'stage1', ...s1, autoPromoted: false };
+  if (s1.announcements.length > 0 && s1.queue.length > 0) {
+    return { effectiveStage: 'stage1', ...s1, autoPromoted: false, skipStage1Reason: null };
   }
 
-  const s2 = await loadStagePayload('stage2_far', vehicleCategory, { userId });
-  if (s2.announcements.length > 0 && s2.queue.length > 0) {
-    return { effectiveStage: 'stage2_far', ...s2, autoPromoted: true };
-  }
+  const skipStage1Reason =
+    s1.announcements.length > 0 && s1.queue.length === 0 ? 'no_far_queue' : 'no_stage1_loads';
 
-  if (s1.queue.length === 0) {
-    throw new Error(`صف نوبت «${vehicleCategory}» خالی است. ابتدا در «ثبت نوبت» راننده اضافه کنید.`);
+  const promoted = await tryPhases(['stage2_far', 'stage2_near_vf', 'stage2_near_all'], {
+    autoPromoted: true,
+  });
+  if (promoted) return { ...promoted, skipStage1Reason };
+
+  if ((await countRawQueueForCategory(vehicleCategory)) === 0) {
+    throw new Error(
+      `صف نوبت «${vehicleCategory}» خالی است. ابتدا در «ثبت نوبت» راننده اضافه کنید.`
+    );
   }
   throw new Error(
-    'بار مرحله اول (مسیرهای خیلی‌دور) موجود نیست. بار مرحله دوم هم برای ادامه یافت نشد.'
+    'بار خیلی‌دور (مرحله ۱) موجود نیست و بار مناسب مرحله ۲ برای نوبت‌های فعلی یافت نشد.'
   );
 }
 
@@ -481,14 +542,16 @@ async function refreshSessionAnnouncements(sessionId, { fallback = null } = {}) 
 
 async function syncQueueFromServer(sessionId) {
   const session = await loadSession(sessionId);
-  if (!session) return [];
-  const { queue, displayQueue } = await loadStagePayload(
+  if (!session) return { queue: [], displayQueue: [] };
+  const { queue: rawQueue, displayQueue } = await loadStagePayload(
     session.stage,
     session.vehicle_category || '',
     stageFetchOpts(session)
   );
+  const deferredIds = await getPhaseDeferredDriverIds(sessionId, session.stage);
+  const queue = filterQueueForActiveTurn(rawQueue, deferredIds);
   await updateSession(sessionId, { queue_snapshot: JSON.stringify(queue) });
-  return { queue, displayQueue };
+  return { queue, displayQueue, rawQueue };
 }
 
 async function advanceAfterAssignment(sessionId, { localRemaining = null } = {}) {
@@ -530,14 +593,36 @@ async function skipTurnInternal(sessionId, reason) {
   if (!session) return;
   const entry = currentTurnEntry(session);
   const driverName = entry?.driver?.name || entry?.driver_name || '—';
-  await updateSession(sessionId, {
-    current_turn_index: session.current_turn_index + 1,
-    status: 'running',
-    pending_selection: null,
-    turn_deadline_at: null,
-    current_turn_message_id: null,
-    current_turn_chat_id: null,
-  });
+  const isDefer =
+    reason === 'deferred_to_stage2' || reason === 'deferred_to_near_all';
+
+  if (isDefer) {
+    await updateSession(sessionId, {
+      status: 'running',
+      pending_selection: null,
+      turn_deadline_at: null,
+      current_turn_message_id: null,
+      current_turn_chat_id: null,
+    });
+    await syncQueueFromServer(sessionId);
+    const refreshed = await loadSession(sessionId);
+    const queue = parseQueueSnapshot(refreshed);
+    const nextIndex =
+      refreshed.current_turn_index >= queue.length ? 0 : refreshed.current_turn_index;
+    if (nextIndex !== refreshed.current_turn_index) {
+      await updateSession(sessionId, { current_turn_index: nextIndex });
+    }
+  } else {
+    await updateSession(sessionId, {
+      current_turn_index: session.current_turn_index + 1,
+      status: 'running',
+      pending_selection: null,
+      turn_deadline_at: null,
+      current_turn_message_id: null,
+      current_turn_chat_id: null,
+    });
+  }
+
   await logEvent(sessionId, 'turn_skipped_auto', {
     reason,
     index: session.current_turn_index,
@@ -597,7 +682,7 @@ async function startDispatchPhase(sessionId, newStage, { groupTitle, logType }) 
     refreshed,
     `${groupTitle} — ${vehicleCategory}\n` +
       `${liveAnnouncements.length} بار باقی‌مانده برای ${liveQueue.length} راننده در صف`,
-    { parseMode: 'HTML' }
+    { parseMode: BALE_PARSE_MODE }
   );
   await broadcastSessionStartToGroup(
     refreshed,
@@ -622,18 +707,18 @@ async function tryAdvanceDispatchPhase(sessionId) {
 
   const phaseChain = {
     stage1: [
-      ['stage2_far', '🔄 <b>شروع مرحله دوم — نوبت دور</b>', 'stage2_far_started'],
+      ['stage2_far', `🔄 ${mdBold('شروع مرحله دوم — نوبت دور')}`, 'stage2_far_started'],
     ],
     stage2_far: [
-      ['stage2_near_vf', '🔄 <b>مرحله دوم — خیلی‌دور برای نوبت نزدیک</b>', 'stage2_near_vf_started'],
-      ['stage2_near_all', '🔄 <b>مرحله دوم — نوبت نزدیک</b>', 'stage2_near_all_started'],
+      ['stage2_near_vf', `🔄 ${mdBold('مرحله دوم — خیلی‌دور برای نوبت نزدیک')}`, 'stage2_near_vf_started'],
+      ['stage2_near_all', `🔄 ${mdBold('مرحله دوم — نوبت نزدیک')}`, 'stage2_near_all_started'],
     ],
     stage2: [
-      ['stage2_near_vf', '🔄 <b>مرحله دوم — خیلی‌دور برای نوبت نزدیک</b>', 'stage2_near_vf_started'],
-      ['stage2_near_all', '🔄 <b>مرحله دوم — نوبت نزدیک</b>', 'stage2_near_all_started'],
+      ['stage2_near_vf', `🔄 ${mdBold('مرحله دوم — خیلی‌دور برای نوبت نزدیک')}`, 'stage2_near_vf_started'],
+      ['stage2_near_all', `🔄 ${mdBold('مرحله دوم — نوبت نزدیک')}`, 'stage2_near_all_started'],
     ],
     stage2_near_vf: [
-      ['stage2_near_all', '🔄 <b>مرحله دوم — نوبت نزدیک</b>', 'stage2_near_all_started'],
+      ['stage2_near_all', `🔄 ${mdBold('مرحله دوم — نوبت نزدیک')}`, 'stage2_near_all_started'],
     ],
   };
 
@@ -699,7 +784,8 @@ async function startSessionForCategory({
     throw new Error(`جلسه فعال برای «${vehicleCategory}» وجود دارد. ابتدا آن را متوقف کنید.`);
   }
 
-  const { effectiveStage, queue, announcements, autoPromoted } = await resolveInitialStage({
+  const { effectiveStage, queue, announcements, autoPromoted, skipStage1Reason } =
+    await resolveInitialStage({
     stage,
     vehicleCategory,
     userId,
@@ -740,11 +826,11 @@ async function startSessionForCategory({
     if (groupChatId) {
       try {
         if (autoPromoted) {
-          await baleApi.sendMessage(
-            Number(groupChatId),
-            `ℹ️ بار مرحله اول (خیلی‌دور) موجود نبود — جلسه مستقیماً از <b>مرحله دوم — نوبت دور</b> ادامه می‌یابد.`,
-            { parseMode: 'HTML' }
-          );
+          const promoText =
+            skipStage1Reason === 'no_far_queue'
+              ? `ℹ️ نوبت «دور» خالی است — جلسه طبق قوانین از ${mdBold('مرحله دوم')} ادامه می‌یابد.`
+              : `ℹ️ بار مرحله اول (خیلی‌دور) موجود نبود — جلسه مستقیماً از ${mdBold('مرحله دوم')} ادامه می‌یابد.`;
+          await baleApi.sendMessage(Number(groupChatId), promoText, { parseMode: BALE_PARSE_MODE });
         }
         await broadcastSessionStartToGroup(
           session,
@@ -783,6 +869,8 @@ async function startSessionForCategory({
 }
 
 async function countQueueForCategory(category, opts) {
+  const raw = await countRawQueueForCategory(category);
+  if (raw === 0) return 0;
   try {
     const { queue } = await resolveInitialStage({
       stage: opts.stage || 'stage1',
@@ -792,7 +880,7 @@ async function countQueueForCategory(category, opts) {
     });
     return queue.length;
   } catch {
-    return 0;
+    return raw;
   }
 }
 
@@ -878,11 +966,11 @@ async function buildTurnMessage(session, entry, eligible) {
   const name = entry.driver?.name || entry.driver_name || '—';
   const countdown = formatCountdown(session.turn_deadline_at);
   return (
-    `⏱ ${countdown} | نوبت شما\n` +
-    `👤 ${name}\n` +
-    `📌 ${stageLabel(session.stage)}\n\n` +
+    `⏱ ${mdBold(countdown)} | ${mdBold('نوبت شما')}\n` +
+    `👤 ${mdBold(name)}\n` +
+    `📌 ${mdBold(stageLabel(session.stage))}\n\n` +
     `بارهای مجاز — فقط شماره را بفرستید:\n\n` +
-    formatAnnouncementList(eligible)
+    formatAnnouncementListMarkdown(eligible)
   );
 }
 
@@ -965,7 +1053,7 @@ async function advanceToCurrentTurn(sessionId, depth = 0) {
       entry,
       eligible
     );
-    const sent = await baleApi.sendMessage(chatId, text);
+    const sent = await baleApi.sendMessage(chatId, text, { parseMode: BALE_PARSE_MODE });
     messageId = sent?.message_id;
     await sendDeferTurnMessage(session, chatId);
   } catch (err) {
@@ -1023,7 +1111,8 @@ async function refreshTurnTimerMessage(sessionId) {
     await baleApi.editMessageText(
       session.current_turn_chat_id,
       session.current_turn_message_id,
-      text
+      text,
+      { parseMode: BALE_PARSE_MODE }
     );
   } catch (err) {
     if (!String(err.message).includes('message is not modified')) {
@@ -1059,10 +1148,70 @@ async function resolveDriverFromMessage(session, text, fromUserId) {
   return { driverId, rowText: trimmed };
 }
 
+async function tryHandleDriverRegistration(chatId, text, fromUserId) {
+  const trimmed = (text || '').trim();
+  const startMatch = trimmed.match(/^\/start(?:@[\w_]+)?(?:\s+(\d{1,10}))?\s*$/i);
+  const registerMatch = trimmed.match(/^ثبت\s+(\d{1,10})\s*$/i);
+
+  let employeeId = null;
+  if (startMatch) {
+    employeeId = startMatch[1] || null;
+    if (!employeeId) {
+      await baleApi.sendMessage(
+        chatId,
+        'برای ثبت chat خود در سیستم اعلام بار:\n\n/start کدپرسنلی\n\nمثال:\n/start 44983'
+      );
+      return { handled: true };
+    }
+  } else if (registerMatch) {
+    employeeId = registerMatch[1];
+  } else {
+    return { handled: false };
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, name, employee_id FROM drivers
+     WHERE employee_id = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)
+     LIMIT 1`,
+    [employeeId]
+  );
+  if (!rows.length) {
+    await baleApi.sendMessage(
+      chatId,
+      `کد پرسنلی ${employeeId} در لیست رانندگان شرکتی یافت نشد.\nاز واحد نوبت‌دهی پیگیری کنید.`
+    );
+    return { handled: true };
+  }
+
+  const driver = rows[0];
+  await pool.query(
+    `INSERT INTO bale_driver_outreach
+      (driver_id, employee_id, outreach_chat_id, bale_user_id, is_test_simulation, notes, updated_at)
+     VALUES ($1, $2, $3, $4, FALSE, 'ثبت خودکار از بله', NOW())
+     ON CONFLICT (driver_id) DO UPDATE SET
+       employee_id = EXCLUDED.employee_id,
+       outreach_chat_id = EXCLUDED.outreach_chat_id,
+       bale_user_id = COALESCE(EXCLUDED.bale_user_id, bale_driver_outreach.bale_user_id),
+       is_test_simulation = FALSE,
+       notes = 'ثبت خودکار از بله',
+       updated_at = NOW()`,
+    [driver.id, driver.employee_id, Number(chatId), fromUserId ? Number(fromUserId) : null]
+  );
+
+  await baleApi.sendMessage(
+    chatId,
+    `✅ ${driver.name}\nchat شما برای اعلام بار ثبت شد.\nکد پرسنلی: ${driver.employee_id}`
+  );
+  return { handled: true };
+}
+
 async function handleTextMessage(chatId, text, fromUserId, chat = null) {
   if (isGroupLikeChat(chat) || (await isBaleGroupChat(chatId))) {
     return { handled: false };
   }
+
+  const registration = await tryHandleDriverRegistration(chatId, text, fromUserId);
+  if (registration.handled) return registration;
 
   const session = await findSessionForInbound(chatId);
   console.log('📩 [bale] inbound:', { chatId, text, status: session?.status, sessionId: session?.id });
@@ -1133,8 +1282,8 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
 
   const ann = eligible[rowNum - 1];
   const confirmText =
-    `انتخاب شما:\n` +
-    formatAnnouncementRow(rowNum, ann) +
+    `${mdBold('انتخاب شما:')}\n` +
+    formatAnnouncementRowMarkdown(rowNum, ann) +
     `\n\nآیا تأیید می‌کنید؟`;
 
   await clearTurnTimer(session.id, {
@@ -1155,6 +1304,7 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
   });
 
   const sent = await baleApi.sendMessage(chatId, confirmText, {
+    parseMode: BALE_PARSE_MODE,
     replyMarkup: confirmKeyboard(session.id),
   });
   await logEvent(session.id, 'selection_pending', { rowNum, announcementId: ann.id });
@@ -1235,10 +1385,14 @@ async function completeAssignment(session, selection, source) {
     await announceToGroup(
       session,
       formatAssignmentGroupMessage(driverName, selection.rowNumber || 1, assignedAnn),
-      { parseMode: 'HTML' }
+      { parseMode: BALE_PARSE_MODE }
     );
   } else {
-    await announceToGroup(session, `✅ <b>${driverName}</b> انتخاب کرد`, { parseMode: 'HTML' });
+    await announceToGroup(
+      session,
+      `✅ ${mdBold(driverName)} انتخاب کرد`,
+      { parseMode: BALE_PARSE_MODE }
+    );
   }
 
   const veryFarRemaining = remaining.filter(isVeryFarAnnouncement).length;
@@ -1246,6 +1400,23 @@ async function completeAssignment(session, selection, source) {
     const advanced = await tryAdvanceDispatchPhase(session.id);
     if (advanced) {
       return { completed: false, selectionDurationSec, stage2Started: true };
+    }
+  }
+
+  if (assignedStage === 'stage2_near_vf') {
+    if (veryFarRemaining === 0) {
+      const advanced = await tryAdvanceDispatchPhase(session.id);
+      if (advanced) {
+        return { completed: false, selectionDurationSec, stage2Started: true };
+      }
+    } else {
+      const { queue: activeQueue } = await syncQueueFromServer(session.id);
+      if (activeQueue.length === 0) {
+        const advanced = await tryAdvanceDispatchPhase(session.id);
+        if (advanced) {
+          return { completed: false, selectionDurationSec, stage2Started: true };
+        }
+      }
     }
   }
 
@@ -1340,6 +1511,7 @@ async function handleCallback(callbackQuery) {
     await logEvent(sessionId, deferToNearAll ? 'deferred_to_near_all' : 'deferred_to_stage2', {
       driverId: entry?.driverId || entry?.driver_id,
       index: session.current_turn_index,
+      stage: session.stage,
     });
     await skipTurnInternal(
       sessionId,
@@ -1520,7 +1692,9 @@ async function extendCurrentTurn(sessionId, extraSec = 120) {
     const outreach = await getDriverOutreach(entry.driverId || entry.driver_id);
     if (outreach?.outreach_chat_id) {
       const text = await buildTurnMessage({ ...refreshed, turn_deadline_at: deadline }, entry, eligible);
-      const sent = await baleApi.sendMessage(outreach.outreach_chat_id, text);
+      const sent = await baleApi.sendMessage(outreach.outreach_chat_id, text, {
+        parseMode: BALE_PARSE_MODE,
+      });
       await sendDeferTurnMessage(refreshed, outreach.outreach_chat_id);
       await updateSession(sessionId, {
         current_turn_message_id: sent?.message_id,
@@ -1594,6 +1768,12 @@ function ensureTickTimer() {
 }
 
 async function seedTestDrivers(outreachChatId, limit = 10) {
+  const { getRuntimeSettings, isProductionEnvironment } = require('./baleSettings');
+  const runtime = await getRuntimeSettings();
+  if (isProductionEnvironment(runtime)) {
+    throw new Error('در حالت عملیاتی امکان لینک تست رانندگان وجود ندارد.');
+  }
+
   const { rows: queueDrivers } = await pool.query(
     `SELECT q.driver_id, d.employee_id, d.name, q.position
      FROM dispatch_queue_entries q

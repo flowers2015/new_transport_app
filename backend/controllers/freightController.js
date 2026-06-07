@@ -6868,6 +6868,33 @@ async function cancelAssignment(req, res) {
       message += '. راننده به صف نوبت برنگشت (اطلاعات نوبت قبلی موجود نبود)';
     }
 
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'cancelled',
+        {
+          id: announcementId,
+          status: newStatus,
+          assigned_driver_id: null,
+          assigned_vehicle_id: null,
+          assigned_driver_name: null,
+          assigned_driver_contact: null,
+          assigned_driver_employee_id: null,
+          assigned_vehicle_model: null,
+          assigned_vehicle_brand: null,
+          vehicle_plate: null,
+          bill_of_lading_number: null,
+          total_freight_cost: null,
+          assignment_finalized_at: null,
+          awaiting_bill_of_lading_at: null,
+        },
+        userId
+      );
+    } catch (realtimeError) {
+      console.warn('⚠️ [freight] cancel realtime notify skipped:', realtimeError.message);
+    }
+
     return res.status(200).json({
       message,
       newStatus,

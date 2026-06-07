@@ -1,4 +1,4 @@
-import { Destination, Driver, FreightAnnouncement, FreightLineType, PersonalDriver, Vehicle } from '../types';
+import { Destination, Driver, FreightAnnouncement, FreightAnnouncementStatus, FreightLineType, PersonalDriver, Vehicle } from '../types';
 import { formatPlateNumber } from './jalali';
 
 /** تب مجزا برای تخصیص شخصی بدون شماره بارنامه */
@@ -75,39 +75,92 @@ export function formatCompanyVehiclePlate(vehicle: Vehicle): string {
     return vehicle.serialNumber || (vehicle as Vehicle & { vehicleCode?: string }).vehicleCode || 'نامشخص';
 }
 
+export function isPendingAssignmentStatus(status?: string | null): boolean {
+    return (
+        status === FreightAnnouncementStatus.PendingCompanyAssignment ||
+        status === FreightAnnouncementStatus.PendingPersonalAssignment ||
+        status === 'PendingCompanyAssignment' ||
+        status === 'PendingPersonalAssignment'
+    );
+}
+
+/** پاک‌سازی فیلدهای تخصیص پس از لغو یا بازگشت به صف */
+export function clearAssignmentFromAnnouncement(
+    ann: FreightAnnouncement,
+    overrides: Partial<FreightAnnouncement> = {}
+): FreightAnnouncement {
+    return {
+        ...ann,
+        ...overrides,
+        assignedDriverId: undefined,
+        assignedVehicleId: undefined,
+        assignedDriverName: undefined,
+        assignedDriverContact: undefined,
+        assignedVehiclePlate: undefined,
+        billOfLadingNumber: undefined,
+        totalFreightCost: undefined,
+        awaitingBillOfLadingAt: undefined,
+        assignmentFinalizedAt: undefined,
+        destinations: (ann.destinations || []).map((d) => ({ ...d, freightCost: undefined })),
+    };
+}
+
+function readOptionalAssignmentId(value: unknown): string | undefined {
+    if (value === null || value === undefined || value === '') return undefined;
+    return String(value);
+}
+
+function readOptionalAssignmentText(value: unknown): string | undefined {
+    if (value === null || value === undefined) return undefined;
+    const s = String(value).trim();
+    return s || undefined;
+}
+
 /** فیلدهای تخصیص از پاسخ API (شامل payloadهای SSE و snake/camel case) */
 export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
     const driverName =
-        (a.resolved_driver_name as string) ||
-        (a.assigned_driver_name as string) ||
-        (a.assignedDriverName as string) ||
-        (a.driverName as string) ||
-        undefined;
+        readOptionalAssignmentText(a.resolved_driver_name) ||
+        readOptionalAssignmentText(a.assigned_driver_name) ||
+        readOptionalAssignmentText(a.assignedDriverName) ||
+        readOptionalAssignmentText(a.driverName);
     const driverContact =
-        (a.resolved_driver_contact as string) ||
-        (a.assigned_driver_contact as string) ||
-        (a.assignedDriverContact as string) ||
-        (a.driverContact as string) ||
-        undefined;
+        readOptionalAssignmentText(a.resolved_driver_contact) ||
+        readOptionalAssignmentText(a.assigned_driver_contact) ||
+        readOptionalAssignmentText(a.assignedDriverContact) ||
+        readOptionalAssignmentText(a.driverContact);
+
+    const plateFromRow = buildAssignedVehiclePlateFromApiRow(a);
+    const assignedVehiclePlate =
+        plateFromRow ||
+        readOptionalAssignmentText(a.vehiclePlate) ||
+        readOptionalAssignmentText(a.vehicle_plate);
+
+    const rawFreight = a.total_freight_cost ?? a.totalFreightCost;
+    const totalFreightCost =
+        rawFreight === null || rawFreight === undefined ? undefined : (rawFreight as number);
 
     return {
         assignmentType: (a.assignment_type || a.assignmentType || a.detected_assignment_type) as
             | 'company'
             | 'personal'
             | undefined,
-        assignedDriverId: (a.assigned_driver_id || a.assignedDriverId || a.driverId) as string | undefined,
-        assignedVehicleId: (a.assigned_vehicle_id || a.assignedVehicleId || a.vehicleId) as string | undefined,
+        assignedDriverId: readOptionalAssignmentId(
+            a.assigned_driver_id ?? a.assignedDriverId ?? a.driverId
+        ),
+        assignedVehicleId: readOptionalAssignmentId(
+            a.assigned_vehicle_id ?? a.assignedVehicleId ?? a.vehicleId
+        ),
         assignedDriverName: driverName,
         assignedDriverContact: driverContact,
-        assignedVehiclePlate:
-            buildAssignedVehiclePlateFromApiRow(a) ||
-            ((a.vehiclePlate as string) || (a.vehicle_plate as string) || undefined),
-        billOfLadingNumber: (a.bill_of_lading_number ?? a.billOfLadingNumber) as string | undefined,
-        totalFreightCost: (a.total_freight_cost ?? a.totalFreightCost) as number | undefined,
-        awaitingBillOfLadingAt: (a.awaiting_bill_of_lading_at ?? a.awaitingBillOfLadingAt) as
-            | string
-            | Date
-            | undefined,
+        assignedVehiclePlate,
+        billOfLadingNumber: readOptionalAssignmentText(
+            a.bill_of_lading_number ?? a.billOfLadingNumber
+        ),
+        totalFreightCost,
+        awaitingBillOfLadingAt:
+            a.awaiting_bill_of_lading_at === null || a.awaitingBillOfLadingAt === null
+                ? undefined
+                : ((a.awaiting_bill_of_lading_at ?? a.awaitingBillOfLadingAt) as string | Date | undefined),
     };
 }
 
@@ -118,12 +171,22 @@ const pickNonEmptyText = (incoming?: string | null, previous?: string | null): s
     return prev || undefined;
 };
 
-/** حفظ نمایش تخصیص اگر refresh/API فیلدها را خالی برگرداند */
+/** حفظ نمایش تخصیص اگر refresh/API فیلدها را خالی برگرداند — مگر بازگشت به صف (لغو تخصیص) */
 export function mergeAssignmentDisplayFields(
     incoming: FreightAnnouncement,
     previous?: FreightAnnouncement | null
 ): FreightAnnouncement {
     if (!previous || previous.id !== incoming.id) return incoming;
+
+    const pendingWithoutAssignment =
+        isPendingAssignmentStatus(incoming.status) &&
+        !incoming.assignedDriverId &&
+        !incoming.assignedVehicleId;
+
+    if (pendingWithoutAssignment) {
+        return clearAssignmentFromAnnouncement(incoming);
+    }
+
     return {
         ...incoming,
         assignedDriverId: incoming.assignedDriverId || previous.assignedDriverId,

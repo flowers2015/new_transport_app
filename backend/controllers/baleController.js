@@ -3,6 +3,10 @@ const baleApi = require('../services/bale/baleApi');
 const sessionEngine = require('../services/bale/baleSessionEngine');
 const { buildPreferenceBrief } = require('../services/bale/balePreferenceBrief');
 const { modeLabel, stageLabel } = require('../services/bale/baleFormat');
+const {
+  getRuntimeSettings,
+  setRuntimeSettings,
+} = require('../services/bale/baleSettings');
 
 function mapSession(row) {
   if (!row) return null;
@@ -56,6 +60,7 @@ async function getStatus(req, res) {
       }
     }
     const activeSessions = await sessionEngine.getActiveSessions();
+    const runtime = await getRuntimeSettings();
     const { rows: channels } = await pool.query(
       `SELECT slot_number, chat_id, vehicle_category, label, is_active
        FROM bale_channels ORDER BY slot_number`
@@ -63,6 +68,7 @@ async function getStatus(req, res) {
     res.json({
       configured,
       bot,
+      runtime,
       activeSession: activeSessions[0] ? mapSession(activeSessions[0]) : null,
       activeSessions: activeSessions.map(mapSession),
       channels,
@@ -110,14 +116,36 @@ async function updateChannel(req, res) {
 async function listDriverOutreach(req, res) {
   try {
     const { rows } = await pool.query(
-      `SELECT o.*, d.name AS driver_name
-       FROM bale_driver_outreach o
-       LEFT JOIN drivers d ON d.id = o.driver_id
+      `SELECT
+         d.id AS driver_id,
+         d.name AS driver_name,
+         d.employee_id,
+         d.mobile,
+         o.outreach_chat_id,
+         o.bale_user_id,
+         o.is_test_simulation,
+         o.notes,
+         o.updated_at AS outreach_updated_at
+       FROM drivers d
+       LEFT JOIN bale_driver_outreach o ON o.driver_id = d.id
+       WHERE (d.is_deleted IS NULL OR d.is_deleted = FALSE)
+         AND d.employee_id IS NOT NULL
+         AND TRIM(d.employee_id) <> ''
        ORDER BY d.name ASC`
     );
     res.json(rows);
   } catch (error) {
     res.status(500).json({ message: 'خطا در لیست رانندگان بله' });
+  }
+}
+
+async function updateRuntimeSettings(req, res) {
+  try {
+    const { environment } = req.body || {};
+    const runtime = await setRuntimeSettings({ environment });
+    res.json(runtime);
+  } catch (error) {
+    res.status(500).json({ message: 'خطا در ذخیره حالت اجرا' });
   }
 }
 
@@ -356,6 +384,7 @@ async function getPreferenceBrief(req, res) {
 module.exports = {
   webhook,
   getStatus,
+  updateRuntimeSettings,
   updateChannel,
   listDriverOutreach,
   upsertDriverOutreach,

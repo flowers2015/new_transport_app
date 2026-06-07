@@ -1,6 +1,17 @@
 const pool = require('../db');
 const { isVeryFarAnnouncement } = require('../services/dispatch/dispatchRouteRules');
 const { computeJalaliCycleRange } = require('../services/dispatch/dispatchCycle');
+const {
+  normalizeCategoryFilter,
+  mapAssignmentRow,
+  mapOpportunityRow,
+  buildAssignmentNotes,
+  buildCycleSummary,
+  buildStats,
+  routeIsVeryFar,
+  resolveAssignmentCertainty,
+  isFarOrVeryFarOpportunity,
+} = require('../services/dispatch/driverPreferences');
 const { formatJalali } = require('../utils/jalali');
 const {
   jalaliToGregorian,
@@ -237,6 +248,11 @@ async function getQueue(req, res) {
       'mini-trailer': 'مینی تریلی',
       'ten-wheel': 'ده چرخ'
     };
+
+    const { start: cycleStart, end: cycleEnd } = computeJalaliCycleRange();
+    const { fetchDriversFinalizedKm } = require('../services/dispatch/driverPreferences');
+    const driverIds = [...new Set(rows.map(r => r.driver_id).filter(Boolean))];
+    const finalizedKmMap = await fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd);
     
     const grouped = {};
     for (const row of rows) {
@@ -282,6 +298,7 @@ async function getQueue(req, res) {
           name: row.driver_name,
           mobile: row.driver_mobile,
           employeeId: row.employee_id,
+          periodFinalizedKm: finalizedKmMap.get(row.driver_id) || 0,
         },
       };
 
@@ -829,6 +846,10 @@ async function getDriverLongRouteHistory(driverId, since, until) {
         ${untilSql}
         AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
         AND fa.status NOT IN ('Cancelled')
+        AND (
+          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
+          OR fa.status = 'Finalized'
+        )
         AND (
           LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلی‌دور%'
           OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلیدور%'
@@ -1486,9 +1507,30 @@ async function assignFreight(req, res) {
       const { rows: fallbackRows } = await client.query(
         `SELECT id, name, username FROM users WHERE username = 'system' LIMIT 1`
       );
-      const fallback = fallbackRows[0] || {};
-      actingUserId = actingUserId || fallback.id || null;
-      actingUserName = actingUserName || fallback.name || fallback.username || 'system';
+      const fallback = fallbackRows[0];
+      if (fallback) {
+        actingUserId = actingUserId || fallback.id;
+        actingUserName = actingUserName || fallback.name || fallback.username;
+      }
+    }
+
+    if (!actingUserId) {
+      const { rows: anyUserRows } = await client.query(
+        `SELECT id, name, username FROM users ORDER BY username LIMIT 1`
+      );
+      const anyUser = anyUserRows[0];
+      if (anyUser) {
+        actingUserId = anyUser.id;
+        actingUserName = actingUserName || anyUser.name || anyUser.username || 'سیستم';
+      }
+    }
+
+    if (!actingUserId) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({
+        message: 'خطا در ثبت تخصیص',
+        details: 'کاربر معتبر برای ثبت تاریخچه یافت نشد.',
+      });
     }
 
     let queueEntryRow = null;
@@ -1613,8 +1655,9 @@ async function assignFreight(req, res) {
 async function getDriverPreferences(req, res) {
   const { driverId } = req.params || {};
   let { from, to, category: categoryParam } = req.query || {};
-  const vehicleCategoryFilter =
-    typeof categoryParam === 'string' && categoryParam.trim() ? categoryParam.trim() : null;
+  const vehicleCategoryFilter = normalizeCategoryFilter(
+    typeof categoryParam === 'string' ? categoryParam : null
+  );
 
   if (!driverId) {
     return res.status(400).json({ message: 'شناسه راننده الزامی است.' });
@@ -1690,12 +1733,16 @@ async function getDriverPreferences(req, res) {
           dr.route_category,
           dr.distance_category,
           dr.round_trip_km,
+          v.vehicle_code,
           COALESCE(da.queue_type, dqe.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
-          COALESCE(da.is_cancelled, FALSE) AS is_cancelled
+          COALESCE(da.is_cancelled, FALSE) AS is_cancelled,
+          fa.status AS freight_status,
+          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
         LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
         LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+        LEFT JOIN vehicles v ON v.id = da.vehicle_id
         LEFT JOIN LATERAL (
           SELECT dqe2.queue_type
           FROM dispatch_driver_opportunities ddo
@@ -1717,207 +1764,57 @@ async function getDriverPreferences(req, res) {
 
     const assignmentsWithQueueType = assignmentsRes.rows;
 
-    console.log(`🔍 [getDriverPreferences] Found ${assignmentsWithQueueType.length} assignments for driver ${driverId}`);
-    if (assignmentsWithQueueType.length > 0) {
-      console.log(`🔍 [getDriverPreferences] Sample assignments:`, assignmentsWithQueueType.slice(0, 3).map(r => ({
-        id: r.id,
-        stage: r.stage,
-        queue_type: r.queue_type,
-        announcement_code: r.announcement_code,
-        created_at: r.created_at
-      })));
+    let taken = assignmentsWithQueueType.map(row => mapAssignmentRow(row, timestampToJalaliDate));
+    if (vehicleCategoryFilter) {
+      taken = taken.filter(item => vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter));
     }
 
-    const opportunitiesRes = { rows: [] };
-    const snapshotOpportunitiesRes = { rows: [] };
+    const opportunitiesRes = await pool.query(
+      `
+        SELECT
+          ddo.id,
+          ddo.stage,
+          ddo.freight_announcement_id,
+          ddo.seen_at,
+          ddo.seen_at_jalali,
+          ddo.queue_position,
+          fa.announcement_code,
+          fa.line_type,
+          fa.vehicle_type,
+          fa.origin_city,
+          fd.city AS destination_city,
+          dr.route_category,
+          dr.distance_category,
+          dr.round_trip_km
+        FROM dispatch_driver_opportunities ddo
+        LEFT JOIN freight_announcements fa ON fa.id = ddo.freight_announcement_id
+        LEFT JOIN LATERAL (
+          SELECT fd2.city
+          FROM freight_destinations fd2
+          WHERE fd2.freight_announcement_id = fa.id
+          ORDER BY fd2.created_at DESC
+          LIMIT 1
+        ) fd ON TRUE
+        LEFT JOIN dispatch_routes dr ON dr.city = fd.city AND dr.is_active = TRUE
+        WHERE ddo.driver_id = $1
+          AND ddo.seen_at BETWEEN $2 AND $3
+          AND ddo.taken = FALSE
+          AND (fa.status IS NULL OR fa.status NOT IN ('Cancelled'))
+        ORDER BY ddo.seen_at DESC
+        LIMIT 200
+      `,
+      [driverId, fromISO, toISO]
+    );
 
-    const taken = assignmentsWithQueueType.map(row => {
-      const queueType = row.queue_type || (row.stage === 'stage1' ? 'far' : 'near');
-      console.log(`🔍 [getDriverPreferences] Mapping assignment ${row.id}: stage=${row.stage}, queue_type=${row.queue_type}, final queueType=${queueType}`);
-      return {
-      id: row.id,
-      announcementId: row.freight_announcement_id,
-      announcementCode: row.announcement_code,
-      stage: row.stage,
-      queueType: queueType,
-      lineType: row.line_type,
-      vehicleType: row.vehicle_type,
-      originCity: row.origin_city,
-      destinationCity: row.destination_city,
-      routeCategory: row.route_category,
-      distanceCategory: row.distance_category,
-      roundTripKm:
-        row.round_trip_km != null
-          ? Number(row.round_trip_km)
-          : row.distance_km != null
-            ? Number(row.distance_km)
-            : null,
-      queuePosition: row.queue_position ?? null,
-      assignedAt: row.created_at,
-      assignedAtJalali: row.assigned_at_jalali || timestampToJalaliDate(row.created_at),
-      isCancelled: row.is_cancelled || false,
-      };
-    });
+    let skipped = opportunitiesRes.rows
+      .map(row => mapOpportunityRow(row, timestampToJalaliDate))
+      .filter(item => vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter))
+      .filter(item => isFarOrVeryFarOpportunity(item));
 
-    const uniqueAnnouncementIds = new Set();
-    for (const row of assignmentsWithQueueType) {
-      if (row.freight_announcement_id) uniqueAnnouncementIds.add(row.freight_announcement_id);
-    }
-    for (const row of opportunitiesRes.rows) {
-      if (row.freight_announcement_id) uniqueAnnouncementIds.add(row.freight_announcement_id);
-    }
-    const announcementIdList = Array.from(uniqueAnnouncementIds);
+    buildAssignmentNotes(taken, skipped);
 
-    let relatedAssignments = [];
-    if (announcementIdList.length > 0) {
-      const otherAssignmentsRes = await pool.query(
-        `
-          SELECT
-            da.freight_announcement_id,
-            da.driver_id,
-            da.queue_position,
-            da.created_at,
-            fa.announcement_code,
-            fa.origin_city,
-            fd.city AS destination_city,
-            d.name AS driver_name
-          FROM dispatch_assignments da
-          LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-          LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
-          LEFT JOIN drivers d ON d.id = da.driver_id
-          WHERE da.freight_announcement_id = ANY($1::varchar[])
-        `,
-        [announcementIdList]
-      );
-      relatedAssignments = otherAssignmentsRes.rows;
-    }
-
-    const snapshotDriverIds = new Set();
-    for (const row of opportunitiesRes.rows) {
-      const snapshotRaw = row.queue_snapshot;
-      if (snapshotRaw) {
-        const snapshotList = Array.isArray(snapshotRaw)
-          ? snapshotRaw
-          : (() => {
-              try {
-                return JSON.parse(snapshotRaw);
-              } catch {
-                return [];
-              }
-            })();
-        for (const entry of snapshotList) {
-          if (entry?.driverId) {
-            snapshotDriverIds.add(String(entry.driverId));
-          }
-        }
-      }
-    }
-
-    const lastAssignmentMap = new Map();
-    const driverIdList = Array.from(snapshotDriverIds);
-    if (driverIdList.length > 0) {
-      const lastAssignmentsRes = await pool.query(
-        `
-          SELECT DISTINCT ON (da.driver_id)
-            da.driver_id,
-            fa.origin_city,
-            fd.city AS destination_city,
-            da.created_at
-          FROM dispatch_assignments da
-          LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-          LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
-          WHERE da.driver_id = ANY($1::varchar[])
-          ORDER BY da.driver_id, da.created_at DESC
-        `,
-        [driverIdList]
-      );
-      for (const row of lastAssignmentsRes.rows) {
-        lastAssignmentMap.set(row.driver_id, {
-          originCity: row.origin_city,
-          destinationCity: row.destination_city,
-          createdAt: row.created_at,
-        });
-      }
-    }
-
-    const assignmentsByAnnouncement = new Map();
-    for (const row of relatedAssignments) {
-      if (!row.freight_announcement_id) continue;
-      const list = assignmentsByAnnouncement.get(row.freight_announcement_id) || [];
-      list.push(row);
-      assignmentsByAnnouncement.set(row.freight_announcement_id, list);
-    }
-
-    const buildOpportunity = row => {
-      const snapshotList = (() => {
-        const raw = row.queue_snapshot;
-        if (!raw) return [];
-        if (Array.isArray(raw)) return raw;
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return [];
-        }
-      })();
-
-      const others = snapshotList
-        .map(entry => {
-          const entryDriverId = entry?.driverId ? String(entry.driverId) : null;
-          if (!entryDriverId || entryDriverId === driverId) {
-            return null;
-          }
-          const annAssignments =
-            assignmentsByAnnouncement.get(row.freight_announcement_id) || [];
-          const driverAssignment = annAssignments.find(
-            item => String(item.driver_id) === entryDriverId
-          );
-          const lastInfo = lastAssignmentMap.get(entryDriverId) || {};
-          return {
-            driverId: entryDriverId,
-            driverName: entry.driverName || driverAssignment?.driver_name || null,
-            queuePosition: entry.queuePosition ?? null,
-            chosenAnnouncementCode: driverAssignment?.announcement_code || null,
-            lastOriginCity: lastInfo.originCity || null,
-          };
-        })
-        .filter(Boolean)
-        .sort((a, b) => ((a?.queuePosition ?? 0) - (b?.queuePosition ?? 0)));
-
-      const entryForDriver = snapshotList.find(
-        entry => entry?.driverId && String(entry.driverId) === driverId
-      );
-
-      return {
-        id: String(row.id),
-        announcementId: row.freight_announcement_id,
-        announcementCode: row.announcement_code,
-        stage: row.stage,
-        lineType: row.line_type,
-        vehicleType: row.vehicle_type,
-        originCity: row.origin_city,
-        destinationCity: row.destination_city,
-        routeCategory: row.route_category,
-        distanceCategory: row.distance_category,
-        roundTripKm: row.round_trip_km != null ? Number(row.round_trip_km) : null,
-        queuePosition:
-          entryForDriver?.queuePosition ?? row.queue_position ?? null,
-        seenAt: row.seen_at,
-        seenAtJalali: row.seen_at_jalali || timestampToJalaliDate(row.seen_at),
-        others,
-        sourceDriverId: row.source_driver_id || row.driver_id || null,
-        sourceDriverName: row.source_driver_name || null,
-      };
-    };
-
-    const skippedMap = new Map();
-    const addOpportunity = opp => {
-      const key = `${opp.announcementId || opp.announcementCode || opp.id}-${opp.stage}`;
-      if (!skippedMap.has(key)) {
-        skippedMap.set(key, opp);
-      }
-    };
-
-    const skipped = [];
+    const cycleSummary = buildCycleSummary(taken);
+    const stats = buildStats(taken);
 
     const peerAssignments = await (async () => {
       const peerValues = [fromISO, toISO];
@@ -1928,15 +1825,11 @@ async function getDriverPreferences(req, res) {
           AND (
             v.vehicle_category = $${categoryIndex}
             OR fa.vehicle_type = $${categoryIndex}
+            OR ($${categoryIndex} = 'تریلی' AND fa.vehicle_type IN ('تریلی', 'مینی تریلی'))
+            OR ($${categoryIndex} = 'مینی تریلی' AND fa.vehicle_type IN ('تریلی', 'مینی تریلی'))
           )
         `;
       }
-      console.log('🔍 [getDriverPreferences] Fetching peerAssignments:', {
-        fromISO,
-        toISO,
-        vehicleCategoryFilter,
-        categoryClause: categoryClause ? 'has filter' : 'no filter'
-      });
       const peerRes = await pool.query(
         `
           SELECT
@@ -1951,10 +1844,14 @@ async function getDriverPreferences(req, res) {
             da.assigned_at_jalali,
             COALESCE(da.is_cancelled, FALSE) AS is_cancelled,
             COALESCE(dr.round_trip_km, da.distance_km) AS round_trip_km,
+            dr.route_category,
+            dr.distance_category,
             fa.announcement_code,
             fa.line_type,
             fa.status AS freight_status,
+            COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at,
             fd.city AS destination_city,
+            v.vehicle_code,
             prev.origin_city AS previous_origin_city
           FROM dispatch_assignments da
           LEFT JOIN drivers d ON d.id = da.driver_id
@@ -1979,35 +1876,30 @@ async function getDriverPreferences(req, res) {
         `,
         peerValues
       );
-      console.log('🔍 [getDriverPreferences] peerAssignments query result:', {
-        rowCount: peerRes.rowCount,
-        sampleRows: peerRes.rows.slice(0, 3).map(r => ({
-          id: r.id,
-          driverName: r.driver_name,
-          queueType: r.queue_type,
-          queuePosition: r.queue_position,
-          isCancelled: r.is_cancelled,
-          freightStatus: r.freight_status,
-          createdAt: r.created_at
-        }))
+      return peerRes.rows.map(row => {
+        const certaintyInfo = resolveAssignmentCertainty(row);
+        return {
+          id: row.id,
+          driverId: row.driver_id,
+          driverName: row.driver_name,
+          employeeId: row.employee_id,
+          stage: row.stage,
+          queuePosition: row.queue_position ?? null,
+          queueType: row.queue_type || (row.stage === 'stage1' ? 'far' : 'near'),
+          lineType: row.line_type,
+          destinationCity: row.destination_city,
+          roundTripKm: row.round_trip_km != null ? Number(row.round_trip_km) : null,
+          vehicleCode: row.vehicle_code || null,
+          isVeryFar: routeIsVeryFar(row),
+          assignedAt: row.created_at,
+          assignedAtJalali: row.assigned_at_jalali || timestampToJalaliDate(row.created_at),
+          previousOriginCity: row.previous_origin_city || null,
+          announcementCode: row.announcement_code,
+          isCancelled: row.is_cancelled || false,
+          certainty: certaintyInfo.certainty,
+          certaintyLabel: certaintyInfo.certaintyLabel,
+        };
       });
-      return peerRes.rows.map(row => ({
-        id: row.id,
-        driverId: row.driver_id,
-        driverName: row.driver_name,
-        employeeId: row.employee_id,
-        stage: row.stage,
-        queuePosition: row.queue_position ?? null,
-        queueType: row.queue_type || (row.stage === 'stage1' ? 'far' : 'near'),
-        lineType: row.line_type,
-        destinationCity: row.destination_city,
-        roundTripKm: row.round_trip_km != null ? Number(row.round_trip_km) : null,
-        assignedAt: row.created_at,
-        assignedAtJalali: row.assigned_at_jalali || timestampToJalaliDate(row.created_at),
-        previousOriginCity: row.previous_origin_city || null,
-        announcementCode: row.announcement_code,
-        isCancelled: row.is_cancelled || false,
-      }));
     })();
 
     res.json({
@@ -2017,10 +1909,13 @@ async function getDriverPreferences(req, res) {
         employeeId: driverResult.rows[0].employee_id,
         mobile: driverResult.rows[0].mobile,
       },
+      category: vehicleCategoryFilter,
       from: fromISO,
       to: toISO,
       fromJalali,
       toJalali,
+      cycleSummary,
+      stats,
       taken,
       skipped,
       peerAssignments,
@@ -2321,6 +2216,51 @@ async function searchDrivers(req, res) {
   }
 }
 
+async function getAssignmentContext(req, res) {
+  const { queueEntryId } = req.query || {};
+  if (!queueEntryId) {
+    return res.status(400).json({ message: 'queueEntryId الزامی است.' });
+  }
+  try {
+    const { getAssignContext } = require('../services/dispatch/dispatchAssignContext');
+    const context = await getAssignContext(queueEntryId, req.user?.id || null);
+    res.json(context);
+  } catch (error) {
+    console.error('❌ [dispatch] getAssignmentContext failed:', error);
+    res.status(400).json({ message: error.message || 'خطا در دریافت context تخصیص' });
+  }
+}
+
+async function getQueueAssignmentHints(req, res) {
+  const { category } = req.query || {};
+  if (!category) {
+    return res.status(400).json({ message: 'category الزامی است.' });
+  }
+  try {
+    const { getQueueAssignHints } = require('../services/dispatch/dispatchAssignContext');
+    const hints = await getQueueAssignHints(category, req.user?.id || null);
+    res.json(hints);
+  } catch (error) {
+    console.error('❌ [dispatch] getQueueAssignmentHints failed:', error);
+    res.status(500).json({ message: error.message || 'خطا در دریافت وضعیت نوبت‌ها' });
+  }
+}
+
+async function deferQueueTurn(req, res) {
+  const { id } = req.params || {};
+  if (!id) {
+    return res.status(400).json({ message: 'شناسه نوبت الزامی است.' });
+  }
+  try {
+    const { deferQueueEntry } = require('../services/dispatch/dispatchAssignContext');
+    const context = await deferQueueEntry(id, req.user?.id || null);
+    res.json(context);
+  } catch (error) {
+    console.error('❌ [dispatch] deferQueueTurn failed:', error);
+    res.status(400).json({ message: error.message || 'ثبت «بمانم» ناموفق بود' });
+  }
+}
+
 module.exports = {
   getQueue,
   createQueueEntry,
@@ -2333,5 +2273,8 @@ module.exports = {
   searchVehicles,
   searchDrivers,
   restoreDriversFromCancelledAssignment,
+  getAssignmentContext,
+  getQueueAssignmentHints,
+  deferQueueTurn,
 };
 

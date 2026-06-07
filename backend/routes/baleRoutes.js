@@ -8,6 +8,7 @@ const transportRoles = ['transport_user', 'personal_transport_user', 'planner', 
 router.post('/webhook', baleController.webhook);
 
 router.get('/status', authenticateToken, authorizeRole(transportRoles), baleController.getStatus);
+router.put('/settings/runtime', authenticateToken, authorizeRole(transportRoles), baleController.updateRuntimeSettings);
 router.put('/channels/:slot', authenticateToken, authorizeRole(transportRoles), baleController.updateChannel);
 router.get('/drivers/outreach', authenticateToken, authorizeRole(transportRoles), baleController.listDriverOutreach);
 router.put('/drivers/:driverId/outreach', authenticateToken, authorizeRole(transportRoles), baleController.upsertDriverOutreach);

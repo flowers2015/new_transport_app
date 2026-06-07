@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
-import { User } from '../types';
+import { User, UserRole, View } from '../types';
+import WorkflowRules from './WorkflowRules';
 
 type BaleChannel = {
     slot_number: number;
@@ -23,9 +24,24 @@ type BaleSession = {
     queueSnapshot: unknown[];
 };
 
+type RuntimeEnvironment = 'test' | 'production';
+
+type DriverOutreach = {
+    driver_id: string;
+    driver_name: string;
+    employee_id: string;
+    mobile?: string | null;
+    outreach_chat_id: number | null;
+    bale_user_id?: number | null;
+    is_test_simulation?: boolean | null;
+    notes?: string | null;
+    outreach_updated_at?: string | null;
+};
+
 type BaleStatus = {
     configured: boolean;
     bot: { username?: string; first_name?: string; error?: string } | null;
+    runtime?: { environment: RuntimeEnvironment };
     activeSession: BaleSession | null;
     activeSessions?: BaleSession[];
     channels: BaleChannel[];
@@ -42,6 +58,19 @@ const CATEGORY_SLOTS = [
     { slot: 2, category: 'تریلی', label: 'کانال تریلی (اسلات ۲)' },
     { slot: 3, category: 'مینی تریلی', label: 'کانال مینی تریلی (اسلات ۳)' },
     { slot: 4, category: 'ده چرخ', label: 'کانال ده چرخ (اسلات ۴)' },
+];
+
+const RUNTIME_OPTIONS: { value: RuntimeEnvironment; label: string; hint: string }[] = [
+    {
+        value: 'test',
+        label: 'پایلوت / تست',
+        hint: 'یک گروه مشترک، chat مشترک رانندگان، ابزار seed',
+    },
+    {
+        value: 'production',
+        label: 'عملیاتی / واقعی',
+        hint: 'هر راننده chat اختصاصی — کانال جدا برای هر دسته',
+    },
 ];
 
 interface Props {
@@ -61,6 +90,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [mode, setMode] = useState('hybrid');
     const [stage, setStage] = useState('stage1');
     const [turnTimeoutSec, setTurnTimeoutSec] = useState(180);
+    const [runtimeEnv, setRuntimeEnv] = useState<RuntimeEnvironment>('test');
     const [testChatId, setTestChatId] = useState('');
     const [groupChatId, setGroupChatId] = useState('');
     const [channelChatIds, setChannelChatIds] = useState<Record<number, string>>({});
@@ -68,6 +98,26 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [busy, setBusy] = useState(false);
     const [seedResult, setSeedResult] = useState<string | null>(null);
     const [selectedSessionId, setSelectedSessionId] = useState('');
+    const [showRulesDialog, setShowRulesDialog] = useState(false);
+    const [drivers, setDrivers] = useState<DriverOutreach[]>([]);
+    const [driverFilter, setDriverFilter] = useState('');
+    const [editingChat, setEditingChat] = useState<Record<string, string>>({});
+    const [savingDriverId, setSavingDriverId] = useState<string | null>(null);
+
+    const isTestMode = runtimeEnv === 'test';
+
+    const loadDrivers = useCallback(async () => {
+        const res = await fetch(getApiUrl('bale/drivers/outreach'), { headers });
+        if (!res.ok) throw new Error('خطا در بارگذاری رانندگان');
+        const data = (await res.json()) as DriverOutreach[];
+        setDrivers(data);
+        const draft: Record<string, string> = {};
+        data.forEach(d => {
+            draft[d.driver_id] =
+                d.outreach_chat_id != null ? String(d.outreach_chat_id) : '';
+        });
+        setEditingChat(draft);
+    }, [token]);
 
     const loadStatus = useCallback(async () => {
         setLoading(true);
@@ -77,6 +127,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as BaleStatus;
             setStatus(data);
+            if (data.runtime?.environment) setRuntimeEnv(data.runtime.environment);
             const ch1 = data.channels?.find(c => c.slot_number === 1);
             if (ch1?.chat_id) setGroupChatId(String(ch1.chat_id));
             const ids: Record<number, string> = {};
@@ -95,12 +146,13 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 if (sessions.find(s => s.id === prev)) return prev;
                 return sessions[0].id;
             });
+            await loadDrivers();
         } catch (e) {
             setError(e instanceof Error ? e.message : 'خطا در بارگذاری');
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [token, loadDrivers]);
 
     useEffect(() => {
         loadStatus();
@@ -121,6 +173,17 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         }
     };
 
+    const saveRuntime = (env: RuntimeEnvironment) =>
+        runAction('حالت اجرا', async () => {
+            const res = await fetch(getApiUrl('bale/settings/runtime'), {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ environment: env }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            setRuntimeEnv(env);
+        });
+
     const saveGroupChannel = () =>
         runAction('ذخیره گروه', async () => {
             const res = await fetch(getApiUrl('bale/channels/1'), {
@@ -128,7 +191,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 headers,
                 body: JSON.stringify({
                     chatId: groupChatId ? Number(groupChatId) : null,
-                    label: 'گروه تست',
+                    label: isTestMode ? 'گروه تست' : 'گروه پایلوت',
                     isActive: true,
                 }),
             });
@@ -159,9 +222,37 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 headers,
                 body: JSON.stringify({ outreachChatId: Number(testChatId), limit: 10 }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || (await res.text()));
+            }
             const data = await res.json();
             setSeedResult(`${data.count} راننده با chat مشترک لینک شدند`);
+        });
+
+    const saveDriverOutreach = (driver: DriverOutreach) =>
+        runAction('ذخیره chat راننده', async () => {
+            const chatRaw = editingChat[driver.driver_id]?.trim();
+            if (!chatRaw) throw new Error('chat_id را وارد کنید');
+            setSavingDriverId(driver.driver_id);
+            try {
+                const res = await fetch(getApiUrl(`bale/drivers/${driver.driver_id}/outreach`), {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify({
+                        outreachChatId: Number(chatRaw),
+                        employeeId: driver.employee_id,
+                        isTestSimulation: isTestMode,
+                        notes: isTestMode ? 'ثبت دستی — تست' : 'ثبت دستی — عملیاتی',
+                    }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || (await res.text()));
+                }
+            } finally {
+                setSavingDriverId(null);
+            }
         });
 
     const ping = () =>
@@ -206,9 +297,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             const data = await res.json();
             const notes: string[] = [`${data.started} جلسه شروع شد`];
             if (data.stoppedPrior > 0) {
-                notes.push(`(${data.stoppedPrior} جلسه قبلی متوقف شد — صف از ثبت نوبت خوانده شد)`);
+                notes.push(`(${data.stoppedPrior} جلسه قبلی متوقف شد)`);
             }
-            if (data.pilotCombined) notes.push('(حالت پایلوت — فقط دسته‌های دارای صف)');
+            if (data.pilotCombined) notes.push('(گروه مشترک — اسلات ۱)');
             if (data.skipped?.length) {
                 notes.push(
                     `رد شده: ${data.skipped.map((e: { category: string }) => e.category).join('، ')}`
@@ -262,36 +353,73 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const queue = Array.isArray(session?.queueSnapshot) ? session.queueSnapshot : [];
     const currentTurn = session ? queue[session.currentTurnIndex] : null;
 
+    const filteredDrivers = drivers.filter(d => {
+        const q = driverFilter.trim().toLowerCase();
+        if (!q) return true;
+        return (
+            d.driver_name?.toLowerCase().includes(q) ||
+            d.employee_id?.includes(q) ||
+            String(d.outreach_chat_id || '').includes(q)
+        );
+    });
+
+    const linkedCount = drivers.filter(d => d.outreach_chat_id != null).length;
+    const testLinkedCount = drivers.filter(d => d.is_test_simulation).length;
+
     return (
-        <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6" dir="rtl">
-            <div>
-                <h1 className="text-xl font-bold text-slate-800">جلسه اعلام بار (بله)</h1>
-                <p className="text-sm text-slate-500 mt-1">
-                    شروع همزمان سه دسته (تریلی، مینی تریلی، ده چرخ) — هر دسته در کانال جدا. در حالت
-                    تست فقط اسلات ۱، هر سه دسته در یک گروه.
-                </p>
+        <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6" dir="rtl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h1 className="text-xl font-bold text-slate-800">جلسه اعلام بار (بله)</h1>
+                    <p className="text-sm text-slate-500 mt-1">
+                        مدیریت نوبت، کانال‌ها و لینک رانندگان شرکتی
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setShowRulesDialog(true)}
+                    className="px-3 py-1.5 text-sm rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center gap-2"
+                    title="قوانین و راهنما"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                        />
+                    </svg>
+                    قوانین و راهنما
+                </button>
             </div>
 
-            <section className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 text-sm text-slate-700 space-y-2">
-                <h2 className="font-semibold text-sky-900">چطور شروع کنم؟</h2>
-                <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
-                    <li>
-                        <strong>کانال‌ها:</strong> اسلات ۲–۴ را برای تولید پر کنید؛ یا فقط اسلات ۱ برای
-                        تست (هر ۳ دسته همزمان در همان گروه).
-                    </li>
-                    <li>
-                        <strong>شروع جلسه:</strong> جلسه قبلی خودکار متوقف می‌شود و صف تازه از «ثبت
-                        نوبت» خوانده می‌شود. مرحله ۱ فقط <strong>نوبت دور</strong> است.
-                    </li>
-                    <li>
-                        <strong>تست مجدد:</strong> بعد از لغو مسیر، راننده قدیمی ممکن است دوباره در
-                        صف باشد — در ثبت نوبت حذف/جایگزین کنید.
-                    </li>
-                    <li>
-                        <strong>در گروه:</strong> فقط نام راننده (بدون کد پرسنلی) — شماره بار مثل «۶.
-                        بار …».
-                    </li>
-                </ol>
+            <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-3">
+                <h2 className="font-semibold text-violet-900">حالت اجرا</h2>
+                <div className="flex flex-col sm:flex-row gap-4">
+                    {RUNTIME_OPTIONS.map(opt => (
+                        <label
+                            key={opt.value}
+                            className={`flex items-start gap-2 flex-1 rounded-lg border p-3 cursor-pointer transition ${
+                                runtimeEnv === opt.value
+                                    ? 'border-violet-500 bg-white ring-1 ring-violet-300'
+                                    : 'border-slate-200 bg-white/70 hover:border-violet-200'
+                            }`}
+                        >
+                            <input
+                                type="radio"
+                                name="runtimeEnv"
+                                className="mt-1"
+                                checked={runtimeEnv === opt.value}
+                                disabled={busy}
+                                onChange={() => saveRuntime(opt.value)}
+                            />
+                            <span>
+                                <span className="font-medium text-slate-800 block">{opt.label}</span>
+                                <span className="text-xs text-slate-500">{opt.hint}</span>
+                            </span>
+                        </label>
+                    ))}
+                </div>
             </section>
 
             {error && (
@@ -323,102 +451,197 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                             {status?.bot && !status.bot.error && (
                                 <div>بازو: @{status.bot.username || status.bot.first_name || '—'}</div>
                             )}
-                            {status?.bot?.error && (
-                                <div className="text-red-600">{status.bot.error}</div>
-                            )}
+                            <div>
+                                لینک رانندگان: {linkedCount} از {drivers.length}
+                                {testLinkedCount > 0 && (
+                                    <span className="text-amber-600 mr-2">
+                                        ({testLinkedCount} حالت تست)
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </section>
 
                     <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                        <h2 className="font-semibold text-slate-700">تنظیمات تست (یک chat_id مشترک)</h2>
-                        <p className="text-xs text-slate-500">
-                            تا ۱۰ راننده واقعی — همه PV به یک chat_id. شناسایی با نوبت جاری هر جلسه است.
-                        </p>
-                        <div className="grid md:grid-cols-2 gap-3">
-                            <label className="text-sm block">
-                                chat_id خصوصی/تست (PV)
-                                <input
-                                    className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-                                    value={testChatId}
-                                    onChange={e => setTestChatId(e.target.value)}
-                                    placeholder="مثلاً از /start یا getUpdates"
-                                />
-                            </label>
-                            <label className="text-sm block">
-                                chat_id گروه تست (اسلات ۱ — حالت پایلوت)
-                                <input
-                                    className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-                                    value={groupChatId}
-                                    onChange={e => setGroupChatId(e.target.value)}
-                                />
-                            </label>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h2 className="font-semibold text-slate-700">رانندگان شرکتی — chat بله</h2>
+                            <input
+                                className="border rounded-md px-3 py-1.5 text-sm w-48"
+                                placeholder="جستجو نام / کد / chat"
+                                value={driverFilter}
+                                onChange={e => setDriverFilter(e.target.value)}
+                            />
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={saveGroupChannel}
-                                className="px-3 py-1.5 rounded-md bg-slate-700 text-white text-sm disabled:opacity-50"
-                            >
-                                ذخیره گروه تست
-                            </button>
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={seedDrivers}
-                                className="px-3 py-1.5 rounded-md bg-sky-600 text-white text-sm disabled:opacity-50"
-                            >
-                                لینک ۱۰ راننده صف به chat تست
-                            </button>
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={ping}
-                                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm disabled:opacity-50"
-                            >
-                                ارسال پیام تست
-                            </button>
+                        <div className="rounded-lg border border-sky-100 bg-sky-50/60 p-3 text-xs text-sky-900 leading-relaxed space-y-1">
+                            <p className="font-medium">ثبت خودکار chat_id از راننده:</p>
+                            <p>
+                                ۱. راننده در بله به بازوی اعلام بار پیام بدهد:{' '}
+                                <code className="bg-white px-1 rounded ltr">/start کدپرسنلی</code>{' '}
+                                — مثلاً <code className="bg-white px-1 rounded ltr">/start 44983</code>
+                            </p>
+                            <p>
+                                ۲. یا پیام: <code className="bg-white px-1 rounded">ثبت 44983</code>
+                            </p>
+                            <p>
+                                ۳. سیستم chat_id همان گفتگو را ذخیره می‌کند — نیازی به دستی نیست مگر
+                                تست.
+                            </p>
+                            <p className="text-slate-600">
+                                روش دستی: بعد از اولین پیام راننده به بازو، از getUpdates یا لاگ سرور
+                                chat_id را بردارید و اینجا وارد کنید.
+                            </p>
+                        </div>
+                        <div className="overflow-x-auto max-h-80 overflow-y-auto border rounded-lg">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 sticky top-0">
+                                    <tr>
+                                        <th className="text-right p-2 font-medium">نام</th>
+                                        <th className="text-right p-2 font-medium">کد پرسنلی</th>
+                                        <th className="text-right p-2 font-medium">chat_id</th>
+                                        <th className="text-right p-2 font-medium">وضعیت</th>
+                                        <th className="p-2 w-24" />
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredDrivers.map(d => (
+                                        <tr key={d.driver_id} className="border-t border-slate-100">
+                                            <td className="p-2">{d.driver_name || '—'}</td>
+                                            <td className="p-2 font-mono text-xs">{d.employee_id}</td>
+                                            <td className="p-2">
+                                                <input
+                                                    className="w-full min-w-[120px] border rounded px-2 py-1 text-xs ltr text-left"
+                                                    value={editingChat[d.driver_id] ?? ''}
+                                                    onChange={e =>
+                                                        setEditingChat(prev => ({
+                                                            ...prev,
+                                                            [d.driver_id]: e.target.value,
+                                                        }))
+                                                    }
+                                                    placeholder="chat_id"
+                                                />
+                                            </td>
+                                            <td className="p-2 text-xs">
+                                                {!d.outreach_chat_id ? (
+                                                    <span className="text-red-600">بدون لینک</span>
+                                                ) : d.is_test_simulation ? (
+                                                    <span className="text-amber-600">تست</span>
+                                                ) : (
+                                                    <span className="text-emerald-600">عملیاتی</span>
+                                                )}
+                                            </td>
+                                            <td className="p-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={busy || savingDriverId === d.driver_id}
+                                                    onClick={() => saveDriverOutreach(d)}
+                                                    className="text-xs px-2 py-1 rounded border hover:bg-slate-50 disabled:opacity-50"
+                                                >
+                                                    ذخیره
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </section>
 
-                    <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                        <h2 className="font-semibold text-slate-700">کانال‌های تولید (اسلات ۲–۴)</h2>
-                        <p className="text-xs text-slate-500">
-                            هر دسته خودرو کانال جدا — با «شروع جلسه» هر سه همزمان آغاز می‌شوند.
-                        </p>
-                        {CATEGORY_SLOTS.map(({ slot, category, label }) => (
-                            <div key={slot} className="flex flex-wrap items-end gap-2">
-                                <label className="text-sm flex-1 min-w-[200px]">
-                                    {label}
+                    {isTestMode && (
+                        <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-4">
+                            <h2 className="font-semibold text-amber-900">
+                                ابزار تست (فقط حالت پایلوت)
+                            </h2>
+                            <p className="text-xs text-slate-600">
+                                تا ۱۰ راننده صف — همه PV به یک chat_id. شناسایی با نوبت جاری هر جلسه.
+                            </p>
+                            <div className="grid md:grid-cols-2 gap-3">
+                                <label className="text-sm block">
+                                    chat_id خصوصی/تست (PV)
                                     <input
                                         className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
-                                        value={channelChatIds[slot] || ''}
-                                        onChange={e =>
-                                            setChannelChatIds(prev => ({
-                                                ...prev,
-                                                [slot]: e.target.value,
-                                            }))
-                                        }
-                                        placeholder="chat_id گروه بله"
+                                        value={testChatId}
+                                        onChange={e => setTestChatId(e.target.value)}
+                                        placeholder="مثلاً از getUpdates"
                                     />
                                 </label>
+                                <label className="text-sm block">
+                                    chat_id گروه (اسلات ۱)
+                                    <input
+                                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
+                                        value={groupChatId}
+                                        onChange={e => setGroupChatId(e.target.value)}
+                                    />
+                                </label>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
                                     disabled={busy}
-                                    onClick={() => saveCategoryChannel(slot, category)}
+                                    onClick={saveGroupChannel}
+                                    className="px-3 py-1.5 rounded-md bg-slate-700 text-white text-sm disabled:opacity-50"
+                                >
+                                    ذخیره گروه تست
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={seedDrivers}
+                                    className="px-3 py-1.5 rounded-md bg-sky-600 text-white text-sm disabled:opacity-50"
+                                >
+                                    لینک ۱۰ راننده به chat تست
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={ping}
                                     className="px-3 py-1.5 rounded-md border border-slate-300 text-sm disabled:opacity-50"
                                 >
-                                    ذخیره
+                                    ارسال پیام تست
                                 </button>
                             </div>
-                        ))}
-                    </section>
+                        </section>
+                    )}
+
+                    {!isTestMode && (
+                        <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                            <h2 className="font-semibold text-slate-700">کانال‌های عملیاتی (اسلات ۲–۴)</h2>
+                            <p className="text-xs text-slate-500">
+                                هر دسته خودرو گروه جدا — با شروع جلسه هر سه همزمان آغاز می‌شوند.
+                            </p>
+                            {CATEGORY_SLOTS.map(({ slot, category, label }) => (
+                                <div key={slot} className="flex flex-wrap items-end gap-2">
+                                    <label className="text-sm flex-1 min-w-[200px]">
+                                        {label}
+                                        <input
+                                            className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
+                                            value={channelChatIds[slot] || ''}
+                                            onChange={e =>
+                                                setChannelChatIds(prev => ({
+                                                    ...prev,
+                                                    [slot]: e.target.value,
+                                                }))
+                                            }
+                                            placeholder="chat_id گروه بله"
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => saveCategoryChannel(slot, category)}
+                                        className="px-3 py-1.5 rounded-md border border-slate-300 text-sm disabled:opacity-50"
+                                    >
+                                        ذخیره
+                                    </button>
+                                </div>
+                            ))}
+                        </section>
+                    )}
 
                     <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
                         <h2 className="font-semibold text-slate-700">جلسه نوبت</h2>
                         <div className="grid md:grid-cols-3 gap-3">
                             <label className="text-sm">
-                                حالت
+                                حالت تصمیم
                                 <select
                                     className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
                                     value={mode}
@@ -432,7 +655,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 </select>
                             </label>
                             <label className="text-sm">
-                                مرحله
+                                مرحله شروع
                                 <select
                                     className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
                                     value={stage}
@@ -452,28 +675,18 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 />
                             </label>
                         </div>
-                        <p className="text-xs text-slate-500">
-                            دسته خودرو از صف نوبت خودکار است — تریلی، مینی تریلی و ده چرخ هر کدام جلسه
-                            جدا.
-                        </p>
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                disabled={busy || activeSessions.length > 0}
+                                disabled={busy}
                                 onClick={startSession}
-                                title={
-                                    activeSessions.length > 0
-                                        ? 'ابتدا جلسه‌های فعال را متوقف کنید'
-                                        : undefined
-                                }
                                 className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
                             >
-                                شروع جلسه (پایلوت / تولید)
+                                شروع جلسه
                             </button>
                             {activeSessions.length > 0 && (
                                 <span className="text-xs text-amber-700 self-center">
-                                    {activeSessions.length} جلسه فعال — برای شروع مجدد اول «توقف همه»
-                                    بزنید
+                                    {activeSessions.length} جلسه فعال — با شروع، قبلی‌ها متوقف می‌شوند
                                 </span>
                             )}
                             <button
@@ -511,11 +724,11 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 onClick={skipTurn}
                                 className="px-3 py-2 rounded-md border text-sm disabled:opacity-50"
                             >
-                                رد نوبت / بعدی
+                                رد نوبت
                             </button>
                         </div>
                         <label className="text-sm block">
-                            URL وب‌هوک (HTTPS عمومی)
+                            URL وب‌هوک (HTTPS)
                             <input
                                 className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
                                 value={webhookUrl}
@@ -553,7 +766,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                         </div>
                                         <div>وضعیت: {s.status}</div>
                                         <div>
-                                            حالت: {s.modeLabel} — {(s as { stageLabel?: string }).stageLabel || s.stage}
+                                            حالت: {s.modeLabel} —{' '}
+                                            {(s as { stageLabel?: string }).stageLabel || s.stage}
                                         </div>
                                         <div>نوبت جاری: {turn?.driver?.name || '—'}</div>
                                         <div>
@@ -562,11 +776,6 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                 ? new Date(s.turnDeadlineAt).toLocaleString('fa-IR')
                                                 : '—'}
                                         </div>
-                                        {s.status === 'awaiting_admin' && (
-                                            <p className="text-amber-700 font-medium mt-1">
-                                                منتظر اپراتور
-                                            </p>
-                                        )}
                                     </div>
                                 );
                             })}
@@ -574,6 +783,48 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     )}
                 </>
             )}
+
+            {showRulesDialog && (
+                <div
+                    className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4"
+                    onClick={() => setShowRulesDialog(false)}
+                >
+                    <div
+                        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4 max-h-[90vh] overflow-y-auto"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <span>📋</span>
+                                <span>قوانین اعلام بار بله</span>
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={() => setShowRulesDialog(false)}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm hover:bg-slate-300"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                        <WorkflowRules
+                            view={View.TransportBaleSession}
+                            userRole={currentUser?.role || UserRole.TransportationUser}
+                        />
+                        <div className="text-xs text-slate-500 mt-4 space-y-1 border-t pt-3">
+                            <p className="font-medium text-slate-600">ثبت chat راننده</p>
+                            <p>
+                                راننده به بازو: <code className="ltr bg-slate-100 px-1 rounded">/start کدپرسنلی</code>{' '}
+                                — یا ثبت دستی در جدول بالا.
+                            </p>
+                            <p>
+                                قالب پیام گروه در بله: <code className="ltr bg-slate-100 px-1 rounded">*متن*</code> برای
+                                بولد (نه HTML).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <p className="text-xs text-slate-400">کاربر: {currentUser.name || currentUser.username}</p>
         </div>
     );

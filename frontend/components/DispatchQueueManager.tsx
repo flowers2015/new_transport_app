@@ -7,12 +7,11 @@ import {
     DispatchDriverSearchResult,
     DispatchAnnouncementCandidate,
     DriverPreferencesResponse,
-    DriverPreferenceAssignment,
-    DriverPreferencePeerAssignment,
     View,
     UserRole,
     User,
 } from '../types';
+import { DriverPreferencesView, PreferenceBriefPanel, PreferenceBriefData } from './DriverPreferencesView';
 import { gregorianToJalali } from '../utils/jalali';
 import { getApiUrl } from '../utils/apiConfig';
 import WorkflowRules from './WorkflowRules';
@@ -47,28 +46,59 @@ type PositionEditState = {
     saving: boolean;
 };
 
-type StageKey = 'stage1' | 'stage2';
+type DispatchPhase = 'stage1' | 'stage2_far' | 'stage2_near_vf' | 'stage2_near_all';
 
-type StageResponse = {
-    stage: StageKey;
-    cycleStart: string;
-    queue: DispatchQueueEntry[];
-    announcements: DispatchAnnouncementCandidate[];
-    pendingStage1Count: number;
-    globalPendingStage1Count?: number;
-    stage2Locked: boolean;
-    stage2Forced?: boolean;
+type QueueRowStatus = 'ready' | 'very_far_history' | 'deferred' | 'inactive';
+
+type AnnouncementWithEligibility = DispatchAnnouncementCandidate & {
+    eligible: boolean;
+    lockReason?: string | null;
+    isVeryFar?: boolean;
+};
+
+type AssignContext = {
+    effectivePhase: DispatchPhase | null;
+    phaseLabel: string | null;
+    entryPhase?: DispatchPhase | null;
+    entryPhaseLabel?: string | null;
+    assignStage: 'stage1' | 'stage2' | null;
+    canDefer: boolean;
+    isDeferredThisPhase: boolean;
+    driverRowStatus: QueueRowStatus;
+    cycleFromJalali?: string;
+    cycleToJalali?: string;
+    announcements: AnnouncementWithEligibility[];
+    eligibleCount: number;
+    queueEntry?: DispatchQueueEntry | null;
+    message?: string;
+    stageMeta?: { pendingStage1Count?: number; autoPromoted?: boolean };
+};
+
+type QueueAssignHints = {
+    effectivePhase: DispatchPhase | null;
+    phaseLabel: string | null;
+    cycleFromJalali?: string;
+    cycleToJalali?: string;
+    entries: Array<{
+        queueEntryId: string;
+        rowStatus: QueueRowStatus;
+        canAssign?: boolean;
+        eligibleLoadCount: number;
+        hasVeryFarHistory: boolean;
+        isDeferred: boolean;
+        entryPhase?: DispatchPhase | null;
+    }>;
 };
 
 type AssignDialogState = {
     isOpen: boolean;
     entry: DispatchQueueEntry | null;
-    stage: StageKey;
     loading: boolean;
-    data: StageResponse | null;
+    context: AssignContext | null;
     selectedAnnouncementId: string;
     assigning: boolean;
-    preferenceBriefText: string | null;
+    deferring: boolean;
+    preferenceBrief: PreferenceBriefData | null;
     preferenceBriefLoading: boolean;
 };
 
@@ -76,6 +106,7 @@ type PreferencesDialogState = {
     isOpen: boolean;
     driver: DispatchQueueDriver | null;
     queueEntry: DispatchQueueEntry | null;
+    categoryLabel: string | null;
     dateFrom: string;
     dateTo: string;
     loading: boolean;
@@ -83,35 +114,62 @@ type PreferencesDialogState = {
     error?: string | null;
 };
 
-const stageOptions: { value: StageKey; label: string; helper: string }[] = [
-    {
-        value: 'stage1',
-        label: 'مرحله اول - مسیرهای خیلی دور',
-        helper: 'رانندگانی که در ۲۶ روز اخیر مسیر دور داشته‌اند در این مرحله مسدود هستند.',
-    },
-    {
-        value: 'stage2',
-        label: 'مرحله دوم - سایر مسیرها',
-        helper: 'پس از اتمام کامل مسیرهای دور، سایر اعلام بارها در این مرحله فعال می‌شوند.',
-    },
-];
-
 const initialAssignDialogState: AssignDialogState = {
     isOpen: false,
     entry: null,
-    stage: 'stage1',
     loading: false,
-    data: null,
+    context: null,
     selectedAnnouncementId: '',
     assigning: false,
-    preferenceBriefText: null,
+    deferring: false,
+    preferenceBrief: null,
     preferenceBriefLoading: false,
+};
+
+const rowStatusClasses: Record<
+    QueueRowStatus,
+    { row: string; badge: string; badgeLabel: string; assignBtn: string }
+> = {
+    ready: {
+        row: 'bg-emerald-50/90 text-slate-800',
+        badge: 'bg-emerald-100 text-emerald-800',
+        badgeLabel: 'آماده تخصیص',
+        assignBtn: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    },
+    very_far_history: {
+        row: 'bg-red-50/90 text-red-950',
+        badge: 'bg-red-100 text-red-800',
+        badgeLabel: 'سابقه خیلی‌دور',
+        assignBtn: 'bg-red-600 hover:bg-red-700 text-white',
+    },
+    deferred: {
+        row: 'bg-amber-50/70 text-amber-900',
+        badge: 'bg-amber-100 text-amber-800',
+        badgeLabel: 'مانده برای بعد',
+        assignBtn: 'bg-slate-300 text-slate-500 cursor-not-allowed',
+    },
+    inactive: {
+        row: 'bg-slate-100/80 text-slate-400',
+        badge: 'bg-slate-200 text-slate-500',
+        badgeLabel: 'غیرفعال در این فاز',
+        assignBtn: 'bg-slate-300 text-slate-500 cursor-not-allowed',
+    },
+};
+
+const lockReasonLabels: Record<string, string> = {
+    wrong_phase: 'در این فاز مجاز نیست',
+    very_far_history: 'سابقه خیلی‌دور در دوره جاری',
+    near_vf_pending: 'ابتدا بار خیلی‌دور',
+    deferred: 'برای مرحله بعد مانده‌اید',
+    wrong_queue: 'نوبت در این فاز فعال نیست',
+    wrong_category: 'دسته خودرو نامطابق',
 };
 
 const initialPreferencesDialogState: PreferencesDialogState = {
     isOpen: false,
     driver: null,
     queueEntry: null,
+    categoryLabel: null,
     dateFrom: '',
     dateTo: '',
     loading: false,
@@ -126,21 +184,6 @@ const queueTypeLabels: Record<DispatchQueueType, string> = {
     external: 'تعمیرگاه خارج',
     leave: 'مرخصی راننده',
     other: 'سایر',
-};
-
-const preferenceRowAccent: Record<
-    'far' | 'near',
-    {
-        labelClass: string;
-    }
-> = {
-    // رنگ‌های بسیار ملایم برای جداسازی فقط برچسب ردیف‌ها
-    far: {
-        labelClass: 'bg-sky-50 text-slate-700',
-    },
-    near: {
-        labelClass: 'bg-emerald-50 text-slate-700',
-    },
 };
 
 const presetCategories: PresetCategory[] = [
@@ -422,24 +465,6 @@ const buildTimelineDays = (fromIso?: string, toIso?: string, maxDays = 31) => {
     return days;
 };
 
-const mapAssignmentSummary = (
-    items: DriverPreferenceAssignment[] | undefined,
-    queueTypeLabels: Record<DispatchQueueType, string>
-) => {
-    if (!items || items.length === 0) return [];
-    return items
-        .map(item => ({
-            key: item.id || `${item.announcementId || 'ann'}-${item.assignedAt}`,
-            destinationCity: item.destinationCity || item.originCity || null,
-            distanceCategory: item.distanceCategory || item.routeCategory || null,
-            lineType: item.lineType || null,
-                roundTripKm: item.roundTripKm != null ? Number(item.roundTripKm) : null,
-                queueTypeLabel: queueTypeLabels[(item.queueType || (item.stage === 'stage1' ? 'far' : 'near')) as DispatchQueueType] || '',
-            assignment: item,
-        }))
-        .sort((a, b) => (b.roundTripKm ?? 0) - (a.roundTripKm ?? 0));
-};
-
 const useDriverSearch = (headers: Record<string, string>) => {
     const [term, setTerm] = useState('');
     const [results, setResults] = useState<DispatchDriverSearchResult[]>([]);
@@ -549,10 +574,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     );
     const [queueData, setQueueData] = useState<QueueGroup>({});
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [registerQueueTab, setRegisterQueueTab] = useState<'far' | 'near'>('far');
     const [activeCategoryKey, setActiveCategoryKey] = useState(presetCategories[0]?.key || '');
     const [loadingQueue, setLoadingQueue] = useState(false);
     const [positionEdits, setPositionEdits] = useState<Record<string, PositionEditState>>({});
     const [assignDialog, setAssignDialog] = useState<AssignDialogState>(initialAssignDialogState);
+    const [assignHintsMap, setAssignHintsMap] = useState<Record<string, QueueAssignHints>>({});
     const [preferencesDialog, setPreferencesDialog] = useState<PreferencesDialogState>(initialPreferencesDialogState);
     const [preferencesPanelOpen, setPreferencesPanelOpen] = useState(false);
     const [selectedDriver, setSelectedDriver] = useState<DispatchDriverSearchResult | null>(null);
@@ -571,191 +598,6 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     );
 
     const driverSearch = useDriverSearch(headers);
-    const takenRows = useMemo(
-        () => mapAssignmentSummary(preferencesDialog.data?.taken, queueTypeLabels),
-        [preferencesDialog.data?.taken]
-    );
-    const preferenceGrid = useMemo(() => {
-        if (!preferencesDialog.data) return null;
-        // اگر نه taken و نه peerAssignments نداریم، grid را نمایش نده
-        if (takenRows.length === 0 && (!preferencesDialog.data.peerAssignments || preferencesDialog.data.peerAssignments.length === 0)) {
-            console.log('🔍 [preferenceGrid] No data to display:', {
-                takenRowsLength: takenRows.length,
-                peerAssignmentsLength: preferencesDialog.data.peerAssignments?.length || 0
-            });
-            return null;
-        }
-        console.log('🔍 [preferenceGrid] Building grid:', {
-            takenRowsLength: takenRows.length,
-            peerAssignmentsLength: preferencesDialog.data.peerAssignments?.length || 0
-        });
-        const dayKey = (value: string) => {
-            const date = new Date(value);
-            if (Number.isNaN(date.getTime())) return null;
-            return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-        };
-        const dayMap = new Map<
-            string,
-            {
-                key: string;
-                iso: string;
-                jalaliLabel: string;
-                label: string;
-            }
-        >();
-        // جمع‌آوری روزها از taken assignments
-        takenRows.forEach(row => {
-            const key = dayKey(row.assignment.assignedAt);
-            if (!key) return;
-            if (!dayMap.has(key)) {
-                const date = new Date(row.assignment.assignedAt);
-                const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
-                dayMap.set(key, {
-                    key,
-                    iso: date.toISOString(),
-                    jalaliLabel: `${jy}/${pad2(jm)}/${pad2(jd)}`,
-                    label: `روز ${jd}`,
-                });
-            }
-        });
-        // جمع‌آوری روزها از peer assignments
-        (preferencesDialog.data.peerAssignments || []).forEach(peer => {
-            // تبدیل assignedAt از string به Date اگر لازم باشد
-            const assignedAtDate = typeof peer.assignedAt === 'string' ? new Date(peer.assignedAt) : peer.assignedAt;
-            const assignedAtStr = assignedAtDate instanceof Date ? assignedAtDate.toISOString() : String(peer.assignedAt);
-            const key = dayKey(assignedAtStr);
-            if (!key) return;
-            if (!dayMap.has(key)) {
-                const date = assignedAtDate instanceof Date ? assignedAtDate : new Date(peer.assignedAt);
-                if (Number.isNaN(date.getTime())) return;
-                const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
-                dayMap.set(key, {
-                    key,
-                    iso: date.toISOString(),
-                    jalaliLabel: `${jy}/${pad2(jm)}/${pad2(jd)}`,
-                    label: `روز ${jd}`,
-                });
-            }
-        });
-        const columns = Array.from(dayMap.values())
-            .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
-            .slice(0, 31);
-        if (columns.length === 0) return null;
-        const columnIndexMap = new Map(columns.map((col, idx) => [col.key, idx]));
-        const initCells = () =>
-            columns.map(() => [] as Array<{
-                isTarget: boolean;
-                driverName: string;
-                queuePosition?: number | null;
-                destination?: string;
-                distance?: string;
-                isCancelled?: boolean;
-            }>);
-        const farRows = initCells();
-        const nearRows = initCells();
-
-        const pushEntry = (
-            queueType: 'far' | 'near' | string | null | undefined,
-            idx: number,
-            payload: {
-                isTarget: boolean;
-                driverName: string;
-                queuePosition?: number | null;
-                destination?: string;
-                distance?: string;
-                isCancelled?: boolean;
-            }
-        ) => {
-            const targetRow = queueType === 'far' ? farRows : nearRows;
-            if (idx >= 0 && idx < targetRow.length) {
-                targetRow[idx].push(payload);
-            }
-        };
-
-        takenRows.forEach(row => {
-            const assignment = row.assignment;
-            const key = dayKey(assignment.assignedAt);
-            if (!key) return;
-            const idx = columnIndexMap.get(key);
-            if (idx == null) return;
-            // استفاده از queueType از assignment یا fallback به stage
-            const queueType = (assignment as any).queueType || (assignment.stage === 'stage1' ? 'far' : 'near');
-            pushEntry(queueType, idx, {
-                isTarget: true,
-                driverName: preferencesDialog.driver?.name || 'راننده فعلی',
-                queuePosition: assignment.queuePosition ?? null,
-                destination: row.destinationCity || assignment.destinationCity || '',
-                distance: row.roundTripKm != null ? formatDistance(row.roundTripKm) : '',
-                isCancelled: assignment.isCancelled || false,
-            });
-        });
-
-        (preferencesDialog.data.peerAssignments || []).forEach(peer => {
-            // تبدیل assignedAt از string به Date اگر لازم باشد
-            let assignedAtDate: Date;
-            if (typeof peer.assignedAt === 'string') {
-                assignedAtDate = new Date(peer.assignedAt);
-            } else if (peer.assignedAt instanceof Date) {
-                assignedAtDate = peer.assignedAt;
-            } else {
-                console.warn('🔍 [preferenceGrid] Invalid assignedAt for peer:', peer);
-                return;
-            }
-            if (Number.isNaN(assignedAtDate.getTime())) {
-                console.warn('🔍 [preferenceGrid] Invalid date for peer:', peer);
-                return;
-            }
-            const key = dayKey(assignedAtDate.toISOString());
-            if (!key) {
-                console.warn('🔍 [preferenceGrid] No dayKey for peer:', peer);
-                return;
-            }
-            const idx = columnIndexMap.get(key);
-            if (idx == null) {
-                console.warn('🔍 [preferenceGrid] No column index for key:', key, 'peer:', peer);
-                return;
-            }
-            // استفاده از queueType از peer یا fallback به stage
-            const queueType = (peer as any).queueType || (peer.stage === 'stage1' ? 'far' : 'near');
-            console.log('🔍 [preferenceGrid] Adding peer entry:', {
-                driverName: peer.driverName,
-                queueType,
-                queuePosition: peer.queuePosition,
-                key,
-                idx,
-                isCancelled: peer.isCancelled
-            });
-            pushEntry(queueType, idx, {
-                isTarget: false,
-                driverName: peer.driverName || 'راننده نامشخص',
-                queuePosition: peer.queuePosition ?? null,
-                destination: peer.destinationCity || '',
-                distance: peer.roundTripKm != null ? formatDistance(peer.roundTripKm) : '',
-                isCancelled: peer.isCancelled || false,
-            });
-        });
-
-        const sortCells = (cells: ReturnType<typeof initCells>) => {
-            cells.forEach(list => {
-                list.sort((a, b) => {
-                    const ax = a.queuePosition ?? 999;
-                    const bx = b.queuePosition ?? 999;
-                    return ax - bx;
-                });
-            });
-        };
-
-        sortCells(farRows);
-        sortCells(nearRows);
-
-        return {
-            columns,
-            rows: [
-                { key: 'far', label: 'نوبت مسیر دور', data: farRows },
-                { key: 'near', label: 'نوبت مسیر نزدیک', data: nearRows },
-            ],
-        };
-    }, [preferencesDialog.data, takenRows]);
 
     const updateRow = (rowId: string, patch: Partial<RowEditor> | ((row: RowEditor) => RowEditor)) => {
         setRows(prev =>
@@ -788,22 +630,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             );
             if (!res.ok) throw new Error(await res.text());
             const payload = (await res.json()) as DriverPreferencesResponse;
-            console.log('🔍 [DispatchQueueManager] Driver preferences loaded:', {
-                driverName: payload.driver?.name,
-                takenCount: payload.taken?.length || 0,
-                peerAssignmentsCount: payload.peerAssignments?.length || 0,
-                samplePeerAssignments: payload.peerAssignments?.slice(0, 3).map(p => ({
-                    driverName: p.driverName,
-                    queueType: p.queueType,
-                    queuePosition: p.queuePosition,
-                    assignedAt: p.assignedAt,
-                    isCancelled: p.isCancelled
-                }))
-            });
             setPreferencesDialog(prev => ({
                 ...prev,
                 loading: false,
                 data: payload,
+                categoryLabel: payload.category || options?.category || prev.categoryLabel,
                 dateFrom: payload.fromJalali ? payload.fromJalali.replace(/\//g, '-') : prev.dateFrom,
                 dateTo: payload.toJalali ? payload.toJalali.replace(/\//g, '-') : prev.dateTo,
                 error: null,
@@ -880,6 +711,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 mobile: selectedDriver.mobile,
             },
             queueEntry: null,
+            categoryLabel: activeCategoryLabel,
             dateFrom: from,
             dateTo: to,
             loading: true,
@@ -896,24 +728,78 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setPreferencesDialog(initialPreferencesDialogState);
     };
 
+    const openPreferencesForEntry = (entry: DispatchQueueEntry, categoryLabel: string) => {
+        const driverId = entry.driver?.id || entry.driverId;
+        if (!driverId) {
+            alert('شناسه راننده یافت نشد.');
+            return;
+        }
+        const range = getDefaultJalaliCycleRange();
+        const categoryKey = resolveCategoryKey(categoryLabel) || categoryLabel;
+        setPreferencesDialog({
+            isOpen: true,
+            driver:
+                entry.driver ||
+                ({
+                    id: driverId,
+                    name: undefined,
+                    employeeId: undefined,
+                    mobile: undefined,
+                } as DispatchQueueDriver),
+            queueEntry: entry,
+            categoryLabel,
+            dateFrom: range.from,
+            dateTo: range.to,
+            loading: true,
+            data: null,
+            error: null,
+        });
+        loadDriverPreferences(driverId, range.from, range.to, { category: categoryKey });
+    };
+
+    const fetchAssignHintsForCategories = async (labels: string[]) => {
+        const map: Record<string, QueueAssignHints> = {};
+        await Promise.all(
+            labels.map(async label => {
+                const preset = presetCategories.find(c => c.label === label);
+                const categoryParam = preset?.key || label;
+                try {
+                    const res = await fetch(
+                        getApiUrl(
+                            `dispatch/queue/assign-hints?category=${encodeURIComponent(categoryParam)}`
+                        ),
+                        { headers }
+                    );
+                    if (res.ok) {
+                        map[label] = (await res.json()) as QueueAssignHints;
+                    }
+                } catch (error) {
+                    console.warn('assign hints failed for', label, error);
+                }
+            })
+        );
+        setAssignHintsMap(map);
+    };
+
     const fetchQueue = async () => {
         try {
             setLoadingQueue(true);
             const res = await fetch(getApiUrl('dispatch/queue'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as QueueGroup;
-            
-            // تبدیل keyهای vehicleCategory (مثل 'ten-wheel') به label (مثل 'ده چرخ')
+
             const normalizedData: QueueGroup = {};
             Object.keys(data || {}).forEach(key => {
                 const label = resolveCategoryLabel(key) || key;
                 normalizedData[label] = data[key];
             });
-            
+
             setQueueData(normalizedData || {});
+            void fetchAssignHintsForCategories(Object.keys(normalizedData));
         } catch (error) {
             console.error('Failed to load queue', error);
             setQueueData({});
+            setAssignHintsMap({});
         } finally {
             setLoadingQueue(false);
         }
@@ -1090,50 +976,39 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setRows(prev => [...prev, createRow(category, queueType)]);
     };
 
-    const loadAssignData = async (
-        entry: DispatchQueueEntry,
-        targetStage: StageKey,
-        options?: { forceStage2?: boolean }
-    ) => {
+    const loadAssignContext = async (entry: DispatchQueueEntry) => {
         setAssignDialog(prev => ({
             ...prev,
-            stage: targetStage,
             loading: true,
             selectedAnnouncementId: '',
         }));
         try {
-            const params = new URLSearchParams({ stage: targetStage });
-            const categoryLabel =
-                entry.vehicleCategory ||
-                entry.vehicle?.vehicleCategory ||
-                entry.vehicle?.model ||
-                '';
-            const categoryKey = resolveCategoryKey(categoryLabel);
-            if (categoryKey) {
-                params.append('category', categoryKey);
-            } else if (categoryLabel && categoryLabel !== 'نامشخص') {
-                params.append('category', categoryLabel);
-            }
-            params.append('queueEntryId', entry.id);
-            if (options?.forceStage2) {
-                params.append('forceStage2', 'true');
-            }
             const res = await fetch(
-                getApiUrl(`dispatch/assignments/candidates?${params.toString()}`),
+                getApiUrl(`dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}`),
                 { headers }
             );
-            if (!res.ok) throw new Error(await res.text());
-            const payload = (await res.json()) as StageResponse;
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+            const context = (await res.json()) as AssignContext;
             setAssignDialog(prev => ({
                 ...prev,
                 loading: false,
-                data: payload,
+                context,
                 selectedAnnouncementId: '',
             }));
+
             const driverId = entry.driver?.id || entry.driverId;
             if (driverId) {
-                setAssignDialog(prev => ({ ...prev, preferenceBriefLoading: true, preferenceBriefText: null }));
+                setAssignDialog(prev => ({
+                    ...prev,
+                    preferenceBriefLoading: true,
+                    preferenceBrief: null,
+                }));
                 try {
+                    const categoryLabel = entry.vehicleCategory || '';
+                    const categoryKey = resolveCategoryKey(categoryLabel);
                     const briefParams = new URLSearchParams();
                     if (categoryKey) briefParams.append('category', categoryKey);
                     const briefRes = await fetch(
@@ -1141,10 +1016,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         { headers }
                     );
                     if (briefRes.ok) {
-                        const brief = (await briefRes.json()) as { operatorText?: string };
+                        const brief = (await briefRes.json()) as PreferenceBriefData & {
+                            takenCount?: number;
+                        };
                         setAssignDialog(prev => ({
                             ...prev,
-                            preferenceBriefText: brief.operatorText || null,
+                            preferenceBrief: {
+                                cycleSummary: brief.cycleSummary,
+                                stats: brief.stats,
+                                fromJalali: brief.fromJalali,
+                                toJalali: brief.toJalali,
+                                takenCount: brief.takenCount,
+                            },
                             preferenceBriefLoading: false,
                         }));
                     } else {
@@ -1155,79 +1038,81 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 }
             }
         } catch (error) {
-            console.error('Failed to load assignment data', error);
+            console.error('Failed to load assignment context', error);
             setAssignDialog(prev => ({
                 ...prev,
                 loading: false,
-                data: null,
+                context: null,
             }));
         }
     };
 
     const openAssignDialog = (entry: DispatchQueueEntry) => {
-        const preferredStage: StageKey = entry.queueType === 'far' ? 'stage1' : 'stage2';
         setAssignDialog({
             ...initialAssignDialogState,
             isOpen: true,
             entry,
-            stage: preferredStage,
             loading: true,
         });
-        loadAssignData(entry, preferredStage);
+        loadAssignContext(entry);
     };
 
     const closeAssignDialog = () => {
         setAssignDialog(initialAssignDialogState);
     };
 
-    const handleStageChange = (stage: StageKey) => {
-        if (!assignDialog.entry) return;
-        if (assignDialog.stage === stage) return;
-        loadAssignData(assignDialog.entry, stage);
-    };
-
-    const handleForceStage2 = () => {
-        if (!assignDialog.entry) return;
-        loadAssignData(assignDialog.entry, 'stage2', { forceStage2: true });
+    const handleDeferTurn = async () => {
+        if (!assignDialog.entry || !assignDialog.context?.canDefer) return;
+        setAssignDialog(prev => ({ ...prev, deferring: true }));
+        try {
+            const res = await fetch(getApiUrl(`dispatch/queue/${assignDialog.entry!.id}/defer`), {
+                method: 'POST',
+                headers,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || 'ثبت «بمانم» ناموفق بود');
+            }
+            const context = (await res.json()) as AssignContext;
+            setAssignDialog(prev => ({
+                ...prev,
+                context,
+                deferring: false,
+                selectedAnnouncementId: '',
+            }));
+            fetchQueue();
+        } catch (error: any) {
+            alert(error?.message || 'ثبت «بمانم» ناموفق بود');
+            setAssignDialog(prev => ({ ...prev, deferring: false }));
+        }
     };
 
     const activeQueueEntry = useMemo<DispatchQueueEntry | null>(() => {
         if (!assignDialog.entry) return null;
-        if (!assignDialog.data) return assignDialog.entry;
-        return assignDialog.data.queue.find(item => item.id === assignDialog.entry!.id) || assignDialog.entry;
-    }, [assignDialog.entry, assignDialog.data]);
-
-    const filteredAnnouncements = useMemo(() => {
-        if (!assignDialog.data) return [];
-
-        const categoryLabel =
-            activeQueueEntry?.vehicleCategory ||
-            assignDialog.entry?.vehicleCategory ||
-            null;
-
-        return assignDialog.data.announcements.filter(item => {
-            const matchesCategory = vehicleMatchesCategory(item.vehicleType, categoryLabel);
-            if (!matchesCategory) return false;
-
-            if (assignDialog.stage === 'stage1') {
-                return isFarRouteCandidate(item);
-            }
-
-            return true;
-        });
-    }, [assignDialog.data, activeQueueEntry, assignDialog.entry, assignDialog.stage]);
+        const ctxEntry = assignDialog.context?.queueEntry;
+        if (ctxEntry && typeof ctxEntry === 'object') {
+            return { ...assignDialog.entry, ...ctxEntry } as DispatchQueueEntry;
+        }
+        return assignDialog.entry;
+    }, [assignDialog.entry, assignDialog.context]);
 
     const sortedAnnouncements = useMemo(() => {
-        return [...filteredAnnouncements].sort(
-            (a, b) => (b.route?.round_trip_km ?? 0) - (a.route?.round_trip_km ?? 0)
-        );
-    }, [filteredAnnouncements]);
+        return assignDialog.context?.announcements || [];
+    }, [assignDialog.context]);
 
-    const categoryPendingCount = assignDialog.data?.pendingStage1Count ?? 0;
-    const globalPendingCount = assignDialog.data?.globalPendingStage1Count ?? 0;
-    const otherCategoryPending = categoryPendingCount === 0 && globalPendingCount > 0;
+    const selectedAnnouncement = useMemo(
+        () => sortedAnnouncements.find(a => a.id === assignDialog.selectedAnnouncementId) || null,
+        [sortedAnnouncements, assignDialog.selectedAnnouncementId]
+    );
 
-    const handleSelectAnnouncement = (announcementId: string) => {
+    const canConfirmAssign =
+        Boolean(selectedAnnouncement?.eligible) &&
+        !assignDialog.context?.isDeferredThisPhase &&
+        Boolean(assignDialog.context?.assignStage) &&
+        !assignDialog.loading;
+
+    const handleSelectAnnouncement = (announcementId: string, eligible: boolean) => {
+        if (!eligible) return;
         setAssignDialog(prev => ({
             ...prev,
             selectedAnnouncementId: announcementId,
@@ -1235,12 +1120,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     };
 
     const handleAssignConfirm = async () => {
-        if (!assignDialog.entry || !assignDialog.data) return;
-        const announcement = assignDialog.data.announcements.find(
-            item => item.id === assignDialog.selectedAnnouncementId
-        );
-        if (!announcement) {
-            alert('لطفاً یک اعلام بار را انتخاب کنید.');
+        if (!assignDialog.entry || !assignDialog.context || !selectedAnnouncement) return;
+        if (!selectedAnnouncement.eligible) {
+            alert('این بار در فاز فعلی قابل انتخاب نیست.');
             return;
         }
 
@@ -1249,12 +1131,10 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             return;
         }
 
-        if (assignDialog.stage === 'stage1') {
-            const blockedEntry = assignDialog.data.queue.find(item => item.id === assignDialog.entry!.id);
-            if (blockedEntry?.blockedStage1) {
-                alert('این راننده در مرحله اول مسدود است.');
-                return;
-            }
+        const assignStage = assignDialog.context.assignStage;
+        if (!assignStage) {
+            alert('فاز تخصیص مشخص نیست.');
+            return;
         }
 
         setAssignDialog(prev => ({
@@ -1267,9 +1147,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
-                    stage: assignDialog.stage,
-                    freightAnnouncementId: announcement.id,
-                    destinationId: announcement.destination?.id || null,
+                    stage: assignStage,
+                    freightAnnouncementId: selectedAnnouncement.id,
+                    destinationId: selectedAnnouncement.destination?.id || null,
                     driverId: activeQueueEntry.driverId,
                     vehicleId: activeQueueEntry.vehicleId,
                     queueEntryId: assignDialog.entry.id,
@@ -1300,11 +1180,6 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             }));
         }
     };
-
-    const stageQueueEntry = React.useMemo(() => {
-        if (!assignDialog.entry || !assignDialog.data) return assignDialog.entry;
-        return assignDialog.data.queue.find(item => item.id === assignDialog.entry!.id) || assignDialog.entry;
-    }, [assignDialog.entry, assignDialog.data]);
 
     useEffect(() => {
         if (!activeCategoryKey && presetCategories.length > 0) {
@@ -1368,9 +1243,15 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         return sortEntries(bucket?.near);
     }, [queueData, activeCategoryLabel]);
 
-    const renderQueueRow = (entry: DispatchQueueEntry) => {
+    const getEntryRowStatus = (entry: DispatchQueueEntry, categoryLabel: string): QueueRowStatus => {
+        const hint = assignHintsMap[categoryLabel]?.entries.find(h => h.queueEntryId === entry.id);
+        return hint?.rowStatus ?? 'inactive';
+    };
+
+    const renderQueueRow = (entry: DispatchQueueEntry, categoryLabel: string) => {
         const vehicleCode = entry.vehicle?.vehicleCode || entry.vehicle?.model || '---';
         const driverName = entry.driver?.name || '---';
+        const periodKm = entry.driver?.periodFinalizedKm ?? 0;
         const mobile = entry.driver?.mobile || '-';
         const originalPosition = entry.position ?? 0;
         const originalValue = originalPosition > 0 ? originalPosition.toString() : '';
@@ -1385,8 +1266,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             numericValue >= 1 &&
             numericValue !== originalPosition;
 
+        const rowStatus = getEntryRowStatus(entry, categoryLabel);
+        const statusStyle = rowStatusClasses[rowStatus];
+        const hint = assignHintsMap[categoryLabel]?.entries.find(h => h.queueEntryId === entry.id);
+        const assignDisabled =
+            rowStatus === 'deferred' ||
+            (hint ? hint.canAssign === false : rowStatus === 'inactive');
+
         return (
-            <tr key={entry.id} className="border-b border-slate-100 last:border-0 text-[12px] text-slate-600">
+            <tr
+                key={entry.id}
+                className={`border-b border-slate-100 last:border-0 text-[12px] ${statusStyle.row}`}
+            >
                 <td className="px-2 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                         <input
@@ -1413,16 +1304,41 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         )}
                     </div>
                 </td>
-                <td className="px-2 py-2">{driverName}</td>
                 <td className="px-2 py-2">{vehicleCode}</td>
+                <td className="px-2 py-2 text-violet-700 text-[11px] whitespace-nowrap">
+                    {periodKm > 0 ? formatDistance(periodKm) : '—'}
+                </td>
+                <td className="px-2 py-2">
+                    <div className="flex flex-col gap-1">
+                        <span>{driverName}</span>
+                        <span
+                            className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] ${statusStyle.badge}`}
+                        >
+                            {hint?.canAssign && rowStatus === 'inactive' && hint.hasVeryFarHistory
+                                ? `سابقه خیلی‌دور${hint.eligibleLoadCount > 0 ? ` • ${hint.eligibleLoadCount} بار` : ''}`
+                                : statusStyle.badgeLabel}
+                            {hint && hint.eligibleLoadCount > 0 && rowStatus === 'ready'
+                                ? ` • ${hint.eligibleLoadCount} بار`
+                                : ''}
+                        </span>
+                    </div>
+                </td>
                 <td className="px-2 py-2 text-center">{mobile}</td>
                 <td className="px-2 py-2 text-center">
                     <div className="flex items-center justify-center gap-2">
                         <button
                             onClick={() => openAssignDialog(entry)}
-                            className="rounded-full bg-sky-600 px-2 py-1 text-[11px] text-white hover:bg-sky-700"
+                            disabled={assignDisabled}
+                            className={`rounded-full px-2 py-1 text-[11px] ${statusStyle.assignBtn} disabled:opacity-60`}
                         >
                             تخصیص بار
+                        </button>
+                        <button
+                            onClick={() => openPreferencesForEntry(entry, categoryLabel)}
+                            className="rounded-full px-2 py-1 text-[11px] text-violet-600 hover:bg-violet-50 border border-violet-200"
+                            title="بررسی ترجیحات راننده در دوره جاری"
+                        >
+                            ترجیحات
                         </button>
                         <button
                             onClick={() => handleDeleteQueueEntry(entry.id)}
@@ -1436,7 +1352,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         );
     };
 
-    const renderQueueList = (title: string, entries: DispatchQueueEntry[], type: 'far' | 'near') => {
+    const renderQueueList = (
+        title: string,
+        entries: DispatchQueueEntry[],
+        type: 'far' | 'near',
+        categoryLabel: string
+    ) => {
         const accent = queueAccent[type];
         return (
             <div className={`rounded-xl border ${accent.border} bg-white shadow-sm overflow-hidden`}>
@@ -1461,13 +1382,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                     <th className="px-2 py-2 text-center font-medium" title="تغییر به شمارهٔ موجود = جابه‌جایی با آن ردیف">
                                         ردیف
                                     </th>
-                                    <th className="px-2 py-2 font-medium">نام راننده</th>
                                     <th className="px-2 py-2 font-medium">کد خودرو</th>
+                                    <th className="px-2 py-2 font-medium">پیمایش دوره</th>
+                                    <th className="px-2 py-2 font-medium">نام راننده</th>
                                     <th className="px-2 py-2 text-center font-medium">شماره تماس</th>
                                 <th className="px-2 py-2 text-center font-medium">اقدام</th>
                                 </tr>
                             </thead>
-                            <tbody>{entries.map(renderQueueRow)}</tbody>
+                            <tbody>{entries.map(entry => renderQueueRow(entry, categoryLabel))}</tbody>
                         </table>
                     </div>
                 )}
@@ -1575,26 +1497,21 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         </button>
                     )}
                 </div>
-                {renderQueueList('نوبت مسیر دور', farEntries, 'far')}
-                {renderQueueList('نوبت مسیر نزدیک', nearEntries, 'near')}
+                {renderQueueList('نوبت مسیر دور', farEntries, 'far', label)}
+                {renderQueueList('نوبت مسیر نزدیک', nearEntries, 'near', label)}
             </div>
         );
     };
 
     const renderFormSection = (queueType: 'far' | 'near', sectionRows: RowEditor[]) => (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center px-4 py-3 border-b border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-700">ثبت نوبت {queueTypeLabels[queueType]}</h3>
-            </div>
-            <div className="p-3 space-y-3">
-                {sectionRows.length === 0 ? (
-                    <div className="text-[12px] text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">
-                        ردیفی برای این بخش ایجاد نشده است.
-                    </div>
-                ) : (
-                    sectionRows.map(row => renderRowEditor(row, sectionRows.length, queueTypeLabels[queueType]))
-                )}
-            </div>
+        <div className="space-y-2">
+            {sectionRows.length === 0 ? (
+                <div className="text-[11px] text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
+                    ردیفی برای این بخش ایجاد نشده است.
+                </div>
+            ) : (
+                sectionRows.map(row => renderRowEditor(row, sectionRows.length, queueTypeLabels[queueType]))
+            )}
         </div>
     );
 
@@ -1605,26 +1522,25 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     };
 
     const renderRowEditor = (row: RowEditor, siblingsCount: number, queueTypeLabel: string) => (
-        <div key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3 shadow-sm">
-            <div className="flex items-center justify-end text-xs text-slate-400">
+        <div key={row.id} className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
+            <div className="flex items-center justify-between text-[10px] text-slate-500">
+                <span>{queueTypeLabel}</span>
                 {siblingsCount > 1 && (
                     <button
                         onClick={() =>
                             setRows(prev => prev.filter(existing => existing.id !== row.id))
                         }
-                        className="rounded-full border border-red-200 px-2 py-1 text-[11px] text-red-500 hover:bg-red-50"
+                        className="text-red-500 hover:text-red-600"
                     >
-                        حذف فرم
+                        حذف
                     </button>
                 )}
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="relative">
-                    <label className="text-[11px] font-medium text-slate-600 bg-slate-100 inline-flex items-center px-2 py-1 rounded-md border border-slate-200">
-                        جستجوی خودرو
-                    </label>
+                    <label className="text-[10px] font-medium text-slate-600">خودرو</label>
                     <input
-                        className="input-style mt-1 h-9 text-sm border-slate-200 focus:border-sky-400 focus:ring-sky-200/60"
+                        className="input-style mt-0.5 h-8 text-xs border-slate-200 focus:border-sky-400 focus:ring-sky-200/60"
                         value={row.selectedVehicle ? row.selectedVehicle.vehicleCode || row.selectedVehicle.model || row.vehicleQuery : row.vehicleQuery}
                         onChange={e => {
                             const value = e.target.value;
@@ -1640,7 +1556,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         <div className="text-[11px] text-slate-400 mt-1">در حال جستجو...</div>
                     )}
                     {!row.vehicleSearching && row.vehicleResults.length > 0 && !row.selectedVehicle && (
-                        <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-sm max-h-48 overflow-auto text-xs">
+                        <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-sm max-h-32 overflow-auto text-xs">
                             {row.vehicleResults.map(result => (
                                 <li
                                     key={result.id}
@@ -1686,11 +1602,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     )}
                 </div>
                 <div className="relative">
-                    <label className="text-[11px] font-medium text-slate-600 bg-slate-100 inline-flex items-center px-2 py-1 rounded-md border border-slate-200">
-                        جستجوی راننده
-                    </label>
+                    <label className="text-[10px] font-medium text-slate-600">راننده</label>
                     <input
-                        className="input-style mt-1 h-9 text-sm border-slate-200 focus:border-emerald-400 focus:ring-emerald-200/60"
+                        className="input-style mt-0.5 h-8 text-xs border-slate-200 focus:border-emerald-400 focus:ring-emerald-200/60"
                         value={row.selectedDriver ? row.selectedDriver.name : row.driverQuery}
                         onChange={e => {
                             const value = e.target.value;
@@ -1706,7 +1620,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         <div className="text-[11px] text-slate-400 mt-1">در حال جستجو...</div>
                     )}
                     {!row.driverSearching && row.driverResults.length > 0 && !row.selectedDriver && (
-                        <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-sm max-h-48 overflow-auto text-xs">
+                        <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-sm max-h-32 overflow-auto text-xs">
                             {row.driverResults.map(result => (
                                 <li
                                     key={result.id}
@@ -1748,25 +1662,22 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     )}
                 </div>
                 <div className="sm:col-span-2">
-                    <label className="text-[11px] font-medium text-slate-600 bg-slate-100 inline-flex items-center px-2 py-1 rounded-md border border-slate-200">
-                        توضیحات (اختیاری)
-                    </label>
+                    <label className="text-[10px] font-medium text-slate-600">توضیحات</label>
                     <input
-                        className="input-style mt-1 h-9 text-sm border-slate-200 focus:border-amber-400 focus:ring-amber-200/60"
+                        className="input-style mt-0.5 h-8 text-xs border-slate-200 focus:border-amber-400 focus:ring-amber-200/60"
                         value={row.notes}
                         onChange={e => updateRow(row.id, { notes: e.target.value })}
                         placeholder="توضیح کوتاه"
                     />
                 </div>
             </div>
-            <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">پس از انتخاب خودرو و راننده روی ذخیره کلیک کنید.</span>
+            <div className="flex items-center justify-end gap-2 text-[10px]">
                 <button
                     onClick={() => handleRowSubmit(row.id)}
                     disabled={row.submitting}
-                    className="px-3 py-1.5 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                    className="px-3 py-1 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
                 >
-                    {row.submitting ? 'در حال ذخیره...' : 'ذخیره نوبت'}
+                    {row.submitting ? '...' : 'ذخیره'}
                 </button>
             </div>
         </div>
@@ -1779,8 +1690,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     <div>
                         <h2 className="text-base font-semibold text-slate-800">تابلوی نوبت ناوگان</h2>
                         <p className="text-xs text-slate-500 mt-1">
-                            نوبت‌های مسیر دور و نزدیک به تفکیک نوع خودرو نمایش داده می‌شوند.
+                            نوبت‌های مسیر دور و نزدیک — رنگ ردیف وضعیت تخصیص را نشان می‌دهد.
                         </p>
+                        <div className="flex flex-wrap gap-2 mt-2 text-[10px]">
+                            <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">سبز: آماده</span>
+                            <span className="rounded-full bg-red-100 text-red-800 px-2 py-0.5">قرمز: سابقه خیلی‌دور</span>
+                            <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">کهربایی: بمانم</span>
+                            <span className="rounded-full bg-slate-200 text-slate-600 px-2 py-0.5">خاکستری: غیرفعال</span>
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -1944,29 +1861,29 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
             {isDrawerOpen && (
                 <div
-                    className="fixed inset-0 z-50 flex justify-center items-start bg-transparent pt-10"
+                    className="fixed inset-0 z-50 flex justify-center items-start bg-slate-900/20 pt-16"
                     onClick={() => setIsDrawerOpen(false)}
                 >
                     <div
-                        className="w-full max-w-[420px] max-h-[90vh] bg-slate-50 shadow-2xl flex flex-col rounded-2xl border border-slate-200"
+                        className="w-full max-w-md bg-white shadow-2xl rounded-xl border border-slate-200"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
-                            <h2 className="text-lg font-semibold text-slate-800">ثبت نوبت</h2>
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200">
+                            <h2 className="text-sm font-semibold text-slate-800">ثبت نوبت</h2>
                             <button
                                 onClick={() => setIsDrawerOpen(false)}
-                                className="text-slate-500 hover:text-slate-700 text-sm"
+                                className="text-slate-500 hover:text-slate-700 text-xs"
                             >
                                 بستن
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                            <div className="flex flex-wrap gap-2">
+                        <div className="p-3 space-y-3">
+                            <div className="flex flex-wrap gap-1.5">
                                 {presetCategories.map(category => (
                                     <button
                                         key={category.key}
                                         onClick={() => setActiveCategoryKey(category.key)}
-                                        className={`px-3 py-1.5 rounded-full text-sm transition shadow-sm ${
+                                        className={`px-2.5 py-1 rounded-full text-xs transition ${
                                             activeCategoryKey === category.key
                                                 ? categoryAccentClasses[category.key] || 'bg-slate-600 text-white'
                                                 : categoryPillInactiveClasses[category.key] || 'border border-slate-300 text-slate-600 hover:bg-slate-100'
@@ -1977,14 +1894,39 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 ))}
                             </div>
                             {!activeCategoryLabel ? (
-                                <div className="py-10 text-center text-slate-500 text-sm">
+                                <div className="py-6 text-center text-slate-500 text-xs">
                                     برای شروع یک نوع خودرو را انتخاب کنید.
                                 </div>
                             ) : (
-                                <div className="space-y-4">
-                                    {renderFormSection('far', activeFarRows)}
-                                    {renderFormSection('near', activeNearRows)}
-                                </div>
+                                <>
+                                    <div className="flex rounded-lg border border-slate-200 p-0.5 text-xs">
+                                        <button
+                                            type="button"
+                                            onClick={() => setRegisterQueueTab('far')}
+                                            className={`flex-1 rounded-md py-1.5 transition ${
+                                                registerQueueTab === 'far'
+                                                    ? 'bg-sky-600 text-white'
+                                                    : 'text-slate-600 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {queueTypeLabels.far}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setRegisterQueueTab('near')}
+                                            className={`flex-1 rounded-md py-1.5 transition ${
+                                                registerQueueTab === 'near'
+                                                    ? 'bg-emerald-600 text-white'
+                                                    : 'text-slate-600 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {queueTypeLabels.near}
+                                        </button>
+                                    </div>
+                                    {registerQueueTab === 'far'
+                                        ? renderFormSection('far', activeFarRows)
+                                        : renderFormSection('near', activeNearRows)}
+                                </>
                             )}
                         </div>
                     </div>
@@ -2028,75 +1970,58 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         </div>
 
                         <div className="px-6 py-4 space-y-4 overflow-y-auto">
-                            <div className="flex flex-wrap gap-2">
-                                {stageOptions.map(option => {
-                                    const isActive = assignDialog.stage === option.value;
-                                    const isStage2Locked =
-                                        option.value === 'stage2' &&
-                                        assignDialog.data?.stage2Locked;
-                                    const disabled = assignDialog.loading;
-                                    const buttonClass = isActive
-                                        ? 'bg-sky-600 text-white'
-                                        : isStage2Locked
-                                            ? 'border border-amber-300 text-amber-600 hover:bg-amber-50'
-                                            : 'border border-sky-200 text-sky-600 hover:bg-sky-50';
-                                    return (
-                                        <button
-                                            key={option.value}
-                                            onClick={() => handleStageChange(option.value)}
-                                            className={`px-3 py-1.5 rounded-full text-sm transition ${buttonClass}`}
-                                            disabled={disabled}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            <div className="space-y-1 text-xs text-slate-500">
-                                <div>
-                                    {stageOptions.find(option => option.value === assignDialog.stage)?.helper}
+                            {(assignDialog.context?.entryPhaseLabel || assignDialog.context?.phaseLabel) && (
+                                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                                    <div className="font-semibold">
+                                        {assignDialog.context.entryPhaseLabel ||
+                                            assignDialog.context.phaseLabel}
+                                    </div>
+                                    {assignDialog.context.entryPhaseLabel &&
+                                        assignDialog.context.phaseLabel &&
+                                        assignDialog.context.entryPhaseLabel !==
+                                            assignDialog.context.phaseLabel && (
+                                            <div className="text-xs text-sky-700 mt-1">
+                                                فاز کلی سیستم: {assignDialog.context.phaseLabel}
+                                            </div>
+                                        )}
+                                    {assignDialog.context.cycleFromJalali && assignDialog.context.cycleToJalali && (
+                                        <div className="text-xs text-sky-700 mt-1">
+                                            دوره جاری: {assignDialog.context.cycleFromJalali} تا{' '}
+                                            {assignDialog.context.cycleToJalali}
+                                        </div>
+                                    )}
+                                    {assignDialog.context.stageMeta?.autoPromoted && (
+                                        <div className="text-xs text-amber-700 mt-1">
+                                            فاز به‌صورت خودکار (طبق قوانین بله) انتخاب شده است.
+                                        </div>
+                                    )}
                                 </div>
-                                {categoryPendingCount > 0 && (
-                                    <div className="text-amber-600">
-                                        {categoryPendingCount} اعلام‌بار مسیر دور هنوز برای این دسته باقی مانده است.
-                                    </div>
-                                )}
-                                {assignDialog.data?.stage2Locked && (
-                                    <div className="flex flex-wrap items-center gap-2 text-amber-600">
-                                        <span>برای ادامه، ابتدا مسیرهای دور را تخصیص دهید یا از اجازۀ دستی استفاده کنید.</span>
-                                        <button
-                                            onClick={handleForceStage2}
-                                            className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700 hover:bg-amber-100"
-                                            disabled={assignDialog.loading}
-                                        >
-                                            اجازه نمایش مرحله دوم
-                                        </button>
-                                    </div>
-                                )}
-                                {assignDialog.data?.stage2Forced && !assignDialog.data?.stage2Locked && assignDialog.stage === 'stage2' && (
-                                    <div className="text-emerald-600">
-                                        مرحله دوم با تایید دستی باز شده است؛ لطفاً پس از تخصیص، وضعیت مسیرهای دور را بررسی کنید.
-                                    </div>
-                                )}
-                            </div>
+                            )}
+
+                            {assignDialog.context?.isDeferredThisPhase && (
+                                <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                    این راننده برای مرحله بعد «بمانم» ثبت کرده — در این فاز تخصیص مجاز نیست.
+                                </div>
+                            )}
+
+                            {assignDialog.context?.driverRowStatus === 'very_far_history' && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                                    سابقه خیلی‌دور در دوره جاری — فقط بارهای مجاز این فاز قابل انتخاب هستند.
+                                </div>
+                            )}
 
                         {assignDialog.loading ? (
                             <div className="py-10 text-center text-slate-500 text-sm">در حال بارگذاری...</div>
-                        ) : !assignDialog.data ? (
+                        ) : !assignDialog.context ? (
                             <div className="py-10 text-center text-slate-400 text-sm">
-                                اعلام باری برای این مرحله پیدا نشد.
+                                اعلام باری برای این نوبت پیدا نشد.
+                            </div>
+                        ) : assignDialog.context.message && sortedAnnouncements.length === 0 ? (
+                            <div className="py-10 text-center text-slate-400 text-sm">
+                                {assignDialog.context.message}
                             </div>
                         ) : (
                             <>
-                                {assignDialog.stage === 'stage1' &&
-                                    assignDialog.data.queue.find(item => item.id === assignDialog.entry?.id)
-                                        ?.blockedStage1 && (
-                                        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                                            این راننده در مرحله اول مسدود است. برای تخصیص، از مرحله دوم استفاده کنید یا
-                                            راننده دیگری را انتخاب کنید.
-                                        </div>
-                                    )}
-
                                 <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1.9fr] gap-4">
                                     <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 text-xs text-slate-600 space-y-2">
                                         <div className="flex justify-between text-slate-700">
@@ -2137,195 +2062,94 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                                 : ''}
                                                         </div>
                                                     ))}
-                                                    {activeQueueEntry.longRouteHistory.length > 3 && (
-                                                        <div className="text-slate-400">...</div>
-                                                    )}
                                                 </div>
                                             )}
-                                        {(assignDialog.preferenceBriefLoading || assignDialog.preferenceBriefText) && (
-                                            <div className="border-t border-violet-200 pt-2 space-y-1 text-violet-900">
-                                                <div className="font-semibold">خلاصه ترجیحات (بله / اپراتور)</div>
-                                                {assignDialog.preferenceBriefLoading ? (
-                                                    <div className="text-slate-400">در حال بارگذاری...</div>
-                                                ) : (
-                                                    <pre className="whitespace-pre-wrap text-[10px] leading-relaxed font-sans">
-                                                        {assignDialog.preferenceBriefText}
-                                                    </pre>
-                                                )}
-                                            </div>
+                                        {(assignDialog.preferenceBriefLoading || assignDialog.preferenceBrief) && (
+                                            <PreferenceBriefPanel
+                                                brief={assignDialog.preferenceBrief}
+                                                loading={assignDialog.preferenceBriefLoading}
+                                            />
                                         )}
                                     </div>
 
                                     <div className="space-y-3">
+                                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
+                                                سبز = قابل انتخاب
+                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">
+                                                خاکستری = غیرفعال
+                                            </span>
+                                            <span className="text-slate-500">
+                                                {assignDialog.context.eligibleCount} بار مجاز از{' '}
+                                                {sortedAnnouncements.length}
+                                            </span>
+                                        </div>
                                         {sortedAnnouncements.length === 0 ? (
-                                            <div className="text-[12px] text-slate-500 text-center py-6 border border-dashed border-slate-200 rounded-xl space-y-2">
-                                                {assignDialog.stage === 'stage2' && assignDialog.data?.stage2Locked ? (
-                                                    <div className="space-y-2">
-                                                        <div>
-                                                            تا زمانی که اعلام‌بارهای مرحله اول باقی مانده‌اند، مرحله دوم فعال
-                                                            نمی‌شود.
-                                                        </div>
-                                                        <div className="text-[11px] text-slate-400">
-                                                            {categoryPendingCount} اعلام‌بار مسیر دور در انتظار تخصیص است.
-                                                        </div>
-                                                        {otherCategoryPending && (
-                                                            <div className="text-[10px] text-slate-400">
-                                                                مسیر دور دسته‌های دیگر نیز باقی مانده است.
-                                                            </div>
-                                                        )}
-                                                        <button
-                                                            onClick={handleForceStage2}
-                                                            className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700 hover:bg-amber-100"
-                                                            disabled={assignDialog.loading}
-                                                        >
-                                                            با تایید مدیر، مرحله دوم را نمایش بده
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div>اعلام باری برای این مرحله موجود نیست.</div>
-                                                )}
+                                            <div className="text-[12px] text-slate-500 text-center py-6 border border-dashed border-slate-200 rounded-xl">
+                                                اعلام باری برای این فاز موجود نیست.
                                             </div>
                                         ) : (
-                                            <div className="overflow-auto border border-slate-200 rounded-xl">
+                                            <div className="overflow-auto border border-slate-200 rounded-xl max-h-[420px]">
                                                 <table className="min-w-full text-right text-[11px]">
-                                                    <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide">
+                                                    <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide sticky top-0">
                                                         <tr className="border-b border-slate-200">
-                                                            <th className="px-2 py-2 text-right font-medium whitespace-nowrap">نوع خط</th>
-                                                            <th className="px-2 py-2 text-right font-medium">کد / مبدا → مقصد</th>
-                                                            <th className="px-2 py-2 text-right font-medium">
-                                                                مسیر و مسافت
-                                                                {assignDialog.stage === 'stage1' && filteredAnnouncements.length > 0 && (
-                                                                    <span className="mr-1 text-[10px] text-slate-400">
-                                                                        (فقط مسیرهای دور)
-                                                                    </span>
-                                                                )}
-                                                            </th>
-                                                            <th className="px-2 py-2 text-right font-medium">اطلاعات مالی</th>
-                                                            <th className="px-2 py-2 text-right font-medium">برند / اولویت</th>
-                                                            <th className="px-2 py-2 text-right font-medium">محصولات</th>
-                                                            <th className="px-2 py-2 text-right font-medium">توضیحات</th>
+                                                            <th className="px-2 py-2 text-right font-medium">نوع خط</th>
+                                                            <th className="px-2 py-2 text-right font-medium">مبدا → مقصد</th>
+                                                            <th className="px-2 py-2 text-right font-medium">مسیر / کیلومتر</th>
+                                                            <th className="px-2 py-2 text-right font-medium">وضعیت</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="bg-white divide-y divide-slate-100">
-                                        {sortedAnnouncements.map(item => {
+                                                    <tbody className="divide-y divide-slate-100">
+                                        {sortedAnnouncements.map((item, idx) => {
                                                             const isSelected = assignDialog.selectedAnnouncementId === item.id;
-                                                            const lineTypeClass =
-                                                                (item.lineType && lineTypeBadgeStyles[item.lineType]) ||
-                                                                'bg-slate-100 text-slate-600';
-                                                            const priorityKey = (item.priority || '').toLowerCase();
-                                                            const priorityClass =
-                                                                priorityBadgeStyles[
-                                                                    priorityKey === 'high'
-                                                                        ? 'high'
-                                                                        : priorityKey === 'low'
-                                                                            ? 'low'
-                                                                            : 'normal'
-                                                                ] || 'bg-slate-100 text-slate-600';
-                                                            const products = normalizeProducts(item.products);
-                                                            const distanceStatus = item.route?.distance_category || '';
-                                                            let routeLabel = item.route?.route_category || 'مسیر';
+                                                            const eligible = item.eligible;
+                                                            const rowClass = eligible
+                                                                ? isSelected
+                                                                    ? 'bg-emerald-50 border-r-4 border-emerald-500 cursor-pointer'
+                                                                    : 'bg-white hover:bg-emerald-50/50 cursor-pointer'
+                                                                : 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-70';
                                                             const kmLabel = formatDistance(item.route?.round_trip_km);
-                                                            const showExactDistance =
-                                                                assignDialog.stage === 'stage1'
-                                                                    ? kmLabel
-                                                                        ? `${kmLabel} • ${distanceStatus || 'خیلی دور'}`
-                                                                        : distanceStatus || 'خیلی دور'
-                                                                    : kmLabel;
-                                                            if (assignDialog.stage === 'stage1') {
-                                                                routeLabel =
-                                                                    distanceStatus
-                                                                        ? `${routeLabel === 'مسیر' ? 'مسیر' : routeLabel} (${distanceStatus})`
-                                                                        : `${routeLabel === 'مسیر' ? 'مسیر' : routeLabel} (خیلی دور)`;
-                                                            }
-                                                            const productsPreview =
-                                                                products.length > 0
-                                                                    ? products.slice(0, 3).join('، ') +
-                                                                      (products.length > 3 ? '، ...' : '')
-                                                                    : 'ثبت نشده';
-                                                            const createdLabel = item.createdAt
-                                                                ? new Date(item.createdAt).toLocaleDateString('fa-IR')
-                                                                : '';
+                                                            const vfBadge = item.isVeryFar ? (
+                                                                <span className="text-[10px] text-amber-700">خیلی‌دور</span>
+                                                            ) : null;
 
                                                             return (
                                                                 <tr
                                                                     key={item.id}
-                                                                    onClick={() => handleSelectAnnouncement(item.id)}
-                                                                    className={`cursor-pointer transition text-[11px] ${
-                                                                        isSelected
-                                                                            ? 'bg-emerald-50 border-l-4 border-emerald-400'
-                                                                            : 'hover:bg-slate-50'
-                                                                    }`}
+                                                                    onClick={() => handleSelectAnnouncement(item.id, eligible)}
+                                                                    className={`transition text-[11px] ${rowClass}`}
+                                                                    title={
+                                                                        item.lockReason
+                                                                            ? lockReasonLabels[item.lockReason] ||
+                                                                              item.lockReason
+                                                                            : undefined
+                                                                    }
                                                                 >
                                                                     <td className="px-2 py-1.5 align-top">
-                                                                        <div className="flex items-center justify-between gap-2 text-slate-700">
-                                                                            <span className="font-semibold text-[11px]">
-                                                                                {item.announcementCode || 'اعلام بار'}
-                                                                            </span>
-                                                                            {item.lineType && (
-                                                                                <span
-                                                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${lineTypeClass}`}
-                                                                                >
-                                                                                    {item.lineType}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
+                                                                        <span className="font-semibold">{idx + 1}.</span>{' '}
+                                                                        {item.lineType || '—'}
                                                                     </td>
-                                                            <td className="px-2 py-1.5 align-top text-slate-600">
-                                                                <div className="font-medium text-slate-700 truncate max-w-[180px]">
-                                                                    {item.destination?.city
-                                                                        ? `از ${item.originCity || 'مبدا'} به ${item.destination?.city}`
-                                                                        : `از ${item.originCity || 'مبدا'} به مقصد نامشخص`}
-                                                                </div>
-                                                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                                                                    {item.vehicleType && <span>{item.vehicleType}</span>}
-                                                                    {createdLabel && <span>{createdLabel}</span>}
-                                                                </div>
+                                                                    <td className="px-2 py-1.5 align-top">
+                                                                        {item.destination?.city
+                                                                            ? `${item.originCity || 'مبدا'} → ${item.destination.city}`
+                                                                            : item.originCity || '—'}
                                                                     </td>
-                                                                    <td className="px-2 py-1.5 align-top text-slate-600">
-                                                                        <div className="text-slate-600">{routeLabel}</div>
-                                                                        {showExactDistance && (
-                                                                            <div className="mt-0.5 text-[10px] text-slate-400">
-                                                                                {showExactDistance}
-                                                                            </div>
-                                                                        )}
+                                                                    <td className="px-2 py-1.5 align-top">
+                                                                        {kmLabel}
+                                                                        {vfBadge && <div>{vfBadge}</div>}
                                                                     </td>
-                                                                    <td className="px-2 py-1.5 align-top text-slate-600">
-                                                                        <div className="text-[11px]">
-                                                                            ارزش:{' '}
-                                                                            <span className="font-semibold text-slate-700">
-                                                                                {formatCurrencyToman(item.cargoValue)}
-                                                                            </span>
-                                                                        </div>
-                                                                        {item.totalFreightCost != null && (
-                                                                            <div className="mt-0.5 text-[10px] text-slate-500">
-                                                                                کرایه:{' '}
-                                                                                <span className="font-semibold text-slate-600">
-                                                                                    {formatCurrencyToman(item.totalFreightCost)}
-                                                                                </span>
-                                                                            </div>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-2 py-1.5 align-top text-slate-600">
-                                                                        <div className="text-[11px] text-slate-600">
-                                                                            {item.brand || <span className="text-slate-400">—</span>}
-                                                                        </div>
-                                                                        {item.priority && (
-                                                                            <span
-                                                                                className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${priorityClass}`}
-                                                                            >
-                                                                                {item.priority}
+                                                                    <td className="px-2 py-1.5 align-top text-[10px]">
+                                                                        {eligible ? (
+                                                                            <span className="text-emerald-700">مجاز</span>
+                                                                        ) : (
+                                                                            <span>
+                                                                                {item.lockReason
+                                                                                    ? lockReasonLabels[item.lockReason] ||
+                                                                                      item.lockReason
+                                                                                    : 'غیرفعال'}
                                                                             </span>
                                                                         )}
-                                                                    </td>
-                                                                    <td className="px-2 py-1.5 align-top text-slate-600 whitespace-normal">
-                                                                        <div className="text-[10px] text-slate-500 leading-4">
-                                                                            {products.length > 0 ? productsPreview : '—'}
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-2 py-1.5 align-top text-slate-500 whitespace-normal">
-                                                                        <div className="text-[10px] leading-4">
-                                                                            {item.notes || '—'}
-                                                                        </div>
                                                                     </td>
                                                                 </tr>
                                                             );
@@ -2341,22 +2165,31 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         </div>
 
                         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
                                 <button
                                     onClick={() =>
-                                        assignDialog.entry && loadAssignData(assignDialog.entry, assignDialog.stage)
+                                        assignDialog.entry && loadAssignContext(assignDialog.entry)
                                     }
                                     className="px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 text-sm"
                                     disabled={assignDialog.loading}
                                 >
                                     بروزرسانی لیست
                                 </button>
-                                {assignDialog.selectedAnnouncementId ? (
+                                {assignDialog.context?.canDefer && (
+                                    <button
+                                        onClick={handleDeferTurn}
+                                        disabled={assignDialog.deferring || assignDialog.loading}
+                                        className="px-3 py-1.5 rounded-md border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 text-sm disabled:opacity-60"
+                                    >
+                                        {assignDialog.deferring ? 'در حال ثبت...' : '⏭ بمانم برای مرحله بعد'}
+                                    </button>
+                                )}
+                                {selectedAnnouncement ? (
                                     <span className="text-emerald-600">
-                                        اعلام بار انتخاب شده: {assignDialog.selectedAnnouncementId}
+                                        انتخاب: {selectedAnnouncement.announcementCode || selectedAnnouncement.id}
                                     </span>
                                 ) : (
-                                    <span>یک اعلام بار انتخاب کنید.</span>
+                                    <span>یک بار مجاز (سبز) انتخاب کنید.</span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2">
@@ -2369,14 +2202,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 </button>
                                 <button
                                     onClick={handleAssignConfirm}
-                                    disabled={
-                                        assignDialog.assigning ||
-                                        !assignDialog.selectedAnnouncementId ||
-                                        assignDialog.loading ||
-                                        (assignDialog.stage === 'stage1' &&
-                                            assignDialog.data?.queue.find(item => item.id === assignDialog.entry?.id)
-                                                ?.blockedStage1)
-                                    }
+                                    disabled={assignDialog.assigning || !canConfirmAssign}
                                     className="px-4 py-1.5 rounded-md bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-60"
                                 >
                                     {assignDialog.assigning ? 'در حال ثبت...' : 'تایید تخصیص'}
@@ -2393,7 +2219,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     onClick={closePreferencesDialog}
                 >
                     <div
-                        className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+                        className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
@@ -2409,10 +2235,17 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                             ? ` • ${preferencesDialog.driver.employeeId}`
                                             : ''}
                                         {preferencesDialog.driver?.mobile ? ` • ${preferencesDialog.driver.mobile}` : ''}
+                                        {preferencesDialog.categoryLabel ? (
+                                            <span className="text-violet-700">
+                                                {' '}
+                                                • {preferencesDialog.categoryLabel}
+                                            </span>
+                                        ) : null}
                                     </div>
                                     <div>
-                                        بازه بررسی: {preferencesDialog.data?.fromJalali || preferencesDialog.dateFrom || '---'} تا{' '}
+                                        دوره: {preferencesDialog.data?.fromJalali || preferencesDialog.dateFrom || '---'} تا{' '}
                                         {preferencesDialog.data?.toJalali || preferencesDialog.dateTo || '---'}
+                                        <span className="text-slate-400 mr-2">(پیش‌فرض: دوره جاری)</span>
                                     </div>
                                 </div>
                             </div>
@@ -2444,97 +2277,16 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                     {preferencesDialog.error}
                                 </div>
                             ) : preferencesDialog.data ? (
-                                preferenceGrid ? (
-                                    <section className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-sm font-semibold text-slate-700">
-                                                نوبت‌های ثبت‌شده در روزهای فعال راننده (حداکثر ۳۱ روز)
-                                            </h3>
-                                            <span className="text-[11px] text-slate-400">
-                                                ستون‌ها فقط روزهایی را نمایش می‌دهند که راننده در آن‌ها حضور داشته است.
-                                            </span>
-                                        </div>
-                                        <div className="overflow-auto rounded-xl border border-slate-200">
-                                            <table className="min-w-[720px] text-right text-[11px]">
-                                                <thead>
-                                                    <tr className="bg-slate-50 text-slate-600 text-[10px]">
-                                                        <th className="px-3 py-2 font-medium">نوع نوبت</th>
-                                                        {preferenceGrid.columns.map(day => (
-                                                            <th key={day.key} className="px-2 py-2 font-medium text-center">
-                                                                <div>{day.label}</div>
-                                                                <div className="text-[9px] text-slate-400">{day.jalaliLabel}</div>
-                                                            </th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {preferenceGrid.rows.map(row => {
-                                                        const accent =
-                                                            row.key === 'far' ? preferenceRowAccent.far : preferenceRowAccent.near;
-                                                        return (
-                                                            <tr key={row.key} className="bg-white">
-                                                                <td className={`px-3 py-3 font-semibold whitespace-nowrap ${accent.labelClass}`}>
-                                                                    {row.label}
-                                                                </td>
-                                                                {row.data.map((cellEntries, idx) => (
-                                                                    <td key={`${row.key}-${idx}`} className="px-2 py-2 align-top">
-                                                                        {cellEntries.length === 0 ? (
-                                                                            <div className="text-slate-300 text-center">—</div>
-                                                                        ) : (
-                                                                            <div className="space-y-1 text-[10px]">
-                                                                                {cellEntries.map((entry, entryIdx) => (
-                                                                                    <div
-                                                                                        key={`${row.key}-${idx}-${entryIdx}`}
-                                                                                        className={`rounded-lg border px-2 py-1 ${
-                                                                                            entry.isCancelled
-                                                                                                ? 'border-red-400 bg-red-50 text-red-700 line-through'
-                                                                                                : entry.isTarget 
-                                                                                                    ? 'border-amber-400 bg-amber-50 text-red-600'
-                                                                                                    : 'border-slate-200 bg-slate-50 text-slate-500'
-                                                                                        }`}
-                                                                                    >
-                                                                                        <div className="flex items-center justify-between gap-2">
-                                                                                            <span className={`text-[11px] font-semibold ${
-                                                                                                entry.isCancelled
-                                                                                                    ? 'text-red-700'
-                                                                                                    : entry.isTarget 
-                                                                                                        ? 'text-red-600'
-                                                                                                        : 'text-slate-700'
-                                                                                            }`}>
-                                                                                                {entry.driverName}
-                                                                                            </span>
-                                                                                            {entry.queuePosition != null && (
-                                                                                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] bg-slate-300 text-slate-800">
-                                                                                                    نوبت {entry.queuePosition}
-                                                                                                </span>
-                                                                                            )}
-                                                                                        </div>
-                                                                                        {entry.destination && (
-                                                                                            <div className={`text-[12px] font-semibold ${entry.isTarget ? 'text-slate-900' : 'text-slate-600'}`}>
-                                                                                                {entry.destination}
-                                                                                            </div>
-                                                                                        )}
-                                                                                        {entry.distance && (
-                                                                                            <div className={`text-[10px] ${entry.isTarget ? 'text-slate-600' : 'text-slate-400'}`}>{entry.distance}</div>
-                                                                                        )}
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                    </td>
-                                                                ))}
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </section>
-                                ) : (
-                                    <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
-                                        برای این راننده در بازه انتخابی نوبتی ثبت نشده است.
-                                    </div>
-                                )
+                                <DriverPreferencesView
+                                    data={preferencesDialog.data}
+                                    categoryLabel={
+                                        preferencesDialog.categoryLabel ||
+                                        preferencesDialog.data.category ||
+                                        null
+                                    }
+                                    targetDriverId={preferencesDialog.driver?.id || preferencesDialog.data.driver.id}
+                                    targetDriverName={preferencesDialog.driver?.name || 'راننده'}
+                                />
                             ) : (
                                 <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
                                     داده‌ای برای نمایش وجود ندارد.

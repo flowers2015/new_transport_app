@@ -703,6 +703,7 @@ export interface DispatchQueueDriver {
     name: string;
     mobile?: string;
     employeeId?: string;
+    periodFinalizedKm?: number;
 }
 
 export interface DispatchQueueVehicle {
@@ -738,6 +739,8 @@ export interface DispatchQueueEntry {
     driver: DispatchQueueDriver;
     vehicle: DispatchQueueVehicle;
     longRouteHistory?: DispatchAssignmentHistory[];
+    lastVeryFarAtJalali?: string | null;
+    hasVeryFarHistory?: boolean;
     blockedStage1?: boolean;
 }
 
@@ -809,12 +812,41 @@ export interface DispatchDriverSearchResult extends DispatchQueueDriver {
     nationalCode?: string | null;
 }
 
+export type AssignmentCertainty = 'finalized' | 'pending' | 'cancelled';
+
+export interface DriverPreferenceTripSummary {
+    id: string;
+    announcementCode?: string | null;
+    destinationCity?: string | null;
+    originCity?: string | null;
+    roundTripKm?: number | null;
+    queueType?: string | null;
+    isVeryFar?: boolean;
+    assignedAtJalali?: string | null;
+    queuePosition?: number | null;
+}
+
+export interface DriverPreferenceCycleSummary {
+    veryFar: DriverPreferenceTripSummary[];
+    far: DriverPreferenceTripSummary[];
+    near: DriverPreferenceTripSummary[];
+}
+
+export interface DriverPreferenceStats {
+    finalizedCount: number;
+    pendingCount: number;
+    cancelledCount: number;
+    totalTaken: number;
+}
+
 export interface DriverPreferenceAssignment {
     id: string;
     announcementId?: string;
     announcementCode?: string;
     stage: string;
     queueType?: 'far' | 'near' | 'workshop' | 'external' | 'leave' | 'other';
+    routeBucket?: 'veryFar' | 'far' | 'near';
+    isVeryFar?: boolean;
     lineType?: string | null;
     vehicleType?: string | null;
     originCity?: string | null;
@@ -825,7 +857,13 @@ export interface DriverPreferenceAssignment {
     assignedAt: string;
     assignedAtJalali?: string | null;
     queuePosition?: number | null;
+    vehicleCode?: string | null;
     isCancelled?: boolean;
+    freightStatus?: string | null;
+    assignmentFinalizedAt?: string | null;
+    certainty?: AssignmentCertainty;
+    certaintyLabel?: string;
+    note?: string | null;
 }
 
 export interface DriverPreferencePeerAssignment {
@@ -839,11 +877,15 @@ export interface DriverPreferencePeerAssignment {
     lineType?: string | null;
     destinationCity?: string | null;
     roundTripKm?: number | null;
+    vehicleCode?: string | null;
     assignedAt: string;
     assignedAtJalali?: string | null;
     previousOriginCity?: string | null;
     announcementCode?: string | null;
     isCancelled?: boolean;
+    isVeryFar?: boolean;
+    certainty?: AssignmentCertainty;
+    certaintyLabel?: string;
 }
 
 export interface DriverPreferenceOpportunity {
@@ -858,9 +900,11 @@ export interface DriverPreferenceOpportunity {
     routeCategory?: string | null;
     distanceCategory?: string | null;
     roundTripKm?: number | null;
+    isVeryFar?: boolean;
     seenAt: string;
     seenAtJalali?: string | null;
     queuePosition?: number | null;
+    note?: string | null;
     others?: Array<{
         driverId: string;
         driverName?: string | null;
@@ -879,10 +923,13 @@ export interface DriverPreferencesResponse {
         employeeId?: string | null;
         mobile?: string | null;
     };
+    category?: string | null;
     from: string;
     to: string;
     fromJalali: string;
     toJalali: string;
+    cycleSummary?: DriverPreferenceCycleSummary;
+    stats?: DriverPreferenceStats;
     taken: DriverPreferenceAssignment[];
     skipped: DriverPreferenceOpportunity[];
     peerAssignments?: DriverPreferencePeerAssignment[];
