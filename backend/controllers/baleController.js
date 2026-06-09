@@ -7,6 +7,7 @@ const {
   getRuntimeSettings,
   setRuntimeSettings,
 } = require('../services/bale/baleSettings');
+const { getDispatchChannelPlans } = require('../services/bale/baleCategoryChannels');
 
 function mapSession(row) {
   if (!row) return null;
@@ -84,23 +85,47 @@ async function updateChannel(req, res) {
   if (!slot || slot < 1 || slot > 4) {
     return res.status(400).json({ message: 'اسلات نامعتبر' });
   }
-  const { chatId, vehicleCategory, label, isActive } = req.body || {};
+  const { chatId, vehicleCategory, label, isActive, confirmClear } = req.body || {};
   try {
+    const updates = [];
+    const values = [slot];
+    let idx = 2;
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'chatId')) {
+      if (chatId == null || chatId === '') {
+        if (!confirmClear) {
+          return res.status(400).json({
+            message: 'برای پاک کردن chat_id گزینه تأیید حذف را فعال کنید.',
+          });
+        }
+        updates.push(`chat_id = $${idx++}`);
+        values.push(null);
+      } else {
+        updates.push(`chat_id = $${idx++}`);
+        values.push(Number(chatId));
+      }
+    }
+    if (vehicleCategory !== undefined) {
+      updates.push(`vehicle_category = $${idx++}`);
+      values.push(vehicleCategory ?? null);
+    }
+    if (label !== undefined) {
+      updates.push(`label = $${idx++}`);
+      values.push(label ?? null);
+    }
+    if (isActive !== undefined) {
+      updates.push(`is_active = $${idx++}`);
+      values.push(Boolean(isActive));
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ message: 'فیلدی برای به‌روزرسانی ارسال نشده' });
+    }
+
+    updates.push('updated_at = NOW()');
     await pool.query(
-      `UPDATE bale_channels SET
-         chat_id = COALESCE($2, chat_id),
-         vehicle_category = COALESCE($3, vehicle_category),
-         label = COALESCE($4, label),
-         is_active = COALESCE($5, is_active),
-         updated_at = NOW()
-       WHERE slot_number = $1`,
-      [
-        slot,
-        chatId != null ? Number(chatId) : null,
-        vehicleCategory ?? null,
-        label ?? null,
-        isActive != null ? Boolean(isActive) : null,
-      ]
+      `UPDATE bale_channels SET ${updates.join(', ')} WHERE slot_number = $1`,
+      values
     );
     const { rows } = await pool.query(
       `SELECT * FROM bale_channels WHERE slot_number = $1`,
@@ -228,14 +253,51 @@ async function startSession(req, res) {
       stage = 'stage1',
       turnTimeoutSec = 180,
       forceStage2 = false,
-      forceRestart = true,
+      forceRestart = false,
+      vehicleCategory,
+      slot,
     } = req.body || {};
     sessionEngine.ensureTickTimer();
+
+    if (vehicleCategory || slot != null) {
+      const plans = await getDispatchChannelPlans();
+      const plan = slot != null
+        ? plans.find(p => p.slot === Number(slot))
+        : plans.find(p => p.category === vehicleCategory);
+      if (!plan) {
+        return res.status(400).json({
+          message: vehicleCategory
+            ? `کانال فعالی برای «${vehicleCategory}» تنظیم نشده.`
+            : `اسلات ${slot} فعال نیست یا chat_id ندارد.`,
+        });
+      }
+
+      const session = await sessionEngine.startSessionForCategory({
+        mode,
+        stage,
+        turnTimeoutSec,
+        userId: req.user?.userId || req.user?.id,
+        forceStage2,
+        vehicleCategory: plan.category,
+        groupChannelSlot: plan.slot,
+      });
+      return res.json({
+        sessions: [mapSession(session)],
+        started: 1,
+        errors: [],
+        skipped: [],
+        pilotCombined: Boolean(plan.pilotCombined),
+        stoppedPrior: 0,
+        forceRestart: false,
+        category: plan.category,
+      });
+    }
+
     const result = await sessionEngine.startAllCategorySessions({
       mode,
       stage,
       turnTimeoutSec,
-      userId: req.user?.id,
+      userId: req.user?.userId || req.user?.id,
       forceStage2,
       forceRestart,
     });
@@ -278,10 +340,36 @@ async function resolveSessionFromRequest(req) {
 
 async function stopSession(req, res) {
   try {
+    const { sessionId, vehicleCategory } = req.body || {};
+
+    if (sessionId) {
+      const session = await sessionEngine.loadSession(sessionId);
+      if (!session) return res.status(404).json({ message: 'جلسه یافت نشد' });
+      if (['completed', 'stopped'].includes(session.status)) {
+        return res.status(400).json({ message: 'این جلسه از قبل متوقف شده' });
+      }
+      const stopped = await sessionEngine.stopSession(sessionId);
+      return res.json({ sessions: [mapSession(stopped)], stopped: 1 });
+    }
+
+    if (vehicleCategory) {
+      const active = await sessionEngine.getActiveSessions();
+      const session = active.find(
+        s => s.vehicle_category === vehicleCategory
+      );
+      if (!session) {
+        return res.status(404).json({
+          message: `جلسه فعالی برای «${vehicleCategory}» نیست`,
+        });
+      }
+      const stopped = await sessionEngine.stopSession(session.id);
+      return res.json({ sessions: [mapSession(stopped)], stopped: 1 });
+    }
+
     const sessions = await sessionEngine.getActiveSessions();
     if (sessions.length === 0) return res.status(404).json({ message: 'جلسه فعالی نیست' });
     const stopped = await sessionEngine.stopAllSessions();
-    res.json({ sessions: stopped.map(mapSession) });
+    res.json({ sessions: stopped.map(mapSession), stopped: stopped.length });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

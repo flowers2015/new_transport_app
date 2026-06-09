@@ -94,7 +94,6 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [testChatId, setTestChatId] = useState('');
     const [groupChatId, setGroupChatId] = useState('');
     const [channelChatIds, setChannelChatIds] = useState<Record<number, string>>({});
-    const [webhookUrl, setWebhookUrl] = useState('');
     const [busy, setBusy] = useState(false);
     const [seedResult, setSeedResult] = useState<string | null>(null);
     const [selectedSessionId, setSelectedSessionId] = useState('');
@@ -160,6 +159,13 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         return () => clearInterval(t);
     }, [loadStatus]);
 
+    const activeSessions =
+        status?.activeSessions?.length
+            ? status.activeSessions
+            : status?.activeSession
+              ? [status.activeSession]
+              : [];
+
     const runAction = async (label: string, fn: () => Promise<void>) => {
         setBusy(true);
         setError(null);
@@ -172,47 +178,6 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             setBusy(false);
         }
     };
-
-    const saveRuntime = (env: RuntimeEnvironment) =>
-        runAction('حالت اجرا', async () => {
-            const res = await fetch(getApiUrl('bale/settings/runtime'), {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({ environment: env }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-            setRuntimeEnv(env);
-        });
-
-    const saveGroupChannel = () =>
-        runAction('ذخیره گروه', async () => {
-            const res = await fetch(getApiUrl('bale/channels/1'), {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({
-                    chatId: groupChatId ? Number(groupChatId) : null,
-                    label: isTestMode ? 'گروه تست' : 'گروه پایلوت',
-                    isActive: true,
-                }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-        });
-
-    const saveCategoryChannel = (slot: number, category: string) =>
-        runAction(`ذخیره اسلات ${slot}`, async () => {
-            const chatId = channelChatIds[slot];
-            const res = await fetch(getApiUrl(`bale/channels/${slot}`), {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({
-                    chatId: chatId ? Number(chatId) : null,
-                    vehicleCategory: category,
-                    label: CATEGORY_SLOTS.find(c => c.slot === slot)?.label,
-                    isActive: Boolean(chatId),
-                }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-        });
 
     const seedDrivers = () =>
         runAction('seed', async () => {
@@ -267,19 +232,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!res.ok) throw new Error(await res.text());
         });
 
-    const registerWebhook = () =>
-        runAction('webhook', async () => {
-            if (!webhookUrl.trim()) throw new Error('URL وب‌هوک را وارد کنید');
-            const res = await fetch(getApiUrl('bale/webhook/register'), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ url: webhookUrl.trim() }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-        });
-
-    const startSession = () =>
-        runAction('شروع جلسه', async () => {
+    const startCategorySession = (vehicleCategory: string) =>
+        runAction(`شروع ${vehicleCategory}`, async () => {
             const res = await fetch(getApiUrl('bale/sessions/start'), {
                 method: 'POST',
                 headers,
@@ -287,7 +241,32 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     mode,
                     stage,
                     turnTimeoutSec,
-                    forceRestart: true,
+                    vehicleCategory,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || (await res.text()));
+            }
+            setSeedResult(`جلسه «${vehicleCategory}» شروع شد`);
+        });
+
+    const startAllSessions = () =>
+        runAction('شروع همه', async () => {
+            if (activeSessions.length > 0) {
+                const ok = window.confirm(
+                    'جلسه‌های فعال بدون توقف باقی می‌مانند. برای ری‌استارت کامل ابتدا «توقف همه» بزنید.\nادامه می‌دهید؟'
+                );
+                if (!ok) return;
+            }
+            const res = await fetch(getApiUrl('bale/sessions/start'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    mode,
+                    stage,
+                    turnTimeoutSec,
+                    forceRestart: false,
                 }),
             });
             if (!res.ok) {
@@ -296,9 +275,6 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             }
             const data = await res.json();
             const notes: string[] = [`${data.started} جلسه شروع شد`];
-            if (data.stoppedPrior > 0) {
-                notes.push(`(${data.stoppedPrior} جلسه قبلی متوقف شد)`);
-            }
             if (data.pilotCombined) notes.push('(گروه مشترک — اسلات ۱)');
             if (data.skipped?.length) {
                 notes.push(
@@ -310,11 +286,31 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     `خطا: ${data.errors.map((e: { category: string; message: string }) => `${e.category}: ${e.message}`).join(' | ')}`
                 );
             }
-            if (notes.length > 1) setSeedResult(notes.join(' — '));
+            setSeedResult(notes.join(' — '));
         });
 
-    const stopSession = () =>
-        runAction('توقف', async () => {
+    const stopCategorySession = (vehicleCategory: string) =>
+        runAction(`توقف ${vehicleCategory}`, async () => {
+            const res = await fetch(getApiUrl('bale/sessions/stop'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ vehicleCategory }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || (await res.text()));
+            }
+            setSeedResult(`جلسه «${vehicleCategory}» متوقف شد`);
+        });
+
+    const stopAllSessions = () =>
+        runAction('توقف همه', async () => {
+            if (
+                activeSessions.length > 0 &&
+                !window.confirm('همه جلسات فعال (حتی منتظر اپراتور) متوقف می‌شوند. ادامه؟')
+            ) {
+                return;
+            }
             const res = await fetch(getApiUrl('bale/sessions/stop'), { method: 'POST', headers });
             if (!res.ok) throw new Error(await res.text());
         });
@@ -341,13 +337,6 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!res.ok) throw new Error(await res.text());
         });
 
-    const activeSessions =
-        status?.activeSessions?.length
-            ? status.activeSessions
-            : status?.activeSession
-              ? [status.activeSession]
-              : [];
-
     const session =
         activeSessions.find(s => s.id === selectedSessionId) || activeSessions[0] || null;
     const queue = Array.isArray(session?.queueSnapshot) ? session.queueSnapshot : [];
@@ -365,6 +354,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
 
     const linkedCount = drivers.filter(d => d.outreach_chat_id != null).length;
     const testLinkedCount = drivers.filter(d => d.is_test_simulation).length;
+
+    const sessionForCategory = (category: string) =>
+        activeSessions.find(s => s.vehicleCategory === category);
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6" dir="rtl">
@@ -393,33 +385,17 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 </button>
             </div>
 
-            <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-3">
+            <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-2">
                 <h2 className="font-semibold text-violet-900">حالت اجرا</h2>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    {RUNTIME_OPTIONS.map(opt => (
-                        <label
-                            key={opt.value}
-                            className={`flex items-start gap-2 flex-1 rounded-lg border p-3 cursor-pointer transition ${
-                                runtimeEnv === opt.value
-                                    ? 'border-violet-500 bg-white ring-1 ring-violet-300'
-                                    : 'border-slate-200 bg-white/70 hover:border-violet-200'
-                            }`}
-                        >
-                            <input
-                                type="radio"
-                                name="runtimeEnv"
-                                className="mt-1"
-                                checked={runtimeEnv === opt.value}
-                                disabled={busy}
-                                onChange={() => saveRuntime(opt.value)}
-                            />
-                            <span>
-                                <span className="font-medium text-slate-800 block">{opt.label}</span>
-                                <span className="text-xs text-slate-500">{opt.hint}</span>
-                            </span>
-                        </label>
-                    ))}
+                <div className="text-sm">
+                    {RUNTIME_OPTIONS.find(o => o.value === runtimeEnv)?.label || runtimeEnv}
+                    <span className="text-xs text-slate-500 mr-2">
+                        — {RUNTIME_OPTIONS.find(o => o.value === runtimeEnv)?.hint}
+                    </span>
                 </div>
+                <p className="text-xs text-slate-500">
+                    تغییر حالت و شناسه کانال‌ها فقط از پنل ادمین (تنظیمات بله) انجام می‌شود.
+                </p>
             </section>
 
             {error && (
@@ -564,24 +540,14 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                         placeholder="مثلاً از getUpdates"
                                     />
                                 </label>
-                                <label className="text-sm block">
+                                <div className="text-sm block">
                                     chat_id گروه (اسلات ۱)
-                                    <input
-                                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
-                                        value={groupChatId}
-                                        onChange={e => setGroupChatId(e.target.value)}
-                                    />
-                                </label>
+                                    <div className="mt-1 border rounded-md px-3 py-2 text-sm ltr text-left font-mono bg-slate-50">
+                                        {groupChatId || '— توسط ادمین تنظیم نشده'}
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={saveGroupChannel}
-                                    className="px-3 py-1.5 rounded-md bg-slate-700 text-white text-sm disabled:opacity-50"
-                                >
-                                    ذخیره گروه تست
-                                </button>
                                 <button
                                     type="button"
                                     disabled={busy}
@@ -602,40 +568,58 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         </section>
                     )}
 
-                    {!isTestMode && (
-                        <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                            <h2 className="font-semibold text-slate-700">کانال‌های عملیاتی (اسلات ۲–۴)</h2>
-                            <p className="text-xs text-slate-500">
-                                هر دسته خودرو گروه جدا — با شروع جلسه هر سه همزمان آغاز می‌شوند.
-                            </p>
-                            {CATEGORY_SLOTS.map(({ slot, category, label }) => (
-                                <div key={slot} className="flex flex-wrap items-end gap-2">
-                                    <label className="text-sm flex-1 min-w-[200px]">
-                                        {label}
-                                        <input
-                                            className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
-                                            value={channelChatIds[slot] || ''}
-                                            onChange={e =>
-                                                setChannelChatIds(prev => ({
-                                                    ...prev,
-                                                    [slot]: e.target.value,
-                                                }))
-                                            }
-                                            placeholder="chat_id گروه بله"
-                                        />
-                                    </label>
+                    <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                        <h2 className="font-semibold text-slate-700">کنترل جداگانه هر کانال</h2>
+                        <p className="text-xs text-slate-500">
+                            هر دسته خودرو جلسه مستقل دارد — شروع یا توقف یک کانال، بقیه را قطع
+                            نمی‌کند.
+                        </p>
+                        {CATEGORY_SLOTS.map(({ slot, category, label }) => {
+                            const catSession = sessionForCategory(category);
+                            const isActive = Boolean(catSession);
+                            return (
+                                <div
+                                    key={slot}
+                                    className="rounded-lg border border-slate-100 p-3 flex flex-wrap items-center gap-3"
+                                >
+                                    <div className="flex-1 min-w-[180px]">
+                                        <div className="font-medium text-sm">{label}</div>
+                                        {!isTestMode && (
+                                            <div className="text-xs font-mono ltr text-slate-500 mt-0.5">
+                                                chat: {channelChatIds[slot] || '—'}
+                                            </div>
+                                        )}
+                                        {isActive && (
+                                            <div className="text-xs text-sky-700 mt-1">
+                                                فعال — {catSession?.status}
+                                                {catSession?.status === 'awaiting_admin' && (
+                                                    <span className="text-amber-600 mr-1">
+                                                        (منتظر اپراتور در تابلو)
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <button
                                         type="button"
-                                        disabled={busy}
-                                        onClick={() => saveCategoryChannel(slot, category)}
-                                        className="px-3 py-1.5 rounded-md border border-slate-300 text-sm disabled:opacity-50"
+                                        disabled={busy || isActive}
+                                        onClick={() => startCategorySession(category)}
+                                        className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
                                     >
-                                        ذخیره
+                                        شروع
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={busy || !isActive}
+                                        onClick={() => stopCategorySession(category)}
+                                        className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
+                                    >
+                                        توقف
                                     </button>
                                 </div>
-                            ))}
-                        </section>
-                    )}
+                            );
+                        })}
+                    </section>
 
                     <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
                         <h2 className="font-semibold text-slate-700">جلسه نوبت</h2>
@@ -679,20 +663,21 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                             <button
                                 type="button"
                                 disabled={busy}
-                                onClick={startSession}
-                                className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
+                                onClick={startAllSessions}
+                                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-700 text-sm disabled:opacity-50"
                             >
-                                شروع جلسه
+                                شروع همه کانال‌ها
                             </button>
                             {activeSessions.length > 0 && (
                                 <span className="text-xs text-amber-700 self-center">
-                                    {activeSessions.length} جلسه فعال — با شروع، قبلی‌ها متوقف می‌شوند
+                                    {activeSessions.length} جلسه فعال — برای توقف یک کانال از دکمه
+                                    بالا استفاده کنید
                                 </span>
                             )}
                             <button
                                 type="button"
                                 disabled={busy || activeSessions.length === 0}
-                                onClick={stopSession}
+                                onClick={stopAllSessions}
                                 className="px-4 py-2 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
                             >
                                 توقف همه
@@ -727,23 +712,6 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 رد نوبت
                             </button>
                         </div>
-                        <label className="text-sm block">
-                            URL وب‌هوک (HTTPS)
-                            <input
-                                className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
-                                value={webhookUrl}
-                                onChange={e => setWebhookUrl(e.target.value)}
-                                placeholder="https://your-server/api/v1/bale/webhook"
-                            />
-                        </label>
-                        <button
-                            type="button"
-                            disabled={busy}
-                            onClick={registerWebhook}
-                            className="px-3 py-1.5 rounded-md border border-slate-300 text-sm disabled:opacity-50"
-                        >
-                            ثبت وب‌هوک در بله
-                        </button>
                     </section>
 
                     {activeSessions.length > 0 && (

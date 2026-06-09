@@ -36,6 +36,7 @@ export enum View {
     TransportDispatchAssignment = 'transport-dispatch-assignment',
     TransportDispatchBoard = 'transport-dispatch-board',
     TransportBaleSession = 'transport-bale-session',
+    BaleAdminSettings = 'bale-admin-settings',
     CentralFinance = 'central-finance',
     TransportFinance = 'transport-finance',
     TransportFinanceCalculation = 'transport-finance-calculation',

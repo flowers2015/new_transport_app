@@ -127,6 +127,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.FinalizePermissionManagement, label: 'مدیریت دسترسی اتمام تخصیص', icon: '🔐' },
       { view: View.PlanningManagerApprovalPermissionManagement, label: 'مجوز تاییدیه مدیران برنامه‌ریزی', icon: '✅' },
       { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', icon: '📋' },
+      { view: View.BaleAdminSettings, label: 'تنظیمات بله', icon: '🤖' },
     ];
 
 
