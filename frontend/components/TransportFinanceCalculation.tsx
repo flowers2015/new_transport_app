@@ -5800,7 +5800,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const isExpanded = expandedTours.has(tour.announcementId);
                                             
                                             const totalMileage = getTourTotalKilometers(tour);
-                                            
+                                            const approvedKm =
+                                                Number(
+                                                    (tour as any).approvedKilometers ??
+                                                        (tour as any).approved_kilometers
+                                                ) ||
+                                                Number(tour.roundTripKm) ||
+                                                0;
+                                            const excessKm =
+                                                Number(
+                                                    tour.excessKilometers ??
+                                                        (tour as any).excess_kilometers
+                                                ) || 0;
+                                            const depotKm =
+                                                Number(
+                                                    (tour as any).depotTotalMileage ??
+                                                        (tour as any).depot_total_mileage
+                                                ) || 0;
+
                                             // محاسبه مجموع ماموریت (مصوب + مازاد + دپو)
                                             const approvedMission = Number(tour.approvedMissionDays) || 0;
                                             const excessMission = Number(tour.excessMissionDays) || 0;
