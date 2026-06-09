@@ -1,75 +1,92 @@
 #!/bin/bash
+#
+# Deploy / آپدیت سرور — مسیر پروژه را خودکار پیدا می‌کند
+#
+# استفاده:
+#   cd /مسیر/واقعی/پروژه && bash deploy.sh
+#   — یا —
+#   bash /مسیر/واقعی/پروژه/deploy.sh
+#
+# اگر مسیر پیدا نشد: deploy.config.example را کپی به deploy.config کنید
 
-# اسکریپت خودکار deploy برای سرور Linux
-# این اسکریپت: git pull می‌کند، تنظیمات CORS را اعمال می‌کند، npm install می‌کند و PM2 را restart می‌کند
+set -euo pipefail
 
-set -e  # در صورت خطا متوقف شود
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/deploy-lib.sh
+source "$SCRIPT_DIR/scripts/deploy-lib.sh"
 
-echo "🚀 شروع فرآیند Deploy..."
+BUILD_FRONTEND="${BUILD_FRONTEND:-true}"
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
+GIT_BRANCH="${GIT_BRANCH:-}"
 
-# رنگ‌ها برای خروجی
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+echo ""
+deploy_log "══════════════════════════════════════════"
+deploy_log "  Deploy — سیستم مدیریت ناوگان"
+deploy_log "══════════════════════════════════════════"
+echo ""
 
-# مسیر پروژه
-PROJECT_DIR="/var/www/my-transport-app"
-BACKEND_DIR="$PROJECT_DIR/backend"
-SERVER_IP="51.178.41.12"
+PROJECT_DIR="$(deploy_find_project_dir || true)"
 
+if [ -z "${PROJECT_DIR:-}" ]; then
+    deploy_print_diagnostics
+    exit 1
+fi
+
+deploy_ok "مسیر پروژه: $PROJECT_DIR"
 cd "$PROJECT_DIR"
 
-# 1. PM2 را متوقف کنید
-echo -e "${YELLOW}⏸️  متوقف کردن PM2...${NC}"
-pm2 stop transport-backend 2>/dev/null || true
+if [ -f "$PROJECT_DIR/deploy.config" ]; then
+    # shellcheck disable=SC1090
+    source "$PROJECT_DIR/deploy.config"
+    BUILD_FRONTEND="${BUILD_FRONTEND:-true}"
+    RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
+    GIT_BRANCH="${GIT_BRANCH:-}"
+fi
 
-# 2. Git Pull
-echo -e "${YELLOW}📥 دریافت تغییرات از Git...${NC}"
-git pull origin master || git pull origin main
+if [ ! -d ".git" ]; then
+    deploy_err "پوشه git نیست: $PROJECT_DIR"
+    echo "اگر هنوز clone نکرده‌اید:"
+    echo "  git clone <repo-url> $PROJECT_DIR"
+    exit 1
+fi
 
-# 3. حذف node_modules برای نصب مجدد (برای اطمینان از کامپایل درست native modules)
-echo -e "${YELLOW}🗑️  حذف node_modules قدیمی...${NC}"
-cd "$BACKEND_DIR"
-rm -rf node_modules package-lock.json
+# --- Git ---
+deploy_git_pull "$GIT_BRANCH"
 
-# 4. نصب Dependencies
-echo -e "${YELLOW}📦 نصب Dependencies...${NC}"
+# --- Backend ---
+deploy_log "نصب وابستگی‌های backend ..."
+cd "$PROJECT_DIR/backend"
 npm install
+deploy_ok "backend npm install"
 
-# 5. اعمال تنظیمات CORS برای سرور Production
-echo -e "${YELLOW}⚙️  اعمال تنظیمات CORS...${NC}"
-cd "$PROJECT_DIR"
-
-# بررسی و اعمال تنظیمات CORS
-if grep -q "origin: true" "$BACKEND_DIR/server.js"; then
-    echo -e "${YELLOW}   تنظیمات CORS در حال اعمال...${NC}"
-    # جایگزینی origin: true با تنظیمات production
-    sed -i "s|origin: true, // Allow all origins in development|origin: ['http://$SERVER_IP', 'http://localhost'], // پوشش IP سرور و آدرس داخلی|g" "$BACKEND_DIR/server.js"
-    echo -e "${GREEN}   ✓ تنظیمات CORS اعمال شد${NC}"
-else
-    echo -e "${GREEN}   ✓ تنظیمات CORS از قبل درست است${NC}"
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    deploy_run_optional_migrations "$PROJECT_DIR/backend"
 fi
 
-# 6. بررسی ecosystem.config.js
-if [ -f "$PROJECT_DIR/ecosystem.config.js" ]; then
-    echo -e "${YELLOW}🔄 راه‌اندازی مجدد PM2 با ecosystem.config.js...${NC}"
-    pm2 start ecosystem.config.js
+# --- Frontend ---
+if [ "$BUILD_FRONTEND" = "true" ] && [ -d "$PROJECT_DIR/frontend" ]; then
+    deploy_log "نصب و build فرانت ..."
+    cd "$PROJECT_DIR/frontend"
+    npm install
+    npm run build
+    deploy_ok "frontend build"
 else
-    echo -e "${YELLOW}🔄 راه‌اندازی مجدد PM2...${NC}"
-    cd "$BACKEND_DIR"
-    pm2 start server.js --name transport-backend
+    deploy_warn "build فرانت رد شد (BUILD_FRONTEND=$BUILD_FRONTEND)"
 fi
 
-# 7. بررسی وضعیت
-echo -e "${YELLOW}📊 بررسی وضعیت PM2...${NC}"
-sleep 2
-pm2 status
+# --- PM2 ---
+deploy_pm2_restart "$PROJECT_DIR"
 
-# 8. نمایش لاگ‌ها
-echo -e "${GREEN}✅ Deploy با موفقیت انجام شد!${NC}"
-echo -e "${YELLOW}📋 آخرین لاگ‌ها:${NC}"
-pm2 logs transport-backend --lines 10 --nostream
+echo ""
+deploy_ok "Deploy تمام شد"
+echo ""
+deploy_log "بررسی:"
+echo "  pm2 status"
+echo "  pm2 logs transport-backend --lines 30 --nostream"
+echo ""
 
-echo -e "${GREEN}🎉 تمام! سرور آماده است.${NC}"
-
+if command -v pm2 >/dev/null 2>&1; then
+    pm2 status 2>/dev/null || true
+    echo ""
+    pm2 logs transport-backend --lines 15 --nostream 2>/dev/null || true
+fi

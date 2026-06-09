@@ -1,0 +1,20 @@
+# کپی کنید به deploy.config در همان پوشه پروژه روی سرور:
+#   cp deploy.config.example deploy.config
+#   nano deploy.config
+#
+# مسیر را با این دستور پیدا کنید:
+#   pm2 describe transport-backend
+#   bash scripts/detect-server-path.sh
+
+# مسیر کامل ریشه پروژه (جایی که backend/ و frontend/ هست)
+# روی FMS-Mihan معمولاً چیزی شبیه این است — حتماً با pm2 describe چک کنید:
+PROJECT_DIR="/home/fms/new_transport_app"
+
+# شاخه git (خالی = شاخه فعلی)
+# GIT_BRANCH="master"
+
+# آیا frontend هم build شود؟ (true/false)
+BUILD_FRONTEND=true
+
+# آیا migrationهای اختیاری اجرا شوند؟
+RUN_MIGRATIONS=true
