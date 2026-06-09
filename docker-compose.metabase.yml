@@ -1,0 +1,21 @@
+# Metabase — جدا از اپ اصلی (پورت 3001)
+# اجرا: docker compose -f docker-compose.metabase.yml up -d
+# راهنمای کامل: METABASE_SETUP.md
+
+services:
+  metabase:
+    image: metabase/metabase:v0.50.26
+    container_name: transport-metabase
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - metabase-data:/metabase-data
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+      JAVA_OPTS: -Xmx768m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  metabase-data:

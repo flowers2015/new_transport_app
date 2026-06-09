@@ -92,6 +92,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.TransportDispatchQueue, label: 'ثبت نوبت', roles: [UserRole.TransportationUser] },
       { view: View.TransportDispatchBoard, label: 'تابلو اعلام بار', roles: [UserRole.TransportationUser] },
       { view: View.TransportBaleSession, label: 'جلسه بله', roles: [UserRole.TransportationUser] },
+      { view: View.TransportReports, label: 'گزارش‌ها', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.TransportationFinance] },
       { type: 'divider', roles: Object.values(UserRole) },
       // Workshop & Fleet Management
       { view: View.Branches, label: 'مدیریت شعب', roles: [UserRole.Transportation, UserRole.VehicleAllocationExpert] },
@@ -133,6 +134,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.PlanningManagerApprovalPermissionManagement, label: 'مجوز تاییدیه مدیران برنامه‌ریزی', icon: '✅' },
       { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', icon: '📋' },
       { view: View.BaleAdminSettings, label: 'تنظیمات بله', icon: '🤖' },
+      { view: View.TransportReports, label: 'گزارش‌ها (Metabase)', icon: '📊' },
       { view: View.SupportTickets, label: 'مدیریت تیکت‌ها', icon: '🎫' },
     ];
 

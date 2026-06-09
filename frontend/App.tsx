@@ -48,6 +48,7 @@ const DispatchAssignmentManager = React.lazy(() => import('./components/Dispatch
 const DispatchBoardView = React.lazy(() => import('./components/DispatchBoardView'));
 const BaleDispatchSession = React.lazy(() => import('./components/BaleDispatchSession'));
 const BaleAdminSettings = React.lazy(() => import('./components/BaleAdminSettings'));
+const MetabaseReports = React.lazy(() => import('./components/MetabaseReports'));
 const FreightHistoryContainer = React.lazy(() => import('./components/FreightHistoryContainer'));
 const TransportDashboardContainer = React.lazy(() => import('./components/TransportDashboardContainer'));
 const FreightDashboard = React.lazy(() => import('./components/FreightDashboard'));
@@ -633,6 +634,9 @@ const App: React.FC = () => {
             case View.BaleAdminSettings:
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <BaleAdminSettings currentUser={currentUser} />;
+            case View.TransportReports:
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <MetabaseReports currentUser={currentUser} />;
             case View.FreightPlanning:
                 console.log('[App] Render view:', View.FreightPlanning);
                 return (

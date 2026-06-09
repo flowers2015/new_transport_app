@@ -37,6 +37,7 @@ const realtimeRoutes = require('./routes/realtimeRoutes');
 const cityRoutes = require('./routes/cityRoutes');
 const baleRoutes = require('./routes/baleRoutes');
 const supportTicketRoutes = require('./routes/supportTicketRoutes');
+const reportsRoutes = require('./routes/reportsRoutes');
 
 const app = express();
 
@@ -145,6 +146,7 @@ app.use('/api/v1/realtime', realtimeRoutes);
 app.use('/api/v1/cities', cityRoutes);
 app.use('/api/v1/bale', baleRoutes);
 app.use('/api/v1/support-tickets', supportTicketRoutes);
+app.use('/api/v1/reports', reportsRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
