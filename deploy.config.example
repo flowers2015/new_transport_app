@@ -7,8 +7,8 @@
 #   bash scripts/detect-server-path.sh
 
 # مسیر کامل ریشه پروژه (جایی که backend/ و frontend/ هست)
-# روی FMS-Mihan معمولاً چیزی شبیه این است — حتماً با pm2 describe چک کنید:
-PROJECT_DIR="/home/fms/new_transport_app"
+# روی FMS-Mihan:
+PROJECT_DIR="/home/fms/project"
 
 # شاخه git (خالی = شاخه فعلی)
 # GIT_BRANCH="master"

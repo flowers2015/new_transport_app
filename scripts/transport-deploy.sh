@@ -100,6 +100,8 @@ find_project() {
 
     # مسیرهای رایج
     for candidate in \
+        "$HOME/project" \
+        "/home/fms/project" \
         "$HOME/new_transport_app" \
         "$HOME/my-transport-app" \
         "/var/www/my-transport-app" \

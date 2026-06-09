@@ -96,6 +96,8 @@ deploy_find_project_dir() {
 
     # ۵) مسیرهای رایج
     for candidate in \
+        "$HOME/project" \
+        "/home/fms/project" \
         "/var/www/my-transport-app" \
         "/var/www/new_transport_app" \
         "$HOME/new_transport_app" \

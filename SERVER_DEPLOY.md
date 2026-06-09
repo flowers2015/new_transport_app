@@ -1,7 +1,7 @@
 # راهنمای Deploy روی سرور (FMS و سایر سرورها)
 
 مسیر `/var/www/my-transport-app` روی همه سرورها یکسان نیست.  
-روی سرور **FMS-Mihan** پروژه احتمالاً جای دیگری است (مثلاً `/home/fms/new_transport_app`).
+روی سرور **FMS-Mihan** مسیر پروژه: **`/home/fms/project`**
 
 ---
 
