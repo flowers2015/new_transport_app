@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getApiUrl } from '../utils/apiConfig';
+import { apiFetch, getApiUrl, isAuthFailureStatus } from '../utils/apiConfig';
 import { User, UserRole } from '../types';
 
 type BaleChannel = {
@@ -20,10 +20,34 @@ type BaleStatus = {
 };
 
 const SLOT_CONFIG = [
-    { slot: 1, category: null, label: 'گروه پایلوت / تست (اسلات ۱)', hint: 'حالت تست — یک گروه مشترک برای هر سه دسته' },
-    { slot: 2, category: 'تریلی', label: 'کانال تریلی (اسلات ۲)', hint: 'عملیاتی' },
-    { slot: 3, category: 'مینی تریلی', label: 'کانال مینی تریلی (اسلات ۳)', hint: 'عملیاتی' },
-    { slot: 4, category: 'ده چرخ', label: 'کانال ده چرخ (اسلات ۴)', hint: 'عملیاتی' },
+    {
+        slot: 1,
+        category: null,
+        label: 'گروه پایلوت / تست (اسلات ۱)',
+        hint: 'حالت تست — یک گروه مشترک برای هر سه دسته',
+        modes: ['test'] as RuntimeEnvironment[],
+    },
+    {
+        slot: 2,
+        category: 'تریلی',
+        label: 'کانال تریلی (اسلات ۲)',
+        hint: 'عملیاتی',
+        modes: ['production'] as RuntimeEnvironment[],
+    },
+    {
+        slot: 3,
+        category: 'مینی تریلی',
+        label: 'کانال مینی تریلی (اسلات ۳)',
+        hint: 'عملیاتی',
+        modes: ['production'] as RuntimeEnvironment[],
+    },
+    {
+        slot: 4,
+        category: 'ده چرخ',
+        label: 'کانال ده چرخ (اسلات ۴)',
+        hint: 'عملیاتی',
+        modes: ['production'] as RuntimeEnvironment[],
+    },
 ];
 
 const RUNTIME_OPTIONS: { value: RuntimeEnvironment; label: string; hint: string }[] = [
@@ -35,13 +59,12 @@ interface Props {
     currentUser: User;
 }
 
-const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
-    const token = localStorage.getItem('token') || '';
-    const headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-    };
+async function readApiError(res: Response): Promise<string> {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    return body.message || res.statusText || 'خطا در ارتباط با سرور';
+}
 
+const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
     const [status, setStatus] = useState<BaleStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -59,8 +82,11 @@ const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(getApiUrl('bale/status'), { headers });
-            if (!res.ok) throw new Error(await res.text());
+            const res = await apiFetch(getApiUrl('bale/status'));
+            if (isAuthFailureStatus(res.status)) {
+                throw new Error('نشست منقضی شده — دوباره وارد شوید.');
+            }
+            if (!res.ok) throw new Error(await readApiError(res));
             const data = (await res.json()) as BaleStatus;
             setStatus(data);
             if (data.runtime?.environment) setRuntimeEnv(data.runtime.environment);
@@ -75,7 +101,7 @@ const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, []);
 
     useEffect(() => {
         loadStatus();
@@ -97,12 +123,11 @@ const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
 
     const saveRuntime = (env: RuntimeEnvironment) =>
         runAction('حالت اجرا', async () => {
-            const res = await fetch(getApiUrl('bale/settings/runtime'), {
+            const res = await apiFetch(getApiUrl('bale/settings/runtime'), {
                 method: 'PUT',
-                headers,
                 body: JSON.stringify({ environment: env }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await readApiError(res));
             setRuntimeEnv(env);
             setSuccess('حالت اجرا ذخیره شد');
         });
@@ -123,15 +148,11 @@ const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
             } else if (!raw) {
                 throw new Error('برای خالی کردن، گزینه «تأیید حذف chat_id» را بزنید');
             }
-            const res = await fetch(getApiUrl(`bale/channels/${slot}`), {
+            const res = await apiFetch(getApiUrl(`bale/channels/${slot}`), {
                 method: 'PUT',
-                headers,
                 body: JSON.stringify(body),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || (await res.text()));
-            }
+            if (!res.ok) throw new Error(await readApiError(res));
             setSuccess(`اسلات ${slot} ذخیره شد`);
             setConfirmClear(prev => ({ ...prev, [slot]: false }));
         });
@@ -139,12 +160,11 @@ const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
     const registerWebhook = () =>
         runAction('وب‌هوک', async () => {
             if (!webhookUrl.trim()) throw new Error('URL وب‌هوک را وارد کنید');
-            const res = await fetch(getApiUrl('bale/webhook/register'), {
+            const res = await apiFetch(getApiUrl('bale/webhook/register'), {
                 method: 'POST',
-                headers,
                 body: JSON.stringify({ url: webhookUrl.trim() }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await readApiError(res));
             setSuccess('وب‌هوک در بله ثبت شد');
         });
 
@@ -226,13 +246,26 @@ const BaleAdminSettings: React.FC<Props> = ({ currentUser }) => {
                         </div>
                     </section>
 
-                    <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-4">
-                        <h2 className="font-semibold text-amber-900">شناسه کانال‌های بله (chat_id)</h2>
+                    <section
+                        className={`rounded-xl border p-4 space-y-4 ${
+                            runtimeEnv === 'test'
+                                ? 'border-amber-200 bg-amber-50/30'
+                                : 'border-sky-200 bg-sky-50/30'
+                        }`}
+                    >
+                        <h2 className="font-semibold text-slate-800">
+                            {runtimeEnv === 'test'
+                                ? 'کانال تست (اسلات ۱)'
+                                : 'کانال‌های عملیاتی (اسلات ۲–۴)'}
+                        </h2>
                         <p className="text-xs text-slate-600 leading-relaxed">
-                            chat_id گروه را از getUpdates یا لاگ سرور بگیرید. برای پاک کردن، ابتدا
-                            «تأیید حذف» را بزنید تا اشتباهی پاک نشود.
+                            {runtimeEnv === 'test'
+                                ? 'فقط یک گروه مشترک برای هر سه دسته در حالت پایلوت. اسلات‌های عملیاتی در این حالت نمایش داده نمی‌شوند.'
+                                : 'هر دسته خودرو گروه جدا — اسلات ۱ (تست) در حالت عملیاتی غیرفعال است.'}
+                            {' '}
+                            برای پاک کردن chat_id، «تأیید حذف» را بزنید.
                         </p>
-                        {SLOT_CONFIG.map(({ slot, category, label, hint }) => {
+                        {SLOT_CONFIG.filter(s => s.modes.includes(runtimeEnv)).map(({ slot, category, label, hint }) => {
                             const saved = status?.channels?.find(c => c.slot_number === slot);
                             return (
                                 <div

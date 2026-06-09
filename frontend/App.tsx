@@ -39,7 +39,7 @@ const ContractManagement = React.lazy(() => import('./components/ContractManagem
 const InvoiceManagement = React.lazy(() => import('./components/InvoiceManagement'));
 const InvoiceForm = React.lazy(() => import('./components/InvoiceForm'));
 const AlertsView = React.lazy(() => import('./components/AlertsView'));
-const SupportTickets = React.lazy(() => import('./components/SupportTickets'));
+const SupportTicketsContainer = React.lazy(() => import('./components/SupportTicketsContainer'));
 const VehicleAllocationManagement = React.lazy(() => import('./components/VehicleAllocationManagement'));
 const TransportLive = React.lazy(() => import('./components/TransportLive'));
 const TransportLiveContainer = React.lazy(() => import('./components/TransportLiveContainer'));
@@ -608,8 +608,11 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.CostReport);
                 return <Placeholder title="گزارش هزینه‌های شعب" />;
             case View.SupportTickets:
-                console.log('[App] Render view:', View.SupportTickets);
-                return <SupportTickets />;
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <SupportTicketsContainer currentUser={currentUser} />;
+            case View.AdminSupportTickets:
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <SupportTicketsContainer currentUser={currentUser} />;
             case View.TransportLive:
                 console.log('[App] Render view:', View.TransportLive);
                 return <TransportLiveContainer currentUser={currentUser} />;

@@ -1,6 +1,53 @@
 import { Destination, Driver, FreightAnnouncement, FreightAnnouncementStatus, FreightLineType, PersonalDriver, Vehicle } from '../types';
 import { formatPlateNumber } from './jalali';
 
+/** نوع نماینده — همیشه فارسی برای UI و اکسل */
+export function formatRepresentativeType(value?: string | null): string {
+    if (!value) return '-';
+    const v = String(value).trim().toLowerCase();
+    if (v === 'distributor' || v === 'distribution' || v === 'پخش') return 'پخش';
+    if (v === 'agent' || v === 'representative' || v === 'نماینده') return 'نماینده';
+    if (value === 'پخش' || value === 'نماینده') return value;
+    return String(value);
+}
+
+const EXCEL_EN_FA: Record<string, string> = {
+    distributor: 'پخش',
+    distribution: 'پخش',
+    agent: 'نماینده',
+    representative: 'نماینده',
+    low: 'کم اهمیت',
+    normal: 'عادی',
+    high: 'فوری',
+    urgent: 'فوری',
+    open: 'باز',
+    'in progress': 'در حال بررسی',
+    in_progress: 'در حال بررسی',
+    closed: 'بسته شده',
+    resolved: 'پاسخ داده شده',
+    company: 'شرکتی',
+    personal: 'شخصی',
+    stage1: 'مرحله ۱',
+    stage2: 'مرحله ۲',
+    hybrid: 'هیبرید',
+    manual: 'دستی',
+    auto: 'خودکار',
+    semi_auto: 'نیمه‌خودکار',
+};
+
+/** تبدیل مقادیر انگلیسی رایج به فارسی در خروجی اکسل */
+export function localizeExcelValue(value: unknown): string | number {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    const raw = String(value).trim();
+    if (!raw) return '';
+    const key = raw.toLowerCase();
+    if (EXCEL_EN_FA[key]) return EXCEL_EN_FA[key];
+    if (key.includes('distributor')) return 'پخش';
+    if (key === 'agent') return 'نماینده';
+    return raw;
+}
+
 /** تب مجزا برای تخصیص شخصی بدون شماره بارنامه */
 export const PENDING_BILL_OF_LADING_TAB = '__pending_bill_of_lading__' as const;
 export type TransportLiveTab = FreightLineType | typeof PENDING_BILL_OF_LADING_TAB;

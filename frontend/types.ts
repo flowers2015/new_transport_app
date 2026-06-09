@@ -37,6 +37,7 @@ export enum View {
     TransportDispatchBoard = 'transport-dispatch-board',
     TransportBaleSession = 'transport-bale-session',
     BaleAdminSettings = 'bale-admin-settings',
+    AdminSupportTickets = 'admin-support-tickets',
     CentralFinance = 'central-finance',
     TransportFinance = 'transport-finance',
     TransportFinanceCalculation = 'transport-finance-calculation',
@@ -133,7 +134,15 @@ export enum VehicleCategory {
 export enum SupportTicketStatus {
     Open = 'باز',
     InProgress = 'در حال بررسی',
+    Answered = 'پاسخ داده شده',
     Closed = 'بسته شده',
+}
+
+export enum SupportTicketPriority {
+    Low = 'کم',
+    Normal = 'عادی',
+    High = 'بالا',
+    Urgent = 'فوری',
 }
 
 export enum LicenseType {
@@ -473,12 +482,23 @@ export interface OutsourcingRequest {
 
 export interface SupportTicket {
     id: string;
+    ticketNumber?: number;
     subject: string;
     description: string;
-    status: SupportTicketStatus;
-    createdAt: Date;
+    priority: SupportTicketPriority | string;
+    status: SupportTicketStatus | string;
+    createdAt: Date | string;
+    updatedAt?: Date | string;
     createdByUserId: string;
     createdByUserName: string;
+    createdByRole?: string;
+    employeeId?: string | null;
+    contactPhone?: string | null;
+    contactExtension: string;
+    adminResponse?: string | null;
+    assignedToUserId?: string | null;
+    assignedToUserName?: string | null;
+    resolvedAt?: Date | string | null;
 }
 
 export interface AuditLog {

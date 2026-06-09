@@ -115,7 +115,12 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.PartUsageReport, label: 'گزارش مصرف قطعات', roles: [UserRole.Workshop, UserRole.HQFinance] },
       { view: View.CostReport, label: 'گزارش هزینه‌های شعب', roles: [] },
       { type: 'divider', roles: Object.values(UserRole) },
-      { view: View.SupportTickets, label: 'تیکت‌های پشتیبانی', roles: [UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.BranchFinance, UserRole.VehicleAllocationExpert, UserRole.Transportation] },
+      { view: View.SupportTickets, label: 'تیکت پشتیبانی', roles: [
+        UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.PlanningManager,
+        UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance,
+        UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.VehicleAllocationExpert,
+        UserRole.Transportation, UserRole.Merchant,
+      ] },
     ];
 
     // آیتم‌های منوی ادمین - جداگانه
@@ -128,6 +133,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.PlanningManagerApprovalPermissionManagement, label: 'مجوز تاییدیه مدیران برنامه‌ریزی', icon: '✅' },
       { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', icon: '📋' },
       { view: View.BaleAdminSettings, label: 'تنظیمات بله', icon: '🤖' },
+      { view: View.SupportTickets, label: 'مدیریت تیکت‌ها', icon: '🎫' },
     ];
 
 

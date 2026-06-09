@@ -36,6 +36,7 @@ const planningManagerApprovalPermissionRoutes = require('./routes/planningManage
 const realtimeRoutes = require('./routes/realtimeRoutes');
 const cityRoutes = require('./routes/cityRoutes');
 const baleRoutes = require('./routes/baleRoutes');
+const supportTicketRoutes = require('./routes/supportTicketRoutes');
 
 const app = express();
 
@@ -143,6 +144,7 @@ app.use('/api/v1/planning-manager-approval-permissions', planningManagerApproval
 app.use('/api/v1/realtime', realtimeRoutes);
 app.use('/api/v1/cities', cityRoutes);
 app.use('/api/v1/bale', baleRoutes);
+app.use('/api/v1/support-tickets', supportTicketRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
@@ -197,6 +199,11 @@ addMustChangePassword().catch(err => {
 const createBaleTables = require('./migrations/create_bale_tables');
 createBaleTables().catch(err => {
   console.error('❌ [Server] خطا در ایجاد جداول بله:', err);
+});
+
+const createSupportTicketsTable = require('./migrations/create_support_tickets_table');
+createSupportTicketsTable().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جدول support_tickets:', err);
 });
 
 const baleSessionEngine = require('./services/bale/baleSessionEngine');

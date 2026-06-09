@@ -1273,13 +1273,27 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             rowStatus === 'deferred' ||
             (hint ? hint.canAssign === false : rowStatus === 'inactive');
 
+        const loadCount =
+            hint && hint.eligibleLoadCount > 0 && (rowStatus === 'ready' || rowStatus === 'very_far_history')
+                ? hint.eligibleLoadCount
+                : 0;
+        const statusNote =
+            rowStatus === 'deferred' || rowStatus === 'inactive'
+                ? hint?.lockReason
+                    ? lockReasonLabels[hint.lockReason] || hint.lockReason
+                    : statusStyle.badgeLabel
+                : rowStatus === 'very_far_history'
+                  ? statusStyle.badgeLabel
+                  : null;
+
         return (
             <tr
                 key={entry.id}
-                className={`border-b border-slate-100 last:border-0 text-[12px] ${statusStyle.row}`}
+                className={`border-b border-slate-100 last:border-0 text-[11px] leading-tight ${statusStyle.row}`}
+                title={statusStyle.badgeLabel}
             >
-                <td className="px-2 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                <td className="px-1 py-1.5 text-center align-middle">
+                    <div className="inline-flex items-center justify-center gap-0.5">
                         <input
                             type="number"
                             min={1}
@@ -1291,61 +1305,69 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                     handlePositionSubmit(entry);
                                 }
                             }}
-                            className="w-16 rounded-md border border-slate-200 bg-white px-2 py-1 text-center text-sm focus:border-sky-400 focus:ring-0"
+                            className="w-9 rounded border border-slate-200 bg-white px-0.5 py-0.5 text-center text-[11px] focus:border-sky-400 focus:ring-0"
+                            title="ردیف نوبت"
                         />
                         {hasChanged && (
                             <button
                                 onClick={() => handlePositionSubmit(entry)}
                                 disabled={saving}
-                                className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] text-white hover:bg-emerald-700 disabled:opacity-60"
+                                className="rounded bg-emerald-600 px-1 py-0.5 text-[9px] text-white hover:bg-emerald-700 disabled:opacity-60"
                             >
-                                {saving ? '...' : 'ثبت'}
+                                {saving ? '…' : '✓'}
                             </button>
                         )}
                     </div>
                 </td>
-                <td className="px-2 py-2">{vehicleCode}</td>
-                <td className="px-2 py-2 text-violet-700 text-[11px] whitespace-nowrap">
-                    {periodKm > 0 ? formatDistance(periodKm) : '—'}
+                <td className="px-1 py-1.5 text-center align-middle font-mono text-[10px]">
+                    {vehicleCode}
                 </td>
-                <td className="px-2 py-2">
-                    <div className="flex flex-col gap-1">
-                        <span>{driverName}</span>
-                        <span
-                            className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] ${statusStyle.badge}`}
+                <td className="px-1 py-1.5 text-center align-middle text-[10px] text-violet-700 whitespace-nowrap">
+                    {periodKm > 0 ? periodKm.toLocaleString('fa-IR') : '—'}
+                </td>
+                <td className="px-1.5 py-1.5 align-middle min-w-0">
+                    <div className="min-w-0">
+                        <div className="truncate font-medium" title={driverName}>
+                            {driverName}
+                        </div>
+                        <div
+                            className="truncate text-[10px] text-slate-500 font-mono dir-ltr text-right"
+                            title={mobile}
                         >
-                            {hint?.canAssign && rowStatus === 'inactive' && hint.hasVeryFarHistory
-                                ? `سابقه خیلی‌دور${hint.eligibleLoadCount > 0 ? ` • ${hint.eligibleLoadCount} بار` : ''}`
-                                : statusStyle.badgeLabel}
-                            {hint && hint.eligibleLoadCount > 0 && rowStatus === 'ready'
-                                ? ` • ${hint.eligibleLoadCount} بار`
-                                : ''}
-                        </span>
+                            {mobile}
+                        </div>
+                        {statusNote && (
+                            <div className="truncate text-[9px] text-slate-500 mt-0.5" title={statusNote}>
+                                {statusNote}
+                            </div>
+                        )}
                     </div>
                 </td>
-                <td className="px-2 py-2 text-center">{mobile}</td>
-                <td className="px-2 py-2 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                <td className="px-1 py-1.5 align-middle">
+                    <div className="flex flex-col items-stretch gap-0.5">
                         <button
                             onClick={() => openAssignDialog(entry)}
                             disabled={assignDisabled}
-                            className={`rounded-full px-2 py-1 text-[11px] ${statusStyle.assignBtn} disabled:opacity-60`}
+                            className={`rounded px-1.5 py-0.5 text-[10px] whitespace-nowrap ${statusStyle.assignBtn} disabled:opacity-60`}
                         >
-                            تخصیص بار
+                            تخصیص{loadCount > 0 ? ` (${loadCount})` : ''}
                         </button>
-                        <button
-                            onClick={() => openPreferencesForEntry(entry, categoryLabel)}
-                            className="rounded-full px-2 py-1 text-[11px] text-violet-600 hover:bg-violet-50 border border-violet-200"
-                            title="بررسی ترجیحات راننده در دوره جاری"
-                        >
-                            ترجیحات
-                        </button>
-                        <button
-                            onClick={() => handleDeleteQueueEntry(entry.id)}
-                            className="rounded-full px-2 py-1 text-[11px] text-red-500 hover:text-red-600 hover:bg-red-50"
-                        >
-                            حذف
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                            <button
+                                onClick={() => openPreferencesForEntry(entry, categoryLabel)}
+                                className="text-[9px] text-violet-600 hover:text-violet-800"
+                                title="ترجیحات راننده"
+                            >
+                                ترجیح
+                            </button>
+                            <span className="text-slate-300">|</span>
+                            <button
+                                onClick={() => handleDeleteQueueEntry(entry.id)}
+                                className="text-[9px] text-red-500 hover:text-red-700"
+                            >
+                                حذف
+                            </button>
+                        </div>
                     </div>
                 </td>
             </tr>
@@ -1375,23 +1397,30 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         نوبتی ثبت نشده است.
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-right">
-                            <thead className="text-[11px] text-slate-500 uppercase tracking-wide">
-                                <tr className="border-b border-slate-200 bg-slate-50/80">
-                                    <th className="px-2 py-2 text-center font-medium" title="تغییر به شمارهٔ موجود = جابه‌جایی با آن ردیف">
-                                        ردیف
-                                    </th>
-                                    <th className="px-2 py-2 font-medium">کد خودرو</th>
-                                    <th className="px-2 py-2 font-medium">پیمایش دوره</th>
-                                    <th className="px-2 py-2 font-medium">نام راننده</th>
-                                    <th className="px-2 py-2 text-center font-medium">شماره تماس</th>
-                                <th className="px-2 py-2 text-center font-medium">اقدام</th>
-                                </tr>
-                            </thead>
-                            <tbody>{entries.map(entry => renderQueueRow(entry, categoryLabel))}</tbody>
-                        </table>
-                    </div>
+                    <table className="w-full table-fixed text-right">
+                        <colgroup>
+                            <col className="w-[2.4rem]" />
+                            <col className="w-[2.5rem]" />
+                            <col className="w-[3.2rem]" />
+                            <col />
+                            <col className="w-[4.8rem]" />
+                        </colgroup>
+                        <thead className="text-[10px] text-slate-500">
+                            <tr className="border-b border-slate-200 bg-slate-50/80">
+                                <th
+                                    className="px-1 py-1.5 text-center font-medium"
+                                    title="تغییر به شمارهٔ موجود = جابه‌جایی با آن ردیف"
+                                >
+                                    #
+                                </th>
+                                <th className="px-1 py-1.5 text-center font-medium">کد</th>
+                                <th className="px-1 py-1.5 text-center font-medium">کیلومتر</th>
+                                <th className="px-1.5 py-1.5 font-medium">راننده</th>
+                                <th className="px-1 py-1.5 text-center font-medium">اقدام</th>
+                            </tr>
+                        </thead>
+                        <tbody>{entries.map(entry => renderQueueRow(entry, categoryLabel))}</tbody>
+                    </table>
                 )}
             </div>
         );
@@ -1730,7 +1759,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     ) : orderedCategoryLabels.length === 0 ? (
                         <div className="py-10 text-center text-slate-400 text-sm">هنوز دسته‌ای برای نمایش وجود ندارد.</div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                             {orderedCategoryLabels.map(renderCategoryColumn)}
                         </div>
                     )}

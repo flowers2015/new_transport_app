@@ -57,6 +57,33 @@ async function answerCallbackQuery(callbackQueryId, text, options = {}) {
   });
 }
 
+function isExpiredCallbackError(err) {
+  const msg = String(err?.message || err || '');
+  return /query is too old|response timeout expired|query ID is invalid/i.test(msg);
+}
+
+/** Ack inline button — never blocks business logic when Bale says the query expired. */
+async function safeAnswerCallbackQuery(callbackQueryId, text, options = {}) {
+  try {
+    await answerCallbackQuery(callbackQueryId, text, options);
+    return true;
+  } catch (err) {
+    if (isExpiredCallbackError(err)) {
+      console.warn('⚠️ [bale] callback query expired (continuing):', callbackQueryId);
+      return false;
+    }
+    throw err;
+  }
+}
+
+async function editMessageReplyMarkup(chatId, messageId, replyMarkup) {
+  return callBale('editMessageReplyMarkup', {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: replyMarkup,
+  });
+}
+
 async function setWebhook(url) {
   return callBale('setWebhook', { url });
 }
@@ -81,7 +108,10 @@ module.exports = {
   isConfigured,
   sendMessage,
   editMessageText,
+  editMessageReplyMarkup,
   answerCallbackQuery,
+  safeAnswerCallbackQuery,
+  isExpiredCallbackError,
   setWebhook,
   deleteWebhook,
   getMe,

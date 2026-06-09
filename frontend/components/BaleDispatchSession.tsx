@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getApiUrl } from '../utils/apiConfig';
+import { apiFetch, getApiUrl, isAuthFailureStatus } from '../utils/apiConfig';
 import { User, UserRole, View } from '../types';
 import WorkflowRules from './WorkflowRules';
 
@@ -55,10 +55,12 @@ const MODES = [
 ];
 
 const CATEGORY_SLOTS = [
-    { slot: 2, category: 'تریلی', label: 'کانال تریلی (اسلات ۲)' },
-    { slot: 3, category: 'مینی تریلی', label: 'کانال مینی تریلی (اسلات ۳)' },
-    { slot: 4, category: 'ده چرخ', label: 'کانال ده چرخ (اسلات ۴)' },
+    { slot: 2, category: 'تریلی', label: 'تریلی', channelLabel: 'کانال تریلی (اسلات ۲)' },
+    { slot: 3, category: 'مینی تریلی', label: 'مینی تریلی', channelLabel: 'کانال مینی تریلی (اسلات ۳)' },
+    { slot: 4, category: 'ده چرخ', label: 'ده چرخ', channelLabel: 'کانال ده چرخ (اسلات ۴)' },
 ];
+
+const EXTEND_MINUTE_OPTIONS = [2, 4, 6] as const;
 
 const RUNTIME_OPTIONS: { value: RuntimeEnvironment; label: string; hint: string }[] = [
     {
@@ -77,16 +79,16 @@ interface Props {
     currentUser: User;
 }
 
-const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
-    const token = localStorage.getItem('token') || '';
-    const headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-    };
+async function readApiError(res: Response): Promise<string> {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    return body.message || res.statusText || 'خطا در ارتباط با سرور';
+}
 
+const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [status, setStatus] = useState<BaleStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [authExpired, setAuthExpired] = useState(false);
     const [mode, setMode] = useState('hybrid');
     const [stage, setStage] = useState('stage1');
     const [turnTimeoutSec, setTurnTimeoutSec] = useState(180);
@@ -106,8 +108,12 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const isTestMode = runtimeEnv === 'test';
 
     const loadDrivers = useCallback(async () => {
-        const res = await fetch(getApiUrl('bale/drivers/outreach'), { headers });
-        if (!res.ok) throw new Error('خطا در بارگذاری رانندگان');
+        const res = await apiFetch(getApiUrl('bale/drivers/outreach'), { skipAuthRedirect: true });
+        if (isAuthFailureStatus(res.status)) {
+            setAuthExpired(true);
+            throw new Error('نشست منقضی شده — دوباره وارد شوید.');
+        }
+        if (!res.ok) throw new Error(await readApiError(res));
         const data = (await res.json()) as DriverOutreach[];
         setDrivers(data);
         const draft: Record<string, string> = {};
@@ -116,14 +122,22 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 d.outreach_chat_id != null ? String(d.outreach_chat_id) : '';
         });
         setEditingChat(draft);
-    }, [token]);
+    }, []);
 
     const loadStatus = useCallback(async () => {
+        if (authExpired) return;
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(getApiUrl('bale/status'), { headers });
-            if (!res.ok) throw new Error(await res.text());
+            const res = await apiFetch(getApiUrl('bale/status'), { skipAuthRedirect: true });
+            if (isAuthFailureStatus(res.status)) {
+                setAuthExpired(true);
+                setError(
+                    'نشست شما منقضی شده. جلسه بله ممکن است روی سرور ادامه داشته باشد — از منو خارج شوید و دوباره وارد شوید.'
+                );
+                return;
+            }
+            if (!res.ok) throw new Error(await readApiError(res));
             const data = (await res.json()) as BaleStatus;
             setStatus(data);
             if (data.runtime?.environment) setRuntimeEnv(data.runtime.environment);
@@ -151,13 +165,14 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         } finally {
             setLoading(false);
         }
-    }, [token, loadDrivers]);
+    }, [authExpired, loadDrivers]);
 
     useEffect(() => {
+        if (authExpired) return;
         loadStatus();
         const t = setInterval(loadStatus, 10000);
         return () => clearInterval(t);
-    }, [loadStatus]);
+    }, [loadStatus, authExpired]);
 
     const activeSessions =
         status?.activeSessions?.length
@@ -182,15 +197,11 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const seedDrivers = () =>
         runAction('seed', async () => {
             if (!testChatId.trim()) throw new Error('chat_id تست را وارد کنید');
-            const res = await fetch(getApiUrl('bale/test/seed-drivers'), {
+            const res = await apiFetch(getApiUrl('bale/test/seed-drivers'), {
                 method: 'POST',
-                headers,
                 body: JSON.stringify({ outreachChatId: Number(testChatId), limit: 10 }),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || (await res.text()));
-            }
+            if (!res.ok) throw new Error(await readApiError(res));
             const data = await res.json();
             setSeedResult(`${data.count} راننده با chat مشترک لینک شدند`);
         });
@@ -201,9 +212,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!chatRaw) throw new Error('chat_id را وارد کنید');
             setSavingDriverId(driver.driver_id);
             try {
-                const res = await fetch(getApiUrl(`bale/drivers/${driver.driver_id}/outreach`), {
+                const res = await apiFetch(getApiUrl(`bale/drivers/${driver.driver_id}/outreach`), {
                     method: 'PUT',
-                    headers,
                     body: JSON.stringify({
                         outreachChatId: Number(chatRaw),
                         employeeId: driver.employee_id,
@@ -211,10 +221,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         notes: isTestMode ? 'ثبت دستی — تست' : 'ثبت دستی — عملیاتی',
                     }),
                 });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.message || (await res.text()));
-                }
+                if (!res.ok) throw new Error(await readApiError(res));
             } finally {
                 setSavingDriverId(null);
             }
@@ -224,19 +231,17 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         runAction('ping', async () => {
             const chat = testChatId || groupChatId;
             if (!chat) throw new Error('chat_id وارد کنید');
-            const res = await fetch(getApiUrl('bale/test/ping'), {
+            const res = await apiFetch(getApiUrl('bale/test/ping'), {
                 method: 'POST',
-                headers,
                 body: JSON.stringify({ chatId: Number(chat) }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await readApiError(res));
         });
 
     const startCategorySession = (vehicleCategory: string) =>
         runAction(`شروع ${vehicleCategory}`, async () => {
-            const res = await fetch(getApiUrl('bale/sessions/start'), {
+            const res = await apiFetch(getApiUrl('bale/sessions/start'), {
                 method: 'POST',
-                headers,
                 body: JSON.stringify({
                     mode,
                     stage,
@@ -244,10 +249,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     vehicleCategory,
                 }),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || (await res.text()));
-            }
+            if (!res.ok) throw new Error(await readApiError(res));
             setSeedResult(`جلسه «${vehicleCategory}» شروع شد`);
         });
 
@@ -259,9 +261,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 );
                 if (!ok) return;
             }
-            const res = await fetch(getApiUrl('bale/sessions/start'), {
+            const res = await apiFetch(getApiUrl('bale/sessions/start'), {
                 method: 'POST',
-                headers,
                 body: JSON.stringify({
                     mode,
                     stage,
@@ -269,10 +270,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     forceRestart: false,
                 }),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || (await res.text()));
-            }
+            if (!res.ok) throw new Error(await readApiError(res));
             const data = await res.json();
             const notes: string[] = [`${data.started} جلسه شروع شد`];
             if (data.pilotCombined) notes.push('(گروه مشترک — اسلات ۱)');
@@ -291,15 +289,11 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
 
     const stopCategorySession = (vehicleCategory: string) =>
         runAction(`توقف ${vehicleCategory}`, async () => {
-            const res = await fetch(getApiUrl('bale/sessions/stop'), {
+            const res = await apiFetch(getApiUrl('bale/sessions/stop'), {
                 method: 'POST',
-                headers,
                 body: JSON.stringify({ vehicleCategory }),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || (await res.text()));
-            }
+            if (!res.ok) throw new Error(await readApiError(res));
             setSeedResult(`جلسه «${vehicleCategory}» متوقف شد`);
         });
 
@@ -311,30 +305,26 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             ) {
                 return;
             }
-            const res = await fetch(getApiUrl('bale/sessions/stop'), { method: 'POST', headers });
-            if (!res.ok) throw new Error(await res.text());
+            const res = await apiFetch(getApiUrl('bale/sessions/stop'), { method: 'POST' });
+            if (!res.ok) throw new Error(await readApiError(res));
         });
 
-    const skipTurn = () =>
+    const skipTurnForSession = (sessionId: string) =>
         runAction('رد نوبت', async () => {
-            if (!selectedSessionId) throw new Error('جلسه‌ای انتخاب نشده');
-            const res = await fetch(getApiUrl('bale/sessions/skip-turn'), {
+            const res = await apiFetch(getApiUrl('bale/sessions/skip-turn'), {
                 method: 'POST',
-                headers,
-                body: JSON.stringify({ sessionId: selectedSessionId }),
+                body: JSON.stringify({ sessionId }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await readApiError(res));
         });
 
-    const extendTurn = () =>
-        runAction('تمدید', async () => {
-            if (!selectedSessionId) throw new Error('جلسه‌ای انتخاب نشده');
-            const res = await fetch(getApiUrl('bale/sessions/extend-turn'), {
+    const extendTurnForSession = (sessionId: string, minutes: number) =>
+        runAction(`تمدید ${minutes} دقیقه`, async () => {
+            const res = await apiFetch(getApiUrl('bale/sessions/extend-turn'), {
                 method: 'POST',
-                headers,
-                body: JSON.stringify({ sessionId: selectedSessionId, extraSec: 120 }),
+                body: JSON.stringify({ sessionId, extraSec: minutes * 60 }),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await readApiError(res));
         });
 
     const session =
@@ -398,7 +388,27 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 </p>
             </section>
 
-            {error && (
+            {authExpired && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm space-y-2">
+                    <p className="font-medium">نشست شما منقضی شده است.</p>
+                    <p>
+                        جلسه بله روی سرور ممکن است هنوز فعال باشد. از منوی بالا خارج شوید و دوباره
+                        وارد شوید تا پنل به‌روز شود.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            localStorage.removeItem('token');
+                            localStorage.removeItem('user');
+                            window.location.href = '/';
+                        }}
+                        className="px-3 py-1.5 rounded-md bg-amber-700 text-white text-sm"
+                    >
+                        ورود مجدد
+                    </button>
+                </div>
+            )}
+            {error && !authExpired && (
                 <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-2 text-sm">
                     {error}
                 </div>
@@ -568,54 +578,117 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         </section>
                     )}
 
-                    <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                        <h2 className="font-semibold text-slate-700">کنترل جداگانه هر کانال</h2>
+                    <section
+                        className={`rounded-xl border p-4 space-y-4 ${
+                            isTestMode
+                                ? 'border-amber-200 bg-amber-50/20'
+                                : 'border-sky-200 bg-sky-50/20'
+                        }`}
+                    >
+                        <h2 className="font-semibold text-slate-700">
+                            {isTestMode ? 'جلسه هر دسته (گروه مشترک تست)' : 'جلسه هر کانال عملیاتی'}
+                        </h2>
                         <p className="text-xs text-slate-500">
-                            هر دسته خودرو جلسه مستقل دارد — شروع یا توقف یک کانال، بقیه را قطع
-                            نمی‌کند.
+                            {isTestMode
+                                ? `هر دسته جلسه جدا دارد ولی همه در یک گروه (اسلات ۱ — chat: ${groupChatId || 'تنظیم نشده'}) اعلام می‌شوند.`
+                                : 'هر دسته خودرو کانال و جلسه مستقل دارد.'}
                         </p>
-                        {CATEGORY_SLOTS.map(({ slot, category, label }) => {
+                        {CATEGORY_SLOTS.map(({ slot, category, label, channelLabel }) => {
                             const catSession = sessionForCategory(category);
                             const isActive = Boolean(catSession);
+                            const canOperateTurn =
+                                isActive &&
+                                catSession &&
+                                ['running', 'awaiting_confirm'].includes(catSession.status);
+                            const q = Array.isArray(catSession?.queueSnapshot)
+                                ? catSession.queueSnapshot
+                                : [];
+                            const turn = catSession
+                                ? (q[catSession.currentTurnIndex] as { driver?: { name?: string } } | undefined)
+                                : undefined;
                             return (
                                 <div
                                     key={slot}
-                                    className="rounded-lg border border-slate-100 p-3 flex flex-wrap items-center gap-3"
+                                    className="rounded-lg border border-slate-200 bg-white p-3 space-y-2"
                                 >
-                                    <div className="flex-1 min-w-[180px]">
-                                        <div className="font-medium text-sm">{label}</div>
-                                        {!isTestMode && (
-                                            <div className="text-xs font-mono ltr text-slate-500 mt-0.5">
-                                                chat: {channelChatIds[slot] || '—'}
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-[180px]">
+                                            <div className="font-medium text-sm">{label}</div>
+                                            <div className="text-xs text-slate-500">
+                                                {isTestMode
+                                                    ? 'گروه تست (اسلات ۱)'
+                                                    : channelLabel}
                                             </div>
-                                        )}
-                                        {isActive && (
-                                            <div className="text-xs text-sky-700 mt-1">
-                                                فعال — {catSession?.status}
-                                                {catSession?.status === 'awaiting_admin' && (
+                                            {!isTestMode && (
+                                                <div className="text-xs font-mono ltr text-slate-500 mt-0.5">
+                                                    chat: {channelChatIds[slot] || '—'}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={busy || isActive}
+                                                onClick={() => startCategorySession(category)}
+                                                className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
+                                            >
+                                                شروع
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={busy || !isActive}
+                                                onClick={() => stopCategorySession(category)}
+                                                className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
+                                            >
+                                                توقف
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {isActive && catSession && (
+                                        <div className="text-xs text-sky-800 bg-sky-50 rounded-md p-2 space-y-1">
+                                            <div>
+                                                وضعیت: <strong>{catSession.status}</strong>
+                                                {catSession.status === 'awaiting_admin' && (
                                                     <span className="text-amber-600 mr-1">
-                                                        (منتظر اپراتور در تابلو)
+                                                        — منتظر اپراتور در تابلو
                                                     </span>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        disabled={busy || isActive}
-                                        onClick={() => startCategorySession(category)}
-                                        className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
-                                    >
-                                        شروع
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={busy || !isActive}
-                                        onClick={() => stopCategorySession(category)}
-                                        className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
-                                    >
-                                        توقف
-                                    </button>
+                                            <div>نوبت: {turn?.driver?.name || '—'}</div>
+                                            <div>
+                                                انقضا:{' '}
+                                                {catSession.turnDeadlineAt
+                                                    ? new Date(catSession.turnDeadlineAt).toLocaleString('fa-IR')
+                                                    : '—'}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {canOperateTurn && catSession && (
+                                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+                                            <span className="text-xs text-slate-500">وقت اضافه:</span>
+                                            {EXTEND_MINUTE_OPTIONS.map(min => (
+                                                <button
+                                                    key={min}
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        extendTurnForSession(catSession.id, min)
+                                                    }
+                                                    className="px-2 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 disabled:opacity-50"
+                                                >
+                                                    +{min} دقیقه
+                                                </button>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() => skipTurnForSession(catSession.id)}
+                                                className="px-2 py-1 rounded border border-amber-300 text-amber-800 text-xs hover:bg-amber-50 disabled:opacity-50"
+                                            >
+                                                رد نوبت
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -682,36 +755,10 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                             >
                                 توقف همه
                             </button>
-                            {activeSessions.length > 1 && (
-                                <select
-                                    className="border rounded-md px-2 py-2 text-sm"
-                                    value={selectedSessionId}
-                                    onChange={e => setSelectedSessionId(e.target.value)}
-                                >
-                                    {activeSessions.map(s => (
-                                        <option key={s.id} value={s.id}>
-                                            {s.vehicleCategory || '—'} — {s.status}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                            <button
-                                type="button"
-                                disabled={busy || !session}
-                                onClick={extendTurn}
-                                className="px-3 py-2 rounded-md border text-sm disabled:opacity-50"
-                            >
-                                +۲ دقیقه
-                            </button>
-                            <button
-                                type="button"
-                                disabled={busy || !session}
-                                onClick={skipTurn}
-                                className="px-3 py-2 rounded-md border text-sm disabled:opacity-50"
-                            >
-                                رد نوبت
-                            </button>
                         </div>
+                        <p className="text-xs text-slate-500">
+                            تمدید نوبت و رد نوبت برای هر دسته در کارت همان دسته (بالا) است.
+                        </p>
                     </section>
 
                     {activeSessions.length > 0 && (

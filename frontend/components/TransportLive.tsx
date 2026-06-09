@@ -26,6 +26,8 @@ import {
     formatTotalTonnageFromDestinations,
     sumDestinationTonnageKg,
     formatPersianGroupedNumber,
+    formatRepresentativeType,
+    localizeExcelValue,
 } from '../utils/freightDisplay';
 import { getApiUrl } from '../utils/apiConfig';
 import { TruckIcon } from './icons/CarIcon';
@@ -711,7 +713,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
+                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -1388,6 +1390,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
                 }
             }
+
+            if (!headers.includes('ردیف')) {
+                headers.unshift('ردیف');
+            }
             
             // Add headers with styling
             const headerRow = worksheet.addRow(headers);
@@ -1465,6 +1471,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 
                 if (typeof value === 'string') {
                     value = value.replace(/<[^>]*>/g, '').trim();
+                    value = localizeExcelValue(value);
                 }
                 
                 if (isNumericColumn && typeof value === 'string') {
@@ -1482,7 +1489,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             
             // Add data rows with zebra striping
             filteredAnnouncements.forEach((ann, idx) => {
-                const rowData: any[] = [];
+                const rowData: any[] = [idx + 1];
                 
                 // اضافه کردن ستون انتخاب اگر وجود دارد
                 if (canPerformActions) {
@@ -1490,9 +1497,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
                 
                 headers.forEach(header => {
-                    if (header !== 'انتخاب' && !header.startsWith('مقصد')) {
-                        rowData.push(getValueForHeader(header, ann, idx));
+                    if (header === 'ردیف' || header === 'انتخاب' || header.startsWith('مقصد')) {
+                        return;
                     }
+                    rowData.push(getValueForHeader(header, ann, idx));
                 });
                 
                 if (isFullDairyAmbientMode) {
@@ -1505,11 +1513,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             const repName = (dest.representativeName || '').toString().trim();
                             
                             // اول از representativeType بررسی کن
-                            if (repTypeValue === 'distributor' || repTypeValue === 'پخش' || repTypeValue === 'agent') {
-                                repType = 'پخش';
-                            } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-                                repType = 'نماینده';
-                            } else if (repName) {
+                            repType = formatRepresentativeType(repTypeValue);
+                            if (repType === '-' && repName) {
                                 // اگر representativeType نبود، از representativeName استفاده کن
                                 const repNameLower = repName.toLowerCase();
                                 if (repNameLower.includes('پخش') || repNameLower === 'پخش') {

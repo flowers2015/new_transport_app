@@ -63,44 +63,50 @@ export const getFileUrl = (filePath: string): string => {
  */
 export default API_BASE_URL;
 
+export const getAuthHeaders = (extra: HeadersInit = {}): HeadersInit => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  };
+};
+
+export const isAuthFailureStatus = (status: number): boolean =>
+  status === 401 || status === 403;
+
 /**
  * تابع کمکی برای بررسی و مدیریت خطای توکن منقضی شده
- * اگر response با کد 401 باشد، کاربر را به صفحه لاگین می‌برد
  */
-export const handleAuthError = (response: Response): Response => {
-  if (response.status === 401) {
-    console.warn('⚠️ [Auth] Token expired or invalid. Redirecting to login...');
-    // پاک کردن توکن از localStorage
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    // نمایش پیام به کاربر
+export const handleAuthError = (
+  response: Response,
+  { redirect = true }: { redirect?: boolean } = {}
+): Response => {
+  if (!isAuthFailureStatus(response.status)) {
+    return response;
+  }
+  console.warn('⚠️ [Auth] Token expired or invalid.', response.status);
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  if (redirect) {
     alert('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
-    // Redirect به صفحه لاگین
     window.location.href = '/';
   }
   return response;
 };
 
 /**
- * تابع fetch با مدیریت خودکار خطای توکن
- * از این تابع به جای fetch معمولی استفاده کنید
+ * تابع fetch با مدیریت خودکار خطای توکن — همیشه توکن را تازه از localStorage می‌خواند
  */
-export const apiFetch = async (url: string, options?: RequestInit): Promise<Response> => {
-  const token = localStorage.getItem('token');
-  
-  const defaultHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-  };
-  
+export const apiFetch = async (
+  url: string,
+  options?: RequestInit & { skipAuthRedirect?: boolean }
+): Promise<Response> => {
+  const { skipAuthRedirect, headers: optionHeaders, ...rest } = options || {};
   const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options?.headers,
-    },
+    ...rest,
+    headers: getAuthHeaders(optionHeaders as HeadersInit),
   });
-  
-  return handleAuthError(response);
+  return handleAuthError(response, { redirect: !skipAuthRedirect });
 };
 

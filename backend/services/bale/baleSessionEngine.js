@@ -1426,6 +1426,30 @@ async function completeAssignment(session, selection, source) {
   return { completed: done, selectionDurationSec };
 }
 
+async function persistDeferToDispatch(entry, userId) {
+  const queueEntryId = entry?.id;
+  if (!queueEntryId) return;
+  try {
+    const { deferQueueEntry } = require('../dispatch/dispatchAssignContext');
+    await deferQueueEntry(queueEntryId, userId || null);
+  } catch (err) {
+    console.warn('⚠️ [bale] deferQueueEntry:', err.message);
+  }
+}
+
+async function removeDeferButton(callbackQuery) {
+  const chatId = callbackQuery.message?.chat?.id;
+  const messageId = callbackQuery.message?.message_id;
+  if (!chatId || !messageId) return;
+  try {
+    await baleApi.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
+  } catch (err) {
+    if (!String(err.message).includes('message is not modified')) {
+      console.warn('⚠️ [bale] remove defer button:', err.message);
+    }
+  }
+}
+
 async function handleCallback(callbackQuery) {
   const data = callbackQuery.data || '';
   const parts = data.split(':');
@@ -1433,9 +1457,11 @@ async function handleCallback(callbackQuery) {
   const sessionId = parts[1];
   if (!sessionId) return { handled: false };
 
+  const driverChatId = callbackQuery.message?.chat?.id;
+
   const session = await loadSession(sessionId);
   if (!session) {
-    await baleApi.answerCallbackQuery(callbackQuery.id, 'جلسه یافت نشد');
+    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'جلسه یافت نشد');
     return { handled: true };
   }
 
@@ -1446,7 +1472,7 @@ async function handleCallback(callbackQuery) {
     : null;
 
   if (action === 'bale_confirm' && pending) {
-    await baleApi.answerCallbackQuery(callbackQuery.id);
+    await baleApi.safeAnswerCallbackQuery(callbackQuery.id);
     try {
       const assignResult = await completeAssignment(session, pending, 'driver');
       const durationNote =
@@ -1454,23 +1480,23 @@ async function handleCallback(callbackQuery) {
           ? `\n⏱ زمان انتخاب: ${assignResult.selectionDurationSec} ثانیه`
           : '';
       await baleApi.sendMessage(
-        callbackQuery.message?.chat?.id,
+        driverChatId,
         `✅ تخصیص با موفقیت ثبت شد.${durationNote}`
       );
     } catch (err) {
-      await baleApi.sendMessage(callbackQuery.message?.chat?.id, `❌ ${err.message}`);
+      await baleApi.sendMessage(driverChatId, `❌ ${err.message}`);
     }
     return { handled: true };
   }
 
   if (action === 'bale_cancel') {
-    await baleApi.answerCallbackQuery(callbackQuery.id, 'انصراف');
+    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'انصراف');
     await updateSession(sessionId, {
       status: 'running',
       pending_selection: null,
     });
     await baleApi.sendMessage(
-      callbackQuery.message?.chat?.id,
+      driverChatId,
       'انصراف شد. دوباره شماره را از لیست نوبت فعلی بفرستید.'
     );
     await logEvent(sessionId, 'selection_cancelled', {});
@@ -1481,33 +1507,54 @@ async function handleCallback(callbackQuery) {
   if (action === 'bale_defer') {
     const callbackTurnIndex = parts.length > 2 ? parseInt(parts[2], 10) : NaN;
     if (!canDeferTurn(session.stage) || session.status !== 'running' || pending) {
-      await baleApi.answerCallbackQuery(callbackQuery.id, 'در این مرحله امکان‌پذیر نیست');
+      const reason =
+        session.status !== 'running'
+          ? 'نوبت شما دیگر فعال نیست (مهلت تمام شده یا منتظر اپراتور هستید).'
+          : 'در این مرحله امکان «بمانم برای مرحله بعد» وجود ندارد.';
+      await baleApi.safeAnswerCallbackQuery(callbackQuery.id, reason);
+      if (driverChatId) {
+        try {
+          await baleApi.sendMessage(driverChatId, `⚠️ ${reason}`);
+        } catch (_) {}
+      }
       return { handled: true };
     }
     if (
       Number.isFinite(callbackTurnIndex) &&
       callbackTurnIndex !== session.current_turn_index
     ) {
-      await baleApi.answerCallbackQuery(
-        callbackQuery.id,
-        'این دکمه مربوط به نوبت قبلی است — از پیام جدید استفاده کنید'
-      );
+      const staleMsg = 'این دکمه مربوط به نوبت قبلی است — از پیام جدید نوبت خود استفاده کنید.';
+      await baleApi.safeAnswerCallbackQuery(callbackQuery.id, staleMsg);
+      if (driverChatId) {
+        try {
+          await baleApi.sendMessage(driverChatId, `⚠️ ${staleMsg}`);
+        } catch (_) {}
+      }
       return { handled: true };
     }
+
     const entry = currentTurnEntry(session);
+    if (!entry) {
+      await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'نوبت جاری یافت نشد');
+      return { handled: true };
+    }
+
     const driverName = entry?.driver?.name || entry?.driver_name || '—';
     const deferToNearAll = session.stage === 'stage2_near_vf';
-    await baleApi.answerCallbackQuery(
-      callbackQuery.id,
-      deferToNearAll
-        ? 'ثبت شد — در نوبت نزدیک نوبت شماست'
-        : 'ثبت شد — در مرحله بعد نوبت شماست'
-    );
+    const ackText = deferToNearAll
+      ? 'ثبت شد — در نوبت نزدیک نوبت شماست'
+      : 'ثبت شد — در مرحله بعد نوبت شماست';
+
+    // Ack immediately so Bale does not expire the callback while DB work runs.
+    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, ackText);
+    await removeDeferButton(callbackQuery);
+
     await clearTurnTimer(sessionId, {
       freezeText: deferToNearAll
         ? `⏭ برای نوبت نزدیک ماندید\n👤 ${driverName}`
         : `⏭ برای مرحله بعد ماندید\n👤 ${driverName}`,
     });
+    await persistDeferToDispatch(entry, session.started_by_user_id);
     await logEvent(sessionId, deferToNearAll ? 'deferred_to_near_all' : 'deferred_to_stage2', {
       driverId: entry?.driverId || entry?.driver_id,
       index: session.current_turn_index,
@@ -1518,9 +1565,22 @@ async function handleCallback(callbackQuery) {
       deferToNearAll ? 'deferred_to_near_all' : 'deferred_to_stage2'
     );
     if (await finishQueueIfDone(sessionId)) {
+      if (driverChatId) {
+        try {
+          await baleApi.sendMessage(
+            driverChatId,
+            `✅ ${ackText}\n👤 ${driverName}`
+          );
+        } catch (_) {}
+      }
       return { handled: true };
     }
     await advanceToCurrentTurn(sessionId);
+    if (driverChatId) {
+      try {
+        await baleApi.sendMessage(driverChatId, `✅ ${ackText}\n👤 ${driverName}`);
+      } catch (_) {}
+    }
     return { handled: true };
   }
 

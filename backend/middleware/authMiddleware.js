@@ -5,10 +5,26 @@ function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (token == null) return res.sendStatus(401);
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication required.', code: 'NO_TOKEN' });
+  }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
+    if (err) {
+      const code =
+        err.name === 'TokenExpiredError'
+          ? 'TOKEN_EXPIRED'
+          : err.name === 'JsonWebTokenError'
+            ? 'INVALID_TOKEN'
+            : 'AUTH_FAILED';
+      return res.status(401).json({
+        message:
+          err.name === 'TokenExpiredError'
+            ? 'نشست منقضی شده است.'
+            : 'توکن نامعتبر است.',
+        code,
+      });
+    }
     req.user = user;
     next();
   });

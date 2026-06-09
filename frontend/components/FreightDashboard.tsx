@@ -5,14 +5,14 @@ import { formatJalaliDateTime, formatJalali, parseJalaliDateString } from '../ut
 import { getApiUrl } from '../utils/apiConfig';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
-import { PrinterIcon } from './icons/PrinterIcon';
 import { DocumentArrowDownIcon } from './icons/DocumentArrowDownIcon';
+import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { getDestinationCitiesLabel } from '../utils/freightDisplay';
+import { formatRepresentativeType, getDestinationCitiesLabel, localizeExcelValue } from '../utils/freightDisplay';
 import CityAutocomplete from './CityAutocomplete';
 
 // --- Constants from user request ---
@@ -320,7 +320,7 @@ const columnsConfig = (props: {
         // --- Ice Cream (بستنی) desired order in both compact/full ---
         { header: 'ردیف', width: '70px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
-        { header: 'نماینده (پخش/نماینده)', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
+        { header: 'نماینده (پخش/نماینده)', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
         { header: 'مقصد', accessor: (ann: FreightAnnouncement) => getDestinationCitiesLabel(ann), width: '200px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
         { header: 'مبدا', accessor: 'originCity', width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -1278,54 +1278,110 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         }
     }, [filteredAnnouncements, selectedIds, isAnnouncementSelectable]);
 
-    const handlePrint = () => {
-        window.print();
-    };
+    const exportTableProps = useMemo(
+        () => ({ changeRequests }),
+        [changeRequests]
+    );
 
     const getExportValue = (ann: FreightAnnouncement, col: any, idx: number) => {
-        if (!col.accessor) return '';
+        let value: unknown = '';
 
-        let value;
-        if (typeof col.accessor === 'function') {
-            value = col.accessor(ann, idx);
-        } else {
-            value = ann[col.accessor as keyof FreightAnnouncement];
+        if (col.render) {
+            try {
+                const rendered = col.render(ann, idx, exportTableProps);
+                if (typeof rendered === 'string' || typeof rendered === 'number') {
+                    value = rendered;
+                } else if (React.isValidElement(rendered)) {
+                    const text = extractTextFromReact(rendered);
+                    value = text.replace(/[📅🕐]/g, '').trim();
+                } else if (rendered != null) {
+                    value = String(rendered);
+                }
+            } catch {
+                /* اگر render به props جدول نیاز داشت و خطا داد، از accessor استفاده می‌شود */
+            }
         }
-        
+        if (value === '' && col.accessor) {
+            if (typeof col.accessor === 'function') {
+                value = col.accessor(ann, idx);
+            } else {
+                value = ann[col.accessor as keyof FreightAnnouncement];
+            }
+        }
+
         if (Array.isArray(value)) {
-            return value.join('; ');
+            return localizeExcelValue(value.join('؛ '));
         }
-    
-        return value ?? '';
+
+        return localizeExcelValue(value ?? '');
     };
 
-    const handleExportToCSV = () => {
-        try {
-            const headers = visibleColumns.map(c => `"${c.header.replace(/"/g, '""')}"`);
-            
-            const dataRows = filteredAnnouncements.map((ann, idx) => 
-                visibleColumns.map(col => {
-                    const value = getExportValue(ann, col, idx);
-                    const sanitizedValue = (typeof value === 'object' && value !== null) ? JSON.stringify(value).replace(/"/g, '""') : String(value).replace(/"/g, '""');
-                    return `"${sanitizedValue}"`;
-                })
-            );
+    const extractTextFromReact = (element: React.ReactNode): string => {
+        if (element == null || typeof element === 'boolean') return '';
+        if (typeof element === 'string' || typeof element === 'number') return String(element);
+        if (Array.isArray(element)) return element.map(extractTextFromReact).join(' ');
+        if (React.isValidElement(element)) {
+            const children = (element.props as { children?: React.ReactNode }).children;
+            if (children == null) return '';
+            if (typeof children === 'string' || typeof children === 'number') return String(children);
+            if (Array.isArray(children)) return children.map(extractTextFromReact).join(' ');
+            return extractTextFromReact(children);
+        }
+        return '';
+    };
 
-            const csvContent = [headers.join(','), ...dataRows.map(row => row.join(','))].join('\n');
-            
-            const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `freight_export_${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error("Failed to export CSV:", error);
-            alert("خطا در خروجی گرفتن اکسل.");
+    const [pendingExportMode, setPendingExportMode] = useState<'compact' | 'full' | null>(null);
+
+    const runExcelExport = useCallback(
+        async (mode: 'compact' | 'full', cols: typeof visibleColumns) => {
+            try {
+                const exportCols = cols.filter(
+                    c => c.header && c.header !== 'عملیات' && c.header !== ''
+                );
+                const headers = exportCols.map(c => c.header);
+                const rows = filteredAnnouncements.map((ann, idx) =>
+                    exportCols.map(col => {
+                        const value = getExportValue(ann, col, idx);
+                        if (value === null || value === undefined) return '';
+                        if (typeof value === 'object') return JSON.stringify(value);
+                        return value;
+                    })
+                );
+                const lineName =
+                    activeTab === FreightLineType.IceCream
+                        ? 'بستنی'
+                        : activeTab === FreightLineType.Dairy
+                          ? 'پاستوریزه'
+                          : 'لبنیات-فروتلند';
+                const modeLabel = mode === 'compact' ? 'فشرده' : 'کامل';
+                await downloadStyledExcel({
+                    sheetName: 'برنامه‌ریزی اعلام بار',
+                    fileName: buildExcelFileName('برنامه_ریزی_اعلام_بار', lineName, modeLabel),
+                    headers,
+                    rows,
+                });
+            } catch (error) {
+                console.error('Failed to export Excel:', error);
+                alert('خطا در خروجی اکسل.');
+            }
+        },
+        [activeTab, filteredAnnouncements, getExportValue]
+    );
+
+    useEffect(() => {
+        if (!pendingExportMode || viewMode !== pendingExportMode) return;
+        const cols = visibleColumns.filter(c => c.header !== 'عملیات' && c.header !== '');
+        runExcelExport(pendingExportMode, cols);
+        setPendingExportMode(null);
+    }, [pendingExportMode, viewMode, visibleColumns, runExcelExport]);
+
+    const handleExportExcel = (mode: 'compact' | 'full') => {
+        if (viewMode === mode) {
+            const cols = visibleColumns.filter(c => c.header !== 'عملیات' && c.header !== '');
+            runExcelExport(mode, cols);
+        } else {
+            setViewMode(mode);
+            setPendingExportMode(mode);
         }
     };
     
@@ -1353,8 +1409,12 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                         ارجاع انتخابی ({selectedIds.length})
                                     </button>
                                 )}
-                                <button onClick={handleExportToCSV} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"><DocumentArrowDownIcon className="w-4 h-4" />اکسل</button>
-                                <button onClick={handlePrint} className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700"><PrinterIcon className="w-4 h-4" />چاپ</button>
+                                <button onClick={() => handleExportExcel('compact')} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700">
+                                    <DocumentArrowDownIcon className="w-4 h-4" />اکسل فشرده
+                                </button>
+                                <button onClick={() => handleExportExcel('full')} className="flex items-center gap-1 px-3 py-1.5 bg-green-700 text-white rounded-md text-xs hover:bg-green-800">
+                                    <DocumentArrowDownIcon className="w-4 h-4" />اکسل کامل
+                                </button>
                                 <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
                                 {isManager && <div className="flex items-center p-1 bg-slate-100 rounded-lg"><button onClick={()=>setManagerView('approval')} className={`px-2 py-1 text-xs rounded ${managerView==='approval'?'bg-sky-600 text-white shadow':'bg-slate-100 hover:bg-slate-200'}`}>در انتظار تایید</button><button onClick={()=>setManagerView('all')} className={`px-2 py-1 text-xs rounded ${managerView==='all'?'bg-sky-600 text-white shadow':'bg-slate-100 hover:bg-slate-200'}`}>همه</button></div>}
                                 <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-sky-600 text-white shadow':'bg-slate-200 hover:bg-slate-300'}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-sky-600 text-white shadow':'bg-slate-200 hover:bg-slate-300'}`}>کامل</button></div>

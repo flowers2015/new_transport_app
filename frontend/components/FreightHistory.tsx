@@ -9,6 +9,8 @@ import {
     getAssignedVehiclePlate,
     TOTAL_FREIGHT_HEADER,
     formatFreightAmountCell,
+    formatRepresentativeType,
+    localizeExcelValue,
 } from '../utils/freightDisplay';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
@@ -553,6 +555,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
                     }
                 }
+
+                if (!headers.includes('ردیف')) {
+                    headers.unshift('ردیف');
+                }
                 
                 // Add headers with styling
                 const headerRow = worksheet.addRow(headers);
@@ -622,6 +628,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     
                     if (typeof value === 'string') {
                         value = value.replace(/<[^>]*>/g, '').trim();
+                        value = localizeExcelValue(value);
                     }
                     
                     if (isNumericColumn && typeof value === 'string') {
@@ -639,8 +646,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 
                 // Add data rows with zebra striping
                 filteredAnnouncements.forEach((ann, idx) => {
-                    const rowData: any[] = [];
+                    const rowData: any[] = [idx + 1];
                     headers.forEach(header => {
+                        if (header === 'ردیف') return;
                         if (!header.startsWith('مقصد')) {
                             rowData.push(getValueForHeader(header, ann, idx));
                         }
@@ -655,12 +663,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             const repTypeValue = (dest as any).representativeType;
                             const repName = (dest.representativeName || '').toString().trim();
                             
-                            // اول از representativeType بررسی کن
-                            if (repTypeValue === 'distributor' || repTypeValue === 'پخش' || repTypeValue === 'agent') {
-                                repType = 'پخش';
-                            } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-                                repType = 'نماینده';
-                            } else if (repName) {
+                            repType = formatRepresentativeType(repTypeValue);
+                            if (repType === '-' && repName) {
                                 // اگر representativeType نبود، از representativeName استفاده کن
                                 const repNameLower = repName.toLowerCase();
                                 if (repNameLower.includes('پخش') || repNameLower === 'پخش') {
@@ -769,7 +773,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => (ann.representativeType === 'distributor' ? 'پخش' : 'نماینده') },
+                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
