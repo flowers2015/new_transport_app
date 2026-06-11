@@ -77,6 +77,13 @@ if [ $? -ne 0 ]; then
     echo -e "${YELLOW}⚠️ هشدار: Migration add_vehicle_type_column اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
 fi
 
+echo -e "${YELLOW}🔄 در حال اجرای Migration برای افزودن ستون vehicle_code به جدول vehicles...${NC}"
+node migrations/add_vehicle_code_column.js
+
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}⚠️ هشدار: Migration add_vehicle_code_column اجرا نشد (ممکن است قبلاً اجرا شده باشد)${NC}"
+fi
+
 echo -e "${YELLOW}📦 در حال نصب وابستگی‌های Frontend...${NC}"
 cd ../frontend
 npm install
