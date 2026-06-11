@@ -22,34 +22,60 @@ export function getCompanyVehicleTypeLabel(vehicle: Vehicle): string {
     return (
         (vehicle.currentVehicleType as string) ||
         (v.current_vehicle_type as string) ||
-        vehicle.vehicleType ||
-        vehicle.type ||
+        (vehicle.vehicleType as string) ||
+        (vehicle.type as string) ||
+        (vehicle.vehicleCategory as string) ||
+        (v.vehicle_category as string) ||
         '—'
     );
 }
 
-/** کد خودرو - نوع (ده‌چرخ/تریلی/…) - برند مدل */
+/** کد خودرو — نوع — پلاک */
 export function formatCompanyVehicleOptionLabel(vehicle: Vehicle): string {
     const code = vehicle.vehicleCode || vehicle.serialNumber || '—';
     const typeLabel = getCompanyVehicleTypeLabel(vehicle);
-    const brandModel = [vehicle.brand, vehicle.model].filter(Boolean).join(' ').trim() || '—';
-    return `${code} - ${typeLabel} - ${brandModel}`;
+    const plate = formatCompanyVehiclePlate(vehicle) || 'بدون پلاک';
+    return `${code} — ${typeLabel} — ${plate}`;
 }
 
 export function vehicleMatchesSearchQuery(vehicle: Vehicle, query: string): boolean {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     const plate = formatCompanyVehiclePlate(vehicle).toLowerCase();
-    const haystack = [
-        vehicle.vehicleCode,
-        vehicle.serialNumber,
-        vehicle.brand,
-        vehicle.model,
-        getCompanyVehicleTypeLabel(vehicle),
-        plate,
-    ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-    return haystack.includes(q);
+    const code = String(vehicle.vehicleCode || vehicle.serialNumber || '').toLowerCase();
+    return code.includes(q) || plate.includes(q);
+}
+
+export function mapVehicleSearchApiRow(row: {
+    id: string;
+    vehicleCode?: string | null;
+    vehicleType?: string | null;
+    currentVehicleType?: string | null;
+    vehicleCategory?: string | null;
+    brand?: string | null;
+    model?: string | null;
+    plate?: {
+        part1?: string | null;
+        letter?: string | null;
+        part2?: string | null;
+        cityCode?: string | null;
+    };
+}): Vehicle {
+    return {
+        id: row.id,
+        vehicleCode: row.vehicleCode || undefined,
+        vehicleType: row.vehicleType || undefined,
+        currentVehicleType: row.currentVehicleType || row.vehicleType || undefined,
+        vehicleCategory: row.vehicleCategory || undefined,
+        brand: row.brand || undefined,
+        model: row.model || undefined,
+        plateNumber: row.plate
+            ? {
+                  part1: row.plate.part1 || undefined,
+                  letter: row.plate.letter || undefined,
+                  part2: row.plate.part2 || undefined,
+                  cityCode: row.plate.cityCode || undefined,
+              }
+            : undefined,
+    } as Vehicle;
 }

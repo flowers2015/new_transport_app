@@ -3,8 +3,30 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const { getVehicles, getVehicleById, createVehicle, updateVehicle, importCompanyVehiclesFromExcel, checkVehicleDependencies, deleteVehicle, restoreVehicle } = require('../controllers/vehicleController');
+const { authenticateToken, authorizeRole } = require('../middleware/authMiddleware');
+const {
+  getVehicles,
+  getVehicleById,
+  searchCompanyVehicles,
+  createVehicle,
+  updateVehicle,
+  importCompanyVehiclesFromExcel,
+  checkVehicleDependencies,
+  deleteVehicle,
+  restoreVehicle,
+} = require('../controllers/vehicleController');
+
+const vehicleSearchRoles = [
+  'admin',
+  'transport',
+  'transport_user',
+  'personal_transport_user',
+  'transport_finance',
+  'planner',
+  'planner_manager',
+  'finance',
+  'central_finance',
+];
 
 // تنظیمات multer برای آپلود فایل اکسل
 const excelStorage = multer.diskStorage({
@@ -37,6 +59,12 @@ const excelUpload = multer({
 
 // All vehicle routes require authentication
 router.get('/', authenticateToken, getVehicles);
+router.get(
+  '/search',
+  authenticateToken,
+  authorizeRole(vehicleSearchRoles),
+  searchCompanyVehicles
+);
 router.get('/:id', authenticateToken, getVehicleById);
 router.post('/', authenticateToken, createVehicle);
 router.post('/import-excel', authenticateToken, excelUpload.single('file'), importCompanyVehiclesFromExcel);

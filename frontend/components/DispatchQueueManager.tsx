@@ -1598,15 +1598,13 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                         })
                                     }
                                 >
-                                    <div className="font-semibold text-slate-700">
-                                        {result.vehicleCode || result.model || 'خودرو'}
+                                    <div className="font-semibold text-slate-700 font-mono text-xs">
+                                        {result.vehicleCode || '—'}
+                                        {result.vehicleType || (result as { currentVehicleType?: string }).currentVehicleType
+                                            ? ` — ${result.vehicleType || (result as { currentVehicleType?: string }).currentVehicleType}`
+                                            : ''}
+                                        {formatPlate(result.plate) ? ` — ${formatPlate(result.plate)}` : ''}
                                     </div>
-                                    <div className="text-slate-500">
-                                        {[result.brand, result.model].filter(Boolean).join(' • ')}
-                                    </div>
-                                    {formatPlate(result.plate) && (
-                                        <div className="text-slate-400">{formatPlate(result.plate)}</div>
-                                    )}
                                 </li>
                             ))}
                         </ul>

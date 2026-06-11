@@ -17,7 +17,14 @@ const {
   deferQueueTurn,
 } = require('../controllers/dispatchController');
 
-const transportRoles = ['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin'];
+const transportRoles = [
+  'transport_user',
+  'personal_transport_user',
+  'planner',
+  'planner_manager',
+  'transport_finance',
+  'admin',
+];
 
 router.get(
   '/queue',

@@ -1256,9 +1256,108 @@ async function restoreVehicle(req, res) {
   }
 }
 
+/**
+ * جستجوی خودرو شرکتی — فقط کد خودرو و پلاک (برای تور استثنایی و ...)
+ */
+async function searchCompanyVehicles(req, res) {
+  try {
+    const term = (req.query.q || '').trim();
+    if (term.length < 2) {
+      return res.json([]);
+    }
+
+    const likeTerm = `%${term}%`;
+    const baseSelect = `
+      SELECT
+        v.id,
+        v.vehicle_code,
+        v.plate_part1,
+        v.plate_letter,
+        v.plate_part2,
+        v.plate_city_code,
+        v.vehicle_category,
+        v.brand,
+        v.model,
+        v.type
+    `;
+    const baseWhere = `
+      WHERE (
+        (v.vehicle_code IS NOT NULL AND v.vehicle_code::text ILIKE $1)
+        OR CONCAT_WS(
+          '',
+          COALESCE(v.plate_part1, ''),
+          COALESCE(v.plate_letter, ''),
+          COALESCE(v.plate_part2, ''),
+          COALESCE(v.plate_city_code, '')
+        ) ILIKE $1
+        OR (v.plate_part1 IS NOT NULL AND v.plate_part1 ILIKE $1)
+        OR (v.plate_part2 IS NOT NULL AND v.plate_part2 ILIKE $1)
+        OR (v.plate_letter IS NOT NULL AND v.plate_letter ILIKE $1)
+      )
+    `;
+    const orderLimit = `
+      ORDER BY v.vehicle_code NULLS LAST
+      LIMIT 20
+    `;
+
+    const runQuery = async (withDeletedFilter, withVehicleType) => {
+      const deletedClause = withDeletedFilter ? ' AND v.deleted_at IS NULL' : '';
+      const vehicleTypeCol = withVehicleType
+        ? ', v.current_vehicle_type'
+        : ', NULL::varchar AS current_vehicle_type';
+      const sql = `${baseSelect}${vehicleTypeCol}
+        FROM vehicles v
+        ${baseWhere}${deletedClause}
+        ${orderLimit}`;
+      return pool.query(sql, [likeTerm]);
+    };
+
+    let rows;
+    try {
+      ({ rows } = await runQuery(true, true));
+    } catch (err) {
+      if (err && err.code === '42703') {
+        try {
+          ({ rows } = await runQuery(false, true));
+        } catch (err2) {
+          if (err2 && err2.code === '42703') {
+            ({ rows } = await runQuery(false, false));
+          } else {
+            throw err2;
+          }
+        }
+      } else {
+        throw err;
+      }
+    }
+
+    res.json(
+      rows.map((row) => ({
+        id: row.id,
+        vehicleCode: row.vehicle_code,
+        vehicleCategory: row.vehicle_category,
+        vehicleType: row.current_vehicle_type || row.type || row.vehicle_category,
+        currentVehicleType: row.current_vehicle_type || row.type || null,
+        brand: row.brand,
+        model: row.model,
+        plate: {
+          part1: row.plate_part1,
+          letter: row.plate_letter,
+          part2: row.plate_part2,
+          cityCode: row.plate_city_code,
+        },
+      }))
+    );
+  } catch (error) {
+    console.error('❌ [searchCompanyVehicles] failed:', error);
+    res.status(500).json({ message: 'خطا در جستجوی خودرو' });
+  }
+}
+
 module.exports = {
   getVehicles,
   getVehicleById,
+  searchCompanyVehicles,
   createVehicle,
   updateVehicle,
   importCompanyVehiclesFromExcel,

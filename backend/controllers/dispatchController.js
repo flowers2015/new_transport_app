@@ -2120,48 +2120,8 @@ async function getBoard(req, res) {
 
 async function searchVehicles(req, res) {
   try {
-    const term = (req.query.q || '').trim();
-    if (term.length < 2) {
-      return res.json([]);
-    }
-
-    const likeTerm = `%${term}%`;
-    const { rows } = await pool.query(
-      `SELECT
-         id,
-         vehicle_code,
-         model,
-         brand,
-         vehicle_category,
-         plate_part1,
-         plate_letter,
-         plate_part2,
-         plate_city_code
-       FROM vehicles
-       WHERE
-         (vehicle_code IS NOT NULL AND vehicle_code ILIKE $1)
-         OR (model IS NOT NULL AND model ILIKE $1)
-         OR (brand IS NOT NULL AND brand ILIKE $1)
-       ORDER BY vehicle_code NULLS LAST, model NULLS LAST
-       LIMIT 15`,
-      [likeTerm]
-    );
-
-    res.json(
-      rows.map(row => ({
-        id: row.id,
-        vehicleCode: row.vehicle_code,
-        model: row.model,
-        brand: row.brand,
-        vehicleCategory: row.vehicle_category,
-        plate: {
-          part1: row.plate_part1,
-          letter: row.plate_letter,
-          part2: row.plate_part2,
-          cityCode: row.plate_city_code,
-        },
-      }))
-    );
+    const { searchCompanyVehicles: searchFromVehicles } = require('./vehicleController');
+    return searchFromVehicles(req, res);
   } catch (error) {
     console.error('❌ [dispatch] searchVehicles failed:', error);
     res.status(500).json({ message: 'خطا در جستجوی خودرو' });
