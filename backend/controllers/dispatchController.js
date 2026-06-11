@@ -2119,13 +2119,8 @@ async function getBoard(req, res) {
 }
 
 async function searchVehicles(req, res) {
-  try {
-    const { searchCompanyVehicles: searchFromVehicles } = require('./vehicleController');
-    return searchFromVehicles(req, res);
-  } catch (error) {
-    console.error('❌ [dispatch] searchVehicles failed:', error);
-    res.status(500).json({ message: 'خطا در جستجوی خودرو' });
-  }
+  const { searchCompanyVehicles } = require('./vehicleController');
+  return searchCompanyVehicles(req, res);
 }
 
 async function searchDrivers(req, res) {
