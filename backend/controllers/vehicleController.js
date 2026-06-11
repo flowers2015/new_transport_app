@@ -1256,24 +1256,28 @@ async function restoreVehicle(req, res) {
   }
 }
 
-/** شرط جستجو — همه فیلدها به text تبدیل می‌شوند (سازگار با plate عددی روی بعضی سرورها) */
-const VEHICLE_SEARCH_WHERE = `
-  WHERE (
-    COALESCE(v.vehicle_code::text, '') ILIKE $1
-    OR (
-      COALESCE(v.plate_part1::text, '') ||
-      COALESCE(v.plate_letter::text, '') ||
-      COALESCE(v.plate_part2::text, '') ||
-      COALESCE(v.plate_city_code::text, '')
-    ) ILIKE $1
-    OR COALESCE(v.plate_part1::text, '') ILIKE $1
-    OR COALESCE(v.plate_part2::text, '') ILIKE $1
-    OR COALESCE(v.plate_letter::text, '') ILIKE $1
-  )
-`;
+let vehicleTableColumnsCache = null;
+let vehicleTableColumnsCachedAt = 0;
+const VEHICLE_COLUMNS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getVehicleTableColumns() {
+  const now = Date.now();
+  if (vehicleTableColumnsCache && now - vehicleTableColumnsCachedAt < VEHICLE_COLUMNS_CACHE_TTL_MS) {
+    return vehicleTableColumnsCache;
+  }
+  const { rows } = await pool.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'vehicles'
+  `);
+  vehicleTableColumnsCache = new Set(rows.map((r) => r.column_name));
+  vehicleTableColumnsCachedAt = now;
+  return vehicleTableColumnsCache;
+}
 
 /**
  * جستجوی خودرو شرکتی — فقط کد خودرو و پلاک (برای تور استثنایی و ...)
+ * کوئری بر اساس ستون‌های واقعی جدول ساخته می‌شود (سازگار با schema قدیمی FMS)
  */
 async function searchCompanyVehicles(req, res) {
   try {
@@ -1282,55 +1286,75 @@ async function searchCompanyVehicles(req, res) {
       return res.json([]);
     }
 
+    const cols = await getVehicleTableColumns();
     const likeTerm = `%${term}%`;
-    const queryVariants = [
-      `SELECT v.id, v.vehicle_code, v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-              v.vehicle_category, v.brand, v.model, v.current_vehicle_type, v.vehicle_tip
-       FROM vehicles v
-       ${VEHICLE_SEARCH_WHERE} AND v.deleted_at IS NULL
-       ORDER BY v.vehicle_code NULLS LAST LIMIT 20`,
-      `SELECT v.id, v.vehicle_code, v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-              v.vehicle_category, v.brand, v.model, v.current_vehicle_type, v.vehicle_tip
-       FROM vehicles v
-       ${VEHICLE_SEARCH_WHERE}
-       ORDER BY v.vehicle_code NULLS LAST LIMIT 20`,
-      `SELECT v.id, v.vehicle_code, v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
-              v.vehicle_category, v.brand, v.model
-       FROM vehicles v
-       ${VEHICLE_SEARCH_WHERE}
-       ORDER BY v.vehicle_code NULLS LAST LIMIT 20`,
-      `SELECT v.id, v.vehicle_code, v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
-       FROM vehicles v
-       ${VEHICLE_SEARCH_WHERE}
-       ORDER BY v.vehicle_code NULLS LAST LIMIT 20`,
-    ];
 
-    let rows = null;
-    let lastError = null;
-    for (const sql of queryVariants) {
-      try {
-        ({ rows } = await pool.query(sql, [likeTerm]));
-        lastError = null;
-        break;
-      } catch (err) {
-        lastError = err;
-        const retryable = ['42703', '42883'].includes(err?.code);
-        if (!retryable) throw err;
-      }
+    const selectParts = [
+      'v.id',
+      'v.plate_part1',
+      'v.plate_letter',
+      'v.plate_part2',
+      'v.plate_city_code',
+    ];
+    const optionalSelect = [
+      'vehicle_code',
+      'vehicle_category',
+      'brand',
+      'model',
+      'current_vehicle_type',
+      'vehicle_tip',
+      'type',
+    ];
+    for (const col of optionalSelect) {
+      if (cols.has(col)) selectParts.push(`v.${col}`);
     }
-    if (lastError) throw lastError;
+
+    const plateConcat = `(
+      COALESCE(v.plate_part1::text, '') ||
+      COALESCE(v.plate_letter::text, '') ||
+      COALESCE(v.plate_part2::text, '') ||
+      COALESCE(v.plate_city_code::text, '')
+    )`;
+
+    const whereParts = [
+      `${plateConcat} ILIKE $1`,
+      `COALESCE(v.plate_part1::text, '') ILIKE $1`,
+      `COALESCE(v.plate_part2::text, '') ILIKE $1`,
+      `COALESCE(v.plate_letter::text, '') ILIKE $1`,
+    ];
+    if (cols.has('vehicle_code')) {
+      whereParts.unshift(`COALESCE(v.vehicle_code::text, '') ILIKE $1`);
+    }
+
+    let sql = `
+      SELECT ${selectParts.join(', ')}
+      FROM vehicles v
+      WHERE (${whereParts.join(' OR ')})
+    `;
+    if (cols.has('deleted_at')) {
+      sql += ' AND v.deleted_at IS NULL';
+    }
+    if (cols.has('vehicle_code')) {
+      sql += ' ORDER BY v.vehicle_code NULLS LAST';
+    } else {
+      sql += ' ORDER BY v.id';
+    }
+    sql += ' LIMIT 20';
+
+    const { rows } = await pool.query(sql, [likeTerm]);
 
     res.json(
-      (rows || []).map((row) => ({
+      rows.map((row) => ({
         id: row.id,
         vehicleCode: row.vehicle_code != null ? String(row.vehicle_code) : null,
         vehicleCategory: row.vehicle_category || null,
         vehicleType:
           row.current_vehicle_type ||
           row.vehicle_tip ||
+          row.type ||
           row.vehicle_category ||
           null,
-        currentVehicleType: row.current_vehicle_type || row.vehicle_tip || null,
+        currentVehicleType: row.current_vehicle_type || row.vehicle_tip || row.type || null,
         brand: row.brand || null,
         model: row.model || null,
         plate: {

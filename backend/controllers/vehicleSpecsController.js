@@ -12,77 +12,73 @@ async function getAllVehicleSpecs(req, res) {
     const { category, brand, model, isActive } = req.query;
     
     const { vehicleType } = req.query;
-    
-    // بررسی وجود ستون‌های جدید
+
     let hasFuelColumns = false;
+    let hasVehicleTypeColumn = false;
     try {
       const checkColumns = await pool.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'vehicle_specifications' 
-        AND column_name IN ('fuel_consumption_percentage', 'fuel_price_per_liter')
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'vehicle_specifications'
+          AND column_name IN (
+            'fuel_consumption_percentage',
+            'fuel_price_per_liter',
+            'vehicle_type'
+          )
       `);
-      hasFuelColumns = checkColumns.rows.length === 2;
+      const columnNames = new Set(checkColumns.rows.map((r) => r.column_name));
+      hasFuelColumns =
+        columnNames.has('fuel_consumption_percentage') &&
+        columnNames.has('fuel_price_per_liter');
+      hasVehicleTypeColumn = columnNames.has('vehicle_type');
     } catch (e) {
       hasFuelColumns = false;
+      hasVehicleTypeColumn = false;
     }
-    
-    let query;
-    if (hasFuelColumns) {
-      query = `
-        SELECT 
-          id, 
-          vehicle_type AS "vehicleType",
-          vehicle_category AS "vehicleCategory",
-          brand,
-          model,
-          tip,
-          fuel_type AS "fuelType",
-          cylinder_count AS "cylinderCount",
-          axle_count AS "axleCount",
-          wheel_count AS "wheelCount",
-          capacity,
-          engine_type AS "engineType",
-          description,
-          fuel_consumption_percentage AS "fuelConsumptionPercentage",
-          fuel_price_per_liter AS "fuelPricePerLiter",
-          is_active AS "isActive",
-          created_at AS "createdAt",
-          updated_at AS "updatedAt"
-        FROM vehicle_specifications
-        WHERE 1=1
-      `;
-    } else {
-      query = `
-        SELECT 
-          id, 
-          vehicle_type AS "vehicleType",
-          vehicle_category AS "vehicleCategory",
-          brand,
-          model,
-          tip,
-          fuel_type AS "fuelType",
-          cylinder_count AS "cylinderCount",
-          axle_count AS "axleCount",
-          wheel_count AS "wheelCount",
-          capacity,
-          engine_type AS "engineType",
-          description,
-          NULL AS "fuelConsumptionPercentage",
-          NULL AS "fuelPricePerLiter",
-          is_active AS "isActive",
-          created_at AS "createdAt",
-          updated_at AS "updatedAt"
-        FROM vehicle_specifications
-        WHERE 1=1
-      `;
-    }
-    
+
+    const vehicleTypeSelect = hasVehicleTypeColumn
+      ? 'vehicle_type AS "vehicleType"'
+      : 'vehicle_category AS "vehicleType"';
+
+    let query = `
+      SELECT
+        id,
+        ${vehicleTypeSelect},
+        vehicle_category AS "vehicleCategory",
+        brand,
+        model,
+        tip,
+        fuel_type AS "fuelType",
+        cylinder_count AS "cylinderCount",
+        axle_count AS "axleCount",
+        wheel_count AS "wheelCount",
+        capacity,
+        engine_type AS "engineType",
+        description,
+        ${
+          hasFuelColumns
+            ? `fuel_consumption_percentage AS "fuelConsumptionPercentage",
+               fuel_price_per_liter AS "fuelPricePerLiter"`
+            : `NULL AS "fuelConsumptionPercentage",
+               NULL AS "fuelPricePerLiter"`
+        },
+        is_active AS "isActive",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM vehicle_specifications
+      WHERE 1=1
+    `;
+
     const params = [];
     let paramIndex = 1;
-    
+
     if (vehicleType) {
-      query += ` AND vehicle_type = $${paramIndex++}`;
+      if (hasVehicleTypeColumn) {
+        query += ` AND vehicle_type = $${paramIndex++}`;
+      } else {
+        query += ` AND vehicle_category = $${paramIndex++}`;
+      }
       params.push(vehicleType);
     }
     if (category) {
@@ -101,75 +97,13 @@ async function getAllVehicleSpecs(req, res) {
       query += ` AND is_active = $${paramIndex++}`;
       params.push(isActive === 'true');
     }
-    
-    query += ` ORDER BY vehicle_type, vehicle_category, brand, model, tip`;
-    
-    let rows;
-    try {
-      const result = await pool.query(query, params);
-      rows = result.rows;
-    } catch (queryError) {
-      // اگر خطای ستون بود، از fallback استفاده کن
-      if (queryError.code === '42703') {
-        console.warn('⚠️ [getAllVehicleSpecs] Column error, using fallback query');
-        // ساخت fallback query بدون ستون‌های جدید
-        let fallbackQuery = `
-          SELECT 
-            id, 
-            vehicle_type AS "vehicleType",
-            vehicle_category AS "vehicleCategory",
-            brand,
-            model,
-            tip,
-            fuel_type AS "fuelType",
-            cylinder_count AS "cylinderCount",
-            axle_count AS "axleCount",
-            wheel_count AS "wheelCount",
-            capacity,
-            engine_type AS "engineType",
-            description,
-            NULL AS "fuelConsumptionPercentage",
-            NULL AS "fuelPricePerLiter",
-            is_active AS "isActive",
-            created_at AS "createdAt",
-            updated_at AS "updatedAt"
-          FROM vehicle_specifications
-          WHERE 1=1
-        `;
-        const fallbackParams = [];
-        let fallbackParamIndex = 1;
-        
-        if (vehicleType) {
-          fallbackQuery += ` AND vehicle_type = $${fallbackParamIndex++}`;
-          fallbackParams.push(vehicleType);
-        }
-        if (category) {
-          fallbackQuery += ` AND vehicle_category = $${fallbackParamIndex++}`;
-          fallbackParams.push(category);
-        }
-        if (brand) {
-          fallbackQuery += ` AND brand = $${fallbackParamIndex++}`;
-          fallbackParams.push(brand);
-        }
-        if (model) {
-          fallbackQuery += ` AND model = $${fallbackParamIndex++}`;
-          fallbackParams.push(model);
-        }
-        if (isActive !== undefined) {
-          fallbackQuery += ` AND is_active = $${fallbackParamIndex++}`;
-          fallbackParams.push(isActive === 'true');
-        }
-        
-        fallbackQuery += ` ORDER BY vehicle_type, vehicle_category, brand, model, tip`;
-        
-        const fallbackResult = await pool.query(fallbackQuery, fallbackParams);
-        rows = fallbackResult.rows;
-      } else {
-        throw queryError;
-      }
-    }
-    
-    res.json(rows);
+
+    query += hasVehicleTypeColumn
+      ? ` ORDER BY vehicle_type, vehicle_category, brand, model, tip`
+      : ` ORDER BY vehicle_category, brand, model, tip`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching vehicle specs:', error);
     res.status(500).json({ message: 'خطا در دریافت مشخصات خودرو' });

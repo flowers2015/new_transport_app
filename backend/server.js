@@ -38,6 +38,20 @@ const cityRoutes = require('./routes/cityRoutes');
 const baleRoutes = require('./routes/baleRoutes');
 const supportTicketRoutes = require('./routes/supportTicketRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
+const { authenticateToken, authorizeRole } = require('./middleware/authMiddleware');
+const { searchCompanyVehicles } = require('./controllers/vehicleController');
+
+const vehicleSearchRoles = [
+  'admin',
+  'transport',
+  'transport_user',
+  'personal_transport_user',
+  'transport_finance',
+  'planner',
+  'planner_manager',
+  'finance',
+  'central_finance',
+];
 
 const app = express();
 
@@ -119,6 +133,13 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/repair-orders', repairOrderRoutes);
 app.use('/api/v1/freight-announcements', freightRoutes);
 app.use('/api/v1/freight-transactions', freightTransactionRoutes);
+// قبل از router خودرو — جلوگیری از تداخل با /:id روی سرورهای با کد قدیمی
+app.get(
+  '/api/v1/vehicles/search',
+  authenticateToken,
+  authorizeRole(vehicleSearchRoles),
+  searchCompanyVehicles
+);
 app.use('/api/v1/vehicles', vehicleRoutes);
 app.use('/api/v1/alerts', alertRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
