@@ -192,6 +192,7 @@ deploy_run_optional_migrations() {
     local migrations=(
         "migrations/create_bale_tables.js"
         "migrations/create_support_tickets_table.js"
+        "migrations/add_finance_rejection_columns.js"
     )
 
     for mig in "${migrations[@]}"; do

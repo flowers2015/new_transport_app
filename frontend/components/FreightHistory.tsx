@@ -12,6 +12,7 @@ import {
     formatRepresentativeType,
     localizeExcelValue,
 } from '../utils/freightDisplay';
+import { getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -187,7 +188,28 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         let columns = [
             // Common Columns
             { header: 'ردیف', align: 'center', display: () => viewMode === 'full', render: (_: any, idx: number) => idx + 1 },
-            { header: 'کد اعلام بار', align: 'center', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
+            {
+                header: 'کد اعلام بار',
+                align: 'center',
+                display: () => true,
+                render: (ann: FreightAnnouncement) => {
+                    const raw = ann as any;
+                    if (!isFinanceRejectedAnn(raw)) {
+                        return ann.announcementCode;
+                    }
+                    const label = getFinanceRejectTypeLabel(
+                        raw.finance_reject_type || raw.financeRejectType
+                    );
+                    return (
+                        <div className="flex flex-col items-center gap-1">
+                            <span>{ann.announcementCode}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-semibold whitespace-nowrap">
+                                {label}
+                            </span>
+                        </div>
+                    );
+                },
+            },
             // { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             { header: 'کارمند اعلام‌کننده', display: () => true, render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
             { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
@@ -1020,8 +1042,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             </thead>
             <tbody>
                             {paginatedAnnouncements.map((ann, idx) => {
-                                // برای تاریخچه، همه ردیف‌ها Finalized هستند - رنگ سبز
-                                const rowColorClass = 'bg-teal-50 hover:bg-teal-100';
+                                const rowColorClass = isFinanceRejectedAnn(ann as any)
+                                    ? 'bg-red-50 hover:bg-red-100'
+                                    : 'bg-teal-50 hover:bg-teal-100';
 
                                 return (
                                 <tr key={ann.id} className={`border-b ${rowColorClass}`}>

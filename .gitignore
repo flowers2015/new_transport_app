@@ -44,3 +44,8 @@ tmp/
 temp/
 *.tmp
 
+# Database backups (local only — never commit)
+backups/*.dump
+backups/*.sql
+backups/*.sql.gz
+

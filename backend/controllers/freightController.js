@@ -163,6 +163,7 @@ async function getFreightAnnouncements(req, res) {
         ALTER TABLE freight_announcements 
         ADD COLUMN IF NOT EXISTS finance_exception_metadata_locked BOOLEAN DEFAULT FALSE
       `);
+      await ensureFinanceDispositionColumns(pool);
     } catch (alterError) {
       // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
       console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment/finalize columns exist:', alterError.message);
@@ -6221,6 +6222,163 @@ async function ensureFinanceExceptionColumns(clientOrPool = pool) {
   `);
 }
 
+async function ensureFinanceDispositionColumns(clientOrPool = pool) {
+  await ensureFinanceExceptionColumns(clientOrPool);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS finance_disposition VARCHAR(50)
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS finance_reject_type VARCHAR(50)
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS finance_reject_note TEXT
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS finance_rejected_at TIMESTAMPTZ
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS finance_rejected_by VARCHAR(255)
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE freight_announcements
+    ADD COLUMN IF NOT EXISTS related_exception_id VARCHAR(255)
+  `);
+  await clientOrPool.query(`
+    ALTER TABLE dispatch_assignments
+    ADD COLUMN IF NOT EXISTS cancellation_source VARCHAR(50)
+  `);
+}
+
+/**
+ * رد مالی تور — حذف از محاسبات و آمار ترابری، ماندن در تاریخچه
+ * POST /api/v1/freight-announcements/:id/finance-reject
+ */
+async function rejectFinanceTour(req, res) {
+  const { id } = req.params;
+  const rejectType = req.body?.rejectType || req.body?.reject_type;
+  const note = (req.body?.note || '').toString().trim() || null;
+  const userId = req.user?.userId || req.user?.id;
+
+  if (!rejectType || !['not_executed', 'partial'].includes(rejectType)) {
+    return res.status(400).json({
+      message: 'نوع رد مالی الزامی است: not_executed (اجرا نشده) یا partial (ناقص).',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await ensureFinanceDispositionColumns(client);
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      `SELECT * FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
+    if (!existing.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+
+    const ann = existing.rows[0];
+
+    if (ann.finance_disposition === 'rejected') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'این تور قبلاً رد مالی شده است.' });
+    }
+
+    if (ann.announcement_source === 'finance_exception') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'تور استثنایی را نمی‌توان با رد مالی بست.' });
+    }
+
+    if (ann.status !== 'Finalized') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'فقط تورهای نهایی‌شده قابل رد مالی هستند.' });
+    }
+
+    const paidCheck = await client.query(
+      `SELECT id FROM driver_calculations
+       WHERE announcement_id = $1 AND is_paid = TRUE
+       LIMIT 1`,
+      [id]
+    );
+    if (paidCheck.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'تور پرداخت‌شده قابل رد مالی نیست.' });
+    }
+
+    const periodCheck = await client.query(
+      `SELECT id FROM driver_calculations
+       WHERE announcement_id = $1 AND period_id IS NOT NULL
+       LIMIT 1`,
+      [id]
+    );
+    if (periodCheck.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'تور در دوره بسته‌شده قابل رد مالی نیست.' });
+    }
+
+    await client.query(
+      `UPDATE freight_announcements SET
+        finance_disposition = 'rejected',
+        finance_reject_type = $2,
+        finance_reject_note = $3,
+        finance_rejected_at = NOW(),
+        finance_rejected_by = $4,
+        updated_at = NOW()
+       WHERE id = $1`,
+      [id, rejectType, note, userId || null]
+    );
+
+    await client.query(
+      `UPDATE dispatch_assignments SET
+        is_cancelled = TRUE,
+        cancellation_source = 'finance_rejection'
+       WHERE freight_announcement_id = $1
+         AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
+      [id]
+    );
+
+    await client.query(
+      `DELETE FROM driver_calculations
+       WHERE announcement_id = $1
+         AND (is_paid IS NULL OR is_paid = FALSE)`,
+      [id]
+    );
+
+    const rejectLabel = rejectType === 'partial' ? 'ناقص' : 'اجرا نشده';
+    await logFreightHistory({
+      announcementId: id,
+      userId: userId || null,
+      userName: req.user?.username || 'مالی ترابری',
+      action: 'FINANCE_TRIP_REJECTED',
+      description: `رد مالی تور (${rejectLabel})${note ? `: ${note}` : ''}`,
+      ipAddress: req.ip,
+      client,
+    });
+
+    await client.query('COMMIT');
+
+    return res.json({
+      message: 'تور با موفقیت رد مالی شد و از محاسبه هزینه تور حذف شد.',
+      rejectType,
+      suggestFinanceException: rejectType === 'partial',
+      announcementId: id,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [rejectFinanceTour]', error);
+    return res.status(500).json({ message: error.message || 'خطا در رد مالی تور.' });
+  } finally {
+    client.release();
+  }
+}
+
 function normalizeLineTypeForFinanceException(lineType) {
   const map = {
     IceCream: 'بستنی',
@@ -6342,7 +6500,10 @@ async function createFinanceExceptionTour(req, res) {
     exceptionReason,
     notes,
     destinations = [],
+    rejectedFromAnnouncementId,
   } = req.body || {};
+  const linkRejectedAnnouncementId =
+    rejectedFromAnnouncementId || req.body?.rejected_from_announcement_id || null;
 
   if (!lineType || !driverId || !vehicleId) {
     return res.status(400).json({ message: 'خط، راننده و خودرو الزامی است.' });
@@ -6435,6 +6596,33 @@ async function createFinanceExceptionTour(req, res) {
       );
     }
 
+    if (linkRejectedAnnouncementId) {
+      const rejectedRow = await client.query(
+        `SELECT id, finance_disposition FROM freight_announcements WHERE id = $1`,
+        [linkRejectedAnnouncementId]
+      );
+      if (
+        rejectedRow.rowCount &&
+        rejectedRow.rows[0].finance_disposition === 'rejected'
+      ) {
+        await client.query(
+          `UPDATE freight_announcements
+           SET related_exception_id = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [id, linkRejectedAnnouncementId]
+        );
+        await logFreightHistory({
+          announcementId: linkRejectedAnnouncementId,
+          userId: userId || null,
+          userName: req.user?.username || 'مالی ترابری',
+          action: 'FINANCE_EXCEPTION_LINKED',
+          description: `تور استثنایی ${announcementCode} به این تور رد‌شده پیوند خورد`,
+          ipAddress: req.ip,
+          client,
+        });
+      }
+    }
+
     await client.query('COMMIT');
 
     const destRows = await pool.query(
@@ -6451,6 +6639,7 @@ async function createFinanceExceptionTour(req, res) {
     return res.status(201).json({
       message: 'تور استثنایی ثبت شد. اکنون می‌توانید «ثبت اطلاعات» محاسباتی را انجام دهید.',
       announcement,
+      linkedRejectedAnnouncementId: linkRejectedAnnouncementId || null,
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -6676,6 +6865,8 @@ module.exports = {
   createFinanceExceptionTour,
   updateFinanceExceptionTour,
   finalizeFinanceExceptionMetadata,
+  rejectFinanceTour,
+  ensureFinanceDispositionColumns,
   FINANCE_EXCEPTION_TRANSPORT_ROLES,
 };
 
@@ -6911,6 +7102,8 @@ async function cancelAssignment(req, res) {
 
 // extend exports with cancelAssignment
 module.exports.cancelAssignment = cancelAssignment;
+module.exports.rejectFinanceTour = rejectFinanceTour;
+module.exports.ensureFinanceDispositionColumns = ensureFinanceDispositionColumns;
 
 /**
  * ثبت درخواست تغییر/تقسیم برای یک اعلام بار

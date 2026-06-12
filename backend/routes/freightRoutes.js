@@ -25,6 +25,7 @@ const {
   createFinanceExceptionTour,
   updateFinanceExceptionTour,
   finalizeFinanceExceptionMetadata,
+  rejectFinanceTour,
   FINANCE_EXCEPTION_TRANSPORT_ROLES,
   searchDispatchRoutes,
   createChangeRequest,
@@ -123,6 +124,12 @@ router.post(
   authenticateToken,
   authorizeRole(FINANCE_EXCEPTION_TRANSPORT_ROLES),
   finalizeFinanceExceptionMetadata
+);
+router.post(
+  '/:id/finance-reject',
+  authenticateToken,
+  authorizeRole(FINANCE_EXCEPTION_TRANSPORT_ROLES),
+  rejectFinanceTour
 );
 
 router.get('/:id', authenticateToken, getFreightAnnouncementById);

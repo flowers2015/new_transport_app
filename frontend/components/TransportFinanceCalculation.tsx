@@ -23,6 +23,7 @@ import {
     getTourTotalKilometers,
     resolveTourRouteMileageForTour,
 } from '../utils/tourMileage';
+import { isFinanceRejectedAnn } from '../utils/financeRejection';
 
 interface TransportFinanceCalculationProps {
     currentUser: User;
@@ -270,6 +271,29 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
     const [financeExceptionDialogOpen, setFinanceExceptionDialogOpen] = useState(false);
     const [financeExceptionEditAnn, setFinanceExceptionEditAnn] = useState<FreightAnnouncement | null>(null);
+    const [financeExceptionRejectedFromId, setFinanceExceptionRejectedFromId] = useState<string | null>(null);
+    const [financeExceptionPrefill, setFinanceExceptionPrefill] = useState<{
+        driverId?: string;
+        vehicleId?: string;
+        lineType?: string;
+        vehicleType?: string;
+    } | null>(null);
+
+    const rejectedAnnouncementIdsRef = useRef<Set<string>>(new Set());
+
+    const [financeRejectDialogOpen, setFinanceRejectDialogOpen] = useState(false);
+    const [financeRejectTarget, setFinanceRejectTarget] = useState<{
+        announcementId: string;
+        announcementCode: string;
+        driverId: string;
+        driverName: string;
+        vehicleId?: string;
+        lineType?: string;
+        vehicleType?: string;
+    } | null>(null);
+    const [financeRejectType, setFinanceRejectType] = useState<'not_executed' | 'partial'>('not_executed');
+    const [financeRejectNote, setFinanceRejectNote] = useState('');
+    const [financeRejectSaving, setFinanceRejectSaving] = useState(false);
     
     // بررسی نقش کاربر (فقط برای مالی ترابری)
     const isTransportFinance = currentUser?.role === 'مالی ترابری' || currentUser?.role === 'TransportationFinance';
@@ -570,25 +594,30 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             setDrivers(Array.isArray(driversData) ? driversData : []);
             setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
             
-            // تورهای شرکتی نهایی‌شده + تورهای استثنایی مالی
-            const companyAnnouncements = (Array.isArray(announcementsData) ? announcementsData : []).filter(
-                (ann: any) => {
-                    const isFinanceException = ann.announcement_source === 'finance_exception';
-                    if (isFinanceException) {
-                        return (
-                            ann.assigned_driver_id &&
-                            ann.assigned_vehicle_id &&
-                            ann.status === 'Finalized'
-                        );
-                    }
+            const rawAnnouncements = Array.isArray(announcementsData) ? announcementsData : [];
+            rejectedAnnouncementIdsRef.current = new Set(
+                rawAnnouncements.filter((ann: any) => isFinanceRejectedAnn(ann)).map((ann: any) => ann.id)
+            );
+
+            // تورهای شرکتی نهایی‌شده + تورهای استثنایی مالی (بدون InTransit و بدون رد مالی)
+            const companyAnnouncements = rawAnnouncements.filter((ann: any) => {
+                if (isFinanceRejectedAnn(ann)) return false;
+
+                const isFinanceException = ann.announcement_source === 'finance_exception';
+                if (isFinanceException) {
                     return (
-                        ann.assignment_type === 'company' &&
                         ann.assigned_driver_id &&
                         ann.assigned_vehicle_id &&
-                        (ann.status === 'Finalized' || ann.status === 'InTransit')
+                        ann.status === 'Finalized'
                     );
                 }
-            );
+                return (
+                    ann.assignment_type === 'company' &&
+                    ann.assigned_driver_id &&
+                    ann.assigned_vehicle_id &&
+                    ann.status === 'Finalized'
+                );
+            });
 
             const enrichedAnnouncements = await enrichAnnouncementsWithRouteMileage(companyAnnouncements);
             setAnnouncements(enrichedAnnouncements);
@@ -608,7 +637,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const driverMap = new Map<string, DriverCalculationRow>();
 
         announcements.forEach((ann: any) => {
-            if (!ann.assigned_driver_id || ann.assignment_type !== 'company') return;
+            if (isFinanceRejectedAnn(ann)) return;
+            const isFinanceException = ann.announcement_source === 'finance_exception';
+            if (!ann.assigned_driver_id) return;
+            if (!isFinanceException && ann.assignment_type !== 'company') return;
 
             const driver = drivers.find(d => d.id === ann.assigned_driver_id);
             const vehicle = vehicles.find(v => v.id === ann.assigned_vehicle_id);
@@ -756,7 +788,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             .filter((item: any) => item.commission_status === 'commission_calculated' || item.commission_status === 'paid')
                             .map((item: any) => item.announcement_id)
                     );
+                    const rejectedTourIds = rejectedAnnouncementIdsRef.current;
+                    const isExcludedTour = (announcementId: string) =>
+                        closedTourIds.has(announcementId) || rejectedTourIds.has(announcementId);
                     console.log('🔒 [loadSavedCalculations] تورهای بسته شده:', closedTourIds.size, 'تور');
+                    console.log('🚫 [loadSavedCalculations] تورهای رد مالی:', rejectedTourIds.size, 'تور');
                     
                     // 🔧 رویکرد جدید: savedData را با calculateDriverData ترکیب می‌کنیم
                     // اول همه تورها را از calculateDriverData می‌گیریم
@@ -788,7 +824,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         savedData.forEach((saved: any) => {
                             // پیدا کردن announcement مربوطه
                             const ann = announcements.find(a => a.id === saved.announcement_id);
-                            if (!ann || closedTourIds.has(saved.announcement_id)) return;
+                            if (!ann || isExcludedTour(saved.announcement_id)) return;
                             
                             const driver = drivers.find(d => d.id === saved.driver_id);
                             const vehicle = vehicles.find(v => v.id === ann.assigned_vehicle_id);
@@ -852,7 +888,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         const driverMap = new Map<string, DriverCalculationRow>();
                         
                         savedData.forEach((saved: any) => {
-                            if (closedTourIds.has(saved.announcement_id)) return;
+                            if (isExcludedTour(saved.announcement_id)) return;
                             
                             const driver = drivers.find(d => d.id === saved.driver_id);
                             if (!driver) return;
@@ -862,6 +898,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             
                             // اگر announcement نداریم، از saved data استفاده کن
                             const ann = announcements.find(a => a.id === saved.announcement_id);
+                            if (ann && isFinanceRejectedAnn(ann as any)) return;
                             const roundTripKm = ann?.route?.round_trip_km || (saved.approved_kilometers || 0) + (saved.excess_kilometers || 0);
                             
                             // پیدا کردن vehicle از announcements یا vehicles
@@ -941,7 +978,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     const updated = baseData.map(calc => {
                             // فیلتر کردن تورهایی که بسته نشده‌اند
-                            const openTours = calc.tours.filter(tour => !closedTourIds.has(tour.announcementId));
+                            const openTours = calc.tours.filter(tour => !isExcludedTour(tour.announcementId));
                             
                             const updatedTours = openTours.map(tour => {
                                 // استفاده از Map برای دسترسی سریع‌تر
@@ -1044,7 +1081,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     savedData.forEach((saved: any) => {
                         // اگر این تور بسته شده، نادیده بگیر
-                        if (closedTourIds.has(saved.announcement_id)) return;
+                        if (isExcludedTour(saved.announcement_id)) return;
                         
                         // اگر این تور قبلاً در baseData هست، نادیده بگیر
                         if (baseTourIds.has(saved.announcement_id)) return;
@@ -2430,6 +2467,100 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         } catch (err: any) {
             console.error('❌ [exportInvoiceToImage] Error:', err);
             alert(`خطا در تولید عکس: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    const openFinanceRejectDialog = (
+        tour: DriverTourDetailWithCalculation,
+        calc: DriverCalculationRow
+    ) => {
+        const periodId = (tour as any).periodId || (tour as any).period_id;
+        if (periodId) {
+            alert('این تور در دوره بسته‌شده است و قابل رد مالی نیست.');
+            return;
+        }
+        if ((tour as any).isPaid) {
+            alert('تور پرداخت‌شده قابل رد مالی نیست.');
+            return;
+        }
+        if ((tour as any).isFinanceException) {
+            alert('تور استثنایی را نمی‌توان با رد مالی بست.');
+            return;
+        }
+        setFinanceRejectTarget({
+            announcementId: tour.announcementId,
+            announcementCode: tour.announcementCode || tour.announcementId,
+            driverId: calc.driverId,
+            driverName: calc.driverName,
+            vehicleId: tour.vehicleId,
+            lineType: tour.lineType,
+            vehicleType: tour.vehicleType,
+        });
+        setFinanceRejectType('not_executed');
+        setFinanceRejectNote('');
+        setFinanceRejectDialogOpen(true);
+    };
+
+    const handleFinanceRejectConfirm = async () => {
+        if (!financeRejectTarget) return;
+        setFinanceRejectSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(
+                getApiUrl(`freight-announcements/${financeRejectTarget.announcementId}/finance-reject`),
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        rejectType: financeRejectType,
+                        note: financeRejectNote.trim() || undefined,
+                    }),
+                }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.message || 'خطا در رد مالی');
+            }
+
+            setFinanceRejectDialogOpen(false);
+            rejectedAnnouncementIdsRef.current.add(financeRejectTarget.announcementId);
+
+            if (showTourDetailsDialog && selectedDriverName === financeRejectTarget.driverName) {
+                setSelectedTourDetails((prev) =>
+                    prev ? prev.filter((t) => t.announcementId !== financeRejectTarget.announcementId) : prev
+                );
+            }
+
+            await fetchData();
+            setRefreshTrigger((t) => t + 1);
+
+            if (financeRejectType === 'partial') {
+                const openException = window.confirm(
+                    'تور از لیست محاسبه حذف شد.\n\nبرای ثبت سفر واقعی (ناقص)، تور استثنایی جدید ثبت شود؟'
+                );
+                if (openException) {
+                    setFinanceExceptionRejectedFromId(financeRejectTarget.announcementId);
+                    setFinanceExceptionPrefill({
+                        driverId: financeRejectTarget.driverId,
+                        vehicleId: financeRejectTarget.vehicleId,
+                        lineType: financeRejectTarget.lineType,
+                        vehicleType: financeRejectTarget.vehicleType,
+                    });
+                    setFinanceExceptionEditAnn(null);
+                    setFinanceExceptionDialogOpen(true);
+                }
+            } else {
+                alert('تور با موفقیت رد مالی شد و از محاسبه هزینه تور حذف گردید.');
+            }
+
+            setFinanceRejectTarget(null);
+        } catch (err: any) {
+            alert(err.message || 'خطا در رد مالی تور');
+        } finally {
+            setFinanceRejectSaving(false);
         }
     };
     
@@ -5748,6 +5879,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         <li><strong>تورهای پرداخت شده:</strong> پس از پرداخت، تورها همچنان قابل ویرایش هستند و می‌توانید اطلاعات آن‌ها را تغییر دهید. صورتحساب‌های پرداخت شده همیشه آخرین نسخه محاسبات را نمایش می‌دهند.</li>
                                         <li><strong>قفل بعد از بستن دوره:</strong> پس از بستن دوره مالی در صفحه "محاسبه پورسانت ماهانه"، تمام تورهای آن دوره قفل می‌شوند و دیگر قابل ویرایش نیستند. این قفل تا زمان باز شدن دوره توسط مدیر سیستم ادامه دارد.</li>
                                         <li><strong>اولویت قفل دوره:</strong> اگر تور در دوره بسته شده باشد، حتی اگر پرداخت شده باشد، امکان ویرایش وجود ندارد.</li>
+                                        <li><strong>رد مالی:</strong> تور اجرا نشده یا ناقص را می‌توانید «رد مالی» کنید. تور از ردیف تورهای راننده و آمار نوبت/خیلی‌دور حذف می‌شود ولی در تاریخچه با برچسب می‌ماند. برای سفر ناقص واقعی، بعد از رد، «تور استثنایی» ثبت کنید.</li>
+                                        <li><strong>ورود به کارتابل:</strong> فقط تورهای <strong>نهایی‌شده (Finalized)</strong> — نه «در حال حمل».</li>
                                     </ul>
                                 </div>
                             </div>
@@ -6041,36 +6174,48 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                         );
                                                                     }
                                                                     
-                                                                    // تورهای عادی
-                                                                    if (!tour.isDataRecorded) {
-                                                                        return (
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                                    if (calc) {
-                                                                                        handleRecordData(calc.driverId, tour.announcementId);
-                                                                                    }
-                                                                                }}
-                                                                                className="px-3 py-1.5 rounded-md text-xs transition-colors bg-green-600 text-white hover:bg-green-700"
-                                                                            >
-                                                                                ثبت اطلاعات
-                                                                            </button>
-                                                                        );
-                                                                    } else {
-                                                                        return (
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    const calc = calculations.find(c => c.driverName === selectedDriverName);
-                                                                                    if (calc) {
-                                                                                        handleEditData(calc.driverId, tour.announcementId);
-                                                                                    }
-                                                                                }}
-                                                                                className="px-3 py-1.5 rounded-md text-xs transition-colors bg-blue-600 text-white hover:bg-blue-700"
-                                                                            >
-                                                                                ویرایش
-                                                                            </button>
-                                                                        );
-                                                                    }
+                                                                    const calcRow = calculations.find(c => c.driverName === selectedDriverName);
+                                                                    const canFinanceReject =
+                                                                        isTransportFinance &&
+                                                                        !(tour as any).isFinanceException;
+
+                                                                    return (
+                                                                        <>
+                                                                            {!tour.isDataRecorded ? (
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        if (calcRow) {
+                                                                                            handleRecordData(calcRow.driverId, tour.announcementId);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-3 py-1.5 rounded-md text-xs transition-colors bg-green-600 text-white hover:bg-green-700"
+                                                                                >
+                                                                                    ثبت اطلاعات
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        if (calcRow) {
+                                                                                            handleEditData(calcRow.driverId, tour.announcementId);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-3 py-1.5 rounded-md text-xs transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                                                                                >
+                                                                                    ویرایش
+                                                                                </button>
+                                                                            )}
+                                                                            {canFinanceReject && calcRow && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => openFinanceRejectDialog(tour, calcRow)}
+                                                                                    className="px-3 py-1.5 rounded-md text-xs transition-colors bg-red-600 text-white hover:bg-red-700"
+                                                                                    title="رد مالی — حذف از محاسبه و آمار ترابری"
+                                                                                >
+                                                                                    رد مالی
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    );
                                                                 })()}
                                                             </div>
                                                         </td>
@@ -6673,18 +6818,90 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 </div>
             )}
             
+            {financeRejectDialogOpen && financeRejectTarget && (
+                <div className="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                        <h2 className="text-lg font-bold text-slate-800 mb-2">رد مالی تور</h2>
+                        <p className="text-sm text-slate-600 mb-4">
+                            تور <span className="font-mono font-semibold">{financeRejectTarget.announcementCode}</span>
+                            {' '}— {financeRejectTarget.driverName}
+                        </p>
+                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-3 mb-4">
+                            پس از رد، این تور از ردیف تورهای راننده در محاسبه هزینه و از آمار پیمایش/نوبت/خیلی‌دور حذف می‌شود، اما در تاریخچه با برچسب «رد مالی» باقی می‌ماند.
+                        </p>
+                        <div className="space-y-3 mb-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="financeRejectType"
+                                    checked={financeRejectType === 'not_executed'}
+                                    onChange={() => setFinanceRejectType('not_executed')}
+                                />
+                                <span className="text-sm">اجرا نشده (سفر انجام نشده)</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="financeRejectType"
+                                    checked={financeRejectType === 'partial'}
+                                    onChange={() => setFinanceRejectType('partial')}
+                                />
+                                <span className="text-sm">ناقص (سپس تور استثنایی برای سفر واقعی ثبت کنید)</span>
+                            </label>
+                        </div>
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">توضیح (اختیاری)</label>
+                            <textarea
+                                value={financeRejectNote}
+                                onChange={(e) => setFinanceRejectNote(e.target.value)}
+                                className="input-style w-full resize-y"
+                                rows={3}
+                                placeholder="مثلاً: خرابی وسیله، برگشت بدون تحویل..."
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFinanceRejectDialogOpen(false);
+                                    setFinanceRejectTarget(null);
+                                }}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm"
+                                disabled={financeRejectSaving}
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleFinanceRejectConfirm}
+                                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 disabled:opacity-50"
+                                disabled={financeRejectSaving}
+                            >
+                                {financeRejectSaving ? 'در حال ثبت...' : 'تأیید رد مالی'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <FinanceExceptionTourDialog
                 open={financeExceptionDialogOpen && isTransportFinance}
                 onClose={() => {
                     setFinanceExceptionDialogOpen(false);
                     setFinanceExceptionEditAnn(null);
+                    setFinanceExceptionRejectedFromId(null);
+                    setFinanceExceptionPrefill(null);
                 }}
                 drivers={drivers}
                 vehicles={vehicles}
                 editAnnouncement={financeExceptionEditAnn}
+                rejectedFromAnnouncementId={financeExceptionRejectedFromId}
+                initialPrefill={financeExceptionPrefill}
                 onSaved={async () => {
                     await fetchData();
                     setRefreshTrigger((t) => t + 1);
+                    setFinanceExceptionRejectedFromId(null);
+                    setFinanceExceptionPrefill(null);
                 }}
             />
 

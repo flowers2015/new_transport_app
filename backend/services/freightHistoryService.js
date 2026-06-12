@@ -361,7 +361,10 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       REANNOUNCED: 'اعلام بار مجدد انجام شد',
       ARCHIVED: 'اعلام بار بایگانی شد',
       CHANGE_REQUESTED: 'درخواست تغییر / تقسیم',
-      CANCELLED: 'لغو تخصیص'
+      CANCELLED: 'لغو تخصیص',
+      FINANCE_TRIP_REJECTED: 'رد مالی تور',
+      FINANCE_EXCEPTION_LINKED: 'پیوند تور استثنایی به تور رد‌شده',
+      FINANCE_EXCEPTION_CREATED: 'ثبت تور استثنایی مالی',
     };
     return actionLabels[action] || 'تغییر انجام شد';
   }

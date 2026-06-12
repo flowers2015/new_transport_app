@@ -332,6 +332,8 @@ async function checkPeriodStatus(req, res) {
         LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
         WHERE fa.assigned_driver_id IS NOT NULL
           AND fa.assignment_type = 'company'
+          AND fa.status = 'Finalized'
+          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
           AND d.id IS NOT NULL  -- فقط driver هایی که در جدول drivers وجود دارن
           AND NOT EXISTS (
             SELECT 1 FROM driver_calculations dc 
@@ -534,6 +536,8 @@ async function closePeriod(req, res) {
       )
         AND fa.assigned_driver_id IS NOT NULL
         AND fa.assignment_type = 'company'
+        AND fa.status = 'Finalized'
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
         AND d.id IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM driver_calculations dc 

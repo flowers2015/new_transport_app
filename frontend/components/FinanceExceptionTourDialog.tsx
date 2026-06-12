@@ -41,12 +41,21 @@ const LINE_OPTIONS = [
     { value: 'لبنیات-فروتلند', label: 'لبنیات-فروتلند' },
 ];
 
+type FinanceExceptionPrefill = {
+    driverId?: string;
+    vehicleId?: string;
+    lineType?: string;
+    vehicleType?: string;
+};
+
 type Props = {
     open: boolean;
     onClose: () => void;
     drivers: Driver[];
     vehicles: Vehicle[];
     editAnnouncement?: FreightAnnouncement | null;
+    rejectedFromAnnouncementId?: string | null;
+    initialPrefill?: FinanceExceptionPrefill | null;
     onSaved: () => void;
 };
 
@@ -56,6 +65,8 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
     drivers,
     vehicles,
     editAnnouncement,
+    rejectedFromAnnouncementId,
+    initialPrefill,
     onSaved,
 }) => {
     const isEdit = Boolean(editAnnouncement?.id);
@@ -113,18 +124,20 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
                 destinations: dests,
             });
         } else {
+            const vt = initialPrefill?.vehicleType || '';
+            const normalizedType = CALCULATION_VEHICLE_TYPES.includes(vt as any) ? vt : '';
             setForm({
-                lineType: 'پاستوریزه',
-                vehicleType: '',
-                driverId: '',
-                vehicleId: '',
+                lineType: initialPrefill?.lineType || 'پاستوریزه',
+                vehicleType: normalizedType,
+                driverId: initialPrefill?.driverId || '',
+                vehicleId: initialPrefill?.vehicleId || '',
                 loadingDate: '',
                 billOfLadingNumber: '',
                 billOfLadingDate: '',
                 destinations: [emptyDestRow()],
             });
         }
-    }, [open, editAnnouncement]);
+    }, [open, editAnnouncement, initialPrefill]);
 
     const updateDestCity = (index: number, city: string, cityValid: boolean) => {
         setForm((prev) => {
@@ -145,6 +158,9 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
         destinations: form.destinations
             .filter((d) => d.city.trim())
             .map((d) => ({ city: d.city.trim() })),
+        ...(rejectedFromAnnouncementId && !isEdit
+            ? { rejectedFromAnnouncementId }
+            : {}),
     });
 
     const handleSave = async () => {

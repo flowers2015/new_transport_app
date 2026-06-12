@@ -255,9 +255,10 @@ async function fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd) {
         AND da.created_at <= $3
         AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
         AND fa.status NOT IN ('Cancelled')
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
         AND (
           COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-          OR fa.status IN ('Finalized', 'InTransit')
+          OR fa.status = 'Finalized'
         )
       GROUP BY da.driver_id
     `,
