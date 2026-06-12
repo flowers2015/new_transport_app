@@ -2173,13 +2173,13 @@ async function searchDrivers(req, res) {
 }
 
 async function getAssignmentContext(req, res) {
-  const { queueEntryId } = req.query || {};
+  const { queueEntryId, assignMode } = req.query || {};
   if (!queueEntryId) {
     return res.status(400).json({ message: 'queueEntryId الزامی است.' });
   }
   try {
     const { getAssignContext } = require('../services/dispatch/dispatchAssignContext');
-    const context = await getAssignContext(queueEntryId, req.user?.id || null);
+    const context = await getAssignContext(queueEntryId, req.user?.id || null, assignMode || 'rules');
     res.json(context);
   } catch (error) {
     console.error('❌ [dispatch] getAssignmentContext failed:', error);
@@ -2188,13 +2188,13 @@ async function getAssignmentContext(req, res) {
 }
 
 async function getQueueAssignmentHints(req, res) {
-  const { category } = req.query || {};
+  const { category, assignMode } = req.query || {};
   if (!category) {
     return res.status(400).json({ message: 'category الزامی است.' });
   }
   try {
     const { getQueueAssignHints } = require('../services/dispatch/dispatchAssignContext');
-    const hints = await getQueueAssignHints(category, req.user?.id || null);
+    const hints = await getQueueAssignHints(category, req.user?.id || null, assignMode || 'rules');
     res.json(hints);
   } catch (error) {
     console.error('❌ [dispatch] getQueueAssignmentHints failed:', error);

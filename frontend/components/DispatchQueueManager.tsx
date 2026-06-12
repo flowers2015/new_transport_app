@@ -47,11 +47,13 @@ type PositionEditState = {
 };
 
 type DispatchPhase = 'stage1' | 'stage2_far' | 'stage2_near_vf' | 'stage2_near_all';
+type AssignMode = 'rules' | 'free';
 
 type QueueRowStatus = 'ready' | 'very_far_history' | 'deferred' | 'inactive';
 
 type AnnouncementWithEligibility = DispatchAnnouncementCandidate & {
     eligible: boolean;
+    strictEligible?: boolean;
     lockReason?: string | null;
     isVeryFar?: boolean;
 };
@@ -62,9 +64,11 @@ type AssignContext = {
     entryPhase?: DispatchPhase | null;
     entryPhaseLabel?: string | null;
     assignStage: 'stage1' | 'stage2' | null;
+    assignMode?: AssignMode;
     canDefer: boolean;
     isDeferredThisPhase: boolean;
     driverRowStatus: QueueRowStatus;
+    canAssign?: boolean;
     cycleFromJalali?: string;
     cycleToJalali?: string;
     announcements: AnnouncementWithEligibility[];
@@ -191,6 +195,29 @@ const presetCategories: PresetCategory[] = [
     { key: 'mini-trailer', label: 'مینی تریلی' },
     { key: 'ten-wheel', label: 'ده چرخ' },
 ];
+
+const ASSIGN_MODE_STORAGE_KEY = 'dispatch_queue_assign_mode_v1';
+
+const loadAssignModeByCategory = (): Record<string, AssignMode> => {
+    try {
+        const raw = localStorage.getItem(ASSIGN_MODE_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw) as Record<string, AssignMode>;
+            if (parsed && typeof parsed === 'object') return parsed;
+        }
+    } catch {
+        /* ignore */
+    }
+    return {};
+};
+
+const persistAssignModeByCategory = (map: Record<string, AssignMode>) => {
+    try {
+        localStorage.setItem(ASSIGN_MODE_STORAGE_KEY, JSON.stringify(map));
+    } catch {
+        /* ignore */
+    }
+};
 
 const categoryAccentClasses: Record<string, string> = {
     'trailer': 'bg-sky-600 text-white',
@@ -580,6 +607,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const [positionEdits, setPositionEdits] = useState<Record<string, PositionEditState>>({});
     const [assignDialog, setAssignDialog] = useState<AssignDialogState>(initialAssignDialogState);
     const [assignHintsMap, setAssignHintsMap] = useState<Record<string, QueueAssignHints>>({});
+    const [assignModeByCategory, setAssignModeByCategory] = useState<Record<string, AssignMode>>(
+        () => loadAssignModeByCategory()
+    );
     const [preferencesDialog, setPreferencesDialog] = useState<PreferencesDialogState>(initialPreferencesDialogState);
     const [preferencesPanelOpen, setPreferencesPanelOpen] = useState(false);
     const [selectedDriver, setSelectedDriver] = useState<DispatchDriverSearchResult | null>(null);
@@ -598,6 +628,22 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     );
 
     const driverSearch = useDriverSearch(headers);
+
+    const getAssignModeForCategory = useCallback(
+        (categoryKey: PresetCategory['key'] | null | undefined): AssignMode => {
+            if (!categoryKey) return 'rules';
+            return assignModeByCategory[categoryKey] || 'rules';
+        },
+        [assignModeByCategory]
+    );
+
+    const handleAssignModeChange = (categoryKey: PresetCategory['key'], mode: AssignMode) => {
+        setAssignModeByCategory(prev => {
+            const next = { ...prev, [categoryKey]: mode };
+            persistAssignModeByCategory(next);
+            return next;
+        });
+    };
 
     const updateRow = (rowId: string, patch: Partial<RowEditor> | ((row: RowEditor) => RowEditor)) => {
         setRows(prev =>
@@ -763,10 +809,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             labels.map(async label => {
                 const preset = presetCategories.find(c => c.label === label);
                 const categoryParam = preset?.key || label;
+                const assignMode = getAssignModeForCategory(preset?.key || resolveCategoryKey(label));
                 try {
                     const res = await fetch(
                         getApiUrl(
-                            `dispatch/queue/assign-hints?category=${encodeURIComponent(categoryParam)}`
+                            `dispatch/queue/assign-hints?category=${encodeURIComponent(categoryParam)}&assignMode=${assignMode}`
                         ),
                         { headers }
                     );
@@ -804,6 +851,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             setLoadingQueue(false);
         }
     };
+
+    useEffect(() => {
+        if (!loadingQueue && Object.keys(queueData).length > 0) {
+            void fetchAssignHintsForCategories(Object.keys(queueData));
+        }
+    }, [assignModeByCategory]);
 
     useEffect(() => {
         fetchQueue();
@@ -983,8 +1036,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             selectedAnnouncementId: '',
         }));
         try {
+            const categoryKey = resolveCategoryKey(entry.vehicleCategory || '');
+            const assignMode = getAssignModeForCategory(categoryKey);
             const res = await fetch(
-                getApiUrl(`dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}`),
+                getApiUrl(
+                    `dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}&assignMode=${assignMode}`
+                ),
                 { headers }
             );
             if (!res.ok) {
@@ -1105,14 +1162,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         [sortedAnnouncements, assignDialog.selectedAnnouncementId]
     );
 
+    const dialogAssignMode = assignDialog.context?.assignMode || 'rules';
+    const isDialogFreeMode = dialogAssignMode === 'free';
+
     const canConfirmAssign =
-        Boolean(selectedAnnouncement?.eligible) &&
+        Boolean(selectedAnnouncement) &&
         !assignDialog.context?.isDeferredThisPhase &&
         Boolean(assignDialog.context?.assignStage) &&
-        !assignDialog.loading;
+        !assignDialog.loading &&
+        (isDialogFreeMode || Boolean(selectedAnnouncement?.eligible));
 
     const handleSelectAnnouncement = (announcementId: string, eligible: boolean) => {
-        if (!eligible) return;
+        if (!eligible && !isDialogFreeMode) return;
         setAssignDialog(prev => ({
             ...prev,
             selectedAnnouncementId: announcementId,
@@ -1121,7 +1182,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
     const handleAssignConfirm = async () => {
         if (!assignDialog.entry || !assignDialog.context || !selectedAnnouncement) return;
-        if (!selectedAnnouncement.eligible) {
+        if (!isDialogFreeMode && !selectedAnnouncement.eligible) {
             alert('این بار در فاز فعلی قابل انتخاب نیست.');
             return;
         }
@@ -1269,9 +1330,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const rowStatus = getEntryRowStatus(entry, categoryLabel);
         const statusStyle = rowStatusClasses[rowStatus];
         const hint = assignHintsMap[categoryLabel]?.entries.find(h => h.queueEntryId === entry.id);
-        const assignDisabled =
-            rowStatus === 'deferred' ||
-            (hint ? hint.canAssign === false : rowStatus === 'inactive');
+        const categoryKey = resolveCategoryKey(categoryLabel);
+        const isFreeMode = getAssignModeForCategory(categoryKey) === 'free';
+        const assignDisabled = isFreeMode
+            ? rowStatus === 'deferred' || (hint ? hint.canAssign === false : false)
+            : rowStatus === 'deferred' ||
+              (hint ? hint.canAssign === false : rowStatus === 'inactive');
 
         const loadCount =
             hint && hint.eligibleLoadCount > 0 && (rowStatus === 'ready' || rowStatus === 'very_far_history')
@@ -1505,6 +1569,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const preset = presetCategories.find(cat => cat.label === label);
         const accentClass = preset ? categoryAccentClasses[preset.key] : 'bg-slate-600 text-white';
         const dotClass = preset ? categoryDotClasses[preset.key] : 'bg-slate-400';
+        const assignMode = preset ? getAssignModeForCategory(preset.key) : 'rules';
         return (
             <div key={label} className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -1526,6 +1591,33 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         </button>
                     )}
                 </div>
+                {preset && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-[10px] text-slate-600">
+                        <div className="font-medium text-slate-700 mb-1.5">حالت تخصیص</div>
+                        <div className="flex flex-col gap-1.5 sm:flex-row sm:gap-4">
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name={`assign-mode-${preset.key}`}
+                                    checked={assignMode === 'rules'}
+                                    onChange={() => handleAssignModeChange(preset.key, 'rules')}
+                                    className="text-sky-600"
+                                />
+                                <span>طبق قانون (فعال/غیرفعال + رنگ)</span>
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name={`assign-mode-${preset.key}`}
+                                    checked={assignMode === 'free'}
+                                    onChange={() => handleAssignModeChange(preset.key, 'free')}
+                                    className="text-sky-600"
+                                />
+                                <span>آزاد (فقط رنگ راهنما)</span>
+                            </label>
+                        </div>
+                    </div>
+                )}
                 {renderQueueList('نوبت مسیر دور', farEntries, 'far', label)}
                 {renderQueueList('نوبت مسیر نزدیک', nearEntries, 'near', label)}
             </div>
@@ -2101,16 +2193,29 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
                                     <div className="space-y-3">
                                         <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
-                                                سبز = قابل انتخاب
-                                            </span>
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">
-                                                خاکستری = غیرفعال
-                                            </span>
-                                            <span className="text-slate-500">
-                                                {assignDialog.context.eligibleCount} بار مجاز از{' '}
-                                                {sortedAnnouncements.length}
-                                            </span>
+                                            {isDialogFreeMode ? (
+                                                <>
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-violet-800">
+                                                        حالت آزاد — همه بارها قابل انتخاب
+                                                    </span>
+                                                    <span className="text-slate-500">
+                                                        ستون وضعیت فقط راهنمای قانون است
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
+                                                        سبز = قابل انتخاب
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">
+                                                        خاکستری = غیرفعال
+                                                    </span>
+                                                    <span className="text-slate-500">
+                                                        {assignDialog.context.eligibleCount} بار مجاز از{' '}
+                                                        {sortedAnnouncements.length}
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
                                         {sortedAnnouncements.length === 0 ? (
                                             <div className="text-[12px] text-slate-500 text-center py-6 border border-dashed border-slate-200 rounded-xl">
@@ -2130,11 +2235,13 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                     <tbody className="divide-y divide-slate-100">
                                         {sortedAnnouncements.map((item, idx) => {
                                                             const isSelected = assignDialog.selectedAnnouncementId === item.id;
-                                                            const eligible = item.eligible;
-                                                            const rowClass = eligible
+                                                            const selectable = isDialogFreeMode || item.eligible;
+                                                            const rowClass = selectable
                                                                 ? isSelected
                                                                     ? 'bg-emerald-50 border-r-4 border-emerald-500 cursor-pointer'
-                                                                    : 'bg-white hover:bg-emerald-50/50 cursor-pointer'
+                                                                    : item.lockReason && isDialogFreeMode
+                                                                      ? 'bg-amber-50/40 hover:bg-emerald-50/50 cursor-pointer'
+                                                                      : 'bg-white hover:bg-emerald-50/50 cursor-pointer'
                                                                 : 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-70';
                                                             const kmLabel = formatDistance(item.route?.round_trip_km);
                                                             const vfBadge = item.isVeryFar ? (
@@ -2144,7 +2251,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                             return (
                                                                 <tr
                                                                     key={item.id}
-                                                                    onClick={() => handleSelectAnnouncement(item.id, eligible)}
+                                                                    onClick={() => handleSelectAnnouncement(item.id, selectable)}
                                                                     className={`transition text-[11px] ${rowClass}`}
                                                                     title={
                                                                         item.lockReason
@@ -2167,10 +2274,10 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                                         {vfBadge && <div>{vfBadge}</div>}
                                                                     </td>
                                                                     <td className="px-2 py-1.5 align-top text-[10px]">
-                                                                        {eligible ? (
+                                                                        {item.eligible ? (
                                                                             <span className="text-emerald-700">مجاز</span>
                                                                         ) : (
-                                                                            <span>
+                                                                            <span className={isDialogFreeMode ? 'text-amber-700' : ''}>
                                                                                 {item.lockReason
                                                                                     ? lockReasonLabels[item.lockReason] ||
                                                                                       item.lockReason
@@ -2216,7 +2323,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                         انتخاب: {selectedAnnouncement.announcementCode || selectedAnnouncement.id}
                                     </span>
                                 ) : (
-                                    <span>یک بار مجاز (سبز) انتخاب کنید.</span>
+                                    <span>
+                                        {isDialogFreeMode
+                                            ? 'یک بار انتخاب کنید.'
+                                            : 'یک بار مجاز (سبز) انتخاب کنید.'}
+                                    </span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2">

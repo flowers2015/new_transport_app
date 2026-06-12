@@ -130,9 +130,24 @@ function filterActiveNearVfQueue(queue, nearVfDeferredIds) {
 
 function collectPendingVeryFarAnnouncements(payloads) {
   const seen = new Map();
-  for (const key of ['stage1', 'stage2_near_vf', 'stage2_near_all']) {
+  // فقط فازهای خیلی‌دور — stage2_near_all همه بارها را دارد و نباید فاز را قفل کند
+  for (const key of ['stage1', 'stage2_near_vf']) {
     for (const ann of payloads[key]?.announcements || []) {
       if (isVeryFarAnnouncement(ann)) seen.set(ann.id, ann);
+    }
+  }
+  return [...seen.values()];
+}
+
+function isFreeAssignMode(assignMode) {
+  return String(assignMode || '').toLowerCase() === 'free';
+}
+
+function mergeCategoryAnnouncements(payloads) {
+  const seen = new Map();
+  for (const key of ['stage1', 'stage2_far', 'stage2_near_vf', 'stage2_near_all']) {
+    for (const ann of payloads[key]?.announcements || []) {
+      seen.set(ann.id, ann);
     }
   }
   return [...seen.values()];
@@ -185,11 +200,7 @@ function resolveNearEntryPhase(entry, globalPhase, deferrals, payloads) {
   const inActiveVfTurn = isNearDriverInActiveVfTurn(entry, deferrals, payloads);
   const vfLoadsPending = hasPendingVeryFarLoads(payloads);
 
-  if (
-    inActiveVfTurn &&
-    vfLoadsPending &&
-    (globalPhase === 'stage2_near_vf' || globalPhase === 'stage2_near_all')
-  ) {
+  if (inActiveVfTurn && vfLoadsPending && globalPhase === 'stage2_near_vf') {
     return {
       phase: 'stage2_near_vf',
       data: nearVfPayload,
@@ -420,7 +431,7 @@ function sortAnnouncements(list) {
 }
 
 function buildAnnouncementEligibility(announcements, driverEntry, phase, options = {}) {
-  const { isDeferred = false, inActiveQueue = true } = options;
+  const { isDeferred = false, inActiveQueue = true, freeMode = false } = options;
   const eligibleIds = new Set(
     filterEligibleForDriver(announcements, driverEntry, phase, []).map(a => a.id)
   );
@@ -453,9 +464,12 @@ function buildAnnouncementEligibility(announcements, driverEntry, phase, options
       }
     }
 
+    const strictEligible = eligible;
+
     return {
       ...ann,
-      eligible,
+      eligible: freeMode && !isDeferred ? true : eligible,
+      strictEligible,
       lockReason,
       isVeryFar: isVeryFarAnnouncement(ann),
     };
@@ -555,7 +569,8 @@ function computeEntryRowStatus(entry, entryCtx, eligibleCount, globalPhase) {
   return eligibleCount > 0 ? 'ready' : 'inactive';
 }
 
-async function getQueueAssignHints(vehicleCategory, userId = null) {
+async function getQueueAssignHints(vehicleCategory, userId = null, assignMode = 'rules') {
+  const freeMode = isFreeAssignMode(assignMode);
   const label = normalizeCategoryLabel(vehicleCategory);
   const { start, end, fromJalali, toJalali } = computeJalaliCycleRange();
   const deferrals = await getDeferralsForCategory(label, start, end);
@@ -582,6 +597,9 @@ async function getQueueAssignHints(vehicleCategory, userId = null) {
       historyByDriver[item.driverId || item.driver_id] = item;
     }
   }
+
+  const categoryLoads = mergeCategoryAnnouncements(payloads);
+  const categoryLoadCount = categoryLoads.length;
 
   const entries = queueRows.map(row => {
     const enriched = historyByDriver[row.driver_id] || {
@@ -627,13 +645,16 @@ async function getQueueAssignHints(vehicleCategory, userId = null) {
       : 0;
 
     const rowStatus = computeEntryRowStatus(enriched, entryCtx, eligibleCount, globalPhase);
-    const canAssign = computeCanAssign(enriched, entryCtx, eligibleCount, globalPhase);
+    const strictCanAssign = computeCanAssign(enriched, entryCtx, eligibleCount, globalPhase);
+    const canAssign = freeMode
+      ? !entryCtx.isDeferredThisPhase && categoryLoadCount > 0
+      : strictCanAssign;
 
     return {
       queueEntryId: row.id,
       rowStatus,
       canAssign,
-      eligibleLoadCount: eligibleCount,
+      eligibleLoadCount: freeMode ? categoryLoadCount : eligibleCount,
       hasVeryFarHistory: driverHasVeryFarHistory(enriched),
       isDeferred: entryCtx.isDeferredThisPhase,
       entryPhase,
@@ -646,6 +667,7 @@ async function getQueueAssignHints(vehicleCategory, userId = null) {
     effectivePhase: globalPhase,
     phaseLabel: globalPhase ? PHASE_LABELS[globalPhase] : null,
     autoPromoted: resolved.autoPromoted,
+    assignMode: freeMode ? 'free' : 'rules',
     cycleStart: start,
     cycleEnd: end,
     cycleFromJalali: fromJalali,
@@ -656,7 +678,8 @@ async function getQueueAssignHints(vehicleCategory, userId = null) {
   };
 }
 
-async function getAssignContext(queueEntryId, userId = null) {
+async function getAssignContext(queueEntryId, userId = null, assignMode = 'rules') {
+  const freeMode = isFreeAssignMode(assignMode);
   const { rows } = await pool.query(
     `SELECT * FROM dispatch_queue_entries WHERE id = $1`,
     [queueEntryId]
@@ -697,7 +720,7 @@ async function getAssignContext(queueEntryId, userId = null) {
   const entryCtx = resolveEntryAssignPhase(baseEntry, globalPhase, deferrals, payloads);
   const phase = entryCtx.phase;
 
-  if (!phase || entryCtx.inactive) {
+  if ((!phase || entryCtx.inactive) && !freeMode) {
     const rawCount = await countRawQueueForCategory(vehicleCategory);
     return {
       effectivePhase: globalPhase,
@@ -705,6 +728,7 @@ async function getAssignContext(queueEntryId, userId = null) {
       entryPhase: phase,
       entryPhaseLabel: phase ? PHASE_LABELS[phase] : null,
       assignStage: null,
+      assignMode: 'rules',
       canDefer: false,
       isDeferredThisPhase: entryCtx.isDeferredThisPhase,
       driverRowStatus: entryCtx.isDeferredThisPhase
@@ -723,6 +747,55 @@ async function getAssignContext(queueEntryId, userId = null) {
         rawCount === 0
           ? 'صف نوبت خالی است.'
           : 'بار مناسب برای تخصیص در هیچ فازی یافت نشد.',
+      stageMeta: {
+        pendingStage1Count: payloads.stage1?.pendingStage1Count,
+        autoPromoted: resolved.autoPromoted,
+      },
+    };
+  }
+
+  if (freeMode && (!phase || entryCtx.inactive)) {
+    const allAnnouncements = mergeCategoryAnnouncements(payloads);
+    const displayPhase = globalPhase || 'stage2_near_all';
+    const announcements = buildAnnouncementEligibility(allAnnouncements, baseEntry, displayPhase, {
+      isDeferred: entryCtx.isDeferredThisPhase,
+      inActiveQueue: true,
+      freeMode: true,
+    });
+    const eligibleCount = announcements.filter(a => a.eligible).length;
+    const strictEligibleCount = filterEligibleForDriver(
+      allAnnouncements,
+      baseEntry,
+      displayPhase,
+      []
+    ).length;
+    const driverRowStatus = computeEntryRowStatus(
+      baseEntry,
+      entryCtx,
+      strictEligibleCount,
+      globalPhase
+    );
+
+    return {
+      effectivePhase: globalPhase,
+      phaseLabel: globalPhase ? PHASE_LABELS[globalPhase] : null,
+      entryPhase: displayPhase,
+      entryPhaseLabel: PHASE_LABELS[displayPhase] || null,
+      assignStage: 'stage2',
+      assignMode: 'free',
+      canDefer: false,
+      isDeferredThisPhase: entryCtx.isDeferredThisPhase,
+      driverRowStatus,
+      canAssign: !entryCtx.isDeferredThisPhase && eligibleCount > 0,
+      cycleFromJalali: fromJalali,
+      cycleToJalali: toJalali,
+      cycleStart: start,
+      cycleEnd: end,
+      announcements,
+      eligibleCount,
+      queueEntry: baseEntry,
+      message:
+        eligibleCount === 0 ? 'اعلام باری برای این دسته خودرو موجود نیست.' : undefined,
       stageMeta: {
         pendingStage1Count: payloads.stage1?.pendingStage1Count,
         autoPromoted: resolved.autoPromoted,
@@ -767,23 +840,44 @@ async function getAssignContext(queueEntryId, userId = null) {
     allAnnouncements = [...merged.values()];
   }
 
-  const announcements = buildAnnouncementEligibility(allAnnouncements, driverEntry, phase, {
-    isDeferred,
-    inActiveQueue:
-      inActiveQueue ||
-      phase === 'stage2_far' ||
-      phase === 'stage2_near_all' ||
-      (phase === 'stage2_near_vf' && inActiveNearVfTurn),
-  });
+  const eligibilityAnnouncements = freeMode
+    ? mergeCategoryAnnouncements(payloads)
+    : allAnnouncements;
+  const eligibilityPhase = freeMode ? globalPhase || phase || 'stage2_near_all' : phase;
+
+  const announcements = buildAnnouncementEligibility(
+    eligibilityAnnouncements,
+    driverEntry,
+    eligibilityPhase,
+    {
+      isDeferred,
+      inActiveQueue:
+        freeMode ||
+        inActiveQueue ||
+        phase === 'stage2_far' ||
+        phase === 'stage2_near_all' ||
+        (phase === 'stage2_near_vf' && inActiveNearVfTurn),
+      freeMode,
+    }
+  );
   const eligibleCount = announcements.filter(a => a.eligible).length;
 
+  const strictEligibleCount = filterEligibleForDriver(
+    eligibilityAnnouncements,
+    driverEntry,
+    eligibilityPhase,
+    []
+  ).length;
   const driverRowStatus = computeEntryRowStatus(
     driverEntry,
     entryCtx,
-    eligibleCount,
+    strictEligibleCount,
     globalPhase
   );
-  const canAssignNow = computeCanAssign(driverEntry, entryCtx, eligibleCount, globalPhase);
+  const strictCanAssign = computeCanAssign(driverEntry, entryCtx, eligibleCount, globalPhase);
+  const canAssignNow = freeMode
+    ? !isDeferred && eligibleCount > 0
+    : strictCanAssign;
   const canDeferNow =
     !isDeferred &&
     (phase === 'stage1'
@@ -796,8 +890,9 @@ async function getAssignContext(queueEntryId, userId = null) {
     phaseLabel: globalPhase ? PHASE_LABELS[globalPhase] : null,
     entryPhase: phase,
     entryPhaseLabel: PHASE_LABELS[phase],
-    assignStage: entryCtx.assignStage || assignStageFromPhase(phase),
-    canDefer: canDeferNow,
+    assignStage: freeMode ? 'stage2' : entryCtx.assignStage || assignStageFromPhase(phase),
+    assignMode: freeMode ? 'free' : 'rules',
+    canDefer: freeMode ? false : canDeferNow,
     isDeferredThisPhase: isDeferred,
     driverRowStatus,
     canAssign: canAssignNow,
