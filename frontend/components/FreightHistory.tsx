@@ -12,7 +12,7 @@ import {
     formatRepresentativeType,
     localizeExcelValue,
 } from '../utils/freightDisplay';
-import { getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
+import { getFinanceRejectType, getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -197,9 +197,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     if (!isFinanceRejectedAnn(raw)) {
                         return ann.announcementCode;
                     }
-                    const label = getFinanceRejectTypeLabel(
-                        raw.finance_reject_type || raw.financeRejectType
-                    );
+                    const label = getFinanceRejectTypeLabel(getFinanceRejectType(raw));
                     return (
                         <div className="flex flex-col items-center gap-1">
                             <span>{ann.announcementCode}</span>

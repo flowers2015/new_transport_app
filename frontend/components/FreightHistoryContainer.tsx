@@ -134,6 +134,15 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                     creator_full_name: a.creator_full_name || a.creatorFullName,
                     creator_username: a.creator_username || a.creatorUsername,
                     creator_user_id: a.creator_user_id || a.creatorUserId,
+                    financeDisposition: a.finance_disposition || a.financeDisposition || null,
+                    financeRejectType: a.finance_reject_type || a.financeRejectType || null,
+                    financeRejectNote: a.finance_reject_note || a.financeRejectNote || null,
+                    financeRejectedAt: a.finance_rejected_at || a.financeRejectedAt || null,
+                    relatedExceptionId: a.related_exception_id || a.relatedExceptionId || null,
+                } as FreightAnnouncement & {
+                    financeDisposition?: string | null;
+                    financeRejectType?: string | null;
+                    financeRejectNote?: string | null;
                 };
             };
 
