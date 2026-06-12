@@ -2179,7 +2179,7 @@ async function getAssignmentContext(req, res) {
   }
   try {
     const { getAssignContext } = require('../services/dispatch/dispatchAssignContext');
-    const context = await getAssignContext(queueEntryId, req.user?.id || null, assignMode || 'rules');
+    const context = await getAssignContext(queueEntryId, req.user?.id || null, assignMode || 'free');
     res.json(context);
   } catch (error) {
     console.error('❌ [dispatch] getAssignmentContext failed:', error);
@@ -2194,7 +2194,7 @@ async function getQueueAssignmentHints(req, res) {
   }
   try {
     const { getQueueAssignHints } = require('../services/dispatch/dispatchAssignContext');
-    const hints = await getQueueAssignHints(category, req.user?.id || null, assignMode || 'rules');
+    const hints = await getQueueAssignHints(category, req.user?.id || null, assignMode || 'free');
     res.json(hints);
   } catch (error) {
     console.error('❌ [dispatch] getQueueAssignmentHints failed:', error);

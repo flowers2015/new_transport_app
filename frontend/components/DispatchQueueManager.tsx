@@ -219,6 +219,25 @@ const persistAssignModeByCategory = (map: Record<string, AssignMode>) => {
     }
 };
 
+const normalizeDistanceText = (value?: string | null) =>
+    (value || '')
+        .toString()
+        .replace(/ي/g, 'ی')
+        .replace(/ك/g, 'ک')
+        .replace(/[\s_\-‌]/g, '')
+        .toLowerCase();
+
+const isVeryFarAnnouncement = (announcement: {
+    route?: { distance_category?: string; route_category?: string };
+}) => {
+    const distanceCategory = normalizeDistanceText(announcement?.route?.distance_category);
+    if (distanceCategory && (distanceCategory.includes('خیلیدور') || distanceCategory.includes('veryfar'))) {
+        return true;
+    }
+    const routeCategory = normalizeDistanceText(announcement?.route?.route_category);
+    return Boolean(routeCategory && (routeCategory.includes('خیلیدور') || routeCategory.includes('veryfar')));
+};
+
 const categoryAccentClasses: Record<string, string> = {
     'trailer': 'bg-sky-600 text-white',
     'mini-trailer': 'bg-amber-500 text-white',
@@ -610,6 +629,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const [assignModeByCategory, setAssignModeByCategory] = useState<Record<string, AssignMode>>(
         () => loadAssignModeByCategory()
     );
+    const [freeCategoryLoadCounts, setFreeCategoryLoadCounts] = useState<Record<string, number>>({});
     const [preferencesDialog, setPreferencesDialog] = useState<PreferencesDialogState>(initialPreferencesDialogState);
     const [preferencesPanelOpen, setPreferencesPanelOpen] = useState(false);
     const [selectedDriver, setSelectedDriver] = useState<DispatchDriverSearchResult | null>(null);
@@ -631,8 +651,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
     const getAssignModeForCategory = useCallback(
         (categoryKey: PresetCategory['key'] | null | undefined): AssignMode => {
-            if (!categoryKey) return 'rules';
-            return assignModeByCategory[categoryKey] || 'rules';
+            if (!categoryKey) return 'free';
+            return assignModeByCategory[categoryKey] ?? 'free';
         },
         [assignModeByCategory]
     );
@@ -805,11 +825,13 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
     const fetchAssignHintsForCategories = async (labels: string[]) => {
         const map: Record<string, QueueAssignHints> = {};
+        const freeCounts: Record<string, number> = {};
         await Promise.all(
             labels.map(async label => {
                 const preset = presetCategories.find(c => c.label === label);
                 const categoryParam = preset?.key || label;
-                const assignMode = getAssignModeForCategory(preset?.key || resolveCategoryKey(label));
+                const categoryKey = (preset?.key || resolveCategoryKey(label)) as PresetCategory['key'];
+                const assignMode = getAssignModeForCategory(categoryKey);
                 try {
                     const res = await fetch(
                         getApiUrl(
@@ -823,9 +845,32 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 } catch (error) {
                     console.warn('assign hints failed for', label, error);
                 }
+                if (assignMode === 'free') {
+                    try {
+                        const params = new URLSearchParams({
+                            stage: 'stage2',
+                            subPhase: 'near_all',
+                            forceStage2: 'true',
+                            category: categoryParam,
+                        });
+                        const candRes = await fetch(
+                            getApiUrl(`dispatch/assignments/candidates?${params}`),
+                            { headers }
+                        );
+                        if (candRes.ok) {
+                            const candData = await candRes.json();
+                            freeCounts[label] = (candData.announcements || []).length;
+                        }
+                    } catch {
+                        /* ignore */
+                    }
+                }
             })
         );
         setAssignHintsMap(map);
+        if (Object.keys(freeCounts).length > 0) {
+            setFreeCategoryLoadCounts(prev => ({ ...prev, ...freeCounts }));
+        }
     };
 
     const fetchQueue = async () => {
@@ -1029,6 +1074,71 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setRows(prev => [...prev, createRow(category, queueType)]);
     };
 
+    const buildFreeContextFromCandidates = (
+        entry: DispatchQueueEntry,
+        data: {
+            announcements?: DispatchAnnouncementCandidate[];
+            queue?: DispatchQueueEntry[];
+            displayQueue?: DispatchQueueEntry[];
+        }
+    ): AssignContext => {
+        const rawAnns = data.announcements || [];
+        const announcements: AnnouncementWithEligibility[] = rawAnns.map(ann => ({
+            ...ann,
+            eligible: true,
+            strictEligible: false,
+            lockReason: null,
+            isVeryFar: isVeryFarAnnouncement(ann),
+        }));
+        const queueEntry =
+            (data.queue || []).find(q => q.id === entry.id) ||
+            (data.displayQueue || []).find(q => q.id === entry.id) ||
+            entry;
+
+        return {
+            effectivePhase: null,
+            phaseLabel: null,
+            entryPhase: null,
+            entryPhaseLabel: null,
+            assignStage: 'stage2',
+            assignMode: 'free',
+            canDefer: false,
+            isDeferredThisPhase: false,
+            driverRowStatus: 'ready',
+            canAssign: announcements.length > 0,
+            announcements,
+            eligibleCount: announcements.length,
+            queueEntry,
+            message:
+                announcements.length === 0
+                    ? 'اعلام بار معلقی برای تخصیص یافت نشد.'
+                    : undefined,
+        };
+    };
+
+    const loadFreeAssignContext = async (entry: DispatchQueueEntry, categoryKey: string) => {
+        const params = new URLSearchParams({
+            stage: 'stage2',
+            subPhase: 'near_all',
+            forceStage2: 'true',
+            category: categoryKey,
+            queueEntryId: entry.id,
+        });
+        const res = await fetch(getApiUrl(`dispatch/assignments/candidates?${params}`), { headers });
+        if (!res.ok) {
+            throw new Error(await res.text());
+        }
+        const data = await res.json();
+        const context = buildFreeContextFromCandidates(entry, data);
+        setAssignDialog(prev => ({
+            ...prev,
+            loading: false,
+            context,
+            selectedAnnouncementId: '',
+        }));
+        return context;
+    };
+
     const loadAssignContext = async (entry: DispatchQueueEntry) => {
         setAssignDialog(prev => ({
             ...prev,
@@ -1036,25 +1146,58 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             selectedAnnouncementId: '',
         }));
         try {
-            const categoryKey = resolveCategoryKey(entry.vehicleCategory || '');
-            const assignMode = getAssignModeForCategory(categoryKey);
-            const res = await fetch(
-                getApiUrl(
-                    `dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}&assignMode=${assignMode}`
-                ),
-                { headers }
-            );
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(errText);
+            const categoryKey =
+                resolveCategoryKey(entry.vehicleCategory || '') || presetCategories[0]?.key || 'trailer';
+            const assignMode = getAssignModeForCategory(categoryKey as PresetCategory['key']);
+
+            if (assignMode === 'free') {
+                try {
+                    const res = await fetch(
+                        getApiUrl(
+                            `dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}&assignMode=free`
+                        ),
+                        { headers }
+                    );
+                    if (res.ok) {
+                        const context = (await res.json()) as AssignContext;
+                        if (
+                            context.assignMode === 'free' &&
+                            (context.announcements?.length || 0) > 0
+                        ) {
+                            setAssignDialog(prev => ({
+                                ...prev,
+                                loading: false,
+                                context,
+                                selectedAnnouncementId: '',
+                            }));
+                        } else {
+                            await loadFreeAssignContext(entry, categoryKey);
+                        }
+                    } else {
+                        await loadFreeAssignContext(entry, categoryKey);
+                    }
+                } catch {
+                    await loadFreeAssignContext(entry, categoryKey);
+                }
+            } else {
+                const res = await fetch(
+                    getApiUrl(
+                        `dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}&assignMode=rules`
+                    ),
+                    { headers }
+                );
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText);
+                }
+                const context = (await res.json()) as AssignContext;
+                setAssignDialog(prev => ({
+                    ...prev,
+                    loading: false,
+                    context,
+                    selectedAnnouncementId: '',
+                }));
             }
-            const context = (await res.json()) as AssignContext;
-            setAssignDialog(prev => ({
-                ...prev,
-                loading: false,
-                context,
-                selectedAnnouncementId: '',
-            }));
 
             const driverId = entry.driver?.id || entry.driverId;
             if (driverId) {
@@ -1332,20 +1475,23 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const hint = assignHintsMap[categoryLabel]?.entries.find(h => h.queueEntryId === entry.id);
         const categoryKey = resolveCategoryKey(categoryLabel);
         const isFreeMode = getAssignModeForCategory(categoryKey) === 'free';
-        const hintsLoaded = Boolean(assignHintsMap[categoryLabel]?.entries?.length);
-        // دکمه تخصیص: آزاد = فقط «بمانم»؛ قانون = inactive/deferred؛ اگر hints نیامد (بک‌اند قدیمی) باز بماند
         const assignDisabled = isFreeMode
             ? rowStatus === 'deferred'
-            : hintsLoaded
-              ? rowStatus === 'deferred' || rowStatus === 'inactive'
-              : rowStatus === 'deferred';
+            : rowStatus === 'deferred' || rowStatus === 'inactive';
+
+        const assignBtnClass =
+            isFreeMode && rowStatus !== 'deferred'
+                ? rowStatusClasses.ready.assignBtn
+                : statusStyle.assignBtn;
 
         const loadCount =
-            hint &&
-            hint.eligibleLoadCount > 0 &&
-            (isFreeMode || rowStatus === 'ready' || rowStatus === 'very_far_history')
-                ? hint.eligibleLoadCount
-                : 0;
+            isFreeMode
+                ? freeCategoryLoadCounts[categoryLabel] || hint?.eligibleLoadCount || 0
+                : hint &&
+                    hint.eligibleLoadCount > 0 &&
+                    (rowStatus === 'ready' || rowStatus === 'very_far_history')
+                  ? hint.eligibleLoadCount
+                  : 0;
         const statusNote =
             rowStatus === 'deferred' || rowStatus === 'inactive'
                 ? hint?.lockReason
@@ -1417,7 +1563,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         <button
                             onClick={() => openAssignDialog(entry)}
                             disabled={assignDisabled}
-                            className={`rounded px-1.5 py-0.5 text-[10px] whitespace-nowrap ${statusStyle.assignBtn} disabled:opacity-60`}
+                            className={`rounded px-1.5 py-0.5 text-[10px] whitespace-nowrap ${assignBtnClass} disabled:opacity-60 disabled:cursor-not-allowed`}
                         >
                             تخصیص{loadCount > 0 ? ` (${loadCount})` : ''}
                         </button>
@@ -2094,31 +2240,45 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         </div>
 
                         <div className="px-6 py-4 space-y-4 overflow-y-auto">
-                            {(assignDialog.context?.entryPhaseLabel || assignDialog.context?.phaseLabel) && (
-                                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-                                    <div className="font-semibold">
-                                        {assignDialog.context.entryPhaseLabel ||
-                                            assignDialog.context.phaseLabel}
-                                    </div>
-                                    {assignDialog.context.entryPhaseLabel &&
-                                        assignDialog.context.phaseLabel &&
-                                        assignDialog.context.entryPhaseLabel !==
-                                            assignDialog.context.phaseLabel && (
-                                            <div className="text-xs text-sky-700 mt-1">
-                                                فاز کلی سیستم: {assignDialog.context.phaseLabel}
+                            {!isDialogFreeMode &&
+                                (assignDialog.context?.entryPhaseLabel ||
+                                    assignDialog.context?.phaseLabel) && (
+                                    <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                                        <div className="font-semibold">
+                                            {assignDialog.context.entryPhaseLabel ||
+                                                assignDialog.context.phaseLabel}
+                                        </div>
+                                        {assignDialog.context.entryPhaseLabel &&
+                                            assignDialog.context.phaseLabel &&
+                                            assignDialog.context.entryPhaseLabel !==
+                                                assignDialog.context.phaseLabel && (
+                                                <div className="text-xs text-sky-700 mt-1">
+                                                    فاز کلی سیستم: {assignDialog.context.phaseLabel}
+                                                </div>
+                                            )}
+                                        {assignDialog.context.cycleFromJalali &&
+                                            assignDialog.context.cycleToJalali && (
+                                                <div className="text-xs text-sky-700 mt-1">
+                                                    دوره جاری: {assignDialog.context.cycleFromJalali}{' '}
+                                                    تا {assignDialog.context.cycleToJalali}
+                                                </div>
+                                            )}
+                                        {assignDialog.context.stageMeta?.autoPromoted && (
+                                            <div className="text-xs text-amber-700 mt-1">
+                                                فاز به‌صورت خودکار (طبق قوانین بله) انتخاب شده
+                                                است.
                                             </div>
                                         )}
-                                    {assignDialog.context.cycleFromJalali && assignDialog.context.cycleToJalali && (
-                                        <div className="text-xs text-sky-700 mt-1">
-                                            دوره جاری: {assignDialog.context.cycleFromJalali} تا{' '}
-                                            {assignDialog.context.cycleToJalali}
-                                        </div>
-                                    )}
-                                    {assignDialog.context.stageMeta?.autoPromoted && (
-                                        <div className="text-xs text-amber-700 mt-1">
-                                            فاز به‌صورت خودکار (طبق قوانین بله) انتخاب شده است.
-                                        </div>
-                                    )}
+                                    </div>
+                                )}
+
+                            {isDialogFreeMode && (
+                                <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+                                    <div className="font-semibold">حالت آزاد</div>
+                                    <div className="text-xs text-violet-700 mt-1">
+                                        همه اعلام بارهای معلق نمایش داده می‌شوند. رنگ ردیف راننده
+                                        فقط راهنماست — تخصیص با تصمیم شما انجام می‌شود.
+                                    </div>
                                 </div>
                             )}
 
@@ -2128,11 +2288,13 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 </div>
                             )}
 
-                            {assignDialog.context?.driverRowStatus === 'very_far_history' && (
-                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-                                    سابقه خیلی‌دور در دوره جاری — فقط بارهای مجاز این فاز قابل انتخاب هستند.
-                                </div>
-                            )}
+                            {!isDialogFreeMode &&
+                                assignDialog.context?.driverRowStatus === 'very_far_history' && (
+                                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                                        سابقه خیلی‌دور در دوره جاری — فقط بارهای مجاز این فاز قابل
+                                        انتخاب هستند.
+                                    </div>
+                                )}
 
                         {assignDialog.loading ? (
                             <div className="py-10 text-center text-slate-500 text-sm">در حال بارگذاری...</div>
