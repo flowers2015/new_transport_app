@@ -1332,13 +1332,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const hint = assignHintsMap[categoryLabel]?.entries.find(h => h.queueEntryId === entry.id);
         const categoryKey = resolveCategoryKey(categoryLabel);
         const isFreeMode = getAssignModeForCategory(categoryKey) === 'free';
+        const hintsLoaded = Boolean(assignHintsMap[categoryLabel]?.entries?.length);
+        // دکمه تخصیص: آزاد = فقط «بمانم»؛ قانون = inactive/deferred؛ اگر hints نیامد (بک‌اند قدیمی) باز بماند
         const assignDisabled = isFreeMode
-            ? rowStatus === 'deferred' || (hint ? hint.canAssign === false : false)
-            : rowStatus === 'deferred' ||
-              (hint ? hint.canAssign === false : rowStatus === 'inactive');
+            ? rowStatus === 'deferred'
+            : hintsLoaded
+              ? rowStatus === 'deferred' || rowStatus === 'inactive'
+              : rowStatus === 'deferred';
 
         const loadCount =
-            hint && hint.eligibleLoadCount > 0 && (rowStatus === 'ready' || rowStatus === 'very_far_history')
+            hint &&
+            hint.eligibleLoadCount > 0 &&
+            (isFreeMode || rowStatus === 'ready' || rowStatus === 'very_far_history')
                 ? hint.eligibleLoadCount
                 : 0;
         const statusNote =
