@@ -376,6 +376,92 @@ const isFarRouteCandidate = (item: DispatchAnnouncementCandidate): boolean => {
     return false;
 };
 
+const FREE_CANDIDATE_QUERIES = [
+    { stage: 'stage2', subPhase: 'near_all', forceStage2: 'true' },
+    { stage: 'stage2', subPhase: 'far', forceStage2: 'true' },
+    { stage: 'stage2', forceStage2: 'true' },
+    { stage: 'stage1' },
+];
+
+async function fetchFreeAnnouncementsForCategory(
+    categoryKey: string,
+    headers: Record<string, string>,
+    cache: Record<string, AnnouncementWithEligibility[]>
+): Promise<AnnouncementWithEligibility[]> {
+    if (cache[categoryKey]?.length) return cache[categoryKey];
+
+    const seen = new Map<string, AnnouncementWithEligibility>();
+
+    const collectFromResponse = (
+        rawAnns: DispatchAnnouncementCandidate[],
+        filterByCategory: boolean
+    ) => {
+        for (const ann of rawAnns) {
+            if (filterByCategory && !vehicleMatchesCategory(ann.vehicleType, categoryKey)) {
+                continue;
+            }
+            if (!seen.has(ann.id)) {
+                seen.set(ann.id, {
+                    ...ann,
+                    eligible: true,
+                    strictEligible: false,
+                    lockReason: null,
+                    isVeryFar: isVeryFarAnnouncement(ann),
+                });
+            }
+        }
+    };
+
+    for (const filterByCategory of [true, false]) {
+        for (const query of FREE_CANDIDATE_QUERIES) {
+            try {
+                const params = new URLSearchParams(query);
+                const res = await fetch(
+                    getApiUrl(`dispatch/assignments/candidates?${params}`),
+                    { headers }
+                );
+                if (!res.ok) continue;
+                const data = await res.json();
+                collectFromResponse(data.announcements || [], filterByCategory);
+            } catch {
+                /* try next */
+            }
+        }
+        if (seen.size > 0) break;
+    }
+
+    const list = [...seen.values()];
+    if (list.length > 0) {
+        cache[categoryKey] = list;
+    }
+    return list;
+}
+
+function buildFreeAssignContext(
+    entry: DispatchQueueEntry,
+    announcements: AnnouncementWithEligibility[]
+): AssignContext {
+    return {
+        effectivePhase: null,
+        phaseLabel: null,
+        entryPhase: null,
+        entryPhaseLabel: null,
+        assignStage: 'stage2',
+        assignMode: 'free',
+        canDefer: false,
+        isDeferredThisPhase: false,
+        driverRowStatus: 'ready',
+        canAssign: true,
+        announcements,
+        eligibleCount: announcements.length,
+        queueEntry: entry,
+        message:
+            announcements.length === 0
+                ? 'اعلام بار معلقی برای تخصیص یافت نشد.'
+                : undefined,
+    };
+}
+
 const queueAccent: Record<
     'far' | 'near',
     { border: string; headerBg: string; headerText: string; badge: string }
@@ -630,6 +716,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         () => loadAssignModeByCategory()
     );
     const [freeCategoryLoadCounts, setFreeCategoryLoadCounts] = useState<Record<string, number>>({});
+    const freeAnnouncementsCacheRef = useRef<Record<string, AnnouncementWithEligibility[]>>({});
     const [preferencesDialog, setPreferencesDialog] = useState<PreferencesDialogState>(initialPreferencesDialogState);
     const [preferencesPanelOpen, setPreferencesPanelOpen] = useState(false);
     const [selectedDriver, setSelectedDriver] = useState<DispatchDriverSearchResult | null>(null);
@@ -846,24 +933,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     console.warn('assign hints failed for', label, error);
                 }
                 if (assignMode === 'free') {
-                    try {
-                        const params = new URLSearchParams({
-                            stage: 'stage2',
-                            subPhase: 'near_all',
-                            forceStage2: 'true',
-                            category: categoryParam,
-                        });
-                        const candRes = await fetch(
-                            getApiUrl(`dispatch/assignments/candidates?${params}`),
-                            { headers }
-                        );
-                        if (candRes.ok) {
-                            const candData = await candRes.json();
-                            freeCounts[label] = (candData.announcements || []).length;
-                        }
-                    } catch {
-                        /* ignore */
-                    }
+                    const anns = await fetchFreeAnnouncementsForCategory(
+                        categoryKey || categoryParam,
+                        headers,
+                        freeAnnouncementsCacheRef.current
+                    );
+                    freeCounts[label] = anns.length;
                 }
             })
         );
@@ -876,6 +951,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const fetchQueue = async () => {
         try {
             setLoadingQueue(true);
+            freeAnnouncementsCacheRef.current = {};
             const res = await fetch(getApiUrl('dispatch/queue'), { headers });
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as QueueGroup;
@@ -1074,71 +1150,6 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setRows(prev => [...prev, createRow(category, queueType)]);
     };
 
-    const buildFreeContextFromCandidates = (
-        entry: DispatchQueueEntry,
-        data: {
-            announcements?: DispatchAnnouncementCandidate[];
-            queue?: DispatchQueueEntry[];
-            displayQueue?: DispatchQueueEntry[];
-        }
-    ): AssignContext => {
-        const rawAnns = data.announcements || [];
-        const announcements: AnnouncementWithEligibility[] = rawAnns.map(ann => ({
-            ...ann,
-            eligible: true,
-            strictEligible: false,
-            lockReason: null,
-            isVeryFar: isVeryFarAnnouncement(ann),
-        }));
-        const queueEntry =
-            (data.queue || []).find(q => q.id === entry.id) ||
-            (data.displayQueue || []).find(q => q.id === entry.id) ||
-            entry;
-
-        return {
-            effectivePhase: null,
-            phaseLabel: null,
-            entryPhase: null,
-            entryPhaseLabel: null,
-            assignStage: 'stage2',
-            assignMode: 'free',
-            canDefer: false,
-            isDeferredThisPhase: false,
-            driverRowStatus: 'ready',
-            canAssign: announcements.length > 0,
-            announcements,
-            eligibleCount: announcements.length,
-            queueEntry,
-            message:
-                announcements.length === 0
-                    ? 'اعلام بار معلقی برای تخصیص یافت نشد.'
-                    : undefined,
-        };
-    };
-
-    const loadFreeAssignContext = async (entry: DispatchQueueEntry, categoryKey: string) => {
-        const params = new URLSearchParams({
-            stage: 'stage2',
-            subPhase: 'near_all',
-            forceStage2: 'true',
-            category: categoryKey,
-            queueEntryId: entry.id,
-        });
-        const res = await fetch(getApiUrl(`dispatch/assignments/candidates?${params}`), { headers });
-        if (!res.ok) {
-            throw new Error(await res.text());
-        }
-        const data = await res.json();
-        const context = buildFreeContextFromCandidates(entry, data);
-        setAssignDialog(prev => ({
-            ...prev,
-            loading: false,
-            context,
-            selectedAnnouncementId: '',
-        }));
-        return context;
-    };
-
     const loadAssignContext = async (entry: DispatchQueueEntry) => {
         setAssignDialog(prev => ({
             ...prev,
@@ -1151,34 +1162,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             const assignMode = getAssignModeForCategory(categoryKey as PresetCategory['key']);
 
             if (assignMode === 'free') {
-                try {
-                    const res = await fetch(
-                        getApiUrl(
-                            `dispatch/assignments/context?queueEntryId=${encodeURIComponent(entry.id)}&assignMode=free`
-                        ),
-                        { headers }
-                    );
-                    if (res.ok) {
-                        const context = (await res.json()) as AssignContext;
-                        if (
-                            context.assignMode === 'free' &&
-                            (context.announcements?.length || 0) > 0
-                        ) {
-                            setAssignDialog(prev => ({
-                                ...prev,
-                                loading: false,
-                                context,
-                                selectedAnnouncementId: '',
-                            }));
-                        } else {
-                            await loadFreeAssignContext(entry, categoryKey);
-                        }
-                    } else {
-                        await loadFreeAssignContext(entry, categoryKey);
-                    }
-                } catch {
-                    await loadFreeAssignContext(entry, categoryKey);
-                }
+                const announcements = await fetchFreeAnnouncementsForCategory(
+                    categoryKey,
+                    headers,
+                    freeAnnouncementsCacheRef.current
+                );
+                const context = buildFreeAssignContext(entry, announcements);
+                setAssignDialog(prev => ({
+                    ...prev,
+                    loading: false,
+                    context,
+                    selectedAnnouncementId: '',
+                }));
             } else {
                 const res = await fetch(
                     getApiUrl(
@@ -1476,13 +1471,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const categoryKey = resolveCategoryKey(categoryLabel);
         const isFreeMode = getAssignModeForCategory(categoryKey) === 'free';
         const assignDisabled = isFreeMode
-            ? rowStatus === 'deferred'
+            ? false
             : rowStatus === 'deferred' || rowStatus === 'inactive';
 
-        const assignBtnClass =
-            isFreeMode && rowStatus !== 'deferred'
-                ? rowStatusClasses.ready.assignBtn
-                : statusStyle.assignBtn;
+        const assignBtnClass = isFreeMode
+            ? rowStatusClasses.ready.assignBtn
+            : rowStatus === 'ready' || rowStatus === 'very_far_history'
+              ? rowStatusClasses.ready.assignBtn
+              : statusStyle.assignBtn;
 
         const loadCount =
             isFreeMode
@@ -2282,7 +2278,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 </div>
                             )}
 
-                            {assignDialog.context?.isDeferredThisPhase && (
+                            {!isDialogFreeMode && assignDialog.context?.isDeferredThisPhase && (
                                 <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                                     این راننده برای مرحله بعد «بمانم» ثبت کرده — در این فاز تخصیص مجاز نیست.
                                 </div>
