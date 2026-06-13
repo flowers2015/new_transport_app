@@ -14,7 +14,7 @@ async function resolveApprovedKmFromAnnouncement(announcementId) {
     const routeRows = await pool.query(
       `SELECT round_trip_km
        FROM dispatch_routes
-       WHERE is_active = TRUE AND city ILIKE $1
+       WHERE is_active = TRUE AND LOWER(TRIM(city)) = LOWER(TRIM($1))
        ORDER BY round_trip_km DESC
        LIMIT 1`,
       [city]

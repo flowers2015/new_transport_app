@@ -18,6 +18,18 @@ type MileageRecord = {
     isDataRecorded?: boolean;
 };
 
+function normalizeCityKey(value: string): string {
+    return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function pickRoutesForExactCity(routes: Array<Record<string, unknown>>, city: string) {
+    const cityKey = normalizeCityKey(city);
+    const exact = routes.filter(
+        (route) => normalizeCityKey(String(route.city || '')) === cityKey
+    );
+    return exact.length > 0 ? exact : routes;
+}
+
 /** پیمایش کل ذخیره‌شده در driver_calculations — منبع حقیقت برای پورسانت */
 export function getStoredTourTotalKilometers(record: MileageRecord): number {
     const stored = Number(record.total_kilometers ?? record.totalKilometers);
@@ -41,7 +53,7 @@ export function getTourTotalKilometers(tour: MileageRecord): number {
     const excess = Number(tour.excessKilometers ?? tour.excess_kilometers) || 0;
     const depot = Number(tour.depotTotalMileage ?? tour.depot_total_mileage) || 0;
     const roundTrip = Number(tour.roundTripKm) || 0;
-    const effectiveApproved = Math.max(approved, roundTrip);
+    const effectiveApproved = approved > 0 ? approved : roundTrip;
     if (effectiveApproved > 0 || excess > 0 || depot > 0) {
         return effectiveApproved + excess + depot;
     }
@@ -92,7 +104,8 @@ export async function resolveRouteMileageFromDestinations(
             const routes = await res.json();
             if (!Array.isArray(routes) || routes.length === 0) continue;
 
-            for (const route of routes) {
+            const matchedRoutes = pickRoutesForExactCity(routes, city);
+            for (const route of matchedRoutes) {
                 const km = Number(route.roundTripKm ?? route.round_trip_km) || 0;
                 if (km > approvedKm) {
                     approvedKm = km;

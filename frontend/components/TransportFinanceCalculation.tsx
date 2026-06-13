@@ -631,6 +631,73 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
     };
 
+    const applyFinanceExceptionAnnouncement = async (
+        savedAnnouncement?: FreightAnnouncement | null,
+        savedDestinations?: Array<{ city: string; roundTripKm?: number }>
+    ) => {
+        if (!savedAnnouncement?.id) {
+            await fetchData();
+            setRefreshTrigger((t) => t + 1);
+            return;
+        }
+
+        const payloadKmByCity = new Map(
+            (savedDestinations || [])
+                .filter((d) => d.city && d.roundTripKm && d.roundTripKm > 0)
+                .map((d) => [d.city.trim(), Number(d.roundTripKm)])
+        );
+
+        const destinationsWithKm = (savedAnnouncement.destinations || []).map((dest: any) => {
+            const city = (dest.city || '').trim();
+            const roundTripKm = payloadKmByCity.get(city);
+            return roundTripKm ? { ...dest, roundTripKm } : dest;
+        });
+
+        const normalizedAnn = {
+            ...savedAnnouncement,
+            announcement_source:
+                (savedAnnouncement as any).announcement_source || 'finance_exception',
+            assigned_driver_id:
+                (savedAnnouncement as any).assigned_driver_id ||
+                savedAnnouncement.assignedDriverId,
+            assigned_vehicle_id:
+                (savedAnnouncement as any).assigned_vehicle_id ||
+                savedAnnouncement.assignedVehicleId,
+            vehicle_type:
+                (savedAnnouncement as any).vehicle_type || savedAnnouncement.vehicleType,
+            line_type: (savedAnnouncement as any).line_type || savedAnnouncement.lineType,
+            announcement_code:
+                (savedAnnouncement as any).announcement_code ||
+                savedAnnouncement.announcementCode,
+            destinations: destinationsWithKm,
+        };
+
+        const storedKms = destinationsWithKm
+            .map((d: any) => Number(d.roundTripKm) || 0)
+            .filter((km: number) => km > 0);
+
+        let enriched = normalizedAnn as any;
+        if (storedKms.length > 0) {
+            enriched = {
+                ...normalizedAnn,
+                route: { round_trip_km: Math.max(...storedKms) },
+            };
+        } else {
+            [enriched] = await enrichAnnouncementsWithRouteMileage([normalizedAnn as any]);
+        }
+
+        setAnnouncements((prev) => {
+            const idx = prev.findIndex((a: any) => a.id === enriched.id);
+            if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...enriched };
+                return next;
+            }
+            return [...prev, enriched];
+        });
+        setRefreshTrigger((t) => t + 1);
+    };
+
     // محاسبه داده‌های رانندگان بر اساس اعلام بارها
     const calculateDriverData = useMemo(() => {
         if (!announcements.length || !drivers.length || !vehicles.length) return [];
@@ -976,6 +1043,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     // Merge کردن داده‌های ذخیره شده با baseData
                     let mergeCount = 0; // شمارش تعداد merge موفق
+
+                    const getFreshAnnouncementTourFields = (announcementId: string) => {
+                        const ann = announcements.find((a: any) => a.id === announcementId);
+                        if (!ann) return null;
+                        return {
+                            destinations: (ann.destinations || [])
+                                .map((d: any) => d.city || '')
+                                .filter(Boolean),
+                            roundTripKm: Number(ann.route?.round_trip_km) || 0,
+                            lineType: ann.line_type || '',
+                            vehicleType: ann.vehicle_type || '',
+                        };
+                    };
                     
                     const updated = baseData.map(calc => {
                             // فیلتر کردن تورهایی که بسته نشده‌اند
@@ -985,6 +1065,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 // استفاده از Map برای دسترسی سریع‌تر
                                 const key = `${calc.driverId}_${tour.announcementId}`;
                                 const saved = savedDataMap.get(key);
+                                const freshAnn = getFreshAnnouncementTourFields(tour.announcementId);
+                                const tourWithFreshMeta = freshAnn
+                                    ? {
+                                          ...tour,
+                                          destinations: freshAnn.destinations,
+                                          roundTripKm: freshAnn.roundTripKm,
+                                          lineType: freshAnn.lineType || tour.lineType,
+                                          vehicleType: freshAnn.vehicleType || tour.vehicleType,
+                                      }
+                                    : tour;
                                 
                                 if (saved) {
                                     mergeCount++;
@@ -998,7 +1088,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         saved
                                     });
                                     return {
-                                        ...tour,
+                                        ...tourWithFreshMeta,
                                         billOfLadingNumber: saved.bill_of_lading_number || saved.billOfLadingNumber || '',
                                         billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
                                         calculationDate: saved.calculation_date || saved.calculationDate || '',
@@ -1057,7 +1147,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         queueType: (saved.queue_type || saved.queueType || calc.queueType || 'porsant') as 'porsant' | 'fixed_allowance' | 'helper',
                                     } as any;
                                 }
-                                return tour;
+                                return tourWithFreshMeta;
                             });
                             
                             // محاسبه مجموع هزینه کل و پیمایش کل (از مجموع مصوب + مازاد)
@@ -1288,6 +1378,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             setShowTourDetailsDialog(true);
         }
     };
+
+    useEffect(() => {
+        if (!showTourDetailsDialog || !selectedDriverId) return;
+        const calc = calculations.find((c) => c.driverId === selectedDriverId);
+        if (calc?.tours) {
+            setSelectedTourDetails(calc.tours);
+            setSelectedDriverName(calc.driverName);
+        }
+    }, [calculations, showTourDetailsDialog, selectedDriverId]);
     
 
     // فیلتر و جستجو
@@ -5766,13 +5865,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             const isExpanded = expandedTours.has(tour.announcementId);
                                             
                                             const totalMileage = getTourTotalKilometers(tour);
-                                            const approvedKm =
-                                                Number(
-                                                    (tour as any).approvedKilometers ??
-                                                        (tour as any).approved_kilometers
-                                                ) ||
-                                                Number(tour.roundTripKm) ||
-                                                0;
+                                            const approvedKm = tour.isDataRecorded
+                                                ? Number(
+                                                      (tour as any).approvedKilometers ??
+                                                          (tour as any).approved_kilometers
+                                                  ) ||
+                                                  Number(tour.roundTripKm) ||
+                                                  0
+                                                : Number(tour.roundTripKm) ||
+                                                  Number(
+                                                      (tour as any).approvedKilometers ??
+                                                          (tour as any).approved_kilometers
+                                                  ) ||
+                                                  0;
                                             const excessKm =
                                                 Number(
                                                     tour.excessKilometers ??
@@ -6730,9 +6835,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 editAnnouncement={financeExceptionEditAnn}
                 rejectedFromAnnouncementId={financeExceptionRejectedFromId}
                 initialPrefill={financeExceptionPrefill}
-                onSaved={async () => {
-                    await fetchData();
-                    setRefreshTrigger((t) => t + 1);
+                onSaved={async (savedAnnouncement, savedDestinations) => {
+                    await applyFinanceExceptionAnnouncement(savedAnnouncement, savedDestinations);
                     setFinanceExceptionRejectedFromId(null);
                     setFinanceExceptionPrefill(null);
                 }}

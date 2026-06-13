@@ -5,6 +5,8 @@ import { getApiUrl } from '../utils/apiConfig';
 interface CityAutocompleteProps {
     value?: string | null;
     onChange: (value: string) => void;
+    /** وقتی کاربر از لیست پیشنهادها یک مسیر مشخص انتخاب می‌کند */
+    onRouteSelect?: (option: CityOption) => void;
     placeholder?: string;
     className?: string;
     required?: boolean;
@@ -49,6 +51,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
     disabled = false,
     requireSelection = false,
     onValidityChange,
+    onRouteSelect,
     inModal = false,
 }) => {
     const safeValue = value ?? '';
@@ -216,6 +219,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
         } else {
             onChange(suggestion.city);
         }
+        onRouteSelect?.(suggestion);
         setShowSuggestions(false);
         setSuggestions([]);
     };

@@ -17,6 +17,7 @@ export const CALCULATION_VEHICLE_TYPES = [
 export type FinanceExceptionDestinationRow = {
     city: string;
     cityValid: boolean;
+    roundTripKm?: number;
 };
 
 export type FinanceExceptionFormState = {
@@ -56,7 +57,10 @@ type Props = {
     editAnnouncement?: FreightAnnouncement | null;
     rejectedFromAnnouncementId?: string | null;
     initialPrefill?: FinanceExceptionPrefill | null;
-    onSaved: () => void;
+    onSaved: (
+        savedAnnouncement?: FreightAnnouncement,
+        savedDestinations?: Array<{ city: string; roundTripKm?: number }>
+    ) => void | Promise<void>;
 };
 
 const FinanceExceptionTourDialog: React.FC<Props> = ({
@@ -139,10 +143,19 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
         }
     }, [open, editAnnouncement, initialPrefill]);
 
-    const updateDestCity = (index: number, city: string, cityValid: boolean) => {
+    const updateDestCity = (
+        index: number,
+        city: string,
+        cityValid: boolean,
+        roundTripKm?: number
+    ) => {
         setForm((prev) => {
             const destinations = [...prev.destinations];
-            destinations[index] = { city, cityValid };
+            destinations[index] = {
+                city,
+                cityValid,
+                roundTripKm: roundTripKm ?? destinations[index]?.roundTripKm,
+            };
             return { ...prev, destinations };
         });
     };
@@ -157,7 +170,10 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
         billOfLadingDate: form.billOfLadingDate.trim() || undefined,
         destinations: form.destinations
             .filter((d) => d.city.trim())
-            .map((d) => ({ city: d.city.trim() })),
+            .map((d) => ({
+                city: d.city.trim(),
+                ...(d.roundTripKm && d.roundTripKm > 0 ? { roundTripKm: d.roundTripKm } : {}),
+            })),
         ...(rejectedFromAnnouncementId && !isEdit
             ? { rejectedFromAnnouncementId }
             : {}),
@@ -195,7 +211,7 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'خطا در ذخیره');
-            onSaved();
+            await onSaved(data.announcement, buildPayload().destinations);
             onClose();
         } catch (e: any) {
             setError(e.message || 'خطا در ذخیره');
@@ -229,7 +245,7 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'خطا در نهایی‌سازی');
-            onSaved();
+            await onSaved(data.announcement);
             onClose();
         } catch (e: any) {
             setError(e.message || 'خطا در نهایی‌سازی');
@@ -393,6 +409,16 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
                                             <CityAutocomplete
                                                 value={row.city}
                                                 onChange={(city) => updateDestCity(idx, city, !!city.trim())}
+                                                onRouteSelect={(option) =>
+                                                    updateDestCity(
+                                                        idx,
+                                                        option.city,
+                                                        true,
+                                                        option.roundTripKm != null
+                                                            ? Number(option.roundTripKm)
+                                                            : undefined
+                                                    )
+                                                }
                                                 onValidityChange={(valid) => {
                                                     setForm((prev) => {
                                                         const destinations = [...prev.destinations];

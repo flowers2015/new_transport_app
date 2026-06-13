@@ -67,6 +67,29 @@ const Header: React.FC<HeaderProps> = ({
         }
     }, [currentUser, isAdmin]);
     const isTransportDefault = defaultDashboardView === View.TransportDashboard;
+    const isTransportRole =
+        currentUser?.role === UserRole.TransportationUser ||
+        currentUser?.role === UserRole.Transportation_Personal_Vehicle_User;
+
+    const transportMenuOrder: View[] = [
+        View.TransportDispatchQueue,
+        View.TransportLive,
+        View.TransportBaleSession,
+        View.TransportDispatchBoard,
+        View.FreightHistory,
+        View.TransportReports,
+        View.TransportDashboard,
+        View.SupportTickets,
+    ];
+
+    const sortNavItemsForRole = <T extends { view?: View; type?: string }>(items: T[]): T[] => {
+        if (!isTransportRole) return items;
+        return [...items].sort((a, b) => {
+            const aIndex = a.view ? transportMenuOrder.indexOf(a.view) : -1;
+            const bIndex = b.view ? transportMenuOrder.indexOf(b.view) : -1;
+            return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+        });
+    };
 
     const navItems = [
       // Transport Finance Section - منوهای مالی ترابری
@@ -80,8 +103,8 @@ const Header: React.FC<HeaderProps> = ({
       // Planning Section - برنامه ریزی (اولین برای PlanningEmployee)
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
       // Freight Management Section - اعلام بار
-      { view: View.TransportLive, label: 'پیگیری اعلام بار-زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
-      { view: View.FreightHistory, label: 'تاریخچه اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
+      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
+      { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
       // داشبورد برای PlanningEmployee (بعد از تاریخچه اعلام بار)
       { view: View.Dashboard, label: 'داشبورد', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
       { type: 'divider', roles: [UserRole.TransportationFinance] },
@@ -91,8 +114,8 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.TransportDashboard, label: 'داشبورد ترابری', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.TransportDispatchQueue, label: 'ثبت نوبت', roles: [UserRole.TransportationUser] },
       { view: View.TransportDispatchBoard, label: 'تابلو اعلام بار', roles: [UserRole.TransportationUser] },
-      { view: View.TransportBaleSession, label: 'جلسه بله', roles: [UserRole.TransportationUser] },
-      { view: View.TransportReports, label: 'گزارش‌ها', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.TransportationFinance] },
+      { view: View.TransportBaleSession, label: 'اعلام بار بله', roles: [UserRole.TransportationUser] },
+      { view: View.TransportReports, label: 'گزارش BI', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.TransportationFinance] },
       { type: 'divider', roles: Object.values(UserRole) },
       // Workshop & Fleet Management
       { view: View.Branches, label: 'مدیریت شعب', roles: [UserRole.Transportation, UserRole.VehicleAllocationExpert] },
@@ -163,7 +186,7 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                     <div className="flex items-center">
                         <nav className="hidden md:flex items-center flex-wrap gap-x-2 gap-y-1">
-                            {!isTransportDefault && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && (
+                            {!isTransportDefault && !isTransportRole && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && (
                                 <button onClick={() => onNavigate(defaultDashboardView)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
                             )}
                             
@@ -177,14 +200,16 @@ const Header: React.FC<HeaderProps> = ({
                                     </button>
                                     {isMgmtDropdownOpen && (
                                         <div className="absolute left-0 z-20 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none py-1">
-                                           {navItems.map((item, index) => {
-                                                const hasItemAccess = hasAccess(item.roles);
-                                                if (!hasItemAccess) return null;
-
+                                           {(() => {
+                                                const visibleNavItems = navItems.filter(
+                                                    item => item.type === 'divider' || hasAccess(item.roles)
+                                                );
+                                                const orderedNavItems = sortNavItemsForRole(visibleNavItems);
+                                                return orderedNavItems.map((item, index) => {
                                                 if (item.type === 'divider') {
-                                                    const prevItem = index > 0 ? navItems[index - 1] : null;
-                                                    const nextItem = index < navItems.length - 1 ? navItems[index + 1] : null;
-                                                    const hasVisibleNeighbor = (prevItem && prevItem.type !== 'divider' && hasAccess(prevItem.roles)) && (nextItem && nextItem.type !== 'divider' && hasAccess(nextItem.roles));
+                                                    const prevItem = index > 0 ? orderedNavItems[index - 1] : null;
+                                                    const nextItem = index < orderedNavItems.length - 1 ? orderedNavItems[index + 1] : null;
+                                                    const hasVisibleNeighbor = (prevItem && prevItem.type !== 'divider') && (nextItem && nextItem.type !== 'divider');
                                                     
                                                     if (!hasVisibleNeighbor) return null;
 
@@ -203,7 +228,8 @@ const Header: React.FC<HeaderProps> = ({
                                                         {isAlerts && alertsCount > 0 && <span className="bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{alertsCount}</span>}
                                                     </a>
                                                 );
-                                           })}
+                                           });
+                                           })()}
                                         </div>
                                     )}
                                 </div>
@@ -238,7 +264,9 @@ const Header: React.FC<HeaderProps> = ({
                                 </>
                             ) : (
                                 <>
-                                {navItems.filter(item => item.type !== 'divider' && hasAccess(item.roles)).map(item => (
+                                {sortNavItemsForRole(
+                                    navItems.filter(item => item.type !== 'divider' && hasAccess(item.roles))
+                                ).map(item => (
                                     <button key={item.view} onClick={() => handleNavigate(item.view!)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition flex items-center gap-2 whitespace-nowrap">
                                         <span>{item.label}</span>
                                         {(item as any).special === 'blinking' && <span className="blinking-dot"></span>}

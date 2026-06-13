@@ -453,7 +453,7 @@ async function getFreightAnnouncementById(req, res) {
         const routeRows = await pool.query(
           `SELECT round_trip_km, expected_days
            FROM dispatch_routes
-           WHERE is_active = TRUE AND city ILIKE $1
+           WHERE is_active = TRUE AND LOWER(TRIM(city)) = LOWER(TRIM($1))
            ORDER BY round_trip_km DESC
            LIMIT 1`,
           [city]
@@ -5279,7 +5279,7 @@ async function searchDispatchRoutes(req, res) {
 
     let rows;
     if (cityParam) {
-      // جستجو بر اساس شهر (برای دریافت اطلاعات مصوب)
+      // جستجو بر اساس نام دقیق شهر (برای پیمایش مصوب — نه ILIKE فازی)
       const query = `
         SELECT id,
                province,
@@ -5291,11 +5291,11 @@ async function searchDispatchRoutes(req, res) {
                distance_category
         FROM dispatch_routes
         WHERE is_active = TRUE
-          AND city ILIKE $1
+          AND LOWER(TRIM(city)) = LOWER(TRIM($1))
         ORDER BY round_trip_km DESC
         LIMIT $2
       `;
-      const { rows: result } = await pool.query(query, [`%${cityParam}%`, maxLimit]);
+      const { rows: result } = await pool.query(query, [cityParam, maxLimit]);
       rows = result;
     } else if (trimmed) {
       const normalized = `%${trimmed.replace(/\s+/g, '%')}%`;
