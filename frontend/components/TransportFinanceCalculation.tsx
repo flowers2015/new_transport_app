@@ -695,6 +695,56 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             }
             return [...prev, enriched];
         });
+
+        const newDestinations = (enriched.destinations || [])
+            .map((d: any) => (d.city || '').trim())
+            .filter(Boolean);
+        const newRoundTripKm = Number(enriched.route?.round_trip_km) || 0;
+
+        const patchExceptionTour = (tour: DriverTourDetailWithCalculation) => {
+            if (tour.announcementId !== enriched.id) return tour;
+            const excessKm = Number(tour.excessKilometers) || 0;
+            const depotKm = Number((tour as any).depotTotalMileage) || 0;
+            const approvedKm = newRoundTripKm || Number(tour.approvedKilometers) || 0;
+            const totalKm =
+                tour.isDataRecorded || (tour as any).isFinanceException
+                    ? approvedKm + excessKm + depotKm
+                    : approvedKm;
+
+            return {
+                ...tour,
+                destinations: newDestinations,
+                roundTripKm: newRoundTripKm,
+                lineType: enriched.line_type || tour.lineType,
+                vehicleType: enriched.vehicle_type || tour.vehicleType,
+                approvedKilometers: tour.isDataRecorded ? approvedKm : tour.approvedKilometers,
+                ...(tour.isDataRecorded
+                    ? {
+                          total_kilometers: totalKm,
+                          totalKilometers: totalKm,
+                      }
+                    : {}),
+            } as DriverTourDetailWithCalculation;
+        };
+
+        setCalculations((prev) =>
+            prev.map((calc) => {
+                const hasTour = calc.tours.some((t) => t.announcementId === enriched.id);
+                if (!hasTour) return calc;
+                const updatedTours = calc.tours.map(patchExceptionTour);
+                return {
+                    ...calc,
+                    tours: updatedTours,
+                    totalKilometers: updatedTours.reduce(
+                        (sum, tour) => sum + getTourTotalKilometers(tour),
+                        0
+                    ),
+                };
+            })
+        );
+
+        setSelectedTourDetails((prev) => (prev ? prev.map(patchExceptionTour) : null));
+
         setRefreshTrigger((t) => t + 1);
     };
 
@@ -1087,15 +1137,41 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         isPaid_type: typeof saved.isPaid,
                                         saved
                                     });
+                                    const isFinanceExceptionTour = Boolean(
+                                        (tourWithFreshMeta as any).isFinanceException
+                                    );
+                                    const savedApprovedKm =
+                                        Number(
+                                            saved.approved_kilometers || saved.approvedKilometers
+                                        ) || 0;
+                                    const savedExcessKm =
+                                        Number(
+                                            saved.excess_kilometers || saved.excessKilometers
+                                        ) || 0;
+                                    const savedDepotKm =
+                                        Number(
+                                            saved.depot_total_mileage || saved.depotTotalMileage
+                                        ) || 0;
+                                    const approvedKilometers =
+                                        isFinanceExceptionTour && freshAnn?.roundTripKm
+                                            ? freshAnn.roundTripKm
+                                            : savedApprovedKm;
+                                    const excessKilometers = savedExcessKm;
+                                    const depotTotalMileage = savedDepotKm;
+                                    const mergedTotalKm =
+                                        isFinanceExceptionTour && freshAnn?.roundTripKm
+                                            ? approvedKilometers + excessKilometers + depotTotalMileage
+                                            : saved.total_kilometers ?? undefined;
+
                                     return {
                                         ...tourWithFreshMeta,
                                         billOfLadingNumber: saved.bill_of_lading_number || saved.billOfLadingNumber || '',
                                         billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
                                         calculationDate: saved.calculation_date || saved.calculationDate || '',
-                                        approvedKilometers: saved.approved_kilometers || saved.approvedKilometers || 0,
-                                        excessKilometers: saved.excess_kilometers || saved.excessKilometers || 0,
-                                        total_kilometers: saved.total_kilometers ?? undefined,
-                                        totalKilometers: saved.total_kilometers ?? undefined,
+                                        approvedKilometers,
+                                        excessKilometers,
+                                        total_kilometers: mergedTotalKm,
+                                        totalKilometers: mergedTotalKm,
                                         approvedMissionDays: saved.approved_mission_days || saved.approvedMissionDays || 1,
                                         excessMissionDays: saved.excess_mission_days || saved.excessMissionDays || 0,
                                         tollCost: saved.toll_cost || saved.tollCost || 0,
@@ -1339,7 +1415,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         loadSavedCalculations();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, announcements.length, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger]);
+    }, [loading, announcements, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger]);
 
     // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
     useEffect(() => {
