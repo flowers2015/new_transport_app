@@ -207,6 +207,42 @@ deploy_run_optional_migrations() {
     done
 }
 
+# بعد از npm run build، dist را به مسیر سرو NGINX هم منتقل می‌کند (اگر با پروژه فرق دارد)
+deploy_sync_frontend_dist() {
+    local project_dir="$1"
+    local nginx_dist="${NGINX_DIST_DIR:-}"
+
+    if [ -z "$nginx_dist" ]; then
+        return 0
+    fi
+
+    local source_dist="$project_dir/frontend/dist"
+    if [ ! -d "$source_dist" ] || [ ! -f "$source_dist/index.html" ]; then
+        deploy_warn "frontend/dist ساخته نشده — sync به NGINX رد شد"
+        return 0
+    fi
+
+    local normalized_source
+    local normalized_target
+    normalized_source="$(cd "$source_dist" && pwd)"
+    normalized_target="$(mkdir -p "$nginx_dist" && cd "$nginx_dist" && pwd)"
+
+    if [ "$normalized_source" = "$normalized_target" ]; then
+        deploy_ok "NGINX همان مسیر build است — sync لازم نیست"
+        return 0
+    fi
+
+    deploy_log "sync frontend/dist → $nginx_dist ..."
+    mkdir -p "$nginx_dist"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete "$source_dist/" "$nginx_dist/"
+    else
+        rm -rf "${nginx_dist:?}/"*
+        cp -a "$source_dist/." "$nginx_dist/"
+    fi
+    deploy_ok "frontend به مسیر NGINX منتقل شد"
+}
+
 deploy_print_diagnostics() {
     deploy_err "مسیر پروژه پیدا نشد!"
     echo ""

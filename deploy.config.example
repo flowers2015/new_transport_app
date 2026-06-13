@@ -18,3 +18,7 @@ BUILD_FRONTEND=true
 
 # آیا migrationهای اختیاری اجرا شوند؟
 RUN_MIGRATIONS=true
+
+# اگر NGINX از مسیر دیگری dist را سرو می‌کند (مثلاً /var/www/...)، بعد از build کپی می‌شود.
+# خالی = فقط همان frontend/dist داخل PROJECT_DIR
+# NGINX_DIST_DIR="/var/www/my-transport-app/frontend/dist"

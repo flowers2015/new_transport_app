@@ -41,6 +41,7 @@ if [ -f "$PROJECT_DIR/deploy.config" ]; then
     BUILD_FRONTEND="${BUILD_FRONTEND:-true}"
     RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
     GIT_BRANCH="${GIT_BRANCH:-}"
+    NGINX_DIST_DIR="${NGINX_DIST_DIR:-}"
 fi
 
 if [ ! -d ".git" ]; then
@@ -70,6 +71,7 @@ if [ "$BUILD_FRONTEND" = "true" ] && [ -d "$PROJECT_DIR/frontend" ]; then
     npm install
     npm run build
     deploy_ok "frontend build"
+    deploy_sync_frontend_dist "$PROJECT_DIR"
 else
     deploy_warn "build فرانت رد شد (BUILD_FRONTEND=$BUILD_FRONTEND)"
 fi
