@@ -82,8 +82,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [currentUser]);
 
-    const fetchData = useCallback(async (silent: boolean = false, includePersonal: boolean = false) => {
-            console.log('🚀 [fetchData] Starting', { silent, includePersonal, userId: currentUser?.id });
+    const fetchData = useCallback(async (silent: boolean = false, includePersonal: boolean = false, forceRefresh: boolean = false) => {
             if (!silent) {
                 setLoading(true);
                 setError(null);
@@ -92,56 +91,27 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 const token = localStorage.getItem('token');
                 const headers = { 'Authorization': `Bearer ${token}` } as any;
                 
-                // Lazy Loading: personal-drivers و personal-vehicles فقط وقتی که نیاز است لود می‌شوند
-                // این داده‌ها فقط وقتی لود می‌شوند که:
-                // 1. کاربر نقش "ترابری شخصی" دارد
-                // 2. یا includePersonal = true باشد (مثلاً وقتی dialog assignment باز می‌شود)
                 const shouldLoadPersonal = includePersonal || 
                     currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
                     currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
                 
-                // استفاده از cached fetch برای بهبود عملکرد
-                // TTL: 30 ثانیه برای freight-announcements (داده‌های زنده)
-                // TTL: 10 دقیقه برای vehicles, drivers (داده‌های static - افزایش یافت)
-                
-                // برای اطمینان از دریافت داده جدید، اگر cache fresh است، invalidate می‌کنیم
-                // (فقط برای force refresh وقتی که نیاز است)
-                if (!silent) {
+                // فقط با دکمه «بروزرسانی» کش پاک شود — نه در هر بار ورود به صفحه
+                if (forceRefresh) {
+                    const transportLiveCacheKeys = [
+                        `GET:${getApiUrl('freight-announcements')}`,
+                        `GET:${getApiUrl('vehicles')}`,
+                        `GET:${getApiUrl('drivers')}`,
+                        `GET:${getApiUrl('personal-drivers?page=1&limit=500')}`,
+                        `GET:${getApiUrl('personal-vehicles?page=1&limit=500')}`,
+                    ];
                     try {
                         const { apiCache } = await import('../utils/apiCache');
-                        const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
-                        const cache = (apiCache as any).cache;
-                        if (cache && cache.has(cacheKey)) {
-                            const entry = cache.get(cacheKey);
-                            // اگر cache fresh است (کمتر از 10 ثانیه)، invalidate کن برای force refresh
-                            if (entry && Date.now() < entry.expiresAt && (Date.now() - entry.timestamp) < 10000) {
-                                apiCache.invalidate(cacheKey);
-                                console.log('🗑️ [fetchData] Cache invalidated for force refresh');
-                            }
+                        for (const cacheKey of transportLiveCacheKeys) {
+                            apiCache.invalidate(cacheKey);
                         }
-                    } catch (err) {
-                        // ignore
+                    } catch {
+                        /* ignore */
                     }
-                }
-                
-                // Force invalidate cache برای اطمینان از دریافت داده جدید
-                const transportLiveCacheKeys = [
-                    `GET:${getApiUrl('freight-announcements')}`,
-                    `GET:${getApiUrl('vehicles')}`,
-                    `GET:${getApiUrl('drivers')}`,
-                    `GET:${getApiUrl('personal-drivers?page=1&limit=500')}`,
-                    `GET:${getApiUrl('personal-vehicles?page=1&limit=500')}`,
-                ];
-                try {
-                    const { apiCache } = await import('../utils/apiCache');
-                    for (const cacheKey of transportLiveCacheKeys) {
-                        apiCache.invalidate(cacheKey);
-                    }
-                    if (!silent) {
-                        console.log('🗑️ [fetchData] All TransportLive caches invalidated (manual refresh)');
-                    }
-                } catch (err) {
-                    // ignore
                 }
 
                 const fetchJson = async (url: string) => {
@@ -152,32 +122,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     return response.json();
                 };
 
-                const loadCachedOrFresh = (url: string, ttl: number) =>
-                    silent ? cachedFetch(url, { headers }, ttl) : fetchJson(url);
+                const loadData = (url: string, ttl: number) =>
+                    forceRefresh ? fetchJson(url) : cachedFetch(url, { headers }, ttl);
 
-                const fetchPromises: Promise<any>[] = [
-                    loadCachedOrFresh(getApiUrl('freight-announcements'), 30 * 1000),
-                    loadCachedOrFresh(getApiUrl('vehicles'), 10 * 60 * 1000),
-                    loadCachedOrFresh(getApiUrl('drivers'), 10 * 60 * 1000),
-                ];
-                
-                // فقط اگر نیاز باشد، personal resources را لود کن
-                // اما برای بهبود عملکرد، فقط وقتی که واقعاً نیاز است (مثلاً برای نمایش در جدول)
-                // برای dropdown ها از Search API استفاده می‌شود
-                if (shouldLoadPersonal) {
-                    // فقط برای نمایش داده‌های موجود در جدول، personal resources را لود کن (با Pagination)
-                    // برای dropdown ها از Search API استفاده می‌شود (در AssignmentDialog)
-                    // افزایش limit به 500 برای اطمینان از نمایش راننده‌ها/خودروهای جدید
-                    fetchPromises.push(
-                        loadCachedOrFresh(getApiUrl('personal-drivers?page=1&limit=500'), 10 * 60 * 1000),
-                        loadCachedOrFresh(getApiUrl('personal-vehicles?page=1&limit=500'), 10 * 60 * 1000)
-                    );
-                } else {
-                    // اگر لود نمی‌کنیم، empty arrays برگردان
-                    fetchPromises.push(Promise.resolve([]), Promise.resolve([]));
-                }
-                
-                const [faRes, vRes, dRes, pdRes, pvRes] = await Promise.all(fetchPromises);
+                // مرحله ۱: داده‌های اصلی (اعلام بار + راننده + خودرو) — بدون انتظار برای personal
+                const [faRes, vRes, dRes] = await Promise.all([
+                    loadData(getApiUrl('freight-announcements'), 30 * 1000),
+                    loadData(getApiUrl('vehicles'), 10 * 60 * 1000),
+                    loadData(getApiUrl('drivers'), 10 * 60 * 1000),
+                ]);
                 
                 // console.log('📊 [TransportLive] API Response Status:', {
                 //     freight: faRes.status,
@@ -187,23 +140,25 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 //     personalVehicles: pvRes.status
                 // });
                 
-                // Handle paginated response for personal resources
-                let personalDriversData, personalVehiclesData;
+                // Handle paginated response for personal resources (مرحله ۲ — غیرمسدودکننده)
+                let personalDriversData: PersonalDriver[] = [];
+                let personalVehiclesData: PersonalVehicle[] = [];
                 if (shouldLoadPersonal) {
-                    // Check if response is paginated
-                    personalDriversData = (pdRes && typeof pdRes === 'object' && 'data' in pdRes) ? pdRes.data : (Array.isArray(pdRes) ? pdRes : []);
-                    personalVehiclesData = (pvRes && typeof pvRes === 'object' && 'data' in pvRes) ? pvRes.data : (Array.isArray(pvRes) ? pvRes : []);
-                } else {
-                    personalDriversData = [];
-                    personalVehiclesData = [];
+                    const [pdRes, pvRes] = await Promise.all([
+                        loadData(getApiUrl('personal-drivers?page=1&limit=500'), 10 * 60 * 1000),
+                        loadData(getApiUrl('personal-vehicles?page=1&limit=500'), 10 * 60 * 1000),
+                    ]);
+                    personalDriversData = (pdRes && typeof pdRes === 'object' && 'data' in pdRes)
+                        ? pdRes.data
+                        : (Array.isArray(pdRes) ? pdRes : []);
+                    personalVehiclesData = (pvRes && typeof pvRes === 'object' && 'data' in pvRes)
+                        ? pvRes.data
+                        : (Array.isArray(pvRes) ? pvRes : []);
                 }
                 
-                // cachedFetch خودش JSON.parse می‌کند
-                const [announcementsRaw, vehiclesData, driversData] = [
-                    faRes,
-                    vRes,
-                    dRes
-                ];
+                const announcementsRaw = faRes;
+                const vehiclesData = vRes;
+                const driversData = dRes;
                 
                 // console.log('📋 [TransportLive] Raw Data Received:', {
                 //     announcements: announcementsRaw,
@@ -339,7 +294,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 );
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
                 setDrivers(Array.isArray(driversData) ? driversData : []);
-                // فقط اگر personal resources لود شده باشند، set کن
+
+                // نمایش سریع جدول — قبل از لود personal (برای اکثر کاربران ترابری)
+                if (!silent) {
+                    setLoading(false);
+                }
+
                 if (shouldLoadPersonal) {
                     setPersonalDrivers(Array.isArray(personalDriversData) ? personalDriversData : []);
                     setPersonalVehicles(Array.isArray(personalVehiclesData) ? personalVehiclesData : []);
@@ -410,14 +370,14 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [needsPersonalResources, personalDrivers.length, personalVehicles.length]);
     
-    // بارگذاری اولیه
+    // بارگذاری اولیه: کش برای سرعت + همگام‌سازی پس‌زمینه
     useEffect(() => {
-        console.log('🚀 [useEffect] Initial load', { 
-            fetchDataExists: !!fetchData,
-            currentUser: currentUser?.id 
-        });
-        fetchDataRef.current(); // استفاده از ref به جای مستقیم
-    }, [currentUser?.id]); // فقط وابسته به currentUser.id
+        fetchDataRef.current(false, false, false);
+        const syncTimer = setTimeout(() => {
+            fetchDataRef.current(true, needsPersonalResourcesRef.current, false);
+        }, 150);
+        return () => clearTimeout(syncTimer);
+    }, [currentUser?.id]);
     
     // Auto-refresh به عنوان fallback (همیشه فعال برای اطمینان از دریافت اعلام بارهای جدید)
     useEffect(() => {
@@ -1064,7 +1024,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // بعد از ارجاع، باید داده‌ها را refresh کنیم
             // چون assignment_type تغییر کرده، اعلام بار از لیست ترابری فعلی حذف می‌شود
             // و در لیست ترابری دیگر ظاهر می‌شود
-            await fetchData();
+            await fetchData(true, needsPersonalResourcesRef.current);
             
             console.log('🔄 [TransportLive] Data refreshed after forward');
         } catch (e: any) {
@@ -1203,7 +1163,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             // Real-time update will handle the UI update
             
             // Refresh data after successful change
-            await fetchData();
+            await fetchData(true, needsPersonalResourcesRef.current);
         } catch (error: any) {
             console.error('❌ [TransportLive] Change Vehicle Type error:', error);
             console.error('❌ [TransportLive] Change vehicle type error:', error);
@@ -1227,7 +1187,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 throw new Error(JSON.parse(text)?.message || 'خطا در ثبت درخواست تغییر');
             }
             // Real-time update will handle the UI update
-            await fetchData();
+            await fetchData(true, needsPersonalResourcesRef.current);
         } catch (e: any) {
             console.error('❌ [TransportLive] Change request error:', e);
         }
@@ -1277,7 +1237,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onChangeVehicleType={onChangeVehicleType}
                 onOpenHistory={onOpenHistory}
                 onOpenAssignmentDialog={onOpenAssignmentDialog}
-                onRefresh={() => fetchData(false, needsPersonalResources)}
+                onRefresh={() => fetchData(false, needsPersonalResources, true)}
                 currentUser={currentUser}
                 activeLine={activeLine}
                 setActiveLine={setActiveLine}

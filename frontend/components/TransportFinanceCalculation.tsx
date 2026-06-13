@@ -2,6 +2,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Driver, Vehicle, FreightAnnouncement, DriverAllowanceCalculation, DriverTourDetail } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali } from '../utils/jalali';
+import {
+    buildInvoiceDownloadFilename,
+    buildInvoiceFilenameFromContext,
+    resolveInvoiceDestinationsFromSources,
+} from '../utils/invoiceDownloadFilename';
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
@@ -13,7 +18,8 @@ import ReactDOMServer from 'react-dom/server';
 import { 
     convertToInvoiceDataFormatHorizontal, 
     renderInvoiceLayoutHorizontal, 
-    PaymentRecord 
+    PaymentRecord,
+    calculateMainDriverCostGlobal,
 } from './InvoiceImageHelper';
 import CityManagement from './CityManagement';
 import FinanceExceptionTourDialog from './FinanceExceptionTourDialog';
@@ -126,6 +132,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
+    const [savedCalculations, setSavedCalculations] = useState<any[]>([]);
     const [calculations, setCalculations] = useState<DriverCalculationRow[]>([]);
     
     // نوع فیلتر تاریخ (تاریخ صدور بارنامه یا تاریخ محاسبه)
@@ -564,9 +571,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
     };
 
-    const fetchData = async () => {
+    const fetchData = async (options?: { silent?: boolean }) => {
+        const silent = options?.silent === true;
         try {
-            setLoading(true);
+            if (!silent) {
+                setLoading(true);
+            }
             setError(null);
             
             const token = localStorage.getItem('token');
@@ -575,25 +585,28 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 'Content-Type': 'application/json',
             };
 
-            // Fetch drivers, vehicles, and announcements
-            const [driversRes, vehiclesRes, announcementsRes] = await Promise.all([
+            // Fetch drivers, vehicles, announcements و محاسبات ذخیره‌شده در یک مرحله
+            const [driversRes, vehiclesRes, announcementsRes, calculationsRes] = await Promise.all([
                 fetch(getApiUrl('drivers'), { headers }),
                 fetch(getApiUrl('vehicles'), { headers }),
                 fetch(getApiUrl('freight-announcements?includeFinalized=true'), { headers }),
+                fetch(getApiUrl('driver-calculations'), { headers }),
             ]);
 
             if (!driversRes.ok) throw new Error('خطا در دریافت رانندگان');
             if (!vehiclesRes.ok) throw new Error('خطا در دریافت خودروها');
             if (!announcementsRes.ok) throw new Error('خطا در دریافت اعلام بارها');
 
-            const [driversData, vehiclesData, announcementsData] = await Promise.all([
+            const [driversData, vehiclesData, announcementsData, calculationsData] = await Promise.all([
                 driversRes.json(),
                 vehiclesRes.json(),
                 announcementsRes.json(),
+                calculationsRes.ok ? calculationsRes.json() : Promise.resolve([]),
             ]);
 
             setDrivers(Array.isArray(driversData) ? driversData : []);
             setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+            setSavedCalculations(Array.isArray(calculationsData) ? calculationsData : []);
             
             const rawAnnouncements = Array.isArray(announcementsData) ? announcementsData : [];
             rejectedAnnouncementIdsRef.current = new Set(
@@ -636,7 +649,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         savedDestinations?: Array<{ city: string; roundTripKm?: number }>
     ) => {
         if (!savedAnnouncement?.id) {
-            await fetchData();
+            await fetchData({ silent: true });
             setRefreshTrigger((t) => t + 1);
             return;
         }
@@ -871,23 +884,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             });
             
             try {
-                const token = localStorage.getItem('token');
-                const headers = {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                };
+                const savedData = savedCalculations;
                 
-                // دریافت همه محاسبات ذخیره شده
-                const apiUrl = getApiUrl('driver-calculations');
-                console.log('🌐 [loadSavedCalculations] در حال fetch از:', apiUrl);
-                const savedRes = await fetch(apiUrl, { headers });
-                console.log('📡 [loadSavedCalculations] Response status:', savedRes.status, savedRes.statusText);
-                if (savedRes.ok) {
-                    const savedData = await savedRes.json();
-                    
-                    // 🔴 DEBUG با alert (چون console.log در production حذف می‌شود)
-                    // این alert را بعد از رفع مشکل حذف کنید
-                    if (typeof window !== 'undefined' && savedData.length > 0) {
+                if (typeof window !== 'undefined' && savedData.length > 0) {
                         const debugInfo = `savedData: ${savedData.length} records, calculateDriverData: ${calculateDriverData.length} drivers`;
                         window.__DEBUG_SAVED_DATA__ = savedData;
                         window.__DEBUG_BASE_DATA__ = calculateDriverData;
@@ -1392,21 +1391,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     // این باعث می‌شود داده‌های به‌روز همیشه نمایش داده شوند
                     
                     console.log('✅ [loadSavedCalculations] داده‌ها با موفقیت load شدند');
-                } else {
-                    const errorText = await savedRes.text().catch(() => '');
-                    console.error('❌ [loadSavedCalculations] خطا در دریافت:', savedRes.status, savedRes.statusText, errorText);
-                    // اگر خطا داد و calculateDriverData داریم، از آن استفاده کن
-                    if (calculateDriverData.length > 0) {
-                        console.log('🔄 [loadSavedCalculations] استفاده از calculateDriverData به دلیل خطا');
-                        setCalculations(calculateDriverData);
-                    } else {
-                        console.warn('⚠️ [loadSavedCalculations] calculateDriverData هم خالی است');
-                        setCalculations([]);
-                    }
-                }
             } catch (err: any) {
                 console.error('❌ [loadSavedCalculations] خطا در بارگذاری داده‌های ذخیره شده:', err);
-                // اگر خطا داد و calculateDriverData داریم، از آن استفاده کن
                 if (calculateDriverData.length > 0) {
                     setCalculations(calculateDriverData);
                 }
@@ -1415,7 +1401,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         loadSavedCalculations();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, announcements, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger]);
+    }, [loading, announcements, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger, savedCalculations.length]);
+
+    // نمایش سریع جدول پایه قبل از اتمام merge (بدون چشمک‌زدن)
+    useEffect(() => {
+        if (!loading && calculateDriverData.length > 0 && calculations.length === 0) {
+            setCalculations(calculateDriverData);
+        }
+    }, [loading, calculateDriverData, calculations.length]);
 
     // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
     useEffect(() => {
@@ -2603,7 +2596,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 
                 // ایجاد لینک دانلود
                 const link = document.createElement('a');
-                link.download = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.png`;
+                link.download = buildInvoiceFilenameFromContext(
+                    selectedInvoiceRecord,
+                    invoiceCalculations,
+                    invoiceAnnouncements,
+                    'png'
+                );
                 link.href = imgData;
                 link.click();
                 
@@ -2685,7 +2683,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 );
             }
 
-            await fetchData();
+            await fetchData({ silent: true });
             setRefreshTrigger((t) => t + 1);
 
             if (financeRejectType === 'partial') {
@@ -3148,7 +3146,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 
                 // ایجاد لینک دانلود
                 const link = document.createElement('a');
-                link.download = `صورتحساب_${calc.driverName}_${new Date().toISOString().split('T')[0]}.png`;
+                link.download = buildInvoiceDownloadFilename({
+                    driverName: calc.driverName,
+                    destinations: resolveInvoiceDestinationsFromSources({
+                        tour,
+                        announcement,
+                    }),
+                    date:
+                        tour.calculationDate ||
+                        tour.billOfLadingDate ||
+                        announcement?.loading_date,
+                    extension: 'png',
+                });
                 link.href = imgData;
                 link.click();
                 
@@ -6005,18 +6014,37 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             
                                             const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
                                             const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
+                                            const returnBillOfLadingCost = Number((tour as any).returnBillOfLadingCost || (tour as any).return_bill_of_lading_cost || 0);
                                             
-                                            // محاسبه سایر هزینه‌های راننده اصلی (بدون اجرت/پورسانت):
-                                            // چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + بار برگشتی بین شعب + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو + اجرت ثابت (فقط برای اجرت ثابت)
-                                            const otherMainDriverCosts = multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + returnInterBranchCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost + fixedAllowance;
-                                            
-                                            // محاسبه totalCost: سایر هزینه‌ها + اجرت/پورسانت (tourCost) + هزینه راننده کمکی
-                                            // اگر fixedAllowance > 0 باشد، یعنی راننده اجرت ثابت است و اجرت قبلاً در otherMainDriverCosts اضافه شده
-                                            const calculatedTotalCost = (fixedAllowance > 0 ? otherMainDriverCosts : (otherMainDriverCosts + tourCost));
-                                            
-                                            // استفاده از calculatedTotalCost (محاسبه شده) به جای totalCost از دیتابیس
-                                            // چون totalCost از دیتابیس ممکن است شامل loadingCost باشد که دیگر استفاده نمی‌شود
-                                            const totalCost = calculatedTotalCost;
+                                            // جمع کل = همان منطق صورتحساب/لیست پرداخت (بدون پورسانت تور)
+                                            const totalCost = calculateMainDriverCostGlobal({
+                                                bill_of_lading_cost: billOfLadingCost,
+                                                billOfLadingCost,
+                                                food_cost: foodCost,
+                                                foodCost,
+                                                fuel_cost: fuelCost,
+                                                fuelCost,
+                                                toll_cost: tollCost,
+                                                tollCost,
+                                                return_cargo_cost: returnCargo,
+                                                returnCargoCost: returnCargo,
+                                                return_inter_branch_cargo_cost: returnInterBranchCargo,
+                                                returnInterBranchCargoCost: returnInterBranchCargo,
+                                                return_bill_of_lading_cost: returnBillOfLadingCost,
+                                                returnBillOfLadingCost,
+                                                multi_unload_cost: multiUnloadCost,
+                                                multiUnloadCost,
+                                                excess_mission_cost: excessMissionCost,
+                                                excessMissionCost,
+                                                fixed_allowance: fixedAllowanceRaw,
+                                                fixedAllowance: fixedAllowanceRaw,
+                                                depot_cargo_handling_cost: depotCargoHandlingCost,
+                                                depotCargoHandlingCost,
+                                                depot_kilometer_rate: depotAllowanceRaw,
+                                                depotKilometerRate: depotAllowanceRaw,
+                                                depot_mission_cost: depotMissionCost,
+                                                depotMissionCost,
+                                            });
                                             
                                             // لاگ برای دیباگ - فقط برای اجرت ثابت
                                             if (isFixedAllowance && tour.announcementId) {
@@ -6402,6 +6430,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                                     <span className={tour.isDataRecorded ? 'text-blue-700 font-bold' : 'text-slate-400'}>
                                                                                         {fixedAllowance > 0 ? fixedAllowance.toLocaleString('fa-IR') : '0'} ریال
                                                                                     </span>
+                                                                                </div>
+                                                                            )}
+                                                                            {isPorsant && tourCostRaw > 0 && (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-600 whitespace-nowrap">پورسانت (انتهای دوره):</span>
+                                                                                    <span className="text-amber-700 font-semibold">{tourCostRaw.toLocaleString('fa-IR')} ریال</span>
+                                                                                    <span className="text-slate-500 text-[10px]">(در جمع کل لحاظ نمی‌شود)</span>
                                                                                 </div>
                                                                             )}
                                                                             <div className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-300">

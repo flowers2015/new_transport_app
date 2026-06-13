@@ -59,6 +59,8 @@ async function savePayment(req, res) {
       paymentListDate,
       notes,
       userId,
+      calculationId,
+      announcementId,
     } = req.body;
 
     if (!driverId || !paymentDate || !paymentAmount) {
@@ -86,11 +88,24 @@ async function savePayment(req, res) {
       userId || null,
     ]);
 
-    // به‌روزرسانی وضعیت پرداخت در driver_calculations
-    // اگر calculation_date_from و calculation_date_to مشخص شده باشند، محاسبات در این بازه را به‌روزرسانی کن
-    if (calculationDateFrom && calculationDateTo) {
-      try {
-        await pool.query(`
+    // به‌روزرسانی وضعیت پرداخت در driver_calculations — اولویت با شناسه تور/محاسبه
+    try {
+      if (calculationId) {
+        const { rowCount } = await pool.query(`
+          UPDATE driver_calculations 
+          SET is_paid = TRUE, updated_by = $1, updated_at = NOW()
+          WHERE id = $2 AND is_paid = FALSE
+        `, [userId || null, calculationId]);
+        console.log('✅ [savePayment] is_paid برای calculationId:', calculationId, 'rows:', rowCount);
+      } else if (announcementId && driverId) {
+        const { rowCount } = await pool.query(`
+          UPDATE driver_calculations 
+          SET is_paid = TRUE, updated_by = $1, updated_at = NOW()
+          WHERE driver_id = $2 AND announcement_id = $3 AND is_paid = FALSE
+        `, [userId || null, driverId, announcementId]);
+        console.log('✅ [savePayment] is_paid برای announcementId:', announcementId, 'rows:', rowCount);
+      } else if (calculationDateFrom && calculationDateTo) {
+        const { rowCount } = await pool.query(`
           UPDATE driver_calculations 
           SET is_paid = TRUE, updated_by = $1, updated_at = NOW()
           WHERE driver_id = $2 
@@ -98,24 +113,17 @@ async function savePayment(req, res) {
             AND calculation_date <= $4
             AND is_paid = FALSE
         `, [userId || null, driverId, calculationDateFrom, calculationDateTo]);
-        console.log('✅ [savePayment] وضعیت پرداخت در driver_calculations به‌روزرسانی شد');
-      } catch (updateError) {
-        console.error('⚠️ [savePayment] خطا در به‌روزرسانی وضعیت پرداخت:', updateError);
-        // ادامه می‌دهیم حتی اگر به‌روزرسانی وضعیت پرداخت خطا داشته باشد
-      }
-    } else {
-      // اگر بازه تاریخ مشخص نشده، همه محاسبات پرداخت نشده این راننده را به‌روزرسانی کن
-      try {
-        await pool.query(`
+        console.log('✅ [savePayment] is_paid برای بازه تاریخ، rows:', rowCount);
+      } else if (driverId) {
+        const { rowCount } = await pool.query(`
           UPDATE driver_calculations 
           SET is_paid = TRUE, updated_by = $1, updated_at = NOW()
-          WHERE driver_id = $2 
-            AND is_paid = FALSE
+          WHERE driver_id = $2 AND is_paid = FALSE
         `, [userId || null, driverId]);
-        console.log('✅ [savePayment] وضعیت پرداخت در driver_calculations به‌روزرسانی شد (بدون فیلتر تاریخ)');
-      } catch (updateError) {
-        console.error('⚠️ [savePayment] خطا در به‌روزرسانی وضعیت پرداخت:', updateError);
+        console.log('✅ [savePayment] is_paid برای همه تورهای راننده، rows:', rowCount);
       }
+    } catch (updateError) {
+      console.error('⚠️ [savePayment] خطا در به‌روزرسانی وضعیت پرداخت:', updateError);
     }
 
     console.log('✅ [savePayment] پرداخت ثبت شد:', id);

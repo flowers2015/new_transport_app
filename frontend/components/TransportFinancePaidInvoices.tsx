@@ -3,6 +3,7 @@ import ReactDOMServer from 'react-dom/server';
 import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
+import { buildInvoiceDownloadFilename, resolveInvoiceDestinationsFromSources } from '../utils/invoiceDownloadFilename';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -998,8 +999,17 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                             bytes[j] = binaryString.charCodeAt(j);
                         }
                         
-                        // نام فایل: نام راننده-تاریخ پرداخت(شمسی بدون /)-شماره تور
-                        const fileName = `${record.driverName}-${paymentDateClean}-${tourNumber}.png`;
+                        const announcementId = calc.announcement_id || calc.announcementId;
+                        const announcement = announcementId ? announcementsMap.get(announcementId) : undefined;
+                        const fileName = buildInvoiceDownloadFilename({
+                            driverName: record.driverName,
+                            destinations: resolveInvoiceDestinationsFromSources({ calculation: calc, announcement }),
+                            date:
+                                calc.calculation_date ||
+                                calc.calculationDate ||
+                                record.paymentDate,
+                            extension: 'png',
+                        });
                         zip.file(fileName, bytes);
                         successCount++;
                         
@@ -2494,7 +2504,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                                 <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
                                                     جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{block.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
                                                 </div>
-                                                {block.summary.deductionsAmount && block.summary.deductionsAmount > 0 && (
+                                                {(block.summary.deductionsAmount ?? 0) > 0 && (
                                                     <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
                                                         {block.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{block.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
                                                     </div>
@@ -2655,7 +2665,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         bytes[j] = binaryString.charCodeAt(j);
                     }
 
-                    const fileName = `صورتحساب_${i + 1}.jpg`;
+                    const lastTourData =
+                        invoiceData.tourData?.[invoiceData.tourData.length - 1];
+                    const fileName = buildInvoiceDownloadFilename({
+                        driverName: invoiceData.driverName || 'راننده',
+                        destinations: lastTourData?.destinations,
+                        date: lastTourData?.calculationDate || lastTourData?.billOfLadingDate,
+                        extension: 'jpg',
+                    });
                     zip.file(fileName, bytes);
                     successCount++;
 
@@ -3261,7 +3278,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                         <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
                                             جمع کل هزینه سفر: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
                                         </div>
-                                        {mainBlock.summary.deductionsAmount && mainBlock.summary.deductionsAmount > 0 && (
+                                        {(mainBlock.summary.deductionsAmount ?? 0) > 0 && (
                                             <div style={{ direction: 'rtl', unicodeBidi: 'isolate', marginBottom: '4px' }}>
                                                 {mainBlock.summary.deductionsTitle || 'کسور'}: <span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.deductionsAmount.toLocaleString('fa-IR')}</span> ریال
                                             </div>
@@ -3866,7 +3883,14 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         bytes[j] = binaryString.charCodeAt(j);
                     }
 
-                    const fileName = `صورتحساب_${i + 1}_افقی.jpg`;
+                    const lastTourData =
+                        invoiceData.tourData?.[invoiceData.tourData.length - 1];
+                    const fileName = buildInvoiceDownloadFilename({
+                        driverName: invoiceData.driverName || 'راننده',
+                        destinations: lastTourData?.destinations,
+                        date: lastTourData?.calculationDate || lastTourData?.billOfLadingDate,
+                        extension: 'jpg',
+                    });
                     zip.file(fileName, bytes);
                     successCount++;
 

@@ -3,6 +3,7 @@ import ReactDOMServer from 'react-dom/server';
 import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
+import { buildInvoiceFilenameFromContext } from '../utils/invoiceDownloadFilename';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -2996,10 +2997,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         });
     }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (options?: { silent?: boolean }) => {
+        const silent = options?.silent === true;
         try {
-            console.log('🚀 [fetchData] شروع fetchData');
-            setLoading(true);
+            if (!silent) {
+                setLoading(true);
+            }
             setError(null);
             
             const token = localStorage.getItem('token');
@@ -3194,36 +3197,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 allRecordsCount: allRecords.length
             });
             
-            // دریافت اطلاعات پرداخت‌ها برای هر رکورد
-            const recordsWithPayments = await Promise.all(
-                allRecords.map(async (record) => {
-                    try {
-                        // دریافت آخرین پرداخت
-                        const paymentRes = await fetch(
-                            getApiUrl(`payments/last/${record.driverId}`),
-                            { headers }
-                        );
-                        if (paymentRes.ok) {
-                            const paymentData = await paymentRes.json();
-                            if (paymentData) {
-                                record.lastPaymentDate = paymentData.payment_date || '';
-                                record.lastPaymentAmount = parseFloat(paymentData.payment_amount || 0);
-                            }
-                        }
-                    } catch (err) {
-                        console.warn(`⚠️ [fetchData] Failed to fetch payment info for driver ${record.driverId}:`, err);
-                    }
-                    
-                    return record;
-                })
-            );
-            
-            console.log('✅ [fetchData] تمام رکوردها پردازش شد:', {
-                totalRecords: recordsWithPayments.length,
-                sampleRecord: recordsWithPayments.length > 0 ? recordsWithPayments[0] : null
-            });
-            
-            setPaymentRecords(recordsWithPayments);
+            setPaymentRecords(allRecords);
             console.log('✅ [fetchData] paymentRecords تنظیم شد');
         } catch (err: any) {
             console.error('❌ [TransportFinancePaymentList] Failed to fetch data:', err);
@@ -3274,52 +3248,21 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredRecords, currentPage, itemsPerPage]);
 
-    // خروجی اکسل برای بانک - تجمیع شده بر اساس راننده
+    // خروجی اکسل برای بانک — هر تور/ردیف لیست پرداخت یک سطر جدا (مثل جدول صفحه)
     const exportToExcelForBank = async () => {
-        const token = localStorage.getItem('token');
-        const headers = {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        };
-        
         const wsData = [
             ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره حساب مقصد', 'مبلغ هزینه (ریال)', 'کسور(پیش پرداخت) (ریال)', 'مبلغ قابل پرداخت (ریال)']
         ];
 
-        // Grouping بر اساس driverId و employeeId (تجمیع هزینه‌ها)
-        const groupedRecords = new Map<string, { employeeId: string; driverName: string; accountNumber: string; mainDriverAmount: number; advancePayment: number; payableAmount: number }>();
-        
-        filteredRecords.forEach((record) => {
-            const key = record.employeeId || record.driverId;
-            const existing = groupedRecords.get(key);
-            
-            if (existing) {
-                existing.mainDriverAmount += record.mainDriverAmount || 0;
-                existing.advancePayment += record.advancePayment || 0;
-                existing.payableAmount = existing.mainDriverAmount - existing.advancePayment;
-            } else {
-                groupedRecords.set(key, {
-                    employeeId: record.employeeId || '',
-                    driverName: record.driverName || '',
-                    accountNumber: record.accountNumber || '',
-                    mainDriverAmount: record.mainDriverAmount || 0,
-                    advancePayment: record.advancePayment || 0,
-                    payableAmount: record.payableAmount || 0
-                });
-            }
-        });
-
-        let rowIndex = 0;
-        Array.from(groupedRecords.values()).forEach((record) => {
-            rowIndex++;
+        filteredRecords.forEach((record, index) => {
             wsData.push([
-                rowIndex,
+                index + 1,
                 record.employeeId,
                 record.driverName,
                 record.accountNumber,
-                record.mainDriverAmount,
-                record.advancePayment,
-                record.payableAmount
+                record.mainDriverAmount || 0,
+                record.advancePayment || 0,
+                record.payableAmount || 0
             ]);
         });
 
@@ -4115,7 +4058,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             }
 
             // ذخیره PDF با استفاده از pdf.save() مستقیم
-            const filename = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.pdf`;
+            const filename = buildInvoiceFilenameFromContext(
+                selectedInvoiceRecord,
+                invoiceCalculations,
+                invoiceAnnouncements,
+                'pdf'
+            );
             pdf.save(filename);
         } catch (err: any) {
             console.error('❌ [exportInvoiceToPDF] Error:', err);
@@ -4694,7 +4642,12 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                 
                 // ایجاد لینک دانلود
                 const link = document.createElement('a');
-                link.download = `صورتحساب_${selectedInvoiceRecord.driverName}_${new Date().toISOString().split('T')[0]}.png`;
+                link.download = buildInvoiceFilenameFromContext(
+                    selectedInvoiceRecord,
+                    invoiceCalculations,
+                    invoiceAnnouncements,
+                    'png'
+                );
                 link.href = imgData;
                 link.click();
                 
@@ -4754,14 +4707,29 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             });
 
             if (!response.ok) {
-                throw new Error('خطا در ثبت پرداخت');
+                const errBody = await response.json().catch(() => ({}));
+                throw new Error(errBody.message || 'خطا در ثبت پرداخت');
             }
 
-            alert(`پرداخت برای ${record.driverName} (تور خاص) با موفقیت ثبت شد`);
-            // صبر کردن کمی تا backend پرداخت را ثبت کند
-            await new Promise(resolve => setTimeout(resolve, 500));
-            // بارگذاری مجدد داده‌ها
-            await fetchData();
+            // حذف فوری از لیست بدون چشمک‌زدن کل صفحه
+            setPaymentRecords((prev) =>
+                prev.filter((r) => {
+                    if (record.calculationId) {
+                        return !(
+                            r.calculationId === record.calculationId &&
+                            Boolean(r.isHelper) === Boolean(record.isHelper)
+                        );
+                    }
+                    return !(
+                        r.driverId === record.driverId &&
+                        r.announcementId === record.announcementId &&
+                        Boolean(r.isHelper) === Boolean(record.isHelper)
+                    );
+                })
+            );
+
+            // همگام‌سازی در پس‌زمینه
+            await fetchData({ silent: true });
         } catch (err: any) {
             console.error('❌ [markAsPaid] Error:', err);
             alert(`خطا در ثبت پرداخت: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
@@ -4909,7 +4877,14 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         </thead>
                         <tbody>
                             {paginatedRecords.map((record, index) => (
-                                <tr key={record.driverId} className="border-b border-slate-300 bg-white hover:bg-slate-50">
+                                <tr
+                                    key={
+                                        record.calculationId
+                                            ? `${record.calculationId}${record.isHelper ? '-helper' : ''}`
+                                            : `${record.driverId}-${record.announcementId ?? index}-${record.isHelper ? 'helper' : 'main'}`
+                                    }
+                                    className="border-b border-slate-300 bg-white hover:bg-slate-50"
+                                >
                                     <td className="p-3 border-l border-slate-200 text-center font-medium">
                                         {((currentPage - 1) * itemsPerPage) + index + 1}
                                     </td>
@@ -5202,7 +5177,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                 <ul className="list-disc list-inside space-y-2 mr-4">
                                     <li>می‌توانید بر اساس کد پرسنلی یا نام راننده جستجو کنید</li>
                                     <li>می‌توانید بر اساس بازه تاریخ محاسبه فیلتر کنید</li>
-                                    <li>خروجی اکسل برای بانک شامل: کد پرسنلی، نام، شماره حساب، مبلغ هزینه، کسور، و مبلغ قابل پرداخت است</li>
+                                    <li>خروجی اکسل برای بانک برای هر تور/ردیف لیست پرداخت یک سطر جدا می‌سازد (مثل جدول صفحه) و شامل: کد پرسنلی، نام، شماره حساب، مبلغ هزینه، کسور، و مبلغ قابل پرداخت است</li>
                                 </ul>
                             </div>
                             

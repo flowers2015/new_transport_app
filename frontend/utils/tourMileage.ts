@@ -166,16 +166,41 @@ export async function resolveTourRouteMileageForTour(tour: {
 export async function enrichAnnouncementsWithRouteMileage<T extends { destinations?: Array<{ city?: string }> }>(
     announcements: T[]
 ): Promise<(T & { route?: { round_trip_km: number; expected_days?: number } })[]> {
-    return Promise.all(
-        announcements.map(async (ann) => {
-            const cities = (ann.destinations || []).map((d) => d.city || '').filter(Boolean);
-            if (cities.length === 0) return ann;
-            const { approvedKm, approvedDays } = await resolveRouteMileageFromDestinations(cities);
-            if (approvedKm <= 0) return ann;
-            return {
-                ...ann,
-                route: { round_trip_km: approvedKm, expected_days: approvedDays },
-            };
+    const cityCache = new Map<string, ResolvedRouteMileage>();
+    const uniqueCities = new Set<string>();
+
+    announcements.forEach((ann) => {
+        (ann.destinations || []).forEach((d) => {
+            const city = (d.city || '').trim();
+            if (city) uniqueCities.add(city);
+        });
+    });
+
+    await Promise.all(
+        [...uniqueCities].map(async (city) => {
+            const mileage = await resolveRouteMileageFromDestinations([city]);
+            cityCache.set(normalizeCityKey(city), mileage);
         })
     );
+
+    return announcements.map((ann) => {
+        const cities = (ann.destinations || []).map((d) => d.city || '').filter(Boolean);
+        if (cities.length === 0) return ann;
+
+        let approvedKm = 0;
+        let approvedDays = 1;
+        cities.forEach((city) => {
+            const mileage = cityCache.get(normalizeCityKey(city));
+            if (mileage && mileage.approvedKm > approvedKm) {
+                approvedKm = mileage.approvedKm;
+                approvedDays = mileage.approvedDays;
+            }
+        });
+
+        if (approvedKm <= 0) return ann;
+        return {
+            ...ann,
+            route: { round_trip_km: approvedKm, expected_days: approvedDays },
+        };
+    });
 }

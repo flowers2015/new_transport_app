@@ -2,6 +2,7 @@ import React from 'react';
 import html2canvas from 'html2canvas';
 import * as domtoimage from 'dom-to-image';
 import ReactDOMServer from 'react-dom/server';
+import { buildInvoiceDownloadFilename } from '../utils/invoiceDownloadFilename';
 
 // ============================================
 // راه‌حل فونت: استفاده از Vazirmatn از Google Fonts
@@ -818,8 +819,9 @@ export const renderInvoiceLayoutHorizontal = (
     const totalNonAllowanceCosts = invoiceData.tourData?.reduce((sum, t) => 
         sum + (t.billOfLadingCost || 0) + (t.fuelCost || 0) + (t.foodCost || 0) + 
         (t.multiUnloadCost || 0) + (t.tollCost || 0) + (t.returnCargoCost || 0) + 
+        (t.returnInterBranchCargoCost || 0) +
         (t.excessMissionCost || 0) + (t.depotCargoHandling || 0) + (t.depotMissionCost || 0), 0) || 0;
-    const totalTourCost = totalFixedAllowance + totalDepotAllowance + totalNonAllowanceCosts;
+    const totalTourCost = mainBlock?.summary?.totalTripCost ?? (totalFixedAllowance + totalDepotAllowance + totalNonAllowanceCosts);
     
     const summaryRows = [
         { label: 'پیمایش کل', getValue: () => totalKm.toLocaleString('fa-IR'), getTotal: () => totalKm.toLocaleString('fa-IR') },
@@ -1381,7 +1383,7 @@ export const renderInvoiceLayoutHorizontal = (
                                         جمع کل هزینه سفر: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{mainBlock.summary.totalTripCost.toLocaleString('fa-IR')}</span> ریال
                                     </td>
                                 </tr>
-                                {mainBlock.summary.deductionsAmount && mainBlock.summary.deductionsAmount > 0 && (
+                                {(mainBlock.summary.deductionsAmount ?? 0) > 0 && (
                                     <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                         <td style={{
                                             border: '2px solid #1e3a8a',
@@ -1989,12 +1991,24 @@ const loadBHomaFont = async (): Promise<void> => {
     }
 };
 
+export type InvoiceImageExportMeta = {
+    destinations?: unknown;
+    date?: Date | string | null;
+};
+
 // تابع اصلی برای export تصویر با استفاده از DOM
 // نسخه بهبود یافته: استفاده از iframe برای isolation کامل
 export const exportInvoiceToImage = async (
     invoiceElement: HTMLElement,
-    driverName: string
+    driverName: string,
+    meta?: InvoiceImageExportMeta
 ): Promise<void> => {
+    const downloadFilename = buildInvoiceDownloadFilename({
+        driverName,
+        destinations: meta?.destinations,
+        date: meta?.date,
+        extension: 'png',
+    });
     try {
         console.log('🖼️ [exportInvoiceToImage] شروع تولید عکس با dom-to-image');
         
@@ -2070,7 +2084,7 @@ export const exportInvoiceToImage = async (
             
             // دانلود
             const link = document.createElement('a');
-            link.download = `صورتحساب_${driverName}_${new Date().toISOString().split('T')[0]}.png`;
+            link.download = downloadFilename;
             link.href = imgData;
             link.click();
             
@@ -2416,7 +2430,7 @@ export const exportInvoiceToImage = async (
         
         // دانلود
         const link = document.createElement('a');
-        link.download = `صورتحساب_${driverName}_${new Date().toISOString().split('T')[0]}.png`;
+        link.download = downloadFilename;
         link.href = imgData;
         link.click();
         
@@ -2616,7 +2630,7 @@ export const exportInvoiceToImage = async (
             
             // ایجاد لینک دانلود
             const link = document.createElement('a');
-            link.download = `صورتحساب_${driverName}_${new Date().toISOString().split('T')[0]}.png`;
+            link.download = downloadFilename;
             link.href = imgData;
             link.click();
             
