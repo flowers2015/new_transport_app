@@ -1938,8 +1938,8 @@ const AnnouncementPanel: React.FC<{
         // تبدیل از رشته با کاما به عدد (مستقیماً ریال)
         const cargoValueStr = commonState.cargoValue.replace(/,/g, '');
         const cargoValueInRials = parseInt(cargoValueStr, 10);
-        if (isNaN(cargoValueInRials) || cargoValueInRials <= 0 || cargoValueInRials > 110_000_000_000) { 
-            alert('ارزش بار باید بین 1 تا 110,000,000,000 ریال باشد.'); 
+        if (isNaN(cargoValueInRials) || cargoValueInRials <= 0) { 
+            alert('ارزش بار باید بزرگتر از صفر باشد.'); 
             return; 
         }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
@@ -2333,7 +2333,7 @@ const AnnouncementPanel: React.FC<{
                             <RequiredField label="نوع خودرو*">
                                 <select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1 w-full" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select>
                             </RequiredField>
-                                <RequiredField label="ارزش بار (ریال)*" hint="حداکثر 110,000,000,000 ریال">
+                                <RequiredField label="ارزش بار (ریال)*">
                                    <div className="flex items-center gap-2">
                                        <input 
                                            type="text" 

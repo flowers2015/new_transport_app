@@ -687,9 +687,45 @@ const CATEGORY_KEY_TO_LABEL = {
   'ten-wheel': 'ده چرخ',
 };
 
-function normalizeQueueVehicleCategory(vehicleCategory) {
-  if (!vehicleCategory) return null;
-  return CATEGORY_KEY_TO_LABEL[vehicleCategory] || vehicleCategory;
+function normalizeQueueVehicleCategory(vehicleCategory, announcementVehicleType = null) {
+  return resolveDispatchQueueCategoryLabel({
+    queueCategory: vehicleCategory,
+    vehicleCategory,
+    announcementVehicleType,
+  });
+}
+
+function resolveDispatchQueueCategoryLabel({
+  queueCategory = null,
+  vehicleCategory = null,
+  announcementVehicleType = null,
+} = {}) {
+  const candidates = [queueCategory, announcementVehicleType, vehicleCategory].filter(Boolean);
+
+  for (const value of candidates) {
+    const presetKey = resolveCategoryKey(value);
+    if (presetKey) {
+      const preset = presetCategories.find(p => p.key === presetKey);
+      if (preset) return preset.label;
+    }
+  }
+
+  for (const value of candidates) {
+    const detectedKey = detectVehicleCategoryKey(value);
+    if (detectedKey) {
+      const preset = presetCategories.find(p => p.key === detectedKey);
+      if (preset) return preset.label;
+    }
+  }
+
+  if (
+    announcementVehicleType &&
+    ['تریلی', 'مینی تریلی', 'ده چرخ'].includes(announcementVehicleType)
+  ) {
+    return announcementVehicleType;
+  }
+
+  return queueCategory || announcementVehicleType || vehicleCategory || null;
 }
 
 function normalizeQueueType(rawQueueType, stage) {
@@ -783,8 +819,10 @@ async function restoreDriversFromCancelledAssignment(client, announcementId, cre
        da.queue_type,
        da.vehicle_category,
        da.queue_position,
-       da.stage
+       da.stage,
+       fa.vehicle_type AS announcement_vehicle_type
      FROM dispatch_assignments da
+     LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
      WHERE da.freight_announcement_id = $1
        AND da.driver_id IS NOT NULL
        AND da.vehicle_id IS NOT NULL
@@ -796,12 +834,38 @@ async function restoreDriversFromCancelledAssignment(client, announcementId, cre
   const results = [];
   for (const row of assignments) {
     const queueType = normalizeQueueType(row.queue_type, row.stage);
+    let queuePosition = row.queue_position;
+    let queueCategory = row.vehicle_category;
+
+    if (!queuePosition || !queueCategory) {
+      const { rows: prevRows } = await client.query(
+        `SELECT queue_position, queue_type, vehicle_category
+         FROM dispatch_assignments
+         WHERE driver_id = $1
+           AND queue_position IS NOT NULL
+           AND freight_announcement_id <> $2
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [row.driver_id, announcementId]
+      );
+      if (prevRows.length > 0) {
+        queuePosition = queuePosition || prevRows[0].queue_position;
+        queueCategory = queueCategory || prevRows[0].vehicle_category;
+      }
+    }
+
+    const vehicleCategory = resolveDispatchQueueCategoryLabel({
+      queueCategory,
+      vehicleCategory: row.vehicle_category,
+      announcementVehicleType: row.announcement_vehicle_type,
+    });
+
     const result = await restoreDriverToDispatchQueue(client, {
       driverId: row.driver_id,
       vehicleId: row.vehicle_id,
       queueType,
-      vehicleCategory: row.vehicle_category,
-      queuePosition: row.queue_position,
+      vehicleCategory,
+      queuePosition,
       createdByUserId,
     });
     results.push({ driverId: row.driver_id, ...result });
@@ -1592,7 +1656,7 @@ async function assignFreight(req, res) {
       ]
     );
 
-    // دریافت vehicle_category از queue entry یا vehicle
+    // دریافت vehicle_category از queue entry یا vehicle — همیشه به دسته نوبت (تریلی/…) نگاشت شود
     let finalVehicleCategory = vehicleCategoryFromEntry;
     if (!finalVehicleCategory) {
       const { rows: vehicleRows } = await client.query(
@@ -1601,6 +1665,11 @@ async function assignFreight(req, res) {
       );
       finalVehicleCategory = vehicleRows[0]?.vehicle_category || null;
     }
+    finalVehicleCategory = resolveDispatchQueueCategoryLabel({
+      queueCategory: vehicleCategoryFromEntry,
+      vehicleCategory: finalVehicleCategory,
+      announcementVehicleType: announcement.vehicle_type,
+    });
     
     // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
     // اما route و distance_km را از primary destination (آخرین یا بیشترین کیلومتر) می‌گیریم
@@ -2229,6 +2298,8 @@ module.exports = {
   searchVehicles,
   searchDrivers,
   restoreDriversFromCancelledAssignment,
+  resolveDispatchQueueCategoryLabel,
+  normalizeQueueType,
   getAssignmentContext,
   getQueueAssignmentHints,
   deferQueueTurn,

@@ -2403,18 +2403,47 @@ async function assignVehicleAndDriverInternal(req, res) {
             }
           }
 
-          // گرفتن vehicle_category از vehicle
-          let vehicleCategory = null;
+          const {
+            resolveDispatchQueueCategoryLabel,
+            normalizeQueueType: normalizeDispatchQueueType,
+          } = require('./dispatchController');
+
+          // نوبت فعلی راننده (برای بازگرداندن به همان ردیف/دسته بعد از لغو)
+          let queueEntryRow = null;
           try {
-            const { rows: vehicleRows } = await client.query(
-              'SELECT vehicle_category FROM vehicles WHERE id = $1',
-              [vehicleId]
+            const { rows: queueRows } = await client.query(
+              `SELECT id, position, queue_type, vehicle_category
+               FROM dispatch_queue_entries
+               WHERE driver_id = $1
+               ORDER BY created_at DESC
+               LIMIT 1`,
+              [driverId]
             );
-            vehicleCategory = vehicleRows[0]?.vehicle_category || null;
-          } catch (vehicleError) {
-            console.error(`❌ [assignVehicleAndDriver] Error fetching vehicle category for vehicle ${vehicleId}:`, vehicleError);
-            // ادامه می‌دهیم با vehicleCategory = null
+            queueEntryRow = queueRows[0] || null;
+          } catch (queueLookupErr) {
+            console.warn('⚠️ [assignVehicleAndDriver] queue lookup skipped:', queueLookupErr.message);
           }
+
+          // گرفتن vehicle_category از نوبت، خودرو، یا نوع خودروی اعلام بار
+          let vehicleCategory = queueEntryRow?.vehicle_category || null;
+          if (!vehicleCategory) {
+            try {
+              const { rows: vehicleRows } = await client.query(
+                'SELECT vehicle_category FROM vehicles WHERE id = $1',
+                [vehicleId]
+              );
+              vehicleCategory = vehicleRows[0]?.vehicle_category || null;
+            } catch (vehicleError) {
+              console.error(`❌ [assignVehicleAndDriver] Error fetching vehicle category for vehicle ${vehicleId}:`, vehicleError);
+            }
+          }
+          vehicleCategory = resolveDispatchQueueCategoryLabel({
+            queueCategory: queueEntryRow?.vehicle_category,
+            vehicleCategory,
+            announcementVehicleType,
+          });
+          const queuePosition = queueEntryRow?.position ?? null;
+          const queueEntryId = queueEntryRow?.id ?? null;
 
           // گرفتن timestampToJalaliDate
           let assignedAtJalali = null;
@@ -2430,61 +2459,37 @@ async function assignVehicleAndDriverInternal(req, res) {
           // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
           for (const dest of allDestRows.rows) {
             try {
-              // تعیین queue_type بر اساس route یا stage
-              let queueType = null;
-              if (route && route.distance_category) {
-                queueType = route.distance_category;
+              // تعیین queue_type بر اساس نوبت، route یا stage
+              let queueType = queueEntryRow?.queue_type || null;
+              if (!queueType) {
+                if (route && route.distance_category) {
+                  queueType = normalizeDispatchQueueType(route.distance_category, stage);
+                } else {
+                  queueType = stage === 'stage1' ? 'far' : 'near';
+                }
               } else {
-                queueType = stage === 'stage1' ? 'far' : 'near';
-              }
-              
-              const insertValues = [
-                announcementId,
-                dest.id,
-                vehicleId,
-                driverId,
-                stage,
-                route ? route.id : null,
-                route ? route.round_trip_km : null,
-                userId || null,
-                assignedAtJalali,
-                queueType,
-                vehicleCategory
-              ];
-              
-              console.log(`🔍 [assignVehicleAndDriver] Inserting dispatch_assignments for destination ${dest.id}:`, {
-                destinationId: dest.id,
-                destinationCity: dest.city,
-                vehicleId,
-                driverId,
-                stage,
-                routeId: route ? route.id : null,
-                queueType,
-                vehicleCategory,
-                assignedAtJalali
-              });
-              
-              // اطمینان از وجود ستون‌های مورد نیاز
-              try {
-                await client.query(`
-                  ALTER TABLE dispatch_assignments
-                  ADD COLUMN IF NOT EXISTS queue_position INTEGER,
-                  ADD COLUMN IF NOT EXISTS assigned_at_jalali VARCHAR(16),
-                  ADD COLUMN IF NOT EXISTS queue_entry_id VARCHAR(255),
-                  ADD COLUMN IF NOT EXISTS queue_type VARCHAR(50),
-                  ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT FALSE,
-                  ADD COLUMN IF NOT EXISTS vehicle_category VARCHAR(255),
-                  ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
-                `);
-              } catch (alterError) {
-                console.warn('⚠️ [assignVehicleAndDriver] Could not alter dispatch_assignments table (columns may already exist):', alterError.message);
+                queueType = normalizeDispatchQueueType(queueType, stage);
               }
               
               await client.query(
                 `INSERT INTO dispatch_assignments
-                  (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11)`,
-                insertValues
+                  (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, assigned_at_jalali, queue_type, vehicle_category, queue_position, queue_entry_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)`,
+                [
+                  announcementId,
+                  dest.id,
+                  vehicleId,
+                  driverId,
+                  stage,
+                  route ? route.id : null,
+                  route ? route.round_trip_km : null,
+                  userId || null,
+                  assignedAtJalali,
+                  queueType,
+                  vehicleCategory,
+                  queuePosition,
+                  queueEntryId,
+                ]
               );
               
               console.log(`✅ [assignVehicleAndDriver] Successfully inserted dispatch_assignments for destination ${dest.id}`);
@@ -2513,6 +2518,11 @@ async function assignVehicleAndDriverInternal(req, res) {
           }
 
           console.log(`✅ [assignVehicleAndDriver] Created ${allDestRows.rows.length} dispatch_assignments records for announcement ${announcementId}`);
+
+          if (queueEntryId) {
+            await client.query('DELETE FROM dispatch_queue_entries WHERE id = $1', [queueEntryId]);
+            console.log(`✅ [assignVehicleAndDriver] Removed queue entry ${queueEntryId} after live assignment`);
+          }
         } else {
           console.warn(`⚠️ [assignVehicleAndDriver] No destinations found for announcement ${announcementId}, skipping dispatch_assignments creation`);
         }
