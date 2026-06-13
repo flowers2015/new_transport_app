@@ -97,6 +97,7 @@ type QueueAssignHints = {
 type AssignDialogState = {
     isOpen: boolean;
     entry: DispatchQueueEntry | null;
+    categoryLabel: string | null;
     loading: boolean;
     context: AssignContext | null;
     selectedAnnouncementId: string;
@@ -121,6 +122,7 @@ type PreferencesDialogState = {
 const initialAssignDialogState: AssignDialogState = {
     isOpen: false,
     entry: null,
+    categoryLabel: null,
     loading: false,
     context: null,
     selectedAnnouncementId: '',
@@ -196,19 +198,25 @@ const presetCategories: PresetCategory[] = [
     { key: 'ten-wheel', label: 'ده چرخ' },
 ];
 
-const ASSIGN_MODE_STORAGE_KEY = 'dispatch_queue_assign_mode_v1';
+const ASSIGN_MODE_STORAGE_KEY = 'dispatch_queue_assign_mode_v2';
+
+const defaultAssignModeByCategory = (): Record<string, AssignMode> =>
+    Object.fromEntries(presetCategories.map(p => [p.key, 'free' as AssignMode]));
 
 const loadAssignModeByCategory = (): Record<string, AssignMode> => {
+    const defaults = defaultAssignModeByCategory();
     try {
         const raw = localStorage.getItem(ASSIGN_MODE_STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw) as Record<string, AssignMode>;
-            if (parsed && typeof parsed === 'object') return parsed;
+            if (parsed && typeof parsed === 'object') {
+                return { ...defaults, ...parsed };
+            }
         }
     } catch {
         /* ignore */
     }
-    return {};
+    return defaults;
 };
 
 const persistAssignModeByCategory = (map: Record<string, AssignMode>) => {
@@ -1150,18 +1158,27 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setRows(prev => [...prev, createRow(category, queueType)]);
     };
 
-    const loadAssignContext = async (entry: DispatchQueueEntry) => {
+    const resolveCategoryKeyForLabel = (categoryLabel: string): PresetCategory['key'] | null => {
+        const preset = presetCategories.find(c => c.label === categoryLabel);
+        return preset?.key || resolveCategoryKey(categoryLabel);
+    };
+
+    const loadAssignContext = async (entry: DispatchQueueEntry, categoryLabel?: string | null) => {
         setAssignDialog(prev => ({
             ...prev,
             loading: true,
             selectedAnnouncementId: '',
         }));
         try {
+            const label = categoryLabel || entry.vehicleCategory || '';
             const categoryKey =
-                resolveCategoryKey(entry.vehicleCategory || '') || presetCategories[0]?.key || 'trailer';
-            const assignMode = getAssignModeForCategory(categoryKey as PresetCategory['key']);
+                resolveCategoryKeyForLabel(label) ||
+                (activeCategoryKey as PresetCategory['key']) ||
+                'trailer';
+            const assignMode = getAssignModeForCategory(categoryKey);
 
             if (assignMode === 'free') {
+                freeAnnouncementsCacheRef.current = {};
                 const announcements = await fetchFreeAnnouncementsForCategory(
                     categoryKey,
                     headers,
@@ -1242,14 +1259,15 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         }
     };
 
-    const openAssignDialog = (entry: DispatchQueueEntry) => {
+    const openAssignDialog = (entry: DispatchQueueEntry, categoryLabel: string) => {
         setAssignDialog({
             ...initialAssignDialogState,
             isOpen: true,
             entry,
+            categoryLabel,
             loading: true,
         });
-        loadAssignContext(entry);
+        loadAssignContext(entry, categoryLabel);
     };
 
     const closeAssignDialog = () => {
@@ -1464,11 +1482,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const rowStatus = getEntryRowStatus(entry, categoryLabel);
         const statusStyle = rowStatusClasses[rowStatus];
         const hint = assignHintsMap[categoryLabel]?.entries.find(h => h.queueEntryId === entry.id);
-        const categoryKey = resolveCategoryKey(categoryLabel);
+        const categoryKey = resolveCategoryKeyForLabel(categoryLabel);
         const isFreeMode = getAssignModeForCategory(categoryKey) === 'free';
         const assignDisabled = isFreeMode
-            ? false
-            : rowStatus === 'deferred' || rowStatus === 'inactive';
+            ? Boolean(hint?.isDeferred)
+            : rowStatus === 'deferred' || rowStatus === 'inactive' || hint?.canAssign === false;
 
         const assignBtnClass = isFreeMode
             ? rowStatusClasses.ready.assignBtn
@@ -1553,7 +1571,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 <td className="px-1 py-1.5 align-middle">
                     <div className="flex flex-col items-stretch gap-0.5">
                         <button
-                            onClick={() => openAssignDialog(entry)}
+                            onClick={() => openAssignDialog(entry, categoryLabel)}
                             disabled={assignDisabled}
                             className={`rounded px-1.5 py-0.5 text-[10px] whitespace-nowrap ${assignBtnClass} disabled:opacity-60 disabled:cursor-not-allowed`}
                         >
@@ -2461,7 +2479,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                             <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
                                 <button
                                     onClick={() =>
-                                        assignDialog.entry && loadAssignContext(assignDialog.entry)
+                                        assignDialog.entry &&
+                                        loadAssignContext(
+                                            assignDialog.entry,
+                                            assignDialog.categoryLabel
+                                        )
                                     }
                                     className="px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 text-sm"
                                     disabled={assignDialog.loading}

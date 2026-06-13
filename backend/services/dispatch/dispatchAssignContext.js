@@ -727,9 +727,7 @@ async function getQueueAssignHints(vehicleCategory, userId = null, assignMode = 
         ? 'deferred'
         : driverHasVeryFarHistory(enriched)
           ? 'very_far_history'
-          : eligibleCount > 0
-            ? 'ready'
-            : 'inactive';
+          : 'ready';
     } else if (eligibleCount > 0 && !entryCtx.isDeferredThisPhase) {
       if (entryPhase === 'stage1' && driverHasVeryFarHistory(enriched)) {
         rowStatus = 'very_far_history';
@@ -739,7 +737,9 @@ async function getQueueAssignHints(vehicleCategory, userId = null, assignMode = 
     }
 
     const strictCanAssign = computeCanAssign(enriched, entryCtx, eligibleCount, globalPhase);
-    const canAssign = freeMode ? true : strictCanAssign;
+    const canAssign = freeMode
+      ? !entryCtx.isDeferredThisPhase
+      : strictCanAssign;
 
     return {
       queueEntryId: row.id,
