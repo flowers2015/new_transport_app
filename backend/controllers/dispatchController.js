@@ -255,12 +255,20 @@ async function getQueue(req, res) {
     const finalizedKmMap = await fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd);
     
     const grouped = {};
+    const categoryRepairs = [];
     for (const row of rows) {
-      // تبدیل category از key به label
-      let category = row.vehicle_category || 'نامشخص';
-      if (categoryKeyToLabel[category]) {
-        category = categoryKeyToLabel[category];
+      const rawCategory = row.vehicle_category || null;
+      const category = await resolveQueueEntryDisplayCategory(pool, row);
+
+      if (
+        rawCategory &&
+        category !== 'نامشخص' &&
+        category !== rawCategory &&
+        row.id
+      ) {
+        categoryRepairs.push({ id: row.id, category });
       }
+
       if (!grouped[category]) {
         grouped[category] = {
           near: [],
@@ -323,6 +331,20 @@ async function getQueue(req, res) {
       }
     }
 
+    if (categoryRepairs.length > 0) {
+      await Promise.all(
+        categoryRepairs.map(({ id, category }) =>
+          pool.query(
+            `UPDATE dispatch_queue_entries SET vehicle_category = $1, updated_at = NOW() WHERE id = $2`,
+            [category, id]
+          )
+        )
+      );
+      console.log(
+        `🔧 [getQueue] Repaired ${categoryRepairs.length} queue entries with non-preset vehicle_category`
+      );
+    }
+
     res.json(grouped);
   } catch (error) {
     if (error?.code === '42P01') {
@@ -347,23 +369,11 @@ async function createQueueEntry(req, res) {
     'mini-trailer': 'مینی تریلی',
     'ten-wheel': 'ده چرخ'
   };
-  const normalizedVehicleCategory = vehicleCategory && categoryKeyToLabel[vehicleCategory] 
-    ? categoryKeyToLabel[vehicleCategory] 
-    : vehicleCategory;
+  const normalizedVehicleCategory = normalizeQueueVehicleCategory(vehicleCategory);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // تبدیل vehicleCategory از key انگلیسی به label فارسی (اگر لازم باشد)
-    const categoryKeyToLabel = {
-      'trailer': 'تریلی',
-      'mini-trailer': 'مینی تریلی',
-      'ten-wheel': 'ده چرخ'
-    };
-    const normalizedVehicleCategory = vehicleCategory && categoryKeyToLabel[vehicleCategory] 
-      ? categoryKeyToLabel[vehicleCategory] 
-      : vehicleCategory;
 
     // بررسی اینکه آیا راننده/خودرو در نوبت موجود است
     const existing = await client.query(
@@ -687,47 +697,6 @@ const CATEGORY_KEY_TO_LABEL = {
   'ten-wheel': 'ده چرخ',
 };
 
-function normalizeQueueVehicleCategory(vehicleCategory, announcementVehicleType = null) {
-  return resolveDispatchQueueCategoryLabel({
-    queueCategory: vehicleCategory,
-    vehicleCategory,
-    announcementVehicleType,
-  });
-}
-
-function resolveDispatchQueueCategoryLabel({
-  queueCategory = null,
-  vehicleCategory = null,
-  announcementVehicleType = null,
-} = {}) {
-  const candidates = [queueCategory, announcementVehicleType, vehicleCategory].filter(Boolean);
-
-  for (const value of candidates) {
-    const presetKey = resolveCategoryKey(value);
-    if (presetKey) {
-      const preset = presetCategories.find(p => p.key === presetKey);
-      if (preset) return preset.label;
-    }
-  }
-
-  for (const value of candidates) {
-    const detectedKey = detectVehicleCategoryKey(value);
-    if (detectedKey) {
-      const preset = presetCategories.find(p => p.key === detectedKey);
-      if (preset) return preset.label;
-    }
-  }
-
-  if (
-    announcementVehicleType &&
-    ['تریلی', 'مینی تریلی', 'ده چرخ'].includes(announcementVehicleType)
-  ) {
-    return announcementVehicleType;
-  }
-
-  return queueCategory || announcementVehicleType || vehicleCategory || null;
-}
-
 function normalizeQueueType(rawQueueType, stage) {
   const value = (rawQueueType || '').toString().trim().toLowerCase();
   if (value === 'far' || value === 'near') return value;
@@ -856,7 +825,6 @@ async function restoreDriversFromCancelledAssignment(client, announcementId, cre
 
     const vehicleCategory = resolveDispatchQueueCategoryLabel({
       queueCategory,
-      vehicleCategory: row.vehicle_category,
       announcementVehicleType: row.announcement_vehicle_type,
     });
 
@@ -1005,6 +973,72 @@ const detectVehicleCategoryKey = (vehicleType) => {
   }
   return null;
 };
+
+const DISPATCH_QUEUE_LABELS = ['تریلی', 'مینی تریلی', 'ده چرخ'];
+
+function resolveDispatchCategoryFromValue(value) {
+  if (!value) return null;
+
+  const presetKey = resolveCategoryKey(value);
+  if (presetKey) {
+    const preset = presetCategories.find(p => p.key === presetKey);
+    if (preset) return preset.label;
+  }
+
+  const detectedKey = detectVehicleCategoryKey(value);
+  if (detectedKey) {
+    const preset = presetCategories.find(p => p.key === detectedKey);
+    if (preset) return preset.label;
+  }
+
+  if (DISPATCH_QUEUE_LABELS.includes(value)) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeQueueVehicleCategory(queueCategory, announcementVehicleType = null) {
+  return resolveDispatchQueueCategoryLabel({
+    queueCategory,
+    announcementVehicleType,
+  });
+}
+
+/** دسته نوبت فقط از نوبت یا vehicle_type اعلام بار — نه vehicle_category جدول خودرو */
+function resolveDispatchQueueCategoryLabel({
+  queueCategory = null,
+  announcementVehicleType = null,
+} = {}) {
+  const fromAnnouncement = resolveDispatchCategoryFromValue(announcementVehicleType);
+  if (fromAnnouncement) return fromAnnouncement;
+
+  return resolveDispatchCategoryFromValue(queueCategory);
+}
+
+async function resolveQueueEntryDisplayCategory(client, row) {
+  const fromQueue = resolveDispatchQueueCategoryLabel({ queueCategory: row.vehicle_category });
+  if (fromQueue) return fromQueue;
+
+  if (row.driver_id) {
+    const { rows: hist } = await client.query(
+      `SELECT fa.vehicle_type
+       FROM dispatch_assignments da
+       JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
+       WHERE da.driver_id = $1
+         AND fa.vehicle_type IS NOT NULL
+       ORDER BY da.created_at DESC
+       LIMIT 1`,
+      [row.driver_id]
+    );
+    const fromAnnouncement = resolveDispatchQueueCategoryLabel({
+      announcementVehicleType: hist[0]?.vehicle_type,
+    });
+    if (fromAnnouncement) return fromAnnouncement;
+  }
+
+  return 'نامشخص';
+}
 
 const vehicleMatchesCategory = (vehicleType, categoryValue) => {
   const presetKey = resolveCategoryKey(categoryValue);
@@ -1656,18 +1690,8 @@ async function assignFreight(req, res) {
       ]
     );
 
-    // دریافت vehicle_category از queue entry یا vehicle — همیشه به دسته نوبت (تریلی/…) نگاشت شود
-    let finalVehicleCategory = vehicleCategoryFromEntry;
-    if (!finalVehicleCategory) {
-      const { rows: vehicleRows } = await client.query(
-        `SELECT vehicle_category FROM vehicles WHERE id = $1`,
-        [vehicleId]
-      );
-      finalVehicleCategory = vehicleRows[0]?.vehicle_category || null;
-    }
-    finalVehicleCategory = resolveDispatchQueueCategoryLabel({
+    const finalVehicleCategory = resolveDispatchQueueCategoryLabel({
       queueCategory: vehicleCategoryFromEntry,
-      vehicleCategory: finalVehicleCategory,
       announcementVehicleType: announcement.vehicle_type,
     });
     

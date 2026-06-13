@@ -1409,11 +1409,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
 
     const presetLabels = presetCategories.map(cat => cat.label);
 
-    const orderedCategoryLabels = useMemo(() => {
-        // queueData قبلاً در fetchQueue normalize شده است
-        const extras = Object.keys(queueData || {}).filter(label => !presetLabels.includes(label));
-        return [...presetLabels, ...extras];
-    }, [queueData, presetLabels]);
+    const orderedCategoryLabels = useMemo(() => presetLabels, [presetLabels]);
 
     const activeCategoryLabel = useMemo(() => {
         const preset = presetCategories.find(cat => cat.key === activeCategoryKey);

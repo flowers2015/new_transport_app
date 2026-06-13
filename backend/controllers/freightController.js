@@ -2424,22 +2424,8 @@ async function assignVehicleAndDriverInternal(req, res) {
             console.warn('⚠️ [assignVehicleAndDriver] queue lookup skipped:', queueLookupErr.message);
           }
 
-          // گرفتن vehicle_category از نوبت، خودرو، یا نوع خودروی اعلام بار
-          let vehicleCategory = queueEntryRow?.vehicle_category || null;
-          if (!vehicleCategory) {
-            try {
-              const { rows: vehicleRows } = await client.query(
-                'SELECT vehicle_category FROM vehicles WHERE id = $1',
-                [vehicleId]
-              );
-              vehicleCategory = vehicleRows[0]?.vehicle_category || null;
-            } catch (vehicleError) {
-              console.error(`❌ [assignVehicleAndDriver] Error fetching vehicle category for vehicle ${vehicleId}:`, vehicleError);
-            }
-          }
-          vehicleCategory = resolveDispatchQueueCategoryLabel({
+          const vehicleCategory = resolveDispatchQueueCategoryLabel({
             queueCategory: queueEntryRow?.vehicle_category,
-            vehicleCategory,
             announcementVehicleType,
           });
           const queuePosition = queueEntryRow?.position ?? null;
