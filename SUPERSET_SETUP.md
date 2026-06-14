@@ -273,7 +273,7 @@ docker compose -f docker-compose.superset.yml exec superset superset db upgrade
 | مشکل | راه‌حل |
 |------|--------|
 | پورت 3001 اشغال است | `docker ps` — Metabase را با `down -v` حذف کنید |
-| اتصال DB از Docker — The port is closed | `bash scripts/superset-pg-docker-access.sh`؛ Host=`host.docker.internal`؛ User=`superset_reader` |
+| اتصال DB از Docker — The port is closed | `bash scripts/superset-pg-docker-access.sh` (نیاز به **restart** postgres)؛ Host=`host.docker.internal`؛ User=`superset_reader` |
 | صفحه Superset 502 | `docker compose logs superset` — مراحل `db upgrade` و `init` را اجرا کنید |
 | کندی | RAM سرور را افزایش دهید؛ تعداد workerها در compose |
 

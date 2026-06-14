@@ -20,14 +20,22 @@ echo "hba:    $PG_HBA"
 LISTEN=$(sudo -u postgres psql -tAc "SHOW listen_addresses;" | tr -d ' ')
 echo "listen_addresses فعلی: $LISTEN"
 
+CONF_LISTEN=$(sudo grep -E "^#*listen_addresses" "$PG_CONF" | tail -1 | sed "s/.*= *['\"]\?\([^'\"]*\)['\"]\?.*/\1/" | tr -d ' ')
+echo "listen_addresses در فایل: ${CONF_LISTEN:-?}"
+
 if [[ "$LISTEN" == "localhost" || "$LISTEN" == "127.0.0.1" ]]; then
-  echo "→ PostgreSQL فقط روی localhost است؛ Docker نمی‌تواند وصل شود."
-  echo "→ listen_addresses را به '*' تغییر می‌دهیم..."
-  sudo sed -i "s/^#*listen_addresses.*/listen_addresses = '*'/" "$PG_CONF"
-  if ! grep -q "^listen_addresses" "$PG_CONF"; then
-    echo "listen_addresses = '*'" | sudo tee -a "$PG_CONF" >/dev/null
+  if [[ "$CONF_LISTEN" == "*" ]]; then
+    echo "→ فایل config درست است ولی سرویس restart نشده."
+    NEED_RESTART=1
+  else
+    echo "→ PostgreSQL فقط روی localhost است؛ Docker نمی‌تواند وصل شود."
+    echo "→ listen_addresses را به '*' تغییر می‌دهیم..."
+    sudo sed -i "s/^#*listen_addresses.*/listen_addresses = '*'/" "$PG_CONF"
+    if ! grep -q "^listen_addresses" "$PG_CONF"; then
+      echo "listen_addresses = '*'" | sudo tee -a "$PG_CONF" >/dev/null
+    fi
+    NEED_RESTART=1
   fi
-  NEED_RELOAD=1
 fi
 
 HBA_MARKER="# superset-docker-access"
@@ -45,7 +53,11 @@ else
   echo "→ rule pg_hba از قبل وجود دارد."
 fi
 
-if [[ "${NEED_RELOAD:-0}" == "1" ]]; then
+if [[ "${NEED_RESTART:-0}" == "1" ]]; then
+  echo "→ restart PostgreSQL (listen_addresses فقط با restart اعمال می‌شود)..."
+  sudo systemctl restart postgresql 2>/dev/null || sudo service postgresql restart
+  sleep 3
+elif [[ "${NEED_RELOAD:-0}" == "1" ]]; then
   echo "→ reload PostgreSQL..."
   sudo systemctl reload postgresql 2>/dev/null || sudo service postgresql reload
   sleep 2
