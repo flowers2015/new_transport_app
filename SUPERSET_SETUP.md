@@ -209,6 +209,35 @@ bash scripts/superset-docker.sh recreate
 
 اگر `host.docker.internal` جواب نداد، Host را `192.168.27.102` (IP سرور) امتحان کنید.
 
+### ۳.۴ عیب‌یابی خطای 422 / 500 در Connect
+
+```bash
+SUPERSET_DB_PASSWORD='رمز-superset_reader' bash scripts/superset-test-db-connection.sh
+```
+
+| خطا در تست | راه‌حل |
+|------------|--------|
+| کاربر وجود ندارد | `sudo -u postgres psql -d transport_app -f scripts/superset-create-reader.sql` |
+| `password authentication failed` | رمز UI با رمز `superset_reader` در SQL یکی نیست — رمز را reset کنید (پایین) |
+| `no pg_hba.conf entry` | `bash scripts/superset-pg-docker-access.sh` و `sudo systemctl restart postgresql` |
+| TCP بسته | `listen_addresses = '*'` و restart postgres |
+
+**Reset رمز superset_reader:**
+
+```bash
+sudo -u postgres psql -d transport_app -c "ALTER USER superset_reader WITH PASSWORD 'رمز_جدید_قوی';"
+```
+
+**اتصال با SQLAlchemy URI** (اگر فرم UI خطا داد):
+
+Settings → Database → PostgreSQL → **Connect using SQLAlchemy URI**:
+
+```
+postgresql+psycopg2://superset_reader:رمز@host.docker.internal:5432/transport_app
+```
+
+> `installHook.js` مربوط به افزونه مرورگر است؛ نادیده بگیرید.
+
 ### ۳.۳ ساخت کاربر reader (اگر نکرده‌اید)
 
 ```bash
