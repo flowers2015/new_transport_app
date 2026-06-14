@@ -7,7 +7,7 @@ services:
     container_name: transport-superset
     restart: unless-stopped
     ports:
-      - "3001:8088"
+      - "0.0.0.0:3001:8088"
     environment:
       SUPERSET_SECRET_KEY: "CHANGE_ME_LONG_RANDOM_SECRET_KEY"
       SUPERSET_LOAD_EXAMPLES: "no"

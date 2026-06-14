@@ -173,6 +173,23 @@ http://192.168.27.102:3001
 
 ## بخش ۳ — اتصال به دیتابیس transport_app
 
+### ۳.۱ اجازه دسترسی Docker به PostgreSQL (یک‌بار روی سرور)
+
+خطای **«The port is closed»** یعنی PostgreSQL فقط روی `127.0.0.1` گوش می‌دهد و کانتینر Superset به آن نمی‌رسد.
+
+```bash
+cd /home/fms/project
+bash scripts/superset-pg-docker-access.sh
+```
+
+اگر `host.docker.internal` در compose نیست، کانتینر را recreate کنید:
+
+```bash
+bash scripts/superset-docker.sh recreate
+```
+
+### ۳.۲ فرم Connect Database در Superset
+
 1. منو: **Settings → Database connections → + Database**
 2. **PostgreSQL**
 3. مقادیر:
@@ -180,15 +197,23 @@ http://192.168.27.102:3001
 | فیلد | مقدار |
 |------|--------|
 | Display Name | Transport App |
-| Host | `host.docker.internal` یا `172.17.0.1` |
+| Host | `host.docker.internal` |
 | Port | `5432` |
 | Database | `transport_app` |
 | Username | `superset_reader` |
-| Password | رمز reader |
+| Password | رمز reader (نه رمز ادمین Superset) |
 
 4. **Test connection** → **Connect**
 
-اگر خطا داد Host را `172.17.0.1` امتحان کنید.
+> **مهم:** `reza_ghezelbash` کاربر **ورود به Superset** است، نه کاربر PostgreSQL. برای دیتابیس اپ حتماً `superset_reader` بگذارید.
+
+اگر `host.docker.internal` جواب نداد، Host را `192.168.27.102` (IP سرور) امتحان کنید.
+
+### ۳.۳ ساخت کاربر reader (اگر نکرده‌اید)
+
+```bash
+sudo -u postgres psql -d transport_app -f scripts/superset-create-reader.sql
+```
 
 ---
 
@@ -248,7 +273,7 @@ docker compose -f docker-compose.superset.yml exec superset superset db upgrade
 | مشکل | راه‌حل |
 |------|--------|
 | پورت 3001 اشغال است | `docker ps` — Metabase را با `down -v` حذف کنید |
-| اتصال DB از Docker | Host = `172.17.0.1`؛ `listen_addresses` در PostgreSQL |
+| اتصال DB از Docker — The port is closed | `bash scripts/superset-pg-docker-access.sh`؛ Host=`host.docker.internal`؛ User=`superset_reader` |
 | صفحه Superset 502 | `docker compose logs superset` — مراحل `db upgrade` و `init` را اجرا کنید |
 | کندی | RAM سرور را افزایش دهید؛ تعداد workerها در compose |
 
