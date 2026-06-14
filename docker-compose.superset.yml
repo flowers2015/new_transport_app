@@ -3,7 +3,10 @@
 
 services:
   superset:
-    image: apache/superset:4.1.1
+    build:
+      context: ./docker/superset
+      dockerfile: Dockerfile
+    image: transport-superset:4.1.1-pg
     container_name: transport-superset
     restart: unless-stopped
     ports:

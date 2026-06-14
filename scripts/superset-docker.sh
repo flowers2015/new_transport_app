@@ -36,11 +36,16 @@ case "$ACTION" in
     echo "   curl -s http://127.0.0.1:3001/health"
     ;;
   recreate)
+    "${COMPOSE[@]}" build superset
     "${COMPOSE[@]}" down
     "${COMPOSE[@]}" up -d --force-recreate
     sleep 3
     "${COMPOSE[@]}" ps
     sudo ss -tlnp 2>/dev/null | grep ':3001 ' || echo "⚠️ پورت 3001 هنوز publish نشده"
+    ;;
+  build)
+    "${COMPOSE[@]}" build superset
+    "${COMPOSE[@]}" up -d --force-recreate superset
     ;;
   ps)
     "${COMPOSE[@]}" ps
@@ -65,7 +70,7 @@ case "$ACTION" in
     echo "✅ آماده: http://$(hostname -I | awk '{print $1}'):3001"
     ;;
   *)
-    echo "استفاده: bash scripts/superset-docker.sh [up|recreate|ps|logs|stop|down|init]"
+    echo "استفاده: bash scripts/superset-docker.sh [up|build|recreate|ps|logs|stop|down|init]"
     exit 1
     ;;
 esac

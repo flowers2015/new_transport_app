@@ -42,6 +42,10 @@ docker exec -e DB_HOST="$DB_HOST" -e DB_PORT="$DB_PORT" -e DB_NAME="$DB_NAME" \
 import os, sys
 try:
     import psycopg2
+except ImportError:
+    print("❌ psycopg2 نصب نیست — bash scripts/superset-docker.sh build")
+    sys.exit(1)
+try:
     conn = psycopg2.connect(
         host=os.environ["DB_HOST"],
         port=int(os.environ["DB_PORT"]),
