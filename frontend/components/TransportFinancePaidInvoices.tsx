@@ -4,7 +4,7 @@ import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import { buildInvoiceDownloadFilename, resolveInvoiceDestinationsFromSources } from '../utils/invoiceDownloadFilename';
-import * as XLSX from 'xlsx';
+import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
@@ -4728,70 +4728,46 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     };
 
     // خروجی اکسل
-    const exportToExcel = () => {
-        const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره حساب', 'مبلغ پرداخت (ریال)', 'تاریخ پرداخت', 'بازه تاریخ محاسبه', 'تاریخ تهیه لیست', 'ثبت کننده', 'تاریخ ثبت']
-        ];
+    const exportToExcel = async () => {
+        try {
+            const rows = filteredRecords.map(record => {
+                const dateRange = record.calculationDateFrom && record.calculationDateTo
+                    ? `${record.calculationDateFrom} تا ${record.calculationDateTo}`
+                    : '-';
 
-        filteredRecords.forEach((record, index) => {
-            const dateRange = record.calculationDateFrom && record.calculationDateTo
-                ? `${record.calculationDateFrom} تا ${record.calculationDateTo}`
-                : '-';
-            
-            wsData.push([
-                index + 1,
-                record.employeeId || '',
-                record.driverName || '',
-                record.accountNumber || '',
-                record.paymentAmount || 0,
-                record.paymentDate || '',
-                dateRange,
-                record.paymentListDate || '-',
-                record.createdByName || record.createdBy || '-',
-                record.createdAt ? formatJalali(new Date(record.createdAt)) : '-',
-            ]);
-        });
+                return [
+                    record.employeeId || '',
+                    record.driverName || '',
+                    record.accountNumber || '',
+                    record.paymentAmount || 0,
+                    record.paymentDate || '',
+                    dateRange,
+                    record.paymentListDate || '-',
+                    record.createdByName || record.createdBy || '-',
+                    record.createdAt ? formatJalali(new Date(record.createdAt)) : '-',
+                ];
+            });
 
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // تنظیم راست‌چین و فرمت اعداد
-        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-                if (!ws[cellAddress]) continue;
-                
-                if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
-                ws[cellAddress].s.alignment.horizontal = 'right';
-                ws[cellAddress].s.alignment.vertical = 'center';
-                
-                // فرمت اعداد برای ستون مبلغ (ستون 4)
-                if (R > 0 && C === 4) {
-                    if (typeof wsData[R][C] === 'number') {
-                        ws[cellAddress].z = '#,##0';
-                    }
-                }
-            }
+            await downloadStyledExcel({
+                sheetName: 'صورتحساب‌های پرداخت شده',
+                fileName: buildExcelFileName('صورتحساب_های_پرداخت_شده', ''),
+                headers: [
+                    'کد پرسنلی',
+                    'نام و نام خانوادگی',
+                    'شماره حساب',
+                    'مبلغ پرداخت (ریال)',
+                    'تاریخ پرداخت',
+                    'بازه تاریخ محاسبه',
+                    'تاریخ تهیه لیست',
+                    'ثبت کننده',
+                    'تاریخ ثبت',
+                ],
+                rows,
+            });
+        } catch (err) {
+            console.error('Failed to export paid invoices Excel:', err);
+            alert('خطا در خروجی اکسل.');
         }
-        
-        // تنظیم عرض ستون‌ها
-        ws['!cols'] = [
-            { wch: 8 },  // ردیف
-            { wch: 12 }, // کد پرسنلی
-            { wch: 25 }, // نام
-            { wch: 20 }, // شماره حساب
-            { wch: 20 }, // مبلغ پرداخت
-            { wch: 15 }, // تاریخ پرداخت
-            { wch: 30 }, // بازه تاریخ محاسبه
-            { wch: 18 }, // تاریخ تهیه لیست
-            { wch: 20 }, // ثبت کننده
-            { wch: 18 }  // تاریخ ثبت
-        ];
-        
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'صورتحساب‌های پرداخت شده');
-        XLSX.writeFile(wb, `صورتحساب_های_پرداخت_شده_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     if (loading) {

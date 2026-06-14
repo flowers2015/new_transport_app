@@ -10,6 +10,54 @@ const {
 const { formatJalali, parseJalaliDateString, jalaliToGregorian, timestampToJalaliDate } = require('../utils/jalali');
 const { logAdminAction } = require('./userManagementController');
 
+const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
+const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
+
+function resolveActingUserId(user) {
+  return user?.userId || user?.id || null;
+}
+
+function resolveActingUserName(user) {
+  const { name, username, fullName, full_name: fullNameSnake } = user || {};
+  const displayName = fullName || fullNameSnake || name || null;
+  if (username) {
+    return displayName ? `${username} - ${displayName}` : username;
+  }
+  return displayName || 'system';
+}
+
+async function updateAnnouncementStatusWithFallback(client, announcementId, candidates) {
+  let lastError = null;
+  for (const statusValue of candidates) {
+    try {
+      const result = await client.query(
+        `UPDATE freight_announcements SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING status`,
+        [statusValue, announcementId]
+      );
+      if (result.rowCount > 0) {
+        return result.rows[0].status;
+      }
+      throw new Error('اعلام بار برای به‌روزرسانی وضعیت یافت نشد.');
+    } catch (error) {
+      lastError = error;
+      // invalid_text_representation = enum mismatch
+      if (error.code === '22P02') {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError || new Error('وضعیت «بایگانی» در پایگاه داده پشتیبانی نمی‌شود.');
+}
+
+async function safeRollback(client) {
+  try {
+    await client.query('ROLLBACK');
+  } catch (_) {
+    // ignore — transaction may already be closed
+  }
+}
+
 /**
  * تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14
  * اگر Date object است، آن را به Jalali string تبدیل می‌کند
@@ -177,10 +225,10 @@ async function getFreightAnnouncements(req, res) {
     let whereClause = "WHERE fa.status NOT IN (";
     if (includeFinalized === 'true') {
       // برای Freight Finance: فقط Reannounced, Archived, Cancelled را فیلتر کن
-      whereClause += "'Reannounced', 'Archived', 'Cancelled'";
+      whereClause += "'Reannounced', 'Archived', 'بایگانی شده', 'Cancelled'";
     } else {
       // برای Transport Live: Finalized را هم فیلتر کن
-      whereClause += "'Finalized', 'Reannounced', 'Archived', 'Cancelled'";
+      whereClause += "'Finalized', 'Reannounced', 'Archived', 'بایگانی شده', 'Cancelled'";
     }
     if (includeLeftover !== 'true') {
       whereClause += ", 'Leftover'";
@@ -7590,69 +7638,83 @@ async function rejectChangeRequest(req, res) {
  */
 async function archiveChangeRequest(req, res) {
   const { id: requestId } = req.params;
-  const { id: actingUserId, name, username } = req.user || {};
-  const userName = username 
-    ? (name ? `${username} - ${name}` : username)
-    : (name || 'system');
+  const actingUserId = resolveActingUserId(req.user);
+  const userName = resolveActingUserName(req.user);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const { rows: reqRows } = await client.query(
-      `SELECT r.*, fa.id as announcement_id, fa.announcement_code, fa.status as announcement_status, fa.assignment_type
+      `SELECT r.*,
+              fa.id AS announcement_id,
+              fa.announcement_code,
+              fa.status AS announcement_status,
+              fa.assignment_type
        FROM freight_change_requests r
        LEFT JOIN freight_announcements fa ON fa.id = r.freight_announcement_id
-       WHERE r.id = $1 AND r.status = 'requested'
-       FOR UPDATE`,
-      [requestId]
+       WHERE r.id = $1
+         AND (
+           r.status = 'requested'
+           OR fa.status = ANY($2::text[])
+         )
+       FOR UPDATE OF r`,
+      [requestId, CHANGE_REQUESTED_STATUSES]
     );
     if (reqRows.length === 0) {
-      await client.query('ROLLBACK');
+      await safeRollback(client);
       return res.status(404).json({ message: 'درخواست یافت نشد یا قبلاً پردازش شده است.' });
     }
+
     const changeReq = reqRows[0];
     const originalAnnId = changeReq.announcement_id || changeReq.freight_announcement_id;
     if (!originalAnnId) {
-      await client.query('ROLLBACK');
+      await safeRollback(client);
       return res.status(400).json({ message: 'اعلام بار مرتبط با این درخواست یافت نشد.' });
     }
 
-    // خارج کردن از کارتابل: تغییر وضعیت به Archived (دیگر در لیست نمایش داده نمی‌شود)
-    await client.query(
-      `UPDATE freight_announcements SET status = 'Archived', updated_at = NOW() WHERE id = $1`,
-      [originalAnnId]
+    const oldStatus = changeReq.announcement_status || 'ChangeRequested';
+    const newStatus = await updateAnnouncementStatusWithFallback(
+      client,
+      originalAnnId,
+      ARCHIVED_STATUS_CANDIDATES
     );
 
     await logFreightHistory({
       announcementId: originalAnnId,
-      userId: actingUserId || null,
-      userName: userName,
+      userId: actingUserId,
+      userName,
       action: 'ARCHIVED',
-      oldStatus: 'ChangeRequested',
-      newStatus: 'Archived',
+      oldStatus,
+      newStatus,
       fieldChanges: {
-        status: { old: 'ChangeRequested', new: 'Archived' },
+        status: { old: oldStatus, new: newStatus },
       },
-      description: `درخواست تغییر از کارتابل خارج شد`,
+      description: 'درخواست تغییر از کارتابل خارج شد',
       ipAddress: req.ip,
-      client
+      client,
     });
 
-    // به‌روزرسانی وضعیت درخواست به archived
     await client.query(
-      `UPDATE freight_change_requests 
+      `UPDATE freight_change_requests
        SET status = 'archived', reviewed_by = $1, reviewed_at = NOW()
        WHERE id = $2`,
-      [actingUserId || null, requestId]
+      [actingUserId, requestId]
     );
 
     await client.query('COMMIT');
-    return res.status(200).json({ message: 'درخواست از کارتابل خارج شد' });
+    return res.status(200).json({ message: 'درخواست از کارتابل خارج شد', newStatus });
   } catch (e) {
-    await client.query('ROLLBACK');
+    await safeRollback(client);
     console.error('❌ [freight] archiveChangeRequest failed:', e);
-    return res.status(500).json({ message: 'خطا در خارج کردن از کارتابل' });
+    const detail =
+      e.code === '22P02'
+        ? 'مقدار وضعیت «بایگانی» در پایگاه داده تعریف نشده است.'
+        : e.message || 'خطای ناشناخته';
+    return res.status(500).json({
+      message: 'خطا در خارج کردن از کارتابل',
+      detail,
+    });
   } finally {
     client.release();
   }

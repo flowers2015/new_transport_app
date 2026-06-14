@@ -1203,7 +1203,11 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 const statusStr = String(a.status);
                 const isFinalized = a.status === FreightAnnouncementStatus.Finalized || statusStr === 'Finalized' || statusStr === 'تکمیل شده';
                 const isInTransit = a.status === FreightAnnouncementStatus.InTransit || statusStr === 'InTransit' || statusStr === 'در حال حمل';
-                return !isFinalized && !isInTransit;
+                const isArchived =
+                    a.status === FreightAnnouncementStatus.Archived ||
+                    statusStr === 'Archived' ||
+                    statusStr === 'بایگانی شده';
+                return !isFinalized && !isInTransit && !isArchived;
             });
         } else {
             // برای planner: همه وضعیت‌ها نمایش داده می‌شوند جز Finalized و InTransit
@@ -1212,7 +1216,11 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 const statusStr = String(a.status);
                 const isFinalized = a.status === FreightAnnouncementStatus.Finalized || statusStr === 'Finalized' || statusStr === 'تکمیل شده';
                 const isInTransit = a.status === FreightAnnouncementStatus.InTransit || statusStr === 'InTransit' || statusStr === 'در حال حمل';
-                return !isFinalized && !isInTransit;
+                const isArchived =
+                    a.status === FreightAnnouncementStatus.Archived ||
+                    statusStr === 'Archived' ||
+                    statusStr === 'بایگانی شده';
+                return !isFinalized && !isInTransit && !isArchived;
             });
         }
 

@@ -1147,35 +1147,18 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                 >
                                     اجرت {sortField === 'totalCommission' && (sortDirection === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="p-3 border-l border-opacity-30">سایر هزینه‌ها</th>
-                                <th 
-                                    className="p-3 border-l border-opacity-30 cursor-pointer hover:bg-opacity-80"
-                                    onClick={() => handleSort('totalPayable')}
-                                >
-                                    جمع قابل پرداخت {sortField === 'totalPayable' && (sortDirection === 'asc' ? '↑' : '↓')}
-                                </th>
                                 <th className="p-3">عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginated.length === 0 ? (
                                 <tr>
-                                    <td colSpan={12} className="p-6 text-center text-slate-500">
+                                    <td colSpan={10} className="p-6 text-center text-slate-500">
                                         {loading ? 'در حال بارگذاری...' : 'ابتدا بازه زمانی را انتخاب و دکمه محاسبه را بزنید.'}
                                     </td>
                                 </tr>
                             ) : (
                                 paginated.map((summary, index) => {
-                                    const otherCosts = 
-                                        summary.totalFoodCost + 
-                                        summary.totalFuelCost + 
-                                        summary.totalTollCost +
-                                        summary.totalLoadingCost +
-                                        summary.totalReturnCargoCost +
-                                        summary.totalReturnBillOfLadingCost +
-                                        summary.totalMultiUnloadCost +
-                                        summary.totalExcessMissionCost;
-                                    
                                     const totalAllowance = summary.totalCommission + summary.fixedAllowance;
                                     
                                     return (
@@ -1222,12 +1205,6 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="p-3 border-l border-slate-200 text-left text-xs text-slate-600">
-                                                {otherCosts > 0 ? otherCosts.toLocaleString('fa-IR') : '-'}
-                                            </td>
-                                            <td className="p-3 border-l border-slate-200 text-left font-bold text-green-700">
-                                                {summary.totalPayable.toLocaleString('fa-IR')}
-                                            </td>
                                             <td className="p-3 text-center">
                                                 <button
                                                     onClick={() => handleDriverReport(summary.driverId)}
@@ -1251,8 +1228,6 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                     <td className="p-3"></td>
                                     <td className="p-3 text-left">{totals.kilometers.toLocaleString('fa-IR')}</td>
                                     <td className="p-3 text-left text-blue-700">{(totals.commission + totals.fixedAllowance).toLocaleString('fa-IR')}</td>
-                                    <td className="p-3"></td>
-                                    <td className="p-3 text-left text-green-700">{totals.payable.toLocaleString('fa-IR')}</td>
                                     <td className="p-3"></td>
                                 </tr>
                             </tfoot>

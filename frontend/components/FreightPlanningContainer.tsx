@@ -575,7 +575,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 let message = 'خطا در خارج کردن از کارتابل';
                 try {
                     const body = await res.json();
-                    message = body.message || message;
+                    message = body.detail ? `${body.message}: ${body.detail}` : (body.message || message);
                 } catch {
                     const text = await res.text();
                     if (text) message = text;

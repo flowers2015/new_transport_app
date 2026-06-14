@@ -12,7 +12,7 @@ import {
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
 import { generateUUID } from '../utils/uuid';
 import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
-import * as XLSX from 'xlsx';
+import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
 import html2canvas from 'html2canvas';
 import ReactDOMServer from 'react-dom/server';
 import { 
@@ -1833,228 +1833,153 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     }, [calculations, refreshTrigger, searchTerm, startDate, endDate, dateFilterType]);
 
     // خروجی اکسل - نوع اول: فقط ردیف‌های اصلی
-    const exportToExcelMainRows = () => {
-        const excelData = getExcelFilteredData();
-        
-        const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'نوع صف', 'تعداد تور', 'تور تریلی', 'تور ده‌چرخ', 'کل پیمایش (کیلومتر)', 'اجرت (ریال)', 'جمع قابل پرداخت (ریال)']
-        ];
+    const exportToExcelMainRows = async () => {
+        try {
+            const excelData = getExcelFilteredData();
+            const rows = excelData.map((calc) => {
+                const totalKm = calc.tours.reduce((sum, tour) => sum + getTourTotalKilometers(tour), 0);
 
-        excelData.forEach((calc, index) => {
-            const recordedTours = calc.tours.filter(t => t.isDataRecorded);
-            const recordedToursCount = recordedTours.length;
-            const unrecordedTours = calc.tours.length - recordedToursCount;
-            
-            const totalKm = calc.tours.reduce((sum, tour) => sum + getTourTotalKilometers(tour), 0);
-            
-            // محاسبه اجرت (tourCost برای پورسانتی یا fixedAllowance برای اجرت ثابت)
-            const totalTourCost = calc.tours.reduce((sum, tour) => {
-                const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
-                const fixedAllowance = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
-                // اگر fixedAllowance > 0 باشد، یعنی اجرت ثابت است، در غیر این صورت tourCost
-                return sum + (fixedAllowance > 0 ? fixedAllowance : tourCost);
-            }, 0);
-            
-            // محاسبه سایر هزینه‌ها (بدون اجرت/پورسانت)
-            // سایر هزینه‌ها = چندجا تخلیه + سوخت + حق ماموریت مازاد + غذا + عوارض + بارنامه + بار برگشتی + بار برگشتی بین شعب + جابجایی بار دپو + اجرت دپو + حق ماموریت دپو
-            const otherCosts = calc.tours.reduce((sum, tour) => {
-                const foodCost = Number(tour.foodCost) || 0;
-                const fuelCost = Number(tour.fuelCost) || 0;
-                const tollCost = Number(tour.tollCost) || 0;
-                const billOfLadingCost = Number((tour as any).billOfLadingCost || (tour as any).bill_of_lading_cost || 0);
-                const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
-                const returnInterBranchCargo = Number((tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0);
-                const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
-                const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
-                const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
-                const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
-                const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
-                
-                return sum + multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + returnInterBranchCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost;
-            }, 0);
-            
-            // محاسبه هزینه کل = سایر هزینه‌ها + اجرت/پورسانت
-            const totalCost = otherCosts + totalTourCost;
-            
-            // محاسبه تعداد تور تریلی و ده چرخ
-            const trailerCount = calc.tours.filter(t => {
-                const vehicleType = t.vehicleType || '';
-                return (vehicleType.includes('تریلی') && !vehicleType.includes('مینی')) || vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
-            }).length;
-            
-            const tenWheelerCount = calc.tours.filter(t => {
-                const vehicleType = t.vehicleType || '';
-                return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
-            }).length;
-            
-            // پیدا کردن اولین تاریخ صدور بارنامه
-            const firstBillDate = calc.tours
-                .map(t => t.billOfLadingDate)
-                .filter(Boolean)[0];
-            const billDateStr = firstBillDate 
-                ? (typeof firstBillDate === 'string' ? firstBillDate : formatJalali(firstBillDate))
-                : '';
+                const totalTourCost = calc.tours.reduce((sum, tour) => {
+                    const tourCost = Number((tour as any).tourCost || (tour as any).tour_cost || 0);
+                    const fixedAllowance = Number((tour as any).fixedAllowance || (tour as any).fixed_allowance || 0);
+                    return sum + (fixedAllowance > 0 ? fixedAllowance : tourCost);
+                }, 0);
 
-            const queueTypeStr = calc.queueType === 'porsant' ? 'پورسانت' : 
-                                calc.queueType === 'fixed_allowance' ? 'اجرت ثابت' : 
-                                'راننده کمکی';
+                const otherCosts = calc.tours.reduce((sum, tour) => {
+                    const foodCost = Number(tour.foodCost) || 0;
+                    const fuelCost = Number(tour.fuelCost) || 0;
+                    const tollCost = Number(tour.tollCost) || 0;
+                    const billOfLadingCost = Number((tour as any).billOfLadingCost || (tour as any).bill_of_lading_cost || 0);
+                    const returnCargo = Number((tour as any).returnCargoCost || (tour as any).return_cargo_cost || 0);
+                    const returnInterBranchCargo = Number((tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0);
+                    const multiUnloadCost = Number((tour as any).multiUnloadCost || (tour as any).multi_unload_cost || 0);
+                    const excessMissionCost = Number((tour as any).excessMissionCost || (tour as any).excess_mission_cost || 0);
+                    const depotMissionCost = Number((tour as any).depotMissionCost || (tour as any).depot_mission_cost || 0);
+                    const depotAllowance = Number((tour as any).depotKilometerRate || (tour as any).depot_kilometer_rate || 0);
+                    const depotCargoHandlingCost = Number((tour as any).depotCargoHandlingCost || (tour as any).depot_cargo_handling_cost || 0);
 
-            wsData.push([
-                index + 1,
-                calc.employeeId || '',
-                calc.driverName || '',
-                queueTypeStr,
-                calc.tourCount || 0,
-                trailerCount,
-                tenWheelerCount,
-                totalKm,
-                totalTourCost,
-                totalCost
-            ]);
-        });
+                    return sum + multiUnloadCost + fuelCost + excessMissionCost + foodCost + tollCost + billOfLadingCost + returnCargo + returnInterBranchCargo + depotCargoHandlingCost + depotAllowance + depotMissionCost;
+                }, 0);
 
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // تنظیم راست‌چین برای تمام ستون‌ها
-        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-                if (!ws[cellAddress]) continue;
-                
-                if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
-                ws[cellAddress].s.alignment.horizontal = 'right';
-                ws[cellAddress].s.alignment.vertical = 'center';
-                
-                // فرمت اعداد برای ستون‌های عددی (ردیف 0 = هدر)
-                if (R > 0) {
-                    const colIndex = C;
-                    // ستون‌های عددی: ردیف (0), تعداد تور (4), تور تریلی (5), تور ده‌چرخ (6), کل پیمایش (7), اجرت (8), جمع قابل پرداخت (9)
-                    if ([0, 4, 5, 6, 7, 8, 9].includes(colIndex)) {
-                        if (typeof wsData[R][colIndex] === 'number') {
-                            ws[cellAddress].z = '#,##0';
-                        }
-                    }
-                }
-            }
+                const totalCost = otherCosts + totalTourCost;
+
+                const trailerCount = calc.tours.filter(t => {
+                    const vehicleType = t.vehicleType || '';
+                    return (vehicleType.includes('تریلی') && !vehicleType.includes('مینی')) || vehicleType.includes('مینی تریلی') || vehicleType.includes('مینیتریلی');
+                }).length;
+
+                const tenWheelerCount = calc.tours.filter(t => {
+                    const vehicleType = t.vehicleType || '';
+                    return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
+                }).length;
+
+                const queueTypeStr = calc.queueType === 'porsant' ? 'پورسانت'
+                    : calc.queueType === 'fixed_allowance' ? 'اجرت ثابت'
+                    : 'راننده کمکی';
+
+                return [
+                    calc.employeeId || '',
+                    calc.driverName || '',
+                    queueTypeStr,
+                    calc.tourCount || 0,
+                    trailerCount,
+                    tenWheelerCount,
+                    totalKm,
+                    totalTourCost,
+                    totalCost,
+                ];
+            });
+
+            await downloadStyledExcel({
+                sheetName: 'محاسبه هزینه تور',
+                fileName: buildExcelFileName('محاسبات_اجرت_پیمایش', ''),
+                headers: [
+                    'کد پرسنلی',
+                    'نام و نام خانوادگی',
+                    'نوع صف',
+                    'تعداد تور',
+                    'تور تریلی',
+                    'تور ده‌چرخ',
+                    'کل پیمایش (کیلومتر)',
+                    'اجرت (ریال)',
+                    'جمع قابل پرداخت (ریال)',
+                ],
+                rows,
+            });
+        } catch (err) {
+            console.error('Failed to export main rows Excel:', err);
+            alert('خطا در خروجی اکسل.');
         }
-        
-        // تنظیم عرض ستون‌ها
-        ws['!cols'] = [
-            { wch: 8 },  // ردیف
-            { wch: 12 }, // کد پرسنلی
-            { wch: 20 }, // نام
-            { wch: 12 }, // نوع صف
-            { wch: 12 }, // تعداد تور
-            { wch: 12 }, // تور تریلی
-            { wch: 12 }, // تور ده‌چرخ
-            { wch: 18 }, // کل پیمایش
-            { wch: 18 }, // اجرت
-            { wch: 20 }  // جمع قابل پرداخت
-        ];
-        
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'محاسبه هزینه تور');
-        XLSX.writeFile(wb, `محاسبات_اجرت_پیمایش_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     // خروجی اکسل - نوع دوم: ریز ردیف‌ها با تمام جزئیات
-    const exportToExcelDetailRows = () => {
-        const excelData = getExcelFilteredData();
-        
-        const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره تور', 'نوع خودرو', 'کد * پلاک', 'لاین', 'مقاصد', 'شماره بارنامه', 'تاریخ صدور بارنامه', 'پیمایش مصوب (کیلومتر)', 'پیمایش مازاد (کیلومتر)', 'ماموریت مصوب (روز)', 'ماموریت مازاد (روز)', 'هزینه عوارض (ریال)', 'هزینه غذا (ریال)', 'هزینه سوخت (ریال)', 'هزینه بار برگشتی بین شعب (ریال)', 'هزینه تور (ریال)', 'هزینه کل (ریال)', 'توضیحات']
-        ];
+    const exportToExcelDetailRows = async () => {
+        try {
+            const excelData = getExcelFilteredData();
+            const rows: (string | number)[][] = [];
 
-        let rowIndex = 1;
-        excelData.forEach((calc) => {
-            calc.tours.forEach((tour) => {
-                const billDateStr = tour.billOfLadingDate 
-                    ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
-                    : '';
-                
-                wsData.push([
-                    rowIndex++,
-                    calc.employeeId || '',
-                    calc.driverName || '',
-                    tour.announcementCode || '',
-                    tour.vehicleType || '',
-                    `${tour.vehicleCode || '-'} * ${tour.plateNumber || '-'}`,
-                    tour.lineType || '',
-                    (Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')) || '',
-                    tour.billOfLadingNumber || '',
-                    billDateStr,
-                    tour.approvedKilometers || 0,
-                    tour.excessKilometers || 0,
-                    tour.approvedMissionDays || 0,
-                    tour.excessMissionDays || 0,
-                    tour.tollCost || 0,
-                    tour.foodCost || 0,
-                    tour.fuelCost || 0,
-                    (tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0,
-                    tour.tourCost || 0,
-                    tour.totalCost || 0,
-                    tour.notes || ''
-                ]);
+            excelData.forEach((calc) => {
+                calc.tours.forEach((tour) => {
+                    const billDateStr = tour.billOfLadingDate
+                        ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                        : '';
+
+                    rows.push([
+                        calc.employeeId || '',
+                        calc.driverName || '',
+                        tour.announcementCode || '',
+                        tour.vehicleType || '',
+                        `${tour.vehicleCode || '-'} * ${tour.plateNumber || '-'}`,
+                        tour.lineType || '',
+                        (Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')) || '',
+                        tour.billOfLadingNumber || '',
+                        billDateStr,
+                        tour.approvedKilometers || 0,
+                        tour.excessKilometers || 0,
+                        tour.approvedMissionDays || 0,
+                        tour.excessMissionDays || 0,
+                        tour.tollCost || 0,
+                        tour.foodCost || 0,
+                        tour.fuelCost || 0,
+                        (tour as any).returnInterBranchCargoCost || (tour as any).return_inter_branch_cargo_cost || 0,
+                        tour.tourCost || 0,
+                        tour.totalCost || 0,
+                        tour.notes || '',
+                    ]);
+                });
             });
-        });
 
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // تنظیم راست‌چین برای تمام ستون‌ها
-        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-                if (!ws[cellAddress]) continue;
-                
-                if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
-                ws[cellAddress].s.alignment.horizontal = 'right';
-                ws[cellAddress].s.alignment.vertical = 'center';
-                
-                // فرمت اعداد برای ستون‌های عددی (ردیف 0 = هدر)
-                if (R > 0) {
-                    const colIndex = C;
-                    // ستون‌های عددی: ردیف (0), پیمایش مصوب (10), پیمایش مازاد (11), ماموریت مصوب (12), ماموریت مازاد (13), هزینه‌ها (14-19)
-                    if ([0, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(colIndex)) {
-                        if (typeof wsData[R][colIndex] === 'number') {
-                            ws[cellAddress].z = '#,##0';
-                        }
-                    }
-                }
-            }
+            await downloadStyledExcel({
+                sheetName: 'جزئیات محاسبات',
+                fileName: buildExcelFileName('جزئیات_محاسبات_اجرت_پیمایش', ''),
+                headers: [
+                    'کد پرسنلی',
+                    'نام و نام خانوادگی',
+                    'شماره تور',
+                    'نوع خودرو',
+                    'کد * پلاک',
+                    'لاین',
+                    'مقاصد',
+                    'شماره بارنامه',
+                    'تاریخ صدور بارنامه',
+                    'پیمایش مصوب (کیلومتر)',
+                    'پیمایش مازاد (کیلومتر)',
+                    'ماموریت مصوب (روز)',
+                    'ماموریت مازاد (روز)',
+                    'هزینه عوارض (ریال)',
+                    'هزینه غذا (ریال)',
+                    'هزینه سوخت (ریال)',
+                    'هزینه بار برگشتی بین شعب (ریال)',
+                    'هزینه تور (ریال)',
+                    'هزینه کل (ریال)',
+                    'توضیحات',
+                ],
+                rows,
+            });
+        } catch (err) {
+            console.error('Failed to export detail rows Excel:', err);
+            alert('خطا در خروجی اکسل.');
         }
-        
-        // تنظیم عرض ستون‌ها
-        ws['!cols'] = [
-            { wch: 8 },  // ردیف
-            { wch: 12 }, // کد پرسنلی
-            { wch: 20 }, // نام
-            { wch: 15 }, // شماره تور
-            { wch: 12 }, // نوع خودرو
-            { wch: 15 }, // کد * پلاک
-            { wch: 12 }, // لاین
-            { wch: 20 }, // مقاصد
-            { wch: 15 }, // شماره بارنامه
-            { wch: 18 }, // تاریخ
-            { wch: 18 }, // پیمایش مصوب
-            { wch: 18 }, // پیمایش مازاد
-            { wch: 15 }, // ماموریت مصوب
-            { wch: 15 }, // ماموریت مازاد
-            { wch: 18 }, // هزینه عوارض
-            { wch: 18 }, // هزینه غذا
-            { wch: 18 }, // هزینه سوخت
-            { wch: 25 }, // هزینه بار برگشتی بین شعب
-            { wch: 18 }, // هزینه تور
-            { wch: 18 }, // هزینه کل
-            { wch: 30 }  // توضیحات
-        ];
-        
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'جزئیات محاسبات');
-        XLSX.writeFile(wb, `جزئیات_محاسبات_اجرت_پیمایش_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     const handleEditData = async (driverId: string, tourId: string) => {
@@ -6646,56 +6571,24 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                 
                                                 const allDrivers = await response.json();
                                                 
-                                                // Export to Excel
-                                                const wsData: any[][] = [];
-                                                
-                                                // Header
-                                                wsData.push(['کد پرسنلی', 'نام راننده', 'شماره حساب']);
-                                                
-                                                // Data rows - مرتب‌سازی بر اساس کد پرسنلی
                                                 const sortedDrivers = [...allDrivers].sort((a: any, b: any) => {
                                                     const aId = (a.employeeId || '').toString();
                                                     const bId = (b.employeeId || '').toString();
                                                     return aId.localeCompare(bId, 'fa-IR');
                                                 });
-                                                
-                                                sortedDrivers.forEach((driver: any) => {
-                                                    const accountNumber = driver.accountNumber || driver.account_number || '-';
-                                                    wsData.push([
-                                                        driver.employeeId || '',
-                                                        driver.name || '',
-                                                        accountNumber
-                                                    ]);
+
+                                                const rows = sortedDrivers.map((driver: any) => [
+                                                    driver.employeeId || '',
+                                                    driver.name || '',
+                                                    driver.accountNumber || driver.account_number || '-',
+                                                ]);
+
+                                                await downloadStyledExcel({
+                                                    sheetName: 'شماره حساب رانندگان',
+                                                    fileName: buildExcelFileName('شماره_حساب_رانندگان', ''),
+                                                    headers: ['کد پرسنلی', 'نام راننده', 'شماره حساب'],
+                                                    rows,
                                                 });
-                                                
-                                                const ws = XLSX.utils.aoa_to_sheet(wsData);
-                                                
-                                                // تنظیم راست‌چین برای تمام ستون‌ها
-                                                const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-                                                for (let R = range.s.r; R <= range.e.r; ++R) {
-                                                    for (let C = range.s.c; C <= range.e.c; ++C) {
-                                                        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-                                                        if (!ws[cellAddress]) continue;
-                                                        
-                                                        if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                                                        if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
-                                                        ws[cellAddress].s.alignment.horizontal = 'right';
-                                                        ws[cellAddress].s.alignment.vertical = 'center';
-                                                    }
-                                                }
-                                                
-                                                // تنظیم عرض ستون‌ها
-                                                ws['!cols'] = [
-                                                    { wch: 15 },  // کد پرسنلی
-                                                    { wch: 25 }, // نام راننده
-                                                    { wch: 20 }  // شماره حساب
-                                                ];
-                                                
-                                                const wb = XLSX.utils.book_new();
-                                                XLSX.utils.book_append_sheet(wb, ws, 'شماره حساب رانندگان');
-                                                
-                                                const fileName = `شماره_حساب_رانندگان_${new Date().toISOString().split('T')[0]}.xlsx`;
-                                                XLSX.writeFile(wb, fileName);
                                             } catch (err: any) {
                                                 console.error('❌ [Export All Drivers] Error:', err);
                                                 alert(`خطا در دریافت یا ایجاد فایل Excel: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);

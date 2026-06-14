@@ -4,7 +4,7 @@ import { User, Driver } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, gregorianToJalali } from '../utils/jalali';
 import { buildInvoiceFilenameFromContext } from '../utils/invoiceDownloadFilename';
-import * as XLSX from 'xlsx';
+import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { 
@@ -52,6 +52,16 @@ interface PaymentRecord {
     helperDriverId?: string; // شناسه راننده کمکی (اگر این ردیف برای راننده کمکی است)
     helperEmployeeId?: string; // کد پرسنلی راننده کمکی
 }
+
+type PaymentSortField =
+    | 'calculationDate'
+    | 'employeeId'
+    | 'driverName'
+    | 'accountNumber'
+    | 'mainDriverAmount'
+    | 'advancePayment'
+    | 'payableAmount'
+    | 'lastPaymentDate';
 
 // ============================================================================
 // توابع Render برای انواع مختلف ساختار صورتحساب
@@ -2984,6 +2994,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     // صفحه‌بندی
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [itemsPerPage, setItemsPerPage] = useState<number>(30);
+
+    // مرتب‌سازی جدول
+    const [sortField, setSortField] = useState<PaymentSortField>('calculationDate');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     
     // دیالوگ قوانین
     const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
@@ -3242,68 +3256,109 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
         return filtered;
     }, [paymentRecords, searchTerm, startDate, endDate]);
 
+    const sortedRecords = useMemo(() => {
+        const sorted = [...filteredRecords];
+        sorted.sort((a, b) => {
+            let aVal: string | number;
+            let bVal: string | number;
+
+            switch (sortField) {
+                case 'calculationDate':
+                    aVal = a.calculationDate || '';
+                    bVal = b.calculationDate || '';
+                    break;
+                case 'employeeId':
+                    aVal = a.employeeId || '';
+                    bVal = b.employeeId || '';
+                    break;
+                case 'driverName':
+                    aVal = a.driverName || '';
+                    bVal = b.driverName || '';
+                    break;
+                case 'accountNumber':
+                    aVal = a.accountNumber || '';
+                    bVal = b.accountNumber || '';
+                    break;
+                case 'mainDriverAmount':
+                    aVal = a.mainDriverAmount || 0;
+                    bVal = b.mainDriverAmount || 0;
+                    break;
+                case 'advancePayment':
+                    aVal = a.advancePayment || 0;
+                    bVal = b.advancePayment || 0;
+                    break;
+                case 'payableAmount':
+                    aVal = a.payableAmount || 0;
+                    bVal = b.payableAmount || 0;
+                    break;
+                case 'lastPaymentDate':
+                    aVal = a.lastPaymentDate || '';
+                    bVal = b.lastPaymentDate || '';
+                    break;
+                default:
+                    aVal = '';
+                    bVal = '';
+            }
+
+            if (typeof aVal === 'string') {
+                return sortDirection === 'asc'
+                    ? aVal.localeCompare(bVal as string, 'fa')
+                    : (bVal as string).localeCompare(aVal, 'fa');
+            }
+
+            return sortDirection === 'asc' ? aVal - (bVal as number) : (bVal as number) - aVal;
+        });
+        return sorted;
+    }, [filteredRecords, sortField, sortDirection]);
+
+    const handleSort = (field: PaymentSortField) => {
+        if (sortField === field) {
+            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortField(field);
+            setSortDirection('desc');
+        }
+        setCurrentPage(1);
+    };
+
     // محاسبه صفحه‌بندی
-    const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+    const totalPages = Math.ceil(sortedRecords.length / itemsPerPage);
     const paginatedRecords = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredRecords, currentPage, itemsPerPage]);
+        return sortedRecords.slice(startIndex, startIndex + itemsPerPage);
+    }, [sortedRecords, currentPage, itemsPerPage]);
 
     // خروجی اکسل برای بانک — هر تور/ردیف لیست پرداخت یک سطر جدا (مثل جدول صفحه)
     const exportToExcelForBank = async () => {
-        const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام و نام خانوادگی', 'شماره حساب مقصد', 'مبلغ هزینه (ریال)', 'کسور(پیش پرداخت) (ریال)', 'مبلغ قابل پرداخت (ریال)']
-        ];
-
-        filteredRecords.forEach((record, index) => {
-            wsData.push([
-                index + 1,
+        try {
+            const rows = sortedRecords.map(record => [
+                record.calculationDate || '-',
                 record.employeeId,
                 record.driverName,
-                record.accountNumber,
+                record.accountNumber || '-',
                 record.mainDriverAmount || 0,
                 record.advancePayment || 0,
-                record.payableAmount || 0
+                record.payableAmount || 0,
             ]);
-        });
 
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // تنظیم راست‌چین و فرمت اعداد
-        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-                if (!ws[cellAddress]) continue;
-                
-                if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                if (!ws[cellAddress].s.alignment) ws[cellAddress].s.alignment = {};
-                ws[cellAddress].s.alignment.horizontal = 'right';
-                ws[cellAddress].s.alignment.vertical = 'center';
-                
-                // فرمت اعداد برای ستون‌های مبلغ (ستون‌های 4، 5، 6)
-                if (R > 0 && (C === 4 || C === 5 || C === 6)) {
-                    if (typeof wsData[R][C] === 'number') {
-                        ws[cellAddress].z = '#,##0';
-                    }
-                }
-            }
+            await downloadStyledExcel({
+                sheetName: 'لیست پرداخت بانک',
+                fileName: buildExcelFileName('لیست_پرداخت_بانک', ''),
+                headers: [
+                    'تاریخ محاسبه',
+                    'کد پرسنلی',
+                    'نام و نام خانوادگی',
+                    'شماره حساب مقصد',
+                    'مبلغ هزینه (ریال)',
+                    'کسور(پیش پرداخت) (ریال)',
+                    'مبلغ قابل پرداخت (ریال)',
+                ],
+                rows,
+            });
+        } catch (err) {
+            console.error('Failed to export payment list Excel:', err);
+            alert('خطا در خروجی اکسل.');
         }
-        
-        // تنظیم عرض ستون‌ها
-        ws['!cols'] = [
-            { wch: 8 },  // ردیف
-            { wch: 12 }, // کد پرسنلی
-            { wch: 25 }, // نام
-            { wch: 20 }, // شماره حساب
-            { wch: 25 }, // مبلغ هزینه
-            { wch: 25 }, // کسور(پیش پرداخت)
-            { wch: 25 }  // مبلغ قابل پرداخت
-        ];
-        
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'لیست پرداخت بانک');
-        XLSX.writeFile(wb, `لیست_پرداخت_بانک_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
@@ -4855,7 +4910,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         </select>
                     </div>
                     <div className="text-sm text-slate-600">
-                        نمایش {((currentPage - 1) * itemsPerPage) + 1} تا {Math.min(currentPage * itemsPerPage, filteredRecords.length)} از {filteredRecords.length} ردیف
+                        نمایش {((currentPage - 1) * itemsPerPage) + 1} تا {Math.min(currentPage * itemsPerPage, sortedRecords.length)} از {sortedRecords.length} ردیف
                     </div>
                 </div>
 
@@ -4865,14 +4920,54 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                         <thead>
                             <tr className="bg-slate-700 text-white border-b">
                                 <th className="p-3 text-right border-l border-slate-600">ردیف</th>
-                                <th className="p-3 text-right border-l border-slate-600">کد پرسنلی</th>
-                                <th className="p-3 text-right border-l border-slate-600">نام و نام خانوادگی</th>
-                                <th className="p-3 text-right border-l border-slate-600">شماره حساب</th>
-                                <th className="p-3 text-right border-l border-slate-600">مبلغ هزینه (ریال)</th>
-                                <th className="p-3 text-right border-l border-slate-600">کسور(پیش پرداخت) (ریال)</th>
-                                <th className="p-3 text-right border-l border-slate-600">مبلغ قابل پرداخت (ریال)</th>
-                                <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
-                                <th className="p-3 text-right border-l border-slate-600">آخرین پرداخت هزینه</th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('calculationDate')}
+                                >
+                                    تاریخ محاسبه {sortField === 'calculationDate' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('employeeId')}
+                                >
+                                    کد پرسنلی {sortField === 'employeeId' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('driverName')}
+                                >
+                                    نام و نام خانوادگی {sortField === 'driverName' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('accountNumber')}
+                                >
+                                    شماره حساب {sortField === 'accountNumber' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('mainDriverAmount')}
+                                >
+                                    مبلغ هزینه (ریال) {sortField === 'mainDriverAmount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('advancePayment')}
+                                >
+                                    کسور(پیش پرداخت) (ریال) {sortField === 'advancePayment' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('payableAmount')}
+                                >
+                                    مبلغ قابل پرداخت (ریال) {sortField === 'payableAmount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th
+                                    className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
+                                    onClick={() => handleSort('lastPaymentDate')}
+                                >
+                                    آخرین پرداخت هزینه {sortField === 'lastPaymentDate' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                </th>
                                 <th className="p-3 text-right border-l border-slate-600">توضیحات</th>
                                 <th className="p-3 text-right">عملیات</th>
                             </tr>
@@ -4890,6 +4985,9 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                     <td className="p-3 border-l border-slate-200 text-center font-medium">
                                         {((currentPage - 1) * itemsPerPage) + index + 1}
                                     </td>
+                                    <td className="p-3 border-l border-slate-200 text-xs">
+                                        {record.calculationDate || '-'}
+                                    </td>
                                     <td className="p-3 border-l border-slate-200 font-medium">{record.employeeId}</td>
                                     <td className="p-3 border-l border-slate-200 font-semibold text-slate-800">{record.driverName}</td>
                                     <td className="p-3 border-l border-slate-200">{record.accountNumber || '-'}</td>
@@ -4903,9 +5001,6 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                         <span dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>
                                             {record.payableAmount < 0 ? '−' : ''}{Math.abs(record.payableAmount).toLocaleString('fa-IR')}
                                         </span>
-                                    </td>
-                                    <td className="p-3 border-l border-slate-200 text-xs">
-                                        {record.calculationDate || '-'}
                                     </td>
                                     <td className="p-3 border-l border-slate-200 text-xs">
                                         {record.lastPaymentDate ? (
