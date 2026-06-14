@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gregorianToJalali, parseJalaliDateString } from '../utils/jalali';
 
 interface JalaliDateInputProps {
@@ -11,45 +11,35 @@ interface JalaliDateInputProps {
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
-const toGregorianInputValue = (value: string): string => {
-    if (!value) return '';
+const isGregorianStoredValue = (value: string): boolean =>
+    value.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(value);
 
-    if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(value)) {
-        const date = parseJalaliDateString(value);
-        if (!date) return '';
-        return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-    }
-
-    if (value.includes('T')) {
-        return value.split('T')[0];
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
-        return value.split(' ')[0];
-    }
-
-    return '';
-};
-
-const toJalaliDisplay = (value: string): string => {
-    if (!value) return '';
-
-    if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(value) && !value.includes('T')) {
-        const normalized = value.replace(/-/g, '/');
-        const parts = normalized.split('/');
-        if (parts.length === 3) {
-            const [y, m, d] = parts;
-            return `${y}/${pad2(Number(m))}/${pad2(Number(d))}`;
-        }
-        return normalized;
-    }
-
-    const gregorianValue = toGregorianInputValue(value);
-    if (!gregorianValue) return '';
-
-    const [gy, gm, gd] = gregorianValue.split('-').map(Number);
+const gregorianToJalaliString = (value: string): string => {
+    const iso = (value.includes('T') ? value.split('T')[0] : value.split(' ')[0]).trim();
+    const [gy, gm, gd] = iso.split('-').map(Number);
+    if (!gy || !gm || !gd) return '';
     const [jy, jm, jd] = gregorianToJalali(gy, gm, gd);
     return `${jy}/${pad2(jm)}/${pad2(jd)}`;
+};
+
+const normalizeJalaliInput = (jalali: string): string => {
+    const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(jalali.trim());
+    if (!match) return jalali;
+    return `${match[1]}/${pad2(Number(match[2]))}/${pad2(Number(match[3]))}`;
+};
+
+const jalaliToGregorianString = (jalali: string): string => {
+    const date = parseJalaliDateString(jalali);
+    if (!date) return '';
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+};
+
+const toDisplayValue = (storedValue: string): string => {
+    if (!storedValue) return '';
+    if (isGregorianStoredValue(storedValue)) {
+        return gregorianToJalaliString(storedValue);
+    }
+    return normalizeJalaliInput(storedValue.replace(/-/g, '/'));
 };
 
 const JalaliDateInput: React.FC<JalaliDateInputProps> = ({
@@ -59,33 +49,51 @@ const JalaliDateInput: React.FC<JalaliDateInputProps> = ({
     className = 'input-style',
     required = false,
 }) => {
-    const [jalaliValue, setJalaliValue] = useState('');
+    const [displayValue, setDisplayValue] = useState('');
+    const isFocusedRef = useRef(false);
 
     useEffect(() => {
-        setJalaliValue(toJalaliDisplay(value));
+        if (isFocusedRef.current) return;
+        setDisplayValue(toDisplayValue(value));
     }, [value]);
 
-    const handleJalaliChange = (jalaliInput: string) => {
-        setJalaliValue(jalaliInput);
-
-        if (!jalaliInput.trim()) {
+    const commitJalaliValue = (jalaliInput: string) => {
+        const trimmed = jalaliInput.trim();
+        if (!trimmed) {
             onChange('');
             return;
         }
 
-        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliInput)) {
-            const date = parseJalaliDateString(jalaliInput);
-            if (date) {
-                onChange(`${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`);
-            }
+        if (!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(trimmed)) {
+            return;
         }
+
+        const normalized = normalizeJalaliInput(trimmed);
+        const gregorianValue = jalaliToGregorianString(normalized);
+        if (!gregorianValue) return;
+
+        setDisplayValue(normalized);
+        onChange(gregorianValue);
+    };
+
+    const handleChange = (jalaliInput: string) => {
+        setDisplayValue(jalaliInput);
+    };
+
+    const handleBlur = () => {
+        isFocusedRef.current = false;
+        commitJalaliValue(displayValue);
     };
 
     return (
         <input
             type="text"
-            value={jalaliValue}
-            onChange={(e) => handleJalaliChange(e.target.value)}
+            value={displayValue}
+            onChange={(e) => handleChange(e.target.value)}
+            onFocus={() => {
+                isFocusedRef.current = true;
+            }}
+            onBlur={handleBlur}
             placeholder={placeholder}
             className={className}
             required={required}
