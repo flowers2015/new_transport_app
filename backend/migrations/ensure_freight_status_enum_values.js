@@ -49,17 +49,18 @@ async function run() {
       );
       console.log(`✅ ${label} به enum اضافه شد`);
     }
-  } catch (e) {
-    console.error('❌ ensure_freight_status_enum_values failed:', e);
-    process.exitCode = 1;
   } finally {
     client.release();
-    await pool.end();
   }
 }
 
 if (require.main === module) {
-  run();
+  run()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error('❌ ensure_freight_status_enum_values failed:', e);
+      process.exit(1);
+    });
 }
 
 module.exports = run;
