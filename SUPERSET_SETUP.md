@@ -117,30 +117,46 @@ cd /home/fms/project
 nano docker-compose.superset.yml
 ```
 
-مقدار `SUPERSET_SECRET_KEY` را با یک رشته تصادفی طولانی عوض کنید:
-
-```bash
-openssl rand -base64 42
-```
+مقدار `SUPERSET_SECRET_KEY` را با خروجی `openssl rand -base64 42` عوض کنید (قبل از `up` حتماً انجام شود).
 
 ### ۲.۵ بالا آوردن سرویس‌ها
 
+> **سرور FMS:** اگر خطای `unknown shorthand flag: 'f'` دیدید، یعنی `docker compose` (v2) نصب نیست.
+> از `docker-compose` (با خط تیره) یا اسکریپت کمکی استفاده کنید.
+
+**روش پیشنهادی (اسکریپت):**
+
+```bash
+chmod +x scripts/superset-docker.sh
+bash scripts/superset-docker.sh up
+bash scripts/superset-docker.sh ps
+```
+
+**دستی با docker-compose v1:**
+
+```bash
+docker-compose -f docker-compose.superset.yml up -d
+docker-compose -f docker-compose.superset.yml ps
+```
+
+**اگر docker compose v2 دارید:**
+
 ```bash
 docker compose -f docker-compose.superset.yml up -d
-docker compose -f docker-compose.superset.yml ps
 ```
 
 ### ۲.۶ راه‌اندازی اولیه Superset (فقط یک‌بار)
 
 ```bash
-# ساخت جداول داخلی Superset
-docker compose -f docker-compose.superset.yml exec superset superset db upgrade
+bash scripts/superset-docker.sh init
+```
 
-# ساخت ادمین (نام کاربری/رمز/ایمیل را خودتان وارد کنید)
-docker compose -f docker-compose.superset.yml exec superset superset fab create-admin
+یا دستی:
 
-# بارگذاری نقش‌ها و مجوزها
-docker compose -f docker-compose.superset.yml exec superset superset init
+```bash
+docker-compose -f docker-compose.superset.yml exec superset superset db upgrade
+docker-compose -f docker-compose.superset.yml exec -it superset superset fab create-admin
+docker-compose -f docker-compose.superset.yml exec superset superset init
 ```
 
 ### ۲.۷ دسترسی در مرورگر

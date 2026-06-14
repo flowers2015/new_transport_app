@@ -1,94 +1,135 @@
 const pool = require('../db');
 const crypto = require('crypto');
 
-/**
- * دریافت لیست مدیران برنامه‌ریزی
- */
-async function getPlanningManagers(req, res) {
-  try {
-    const { rows } = await pool.query(`
-      SELECT 
+const MANAGER_ROLES = [
+  'planner_manager',
+  'مدیر برنامه‌ریزی',
+  'PlanningManager',
+  'planning_manager',
+];
+
+const EMPLOYEE_ROLES = [
+  'planner',
+  'کارمند برنامه‌ریزی',
+  'PlanningEmployee',
+  'planning_employee',
+];
+
+let usersColumnCache = null;
+
+async function getUsersColumnInfo() {
+  if (usersColumnCache) return usersColumnCache;
+
+  const { rows } = await pool.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name IN ('full_name', 'name', 'employee_id')
+  `);
+
+  const cols = new Set(rows.map((r) => r.column_name));
+  const nameParts = [];
+  if (cols.has('full_name')) nameParts.push("NULLIF(TRIM(full_name), '')");
+  if (cols.has('name')) nameParts.push("NULLIF(TRIM(name), '')");
+  nameParts.push('username');
+
+  usersColumnCache = {
+    fullNameExpr: `COALESCE(${nameParts.join(', ')})`,
+    employeeSelect: cols.has('employee_id') ? 'employee_id' : 'NULL::varchar AS employee_id',
+  };
+  return usersColumnCache;
+}
+
+async function queryPlanningUsers(roles) {
+  const { fullNameExpr, employeeSelect } = await getUsersColumnInfo();
+  const placeholders = roles.map((_, i) => `$${i + 1}`).join(', ');
+
+  const { rows } = await pool.query(
+    `
+      SELECT
         id,
         username,
-        COALESCE(NULLIF(TRIM(full_name), ''), NULLIF(TRIM(name), ''), username) as full_name,
+        ${fullNameExpr} AS full_name,
         role,
-        employee_id
-      FROM users 
-      WHERE role IN (
-        'planner_manager',
-        'مدیر برنامه‌ریزی',
-        'PlanningManager',
-        'planning_manager'
-      )
+        ${employeeSelect}
+      FROM users
+      WHERE role IN (${placeholders})
       ORDER BY full_name, username
-    `);
-    
+    `,
+    roles
+  );
+
+  return rows;
+}
+
+async function ensurePermissionsTable() {
+  const tableCheck = await pool.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = 'planning_manager_approval_permissions'
+    ) AS exists
+  `);
+
+  if (tableCheck.rows[0].exists) return true;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS planning_manager_approval_permissions (
+      id VARCHAR(255) PRIMARY KEY,
+      user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      username VARCHAR(255) NOT NULL,
+      full_name VARCHAR(255) NOT NULL,
+      line_type VARCHAR(255) NOT NULL,
+      permission_type VARCHAR(50) NOT NULL DEFAULT 'approval',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, line_type, permission_type)
+    )
+  `);
+
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_planning_manager_approval_permissions_user_id ON planning_manager_approval_permissions(user_id)'
+  );
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_planning_manager_approval_permissions_line_type ON planning_manager_approval_permissions(line_type)'
+  );
+
+  return true;
+}
+
+async function getPlanningManagers(req, res) {
+  try {
+    const rows = await queryPlanningUsers(MANAGER_ROLES);
     res.json(rows);
   } catch (error) {
     console.error('Error getting planning managers:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'خطا در دریافت لیست مدیران برنامه‌ریزی',
-      error: error.message 
+      error: error.message,
     });
   }
 }
 
-/**
- * دریافت لیست کارمندان برنامه‌ریزی
- */
 async function getPlanningEmployees(req, res) {
   try {
-    const { rows } = await pool.query(`
-      SELECT 
-        id,
-        username,
-        COALESCE(NULLIF(TRIM(full_name), ''), NULLIF(TRIM(name), ''), username) as full_name,
-        role,
-        employee_id
-      FROM users 
-      WHERE role IN (
-        'planner',
-        'کارمند برنامه‌ریزی',
-        'PlanningEmployee',
-        'planning_employee'
-      )
-      ORDER BY full_name, username
-    `);
-    
+    const rows = await queryPlanningUsers(EMPLOYEE_ROLES);
     res.json(rows);
   } catch (error) {
     console.error('Error getting planning employees:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'خطا در دریافت لیست کارمندان برنامه‌ریزی',
-      error: error.message 
+      error: error.message,
     });
   }
 }
 
-/**
- * دریافت مجوزهای تاییدیه
- */
 async function getApprovalPermissions(req, res) {
   try {
-    // بررسی وجود جدول
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'planning_manager_approval_permissions'
-      );
-    `);
-    
-    if (!tableCheck.rows[0].exists) {
-      console.error('Table planning_manager_approval_permissions does not exist');
-      return res.status(500).json({ 
-        message: 'جدول مجوزها وجود ندارد. لطفاً migration را اجرا کنید.',
-        error: 'TABLE_NOT_FOUND'
-      });
-    }
-    
+    await ensurePermissionsTable();
+
     const { rows } = await pool.query(`
-      SELECT 
+      SELECT
         pmap.id,
         pmap.user_id,
         pmap.username,
@@ -102,43 +143,37 @@ async function getApprovalPermissions(req, res) {
       LEFT JOIN users u ON pmap.user_id = u.id
       ORDER BY pmap.line_type, pmap.full_name
     `);
-    
+
     res.json(rows);
   } catch (error) {
     console.error('Error getting approval permissions:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'خطا در دریافت مجوزها',
-      error: error.message 
+      error: error.message,
     });
   }
 }
 
-/**
- * بررسی مجوز کاربر برای تاییدیه در یک لاین خاص
- */
 async function checkApprovalPermission(req, res) {
   try {
     const { userId, lineType } = req.query;
-    
+
     if (!userId || !lineType) {
       return res.status(400).json({ message: 'userId و lineType الزامی است' });
     }
-    
-    // بررسی وجود جدول
+
     const tableCheck = await pool.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'planning_manager_approval_permissions'
-      );
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'planning_manager_approval_permissions'
+      ) AS exists
     `);
-    
+
     if (!tableCheck.rows[0].exists) {
-      // اگر جدول وجود ندارد، false برگردان (بدون خطا)
       return res.json({ hasPermission: false });
     }
-    
-    // تبدیل lineType به فرمت استاندارد
+
     let normalizedLineType = lineType;
     if (lineType === 'بستنی' || lineType === 'IceCream') {
       normalizedLineType = 'IceCream';
@@ -147,35 +182,33 @@ async function checkApprovalPermission(req, res) {
     } else if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') {
       normalizedLineType = 'Ambient';
     }
-    
-    const { rows } = await pool.query(`
-      SELECT COUNT(*) as count
-      FROM planning_manager_approval_permissions
-      WHERE user_id = $1 AND line_type = $2
-    `, [userId, normalizedLineType]);
-    
-    const hasPermission = parseInt(rows[0].count) > 0;
-    
-    res.json({ hasPermission });
+
+    const { rows } = await pool.query(
+      `
+        SELECT COUNT(*) AS count
+        FROM planning_manager_approval_permissions
+        WHERE user_id = $1 AND line_type = $2
+      `,
+      [userId, normalizedLineType]
+    );
+
+    res.json({ hasPermission: parseInt(rows[0].count, 10) > 0 });
   } catch (error) {
     console.error('Error checking approval permission:', error);
-    // در صورت خطا، false برگردان (بدون خطا)
     res.json({ hasPermission: false });
   }
 }
 
-/**
- * افزودن مجوز تاییدیه یا ایجاد اعلام بار
- */
 async function addApprovalPermission(req, res) {
   try {
     const { userId, username, fullName, lineType, permissionType = 'approval' } = req.body;
-    
+
     if (!userId || !username || !fullName || !lineType) {
       return res.status(400).json({ message: 'همه فیلدها الزامی است' });
     }
-    
-    // تبدیل lineType به فرمت استاندارد
+
+    await ensurePermissionsTable();
+
     let normalizedLineType = lineType;
     if (lineType === 'بستنی' || lineType === 'IceCream') {
       normalizedLineType = 'IceCream';
@@ -184,52 +217,58 @@ async function addApprovalPermission(req, res) {
     } else if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') {
       normalizedLineType = 'Ambient';
     }
-    
-    // بررسی تکراری بودن
-    const existing = await pool.query(`
-      SELECT id FROM planning_manager_approval_permissions 
-      WHERE user_id = $1 AND line_type = $2 AND permission_type = $3
-    `, [userId, normalizedLineType, permissionType]);
-    
+
+    const existing = await pool.query(
+      `
+        SELECT id FROM planning_manager_approval_permissions
+        WHERE user_id = $1 AND line_type = $2 AND permission_type = $3
+      `,
+      [userId, normalizedLineType, permissionType]
+    );
+
     if (existing.rows.length > 0) {
       return res.status(400).json({ message: 'این مجوز قبلاً ثبت شده است' });
     }
-    
+
     const id = crypto.randomUUID();
-    
-    await pool.query(`
-      INSERT INTO planning_manager_approval_permissions (id, user_id, username, full_name, line_type, permission_type)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `, [id, userId, username, fullName, normalizedLineType, permissionType]);
-    
+
+    await pool.query(
+      `
+        INSERT INTO planning_manager_approval_permissions
+          (id, user_id, username, full_name, line_type, permission_type)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [id, userId, username, fullName, normalizedLineType, permissionType]
+    );
+
     res.status(201).json({ message: 'مجوز با موفقیت اضافه شد', id });
   } catch (error) {
     console.error('Error adding approval permission:', error);
-    res.status(500).json({ message: 'خطا در افزودن مجوز' });
+    res.status(500).json({ message: 'خطا در افزودن مجوز', error: error.message });
   }
 }
 
-/**
- * حذف مجوز تاییدیه
- */
 async function deleteApprovalPermission(req, res) {
   try {
     const { id } = req.params;
-    
-    const { rows } = await pool.query(`
-      DELETE FROM planning_manager_approval_permissions 
-      WHERE id = $1 
-      RETURNING *
-    `, [id]);
-    
+
+    const { rows } = await pool.query(
+      `
+        DELETE FROM planning_manager_approval_permissions
+        WHERE id = $1
+        RETURNING *
+      `,
+      [id]
+    );
+
     if (rows.length === 0) {
       return res.status(404).json({ message: 'مجوز یافت نشد' });
     }
-    
+
     res.json({ message: 'مجوز با موفقیت حذف شد' });
   } catch (error) {
     console.error('Error deleting approval permission:', error);
-    res.status(500).json({ message: 'خطا در حذف مجوز' });
+    res.status(500).json({ message: 'خطا در حذف مجوز', error: error.message });
   }
 }
 
@@ -241,4 +280,3 @@ module.exports = {
   addApprovalPermission,
   deleteApprovalPermission,
 };
-

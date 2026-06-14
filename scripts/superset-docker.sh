@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# اجرای Superset — هم docker compose (v2) هم docker-compose (v1)
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+COMPOSE_FILE="docker-compose.superset.yml"
+
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE=(docker compose -f "$COMPOSE_FILE")
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE=(docker-compose -f "$COMPOSE_FILE")
+else
+  echo "❌ نه docker compose و نه docker-compose پیدا نشد."
+  echo "   نصب: sudo apt install -y docker-compose"
+  exit 1
+fi
+
+ACTION="${1:-up}"
+
+case "$ACTION" in
+  up)
+    "${COMPOSE[@]}" up -d
+    echo "✅ Superset بالا آمد. چند ثانیه صبر کنید سپس:"
+    echo "   bash scripts/superset-docker.sh init"
+    ;;
+  ps)
+    "${COMPOSE[@]}" ps
+    ;;
+  logs)
+    "${COMPOSE[@]}" logs -f --tail=100 superset
+    ;;
+  stop)
+    "${COMPOSE[@]}" stop
+    ;;
+  down)
+    "${COMPOSE[@]}" down
+    ;;
+  init)
+    echo "🔄 db upgrade ..."
+    "${COMPOSE[@]}" exec superset superset db upgrade
+    echo ""
+    echo "👤 ساخت ادمین (نام کاربری/رمز را وارد کنید):"
+    "${COMPOSE[@]}" exec -it superset superset fab create-admin
+    echo "🔄 superset init ..."
+    "${COMPOSE[@]}" exec superset superset init
+    echo "✅ آماده: http://$(hostname -I | awk '{print $1}'):3001"
+    ;;
+  *)
+    echo "استفاده: bash scripts/superset-docker.sh [up|ps|logs|stop|down|init]"
+    exit 1
+    ;;
+esac

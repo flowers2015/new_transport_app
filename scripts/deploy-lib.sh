@@ -194,6 +194,8 @@ deploy_run_optional_migrations() {
         "migrations/create_support_tickets_table.js"
         "migrations/add_finance_rejection_columns.js"
         "migrations/ensure_freight_status_enum_values.js"
+        "migrations/create_planning_manager_approval_permissions_table.js"
+        "migrations/add_permission_type_to_planning_manager_approval_permissions.js"
     )
 
     for mig in "${migrations[@]}"; do

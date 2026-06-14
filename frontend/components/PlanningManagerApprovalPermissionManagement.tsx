@@ -62,7 +62,20 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
       ]);
 
       if (!managersRes.ok || !employeesRes.ok || !permissionsRes.ok) {
-        throw new Error('خطا در دریافت اطلاعات');
+        const failed: string[] = [];
+        if (!managersRes.ok) {
+          const body = await managersRes.json().catch(() => ({}));
+          failed.push(`مدیران (${managersRes.status}): ${body.message || body.error || 'خطا'}`);
+        }
+        if (!employeesRes.ok) {
+          const body = await employeesRes.json().catch(() => ({}));
+          failed.push(`کارمندان (${employeesRes.status}): ${body.message || body.error || 'خطا'}`);
+        }
+        if (!permissionsRes.ok) {
+          const body = await permissionsRes.json().catch(() => ({}));
+          failed.push(`مجوزها (${permissionsRes.status}): ${body.message || body.error || 'خطا'}`);
+        }
+        throw new Error(failed.join(' | '));
       }
 
       const [managersData, employeesData, permissionsData] = await Promise.all([
@@ -170,8 +183,8 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
         (selectedLineType === FreightLineType.Ambient && p.line_type === 'Ambient');
       
       const matchesSearch = !listSearchQuery || 
-        p.username.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
-        p.full_name.toLowerCase().includes(listSearchQuery.toLowerCase());
+        (p.username || '').toLowerCase().includes(listSearchQuery.toLowerCase()) ||
+        (p.full_name || '').toLowerCase().includes(listSearchQuery.toLowerCase());
       
       return matchesLineType && matchesSearch;
     });
@@ -189,7 +202,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
     return availableUsers.filter(u => {
       const displayName = (u.full_name || u.username || '').toLowerCase();
       const matchesSearch = !userPickerSearch ||
-        u.username.toLowerCase().includes(userPickerSearch.toLowerCase()) ||
+        (u.username || '').toLowerCase().includes(userPickerSearch.toLowerCase()) ||
         displayName.includes(userPickerSearch.toLowerCase()) ||
         (u.employee_id && u.employee_id.toLowerCase().includes(userPickerSearch.toLowerCase()));
 
