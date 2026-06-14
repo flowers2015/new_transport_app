@@ -34,7 +34,8 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedUserType, setSelectedUserType] = useState<UserType>('manager');
   const [selectedLineTypes, setSelectedLineTypes] = useState<FreightLineType[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [listSearchQuery, setListSearchQuery] = useState('');
+  const [userPickerSearch, setUserPickerSearch] = useState('');
 
   const headers = useMemo(() => ({
     'Content-Type': 'application/json',
@@ -163,59 +164,63 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
 
   const filteredPermissions = useMemo(() => {
     return permissions.filter(p => {
-      const matchesLineType = p.line_type === selectedLineType || 
+      const matchesLineType = !selectedLineType || p.line_type === selectedLineType || 
         (selectedLineType === FreightLineType.IceCream && p.line_type === 'IceCream') ||
         (selectedLineType === FreightLineType.Dairy && p.line_type === 'Dairy') ||
         (selectedLineType === FreightLineType.Ambient && p.line_type === 'Ambient');
       
-      const matchesSearch = !searchQuery || 
-        p.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = !listSearchQuery || 
+        p.username.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
+        p.full_name.toLowerCase().includes(listSearchQuery.toLowerCase());
       
       return matchesLineType && matchesSearch;
     });
-  }, [permissions, selectedLineType, searchQuery]);
+  }, [permissions, selectedLineType, listSearchQuery]);
+
+  const availableUsers = useMemo(() => {
+    if (selectedUserType === 'manager') return planningManagers;
+    if (selectedUserType === 'employee') return planningEmployees;
+    return [...planningManagers, ...planningEmployees];
+  }, [selectedUserType, planningManagers, planningEmployees]);
 
   const filteredUsers = useMemo(() => {
-    const users = selectedUserType === 'manager' ? planningManagers : 
-                  selectedUserType === 'employee' ? planningEmployees :
-                  [...planningManagers, ...planningEmployees];
-    
-    return users.filter(u => {
-      const matchesSearch = !searchQuery || 
-        u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (u.employee_id && u.employee_id.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      // فقط کاربرانی که هنوز برای این لاین‌های انتخاب شده مجوز ندارند
-      const permissionType = selectedUserType === 'manager' ? 'approval' : 
-                            selectedUserType === 'employee' ? 'create' : 
-                            undefined;
-      
-      const hasPermissionForAllSelected = selectedLineTypes.length > 0 && selectedLineTypes.every(lt => 
-        permissions.some(p => 
-          p.user_id === u.id && 
-          p.permission_type === (permissionType || p.permission_type) &&
-          (p.line_type === lt || 
+    const permissionType = selectedUserType === 'manager' ? 'approval' : 'create';
+
+    return availableUsers.filter(u => {
+      const displayName = (u.full_name || u.username || '').toLowerCase();
+      const matchesSearch = !userPickerSearch ||
+        u.username.toLowerCase().includes(userPickerSearch.toLowerCase()) ||
+        displayName.includes(userPickerSearch.toLowerCase()) ||
+        (u.employee_id && u.employee_id.toLowerCase().includes(userPickerSearch.toLowerCase()));
+
+      if (!matchesSearch) return false;
+
+      if (selectedLineTypes.length === 0) return true;
+
+      const hasPermissionForAllSelected = selectedLineTypes.every(lt =>
+        permissions.some(p =>
+          p.user_id === u.id &&
+          p.permission_type === permissionType &&
+          (p.line_type === lt ||
            (lt === FreightLineType.IceCream && p.line_type === 'IceCream') ||
            (lt === FreightLineType.Dairy && p.line_type === 'Dairy') ||
            (lt === FreightLineType.Ambient && p.line_type === 'Ambient'))
         )
       );
-      
-      return matchesSearch && !hasPermissionForAllSelected;
+
+      return !hasPermissionForAllSelected;
     });
-  }, [planningManagers, planningEmployees, permissions, searchQuery, selectedLineTypes, selectedUserType]);
+  }, [availableUsers, permissions, userPickerSearch, selectedLineTypes, selectedUserType]);
 
   // گروه‌بندی مجوزها بر اساس مدیر
   const groupedPermissions = useMemo(() => {
-    const grouped: { [userId: string]: { manager: PlanningManager; lineTypes: string[] } } = {};
+    const grouped: { [userId: string]: { user: PlanningUser; lineTypes: string[] } } = {};
     
     permissions.forEach(p => {
       if (!grouped[p.user_id]) {
-        const manager = planningManagers.find(m => m.id === p.user_id);
-        if (manager) {
-          grouped[p.user_id] = { manager, lineTypes: [] };
+        const user = [...planningManagers, ...planningEmployees].find(u => u.id === p.user_id);
+        if (user) {
+          grouped[p.user_id] = { user, lineTypes: [] };
         }
       }
       if (grouped[p.user_id]) {
@@ -224,7 +229,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
     });
     
     return Object.values(grouped);
-  }, [permissions, planningManagers]);
+  }, [permissions, planningManagers, planningEmployees]);
 
   if (loading) {
     return <div className="text-center p-8">در حال بارگذاری...</div>;
@@ -259,11 +264,12 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                 onChange={(e) => {
                   setSelectedUserType(e.target.value as UserType);
                   setSelectedUser('');
+                  setUserPickerSearch('');
                 }}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border rounded-lg bg-white"
               >
-                <option value="manager">مدیر برنامه‌ریزی</option>
-                <option value="employee">کارمند برنامه‌ریزی</option>
+                <option value="manager">مدیر برنامه‌ریزی (مجوز تاییدیه)</option>
+                <option value="employee">کارمند برنامه‌ریزی (مجوز ایجاد اعلام بار)</option>
               </select>
               {selectedUserType && (
                 <div className="mt-2 p-3 rounded-lg bg-white border-2 border-blue-200">
@@ -288,18 +294,39 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
               <label className="block text-sm font-medium mb-1">
                 انتخاب {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی:
               </label>
+              <input
+                type="text"
+                placeholder={`جستجو بین ${availableUsers.length} ${selectedUserType === 'manager' ? 'مدیر' : 'کارمند'}...`}
+                value={userPickerSearch}
+                onChange={(e) => setUserPickerSearch(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg mb-2"
+              />
               <select
+                key={`user-select-${selectedUserType}`}
                 value={selectedUser}
                 onChange={(e) => setSelectedUser(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border rounded-lg bg-white"
               >
-                <option value="">-- انتخاب {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی --</option>
+                <option value="">
+                  -- انتخاب {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی --
+                </option>
                 {filteredUsers.map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.full_name} ({user.username}) {user.employee_id ? `- ${user.employee_id}` : ''}
+                    {(user.full_name || user.username)} ({user.username})
+                    {user.employee_id ? ` - ${user.employee_id}` : ''}
                   </option>
                 ))}
               </select>
+              {availableUsers.length === 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  هیچ {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی در سیستم ثبت نشده است.
+                </p>
+              )}
+              {availableUsers.length > 0 && filteredUsers.length === 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  کاربری برای انتخاب باقی نمانده (همه مجوز دارند یا جستجو نتیجه‌ای ندارد).
+                </p>
+              )}
             </div>
             
             <div>
@@ -349,8 +376,8 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
           <input
             type="text"
             placeholder="جستجو بر اساس نام کاربری، نام کامل یا کد پرسنلی..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={listSearchQuery}
+            onChange={(e) => setListSearchQuery(e.target.value)}
             className="w-full px-4 py-2 border rounded-lg"
           />
         </div>
@@ -405,7 +432,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
         {/* لیست مجوزهای فعلی */}
         <div className="p-4">
           <h3 className="font-semibold mb-3">
-            مجوزهای ثبت شده برای لاین "{getLineTypeLabel(selectedLineType)}":
+            مجوزهای ثبت شده{selectedLineType ? ` برای لاین "${getLineTypeLabel(selectedLineType)}"` : ''}:
           </h3>
           <div className="mb-3 flex gap-2">
             <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">

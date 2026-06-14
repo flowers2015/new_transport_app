@@ -1,0 +1,55 @@
+# Apache Superset — جایگزین Metabase (پورت 3001)
+# راهنمای کامل: SUPERSET_SETUP.md
+
+services:
+  superset:
+    image: apache/superset:4.1.1
+    container_name: transport-superset
+    restart: unless-stopped
+    ports:
+      - "3001:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "CHANGE_ME_LONG_RANDOM_SECRET_KEY"
+      SUPERSET_LOAD_EXAMPLES: "no"
+      DATABASE_DIALECT: postgresql
+      DATABASE_USER: superset
+      DATABASE_PASSWORD: superset
+      DATABASE_HOST: superset-db
+      DATABASE_PORT: 5432
+      DATABASE_DB: superset
+      REDIS_HOST: superset-redis
+      REDIS_PORT: 6379
+    volumes:
+      - superset_home:/app/superset_home
+    depends_on:
+      superset-db:
+        condition: service_healthy
+      superset-redis:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  superset-db:
+    image: postgres:16-alpine
+    container_name: transport-superset-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset
+      POSTGRES_DB: superset
+    volumes:
+      - superset-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset -d superset"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  superset-redis:
+    image: redis:7-alpine
+    container_name: transport-superset-redis
+    restart: unless-stopped
+
+volumes:
+  superset_home:
+  superset-db-data:

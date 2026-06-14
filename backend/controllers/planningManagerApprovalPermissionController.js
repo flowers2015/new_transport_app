@@ -6,23 +6,11 @@ const crypto = require('crypto');
  */
 async function getPlanningManagers(req, res) {
   try {
-    // بررسی اینکه کدام ستون name وجود دارد
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'users' 
-      AND column_name IN ('name', 'full_name')
-    `);
-    
-    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
-    const nameColumn = hasFullName ? 'full_name' : 'name';
-    
-    // نقش‌های مدیر برنامه‌ریزی
     const { rows } = await pool.query(`
       SELECT 
         id,
         username,
-        ${nameColumn} as full_name,
+        COALESCE(NULLIF(TRIM(full_name), ''), NULLIF(TRIM(name), ''), username) as full_name,
         role,
         employee_id
       FROM users 
@@ -32,7 +20,7 @@ async function getPlanningManagers(req, res) {
         'PlanningManager',
         'planning_manager'
       )
-      ORDER BY ${nameColumn}
+      ORDER BY full_name, username
     `);
     
     res.json(rows);
@@ -50,23 +38,11 @@ async function getPlanningManagers(req, res) {
  */
 async function getPlanningEmployees(req, res) {
   try {
-    // بررسی اینکه کدام ستون name وجود دارد
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'users' 
-      AND column_name IN ('name', 'full_name')
-    `);
-    
-    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
-    const nameColumn = hasFullName ? 'full_name' : 'name';
-    
-    // نقش‌های کارمند برنامه‌ریزی
     const { rows } = await pool.query(`
       SELECT 
         id,
         username,
-        ${nameColumn} as full_name,
+        COALESCE(NULLIF(TRIM(full_name), ''), NULLIF(TRIM(name), ''), username) as full_name,
         role,
         employee_id
       FROM users 
@@ -76,7 +52,7 @@ async function getPlanningEmployees(req, res) {
         'PlanningEmployee',
         'planning_employee'
       )
-      ORDER BY ${nameColumn}
+      ORDER BY full_name, username
     `);
     
     res.json(rows);
