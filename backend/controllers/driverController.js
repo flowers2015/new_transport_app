@@ -195,7 +195,35 @@ async function createDriver(req, res) {
     } = req.body;
 
     if (!employeeId || !name) {
-      return res.status(400).json({ message: 'Employee ID and name are required.' });
+      return res.status(400).json({ message: 'کد پرسنلی و نام الزامی است.' });
+    }
+
+    let normalizedNationalId = null;
+    if (nationalId !== undefined && nationalId !== null && String(nationalId).trim() !== '') {
+      normalizedNationalId = String(nationalId).trim();
+    }
+    if (!normalizedNationalId) {
+      return res.status(400).json({ message: 'کد ملی الزامی است.' });
+    }
+
+    const existingEmployee = await pool.query(
+      'SELECT id, name FROM drivers WHERE employee_id = $1 AND is_deleted = false',
+      [String(employeeId).trim()]
+    );
+    if (existingEmployee.rows.length > 0) {
+      return res.status(400).json({
+        message: `کد پرسنلی "${employeeId}" قبلاً ثبت شده (${existingEmployee.rows[0].name}).`,
+      });
+    }
+
+    const existingNational = await pool.query(
+      'SELECT id, name FROM drivers WHERE national_id = $1 AND is_deleted = false',
+      [normalizedNationalId]
+    );
+    if (existingNational.rows.length > 0) {
+      return res.status(400).json({
+        message: `کد ملی "${normalizedNationalId}" قبلاً ثبت شده (${existingNational.rows[0].name}).`,
+      });
     }
 
     // بررسی وجود ستون account_number
@@ -222,9 +250,9 @@ async function createDriver(req, res) {
         home_address, work_location, job_title, hire_date, termination_date,
         license_number, license_type, license_issue_date, license_issue_place,
         license_expiry_date, created_at, updated_at`;
-    let insertValues = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW()`;
+    let insertValues = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW()`;
     let insertParams = [
-      id, employeeId, name, fatherName || null, nationalId,
+      id, employeeId, name, fatherName || null, normalizedNationalId,
       birthDate ? new Date(birthDate) : null, idNumber || null,
       birthPlace || null, issuePlace || null, homePhone || null,
       workPhone || null, mobile || null, postalCode || null,
@@ -240,7 +268,7 @@ async function createDriver(req, res) {
         home_address, work_location, job_title, hire_date, termination_date,
         license_number, license_type, license_issue_date, license_issue_place,
         license_expiry_date, account_number, created_at, updated_at`;
-      insertValues = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW()`;
+      insertValues = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW()`;
       insertParams.push(accountNumber || null);
     }
     
@@ -252,7 +280,20 @@ async function createDriver(req, res) {
     res.status(201).json(rows[0]);
   } catch (error) {
     console.error('Failed to create driver:', error);
-    res.status(500).json({ message: 'Internal server error while creating driver.' });
+    if (error.code === '23505') {
+      const detail = String(error.detail || '');
+      if (detail.includes('employee_id')) {
+        return res.status(400).json({ message: 'کد پرسنلی تکراری است.' });
+      }
+      if (detail.includes('national_id')) {
+        return res.status(400).json({ message: 'کد ملی تکراری است.' });
+      }
+      return res.status(400).json({ message: 'رکورد تکراری است.' });
+    }
+    if (error.code === '23502') {
+      return res.status(400).json({ message: 'فیلدهای الزامی را کامل کنید (کد پرسنلی، نام، کد ملی).' });
+    }
+    res.status(500).json({ message: 'خطا در ایجاد راننده.' });
   }
 }
 

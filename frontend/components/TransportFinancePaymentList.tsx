@@ -14,6 +14,7 @@ import {
     PaymentRecord as InvoicePaymentRecord,
     calculateMainDriverCostGlobal
 } from './InvoiceImageHelper';
+import { notifyFinanceDataChanged } from '../utils/financeDataSync';
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
@@ -4730,6 +4731,7 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
 
             // همگام‌سازی در پس‌زمینه
             await fetchData({ silent: true });
+            notifyFinanceDataChanged({ source: 'payment-list-mark-paid' });
         } catch (err: any) {
             console.error('❌ [markAsPaid] Error:', err);
             alert(`خطا در ثبت پرداخت: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);

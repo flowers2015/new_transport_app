@@ -40,6 +40,19 @@ const {
 
 const { getPerformanceIndex, getPersonalPerformanceIndex } = require('../controllers/performanceIndexController');
 
+const PLANNER_ROLES = [
+  'planner',
+  'planner_manager',
+  'admin',
+  'کارمند برنامه‌ریزی',
+  'مدیر برنامه‌ریزی',
+  'ادمین',
+  'PlanningEmployee',
+  'PlanningManager',
+  'planning_employee',
+  'planning_manager',
+];
+
 // Note: The roles 'PlanningManager' and 'Transportation Users' are placeholders.
 // You should replace them with the actual roles defined in your user_role_enum.
 // For example, 'Admin', 'LogisticsCoordinator', etc.
@@ -102,7 +115,7 @@ router.get(
 router.get(
   '/change-requests',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(PLANNER_ROLES),
   listChangeRequests
 );
 
@@ -210,14 +223,14 @@ router.post(
 router.post(
   '/change-requests/:id/approve',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(PLANNER_ROLES),
   approveChangeRequest
 );
 
 router.post(
   '/change-requests/:id/reject',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(PLANNER_ROLES),
   rejectChangeRequest
 );
 
@@ -225,7 +238,7 @@ router.post(
 router.post(
   '/change-requests/:id/archive',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(PLANNER_ROLES),
   archiveChangeRequest
 );
 

@@ -31,6 +31,7 @@ import {
 } from '../utils/tourMileage';
 import { isFinanceRejectedAnn } from '../utils/financeRejection';
 import { computeTourFuelCost } from '../utils/fuelCostCalculation';
+import { subscribeFinanceDataChanged } from '../utils/financeDataSync';
 
 interface TransportFinanceCalculationProps {
     currentUser: User;
@@ -133,6 +134,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
     const [savedCalculations, setSavedCalculations] = useState<any[]>([]);
+    const savedCalculationsSyncKey = useMemo(
+        () =>
+            savedCalculations
+                .map(
+                    (s: any) =>
+                        `${s.id ?? ''}:${s.announcement_id ?? s.announcementId ?? ''}:${s.is_paid ? 1 : 0}:${s.total_cost ?? 0}:${s.commission_status ?? ''}`
+                )
+                .join('|'),
+        [savedCalculations]
+    );
     const [calculations, setCalculations] = useState<DriverCalculationRow[]>([]);
     
     // نوع فیلتر تاریخ (تاریخ صدور بارنامه یا تاریخ محاسبه)
@@ -322,6 +333,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         fetchRegulations();
         // Reset refreshTrigger هنگام mount شدن component
         setRefreshTrigger(0);
+    }, []);
+
+    // بعد از «پرداخت شد» در لیست پرداخت یا بازگشت به این صفحه، داده‌ها را تازه کن
+    useEffect(() => {
+        return subscribeFinanceDataChanged(() => {
+            fetchData({ silent: true }).then(() => setRefreshTrigger((t) => t + 1));
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // محاسبه اتوماتیک اجرت وقتی دیالوگ باز شد و صف "اجرت ثابت" هست یا پیمایش تغییر کرد (با debounce)
@@ -635,6 +654,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
             const enrichedAnnouncements = await enrichAnnouncementsWithRouteMileage(companyAnnouncements);
             setAnnouncements(enrichedAnnouncements);
+            setRefreshTrigger((t) => t + 1);
             
         } catch (err: any) {
             console.error('❌ [TransportFinanceCalculation] Failed to fetch data:', err);
@@ -1401,14 +1421,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         loadSavedCalculations();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, announcements, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger, savedCalculations.length]);
+    }, [loading, announcements, drivers.length, vehicles.length, calculateDriverData.length, refreshTrigger, savedCalculationsSyncKey]);
 
-    // نمایش سریع جدول پایه قبل از اتمام merge (بدون چشمک‌زدن)
+    // فقط وقتی هیچ محاسبهٔ ذخیره‌شده‌ای نیست — جلوگیری از overwrite بعد از merge (isPaid و ...)
     useEffect(() => {
-        if (!loading && calculateDriverData.length > 0 && calculations.length === 0) {
+        if (
+            !loading &&
+            calculateDriverData.length > 0 &&
+            calculations.length === 0 &&
+            savedCalculations.length === 0
+        ) {
             setCalculations(calculateDriverData);
         }
-    }, [loading, calculateDriverData, calculations.length]);
+    }, [loading, calculateDriverData, calculations.length, savedCalculations.length]);
 
     // به‌روزرسانی مجموع هزینه کل و پیمایش کل برای هر راننده - بعد از هر تغییر در tours
     useEffect(() => {

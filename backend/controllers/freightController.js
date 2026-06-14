@@ -7612,7 +7612,11 @@ async function archiveChangeRequest(req, res) {
       return res.status(404).json({ message: 'درخواست یافت نشد یا قبلاً پردازش شده است.' });
     }
     const changeReq = reqRows[0];
-    const originalAnnId = changeReq.announcement_id;
+    const originalAnnId = changeReq.announcement_id || changeReq.freight_announcement_id;
+    if (!originalAnnId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'اعلام بار مرتبط با این درخواست یافت نشد.' });
+    }
 
     // خارج کردن از کارتابل: تغییر وضعیت به Archived (دیگر در لیست نمایش داده نمی‌شود)
     await client.query(

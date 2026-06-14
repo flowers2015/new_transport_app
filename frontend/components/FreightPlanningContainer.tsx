@@ -571,13 +571,22 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 method: 'POST',
                 headers,
             });
-            if (!res.ok) throw new Error(await res.text());
-            // Real-time update will handle the UI update
+            if (!res.ok) {
+                let message = 'خطا در خارج کردن از کارتابل';
+                try {
+                    const body = await res.json();
+                    message = body.message || message;
+                } catch {
+                    const text = await res.text();
+                    if (text) message = text;
+                }
+                throw new Error(message);
+            }
             await fetchChangeRequests();
             await fetchAnnouncements();
         } catch (e: any) {
             console.error('❌ [FreightPlanning] Archive change request failed:', e);
-            console.error('❌ [FreightPlanning] Archive change request failed:', e);
+            alert(e?.message || 'خطا در خارج کردن از کارتابل');
         }
     };
 

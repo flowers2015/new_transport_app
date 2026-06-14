@@ -1038,10 +1038,13 @@ const CompanyDriverForm: React.FC<{
       alert('کد پرسنلی و نام الزامی است');
       return;
     }
-    // Normalize nationalId: اگر خالی است، null بفرست (نه empty string)
+    if (!form.nationalId || !form.nationalId.trim()) {
+      alert('کد ملی الزامی است');
+      return;
+    }
     const normalizedForm = {
       ...form,
-      nationalId: (form.nationalId && form.nationalId.trim() !== '') ? form.nationalId.trim() : null,
+      nationalId: form.nationalId.trim(),
     };
     onSave(normalizedForm);
   };
@@ -1064,8 +1067,8 @@ const CompanyDriverForm: React.FC<{
         <input type="text" value={form.fatherName} onChange={e => setForm({...form, fatherName: e.target.value})} className={inputClass} />
       </div>
       <div>
-        <label className={labelClass}>کد ملی</label>
-        <input type="text" value={form.nationalId} onChange={e => setForm({...form, nationalId: e.target.value})} className={inputClass} />
+        <label className={labelClass}>کد ملی *</label>
+        <input type="text" value={form.nationalId} onChange={e => setForm({...form, nationalId: e.target.value})} className={inputClass} required />
       </div>
       <div>
         <label className={labelClass}>تاریخ تولد</label>
