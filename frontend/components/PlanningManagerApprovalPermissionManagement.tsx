@@ -24,6 +24,31 @@ interface ApprovalPermission {
 
 type UserType = 'manager' | 'employee' | 'all';
 
+const MANAGER_ROLES = new Set([
+  'planner_manager',
+  'مدیر برنامه‌ریزی',
+  'PlanningManager',
+  'planning_manager',
+]);
+
+const EMPLOYEE_ROLES = new Set([
+  'planner',
+  'کارمند برنامه‌ریزی',
+  'PlanningEmployee',
+  'planning_employee',
+]);
+
+const normalizePlanningUser = (raw: any): PlanningUser => ({
+  id: String(raw.id || ''),
+  username: raw.username || '',
+  full_name: raw.full_name || raw.fullName || raw.name || raw.username || '',
+  role: raw.role || '',
+  employee_id: raw.employee_id || raw.employeeId || undefined,
+});
+
+const isManagerRole = (role: string) => MANAGER_ROLES.has(role);
+const isEmployeeRole = (role: string) => EMPLOYEE_ROLES.has(role);
+
 const PlanningManagerApprovalPermissionManagement: React.FC = () => {
   const [planningManagers, setPlanningManagers] = useState<PlanningUser[]>([]);
   const [planningEmployees, setPlanningEmployees] = useState<PlanningUser[]>([]);
@@ -55,37 +80,44 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [managersRes, employeesRes, permissionsRes] = await Promise.all([
-        fetch(getApiUrl('planning-manager-approval-permissions/planning-managers'), { headers }),
-        fetch(getApiUrl('planning-manager-approval-permissions/planning-employees'), { headers }),
+      setError(null);
+
+      const [usersRes, permissionsRes] = await Promise.all([
+        fetch(getApiUrl('planning-manager-approval-permissions/planning-users'), { headers }),
         fetch(getApiUrl('planning-manager-approval-permissions/permissions'), { headers }),
       ]);
 
-      if (!managersRes.ok || !employeesRes.ok || !permissionsRes.ok) {
-        const failed: string[] = [];
-        if (!managersRes.ok) {
-          const body = await managersRes.json().catch(() => ({}));
-          failed.push(`مدیران (${managersRes.status}): ${body.message || body.error || 'خطا'}`);
-        }
-        if (!employeesRes.ok) {
-          const body = await employeesRes.json().catch(() => ({}));
-          failed.push(`کارمندان (${employeesRes.status}): ${body.message || body.error || 'خطا'}`);
-        }
-        if (!permissionsRes.ok) {
-          const body = await permissionsRes.json().catch(() => ({}));
-          failed.push(`مجوزها (${permissionsRes.status}): ${body.message || body.error || 'خطا'}`);
-        }
-        throw new Error(failed.join(' | '));
+      let managers: PlanningUser[] = [];
+      let employees: PlanningUser[] = [];
+
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        managers = (usersData.managers || []).map(normalizePlanningUser);
+        employees = (usersData.employees || []).map(normalizePlanningUser);
       }
 
-      const [managersData, employeesData, permissionsData] = await Promise.all([
-        managersRes.json(),
-        employeesRes.json(),
-        permissionsRes.json(),
-      ]);
+      if (!usersRes.ok || (managers.length === 0 && employees.length === 0)) {
+        const fallbackRes = await fetch(getApiUrl('admin/users?limit=500'), { headers });
+        if (fallbackRes.ok) {
+          const fallbackData = await fallbackRes.json();
+          const allUsers = (fallbackData.users || fallbackData || []).map(normalizePlanningUser);
+          managers = allUsers.filter((u) => isManagerRole(u.role));
+          employees = allUsers.filter((u) => isEmployeeRole(u.role));
+        } else if (!usersRes.ok) {
+          const body = await usersRes.json().catch(() => ({}));
+          throw new Error(body.message || body.error || 'خطا در دریافت کاربران برنامه‌ریزی');
+        }
+      }
 
-      setPlanningManagers(managersData);
-      setPlanningEmployees(employeesData);
+      if (!permissionsRes.ok) {
+        const body = await permissionsRes.json().catch(() => ({}));
+        throw new Error(body.message || body.error || 'خطا در دریافت مجوزها');
+      }
+
+      const permissionsData = await permissionsRes.json();
+
+      setPlanningManagers(managers);
+      setPlanningEmployees(employees);
       setPermissions(permissionsData);
     } catch (err: any) {
       setError(err.message || 'خطا در دریافت اطلاعات');
@@ -263,6 +295,9 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
             • کدام مدیران برنامه‌ریزی می‌توانند برای هر لاین تاییدیه بدهند (و فقط بارهای همان لاین را ببینند)
             <br />
             • کدام کارمندان برنامه‌ریزی می‌توانند برای هر لاین اعلام بار ایجاد کنند (و فقط تب‌های مربوط به لاین‌های مجاز را ببینند)
+          </p>
+          <p className="text-xs text-slate-500 mt-2">
+            کاربران یافت‌شده: {planningManagers.length.toLocaleString('fa-IR')} مدیر، {planningEmployees.length.toLocaleString('fa-IR')} کارمند
           </p>
         </div>
 

@@ -4,6 +4,7 @@ const { authenticateToken } = require('../middleware/authMiddleware');
 const {
   getPlanningManagers,
   getPlanningEmployees,
+  getPlanningUsers,
   getApprovalPermissions,
   checkApprovalPermission,
   addApprovalPermission,
@@ -11,6 +12,7 @@ const {
 } = require('../controllers/planningManagerApprovalPermissionController');
 
 // همه route ها نیاز به authentication دارند
+router.get('/planning-users', authenticateToken, getPlanningUsers);
 router.get('/planning-managers', authenticateToken, getPlanningManagers);
 router.get('/planning-employees', authenticateToken, getPlanningEmployees);
 router.get('/permissions', authenticateToken, getApprovalPermissions);

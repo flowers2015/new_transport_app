@@ -15,12 +15,8 @@ const EMPLOYEE_ROLES = [
   'planning_employee',
 ];
 
-let usersColumnCache = null;
-
-async function getUsersColumnInfo() {
-  if (usersColumnCache) return usersColumnCache;
-
-  const { rows } = await pool.query(`
+async function queryPlanningUsers(roles) {
+  const columnCheck = await pool.query(`
     SELECT column_name
     FROM information_schema.columns
     WHERE table_schema = 'public'
@@ -28,39 +24,46 @@ async function getUsersColumnInfo() {
       AND column_name IN ('full_name', 'name', 'employee_id')
   `);
 
-  const cols = new Set(rows.map((r) => r.column_name));
-  const nameParts = [];
-  if (cols.has('full_name')) nameParts.push("NULLIF(TRIM(full_name), '')");
-  if (cols.has('name')) nameParts.push("NULLIF(TRIM(name), '')");
-  nameParts.push('username');
-
-  usersColumnCache = {
-    fullNameExpr: `COALESCE(${nameParts.join(', ')})`,
-    employeeSelect: cols.has('employee_id') ? 'employee_id' : 'NULL::varchar AS employee_id',
-  };
-  return usersColumnCache;
-}
-
-async function queryPlanningUsers(roles) {
-  const { fullNameExpr, employeeSelect } = await getUsersColumnInfo();
-  const placeholders = roles.map((_, i) => `$${i + 1}`).join(', ');
+  const cols = new Set(columnCheck.rows.map((r) => r.column_name));
+  const nameColumn = cols.has('full_name')
+    ? 'full_name'
+    : cols.has('name')
+      ? 'name'
+      : 'username';
+  const employeeSelect = cols.has('employee_id')
+    ? 'employee_id'
+    : 'NULL::varchar AS employee_id';
 
   const { rows } = await pool.query(
     `
       SELECT
         id,
         username,
-        ${fullNameExpr} AS full_name,
-        role,
+        ${nameColumn} AS full_name,
+        role::text AS role,
         ${employeeSelect}
       FROM users
-      WHERE role IN (${placeholders})
-      ORDER BY full_name, username
+      WHERE role::text = ANY($1::text[])
+      ORDER BY ${nameColumn}, username
     `,
-    roles
+    [roles]
   );
 
   return rows;
+}
+
+async function getPlanningUsers(req, res) {
+  try {
+    const managers = await queryPlanningUsers(MANAGER_ROLES);
+    const employees = await queryPlanningUsers(EMPLOYEE_ROLES);
+    res.json({ managers, employees });
+  } catch (error) {
+    console.error('Error getting planning users:', error);
+    res.status(500).json({
+      message: 'خطا در دریافت لیست کاربران برنامه‌ریزی',
+      error: error.message,
+    });
+  }
 }
 
 async function ensurePermissionsTable() {
@@ -275,6 +278,7 @@ async function deleteApprovalPermission(req, res) {
 module.exports = {
   getPlanningManagers,
   getPlanningEmployees,
+  getPlanningUsers,
   getApprovalPermissions,
   checkApprovalPermission,
   addApprovalPermission,
