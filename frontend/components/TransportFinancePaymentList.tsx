@@ -63,6 +63,16 @@ type PaymentSortField =
     | 'payableAmount'
     | 'lastPaymentDate';
 
+const getPaymentRecordKey = (record: PaymentRecord): string => {
+    if (record.calculationId) {
+        return `${record.calculationId}${record.isHelper ? '-helper' : ''}`;
+    }
+    return `${record.driverId}-${record.announcementId ?? 'na'}-${record.isHelper ? 'helper' : 'main'}`;
+};
+
+const isSamePaymentRecord = (a: PaymentRecord, b: PaymentRecord): boolean =>
+    getPaymentRecordKey(a) === getPaymentRecordKey(b);
+
 // ============================================================================
 // توابع Render برای انواع مختلف ساختار صورتحساب
 // ============================================================================
@@ -2998,6 +3008,10 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     // مرتب‌سازی جدول
     const [sortField, setSortField] = useState<PaymentSortField>('calculationDate');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    // انتخاب ردیف‌ها برای پرداخت گروهی
+    const [selectedRecordKeys, setSelectedRecordKeys] = useState<Set<string>>(new Set());
+    const [bulkPaying, setBulkPaying] = useState(false);
     
     // دیالوگ قوانین
     const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
@@ -3319,6 +3333,77 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
             setSortDirection('desc');
         }
         setCurrentPage(1);
+    };
+
+    const allFilteredSelected = sortedRecords.length > 0
+        && sortedRecords.every(record => selectedRecordKeys.has(getPaymentRecordKey(record)));
+    const someFilteredSelected = sortedRecords.some(record => selectedRecordKeys.has(getPaymentRecordKey(record)));
+
+    const toggleRecordSelection = (key: string) => {
+        setSelectedRecordKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const handleSelectAllFiltered = () => {
+        if (allFilteredSelected) {
+            setSelectedRecordKeys(new Set());
+            return;
+        }
+        setSelectedRecordKeys(new Set(sortedRecords.map(getPaymentRecordKey)));
+    };
+
+    const removeRecordsFromList = (recordsToRemove: PaymentRecord[]) => {
+        setPaymentRecords(prev =>
+            prev.filter(record => !recordsToRemove.some(target => isSamePaymentRecord(record, target)))
+        );
+        setSelectedRecordKeys(prev => {
+            const next = new Set(prev);
+            recordsToRemove.forEach(record => next.delete(getPaymentRecordKey(record)));
+            return next;
+        });
+    };
+
+    const submitPayment = async (record: PaymentRecord): Promise<void> => {
+        if (!record.calculationId && !record.announcementId) {
+            throw new Error('شناسه محاسبه یافت نشد');
+        }
+
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        };
+
+        const today = new Date();
+        const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        const paymentDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
+        const userId = currentUser?.id || currentUser?.userId || '';
+
+        const response = await fetch(getApiUrl('payments'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                driverId: record.driverId,
+                paymentDate,
+                paymentAmount: record.payableAmount,
+                calculationDateFrom: record.calculationDate || startDate || null,
+                calculationDateTo: record.calculationDate || endDate || null,
+                paymentListDate: paymentDate,
+                userId,
+                announcementId: record.announcementId || null,
+                calculationId: record.calculationId || null,
+                isHelper: record.isHelper || false,
+            }),
+        });
+
+        if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            throw new Error(errBody.message || 'خطا در ثبت پرداخت');
+        }
     };
 
     // محاسبه صفحه‌بندی
@@ -4724,72 +4809,66 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
     // علامت‌گذاری پرداخت شد - فقط برای همان تور خاص
     const markAsPaid = async (record: PaymentRecord) => {
         try {
-            const token = localStorage.getItem('token');
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            };
-
-            // اگر calculationId نداریم، نمی‌توانیم پرداخت را ثبت کنیم
-            if (!record.calculationId && !record.announcementId) {
-                alert('خطا: شناسه محاسبه یافت نشد');
-                return;
-            }
-
-            // تاریخ امروز
-            const today = new Date();
-            const [jy, jm, jd] = gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
-            const paymentDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
-
-            const userId = currentUser?.id || currentUser?.userId || '';
-
-            // برای هر تور، فقط همان calculationId را پرداخت می‌کنیم
-            // از API payments استفاده می‌کنیم اما با calculationId (یا announcementId + driverId)
-            const response = await fetch(getApiUrl('payments'), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    driverId: record.driverId,
-                    paymentDate,
-                    paymentAmount: record.payableAmount,
-                    calculationDateFrom: record.calculationDate || startDate || null,
-                    calculationDateTo: record.calculationDate || endDate || null,
-                    paymentListDate: paymentDate,
-                    userId,
-                    announcementId: record.announcementId || null, // اضافه کردن announcementId برای شناسایی تور خاص
-                    calculationId: record.calculationId || null, // اضافه کردن calculationId برای شناسایی محاسبه خاص
-                    isHelper: record.isHelper || false, // مشخص کردن اینکه آیا برای راننده کمکی است یا نه
-                }),
-            });
-
-            if (!response.ok) {
-                const errBody = await response.json().catch(() => ({}));
-                throw new Error(errBody.message || 'خطا در ثبت پرداخت');
-            }
-
-            // حذف فوری از لیست بدون چشمک‌زدن کل صفحه
-            setPaymentRecords((prev) =>
-                prev.filter((r) => {
-                    if (record.calculationId) {
-                        return !(
-                            r.calculationId === record.calculationId &&
-                            Boolean(r.isHelper) === Boolean(record.isHelper)
-                        );
-                    }
-                    return !(
-                        r.driverId === record.driverId &&
-                        r.announcementId === record.announcementId &&
-                        Boolean(r.isHelper) === Boolean(record.isHelper)
-                    );
-                })
-            );
-
-            // همگام‌سازی در پس‌زمینه
+            await submitPayment(record);
+            removeRecordsFromList([record]);
             await fetchData({ silent: true });
             notifyFinanceDataChanged({ source: 'payment-list-mark-paid' });
         } catch (err: any) {
             console.error('❌ [markAsPaid] Error:', err);
             alert(`خطا در ثبت پرداخت: ${err.message || 'لطفاً دوباره تلاش کنید.'}`);
+        }
+    };
+
+    const markSelectedAsPaid = async () => {
+        const selectedRecords = sortedRecords.filter(record =>
+            selectedRecordKeys.has(getPaymentRecordKey(record))
+        );
+
+        if (selectedRecords.length === 0) {
+            alert('لطفاً حداقل یک ردیف انتخاب کنید.');
+            return;
+        }
+
+        const totalAmount = selectedRecords.reduce((sum, record) => sum + (record.payableAmount || 0), 0);
+        const confirmMessage = `آیا می‌خواهید ${selectedRecords.length.toLocaleString('fa-IR')} ردیف به مبلغ ${totalAmount.toLocaleString('fa-IR')} ریال را پرداخت‌شده علامت بزنید؟`;
+        if (!confirm(confirmMessage)) return;
+
+        setBulkPaying(true);
+        const paidRecords: PaymentRecord[] = [];
+        const failedRecords: { record: PaymentRecord; message: string }[] = [];
+
+        for (const record of selectedRecords) {
+            try {
+                await submitPayment(record);
+                paidRecords.push(record);
+            } catch (err: any) {
+                failedRecords.push({
+                    record,
+                    message: err?.message || 'خطای نامشخص',
+                });
+            }
+        }
+
+        if (paidRecords.length > 0) {
+            removeRecordsFromList(paidRecords);
+            await fetchData({ silent: true });
+            notifyFinanceDataChanged({ source: 'payment-list-bulk-mark-paid' });
+        }
+
+        setBulkPaying(false);
+
+        if (failedRecords.length > 0) {
+            const failedNames = failedRecords
+                .slice(0, 3)
+                .map(item => `${item.record.driverName} (${item.record.employeeId})`)
+                .join('، ');
+            const moreCount = failedRecords.length > 3 ? ` و ${(failedRecords.length - 3).toLocaleString('fa-IR')} مورد دیگر` : '';
+            alert(
+                `${paidRecords.length.toLocaleString('fa-IR')} ردیف پرداخت شد.\n` +
+                `${failedRecords.length.toLocaleString('fa-IR')} ردیف ناموفق: ${failedNames}${moreCount}`
+            );
+        } else {
+            alert(`${paidRecords.length.toLocaleString('fa-IR')} ردیف با موفقیت پرداخت شد.`);
         }
     };
 
@@ -4881,6 +4960,17 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             />
                         </div>
                         <div className="flex gap-2 items-end">
+                            {selectedRecordKeys.size > 0 && (
+                                <button
+                                    onClick={markSelectedAsPaid}
+                                    disabled={bulkPaying}
+                                    className="px-4 py-2 bg-emerald-600 text-white rounded-md text-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {bulkPaying
+                                        ? 'در حال ثبت پرداخت...'
+                                        : `پرداخت انتخاب‌شده‌ها (${selectedRecordKeys.size.toLocaleString('fa-IR')})`}
+                                </button>
+                            )}
                             <button
                                 onClick={exportToExcelForBank}
                                 className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
@@ -4911,6 +5001,11 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     </div>
                     <div className="text-sm text-slate-600">
                         نمایش {((currentPage - 1) * itemsPerPage) + 1} تا {Math.min(currentPage * itemsPerPage, sortedRecords.length)} از {sortedRecords.length} ردیف
+                        {selectedRecordKeys.size > 0 && (
+                            <span className="mr-3 text-emerald-700 font-medium">
+                                | {selectedRecordKeys.size.toLocaleString('fa-IR')} ردیف انتخاب شده
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -4919,6 +5014,18 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                     <table className="w-full text-sm text-right border-collapse">
                         <thead>
                             <tr className="bg-slate-700 text-white border-b">
+                                <th className="p-3 text-center border-l border-slate-600 w-12">
+                                    <input
+                                        type="checkbox"
+                                        checked={allFilteredSelected}
+                                        ref={(el) => {
+                                            if (el) el.indeterminate = someFilteredSelected && !allFilteredSelected;
+                                        }}
+                                        onChange={handleSelectAllFiltered}
+                                        title="انتخاب همه"
+                                        className="w-4 h-4 cursor-pointer"
+                                    />
+                                </th>
                                 <th className="p-3 text-right border-l border-slate-600">ردیف</th>
                                 <th
                                     className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600"
@@ -4973,15 +5080,23 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                             </tr>
                         </thead>
                         <tbody>
-                            {paginatedRecords.map((record, index) => (
+                            {paginatedRecords.map((record, index) => {
+                                const recordKey = getPaymentRecordKey(record);
+                                const isSelected = selectedRecordKeys.has(recordKey);
+
+                                return (
                                 <tr
-                                    key={
-                                        record.calculationId
-                                            ? `${record.calculationId}${record.isHelper ? '-helper' : ''}`
-                                            : `${record.driverId}-${record.announcementId ?? index}-${record.isHelper ? 'helper' : 'main'}`
-                                    }
-                                    className="border-b border-slate-300 bg-white hover:bg-slate-50"
+                                    key={recordKey}
+                                    className={`border-b border-slate-300 hover:bg-slate-50 ${isSelected ? 'bg-emerald-50' : 'bg-white'}`}
                                 >
+                                    <td className="p-3 border-l border-slate-200 text-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => toggleRecordSelection(recordKey)}
+                                            className="w-4 h-4 cursor-pointer"
+                                        />
+                                    </td>
                                     <td className="p-3 border-l border-slate-200 text-center font-medium">
                                         {((currentPage - 1) * itemsPerPage) + index + 1}
                                     </td>
@@ -5027,14 +5142,16 @@ const TransportFinancePaymentList: React.FC<TransportFinancePaymentListProps> = 
                                             </button>
                                             <button
                                                 onClick={() => markAsPaid(record)}
-                                                className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                                disabled={bulkPaying}
+                                                className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 پرداخت شد
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

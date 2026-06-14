@@ -17,6 +17,7 @@ import {
   getModelsForBrand
 } from '../utils/vehicleConstants';
 import VehicleFormDialog from './VehicleFormDialog';
+import JalaliDateInput from './JalaliDateInput';
 import IranianPlateInput, { DEFAULT_PLATE_LETTER } from './IranianPlateInput';
 import { Vehicle, Branch } from '../types';
 
@@ -954,7 +955,7 @@ const CompanyDriverForm: React.FC<{
     });
     
     if (initialData) {
-      // تبدیل تاریخ‌ها به فرمت مناسب برای input type="date"
+      // تبدیل تاریخ‌های ذخیره‌شده به فرمت YYYY-MM-DD برای JalaliDateInput
       const formatDateForInput = (dateStr: string | undefined | null): string => {
         if (!dateStr) return '';
         // اگر تاریخ به صورت ISO string است (مثلاً "2024-01-01T00:00:00.000Z")
@@ -1071,8 +1072,13 @@ const CompanyDriverForm: React.FC<{
         <input type="text" value={form.nationalId} onChange={e => setForm({...form, nationalId: e.target.value})} className={inputClass} required />
       </div>
       <div>
-        <label className={labelClass}>تاریخ تولد</label>
-        <input type="date" value={form.birthDate} onChange={e => setForm({...form, birthDate: e.target.value})} className={inputClass} />
+        <label className={labelClass}>تاریخ تولد (شمسی)</label>
+        <JalaliDateInput
+          value={form.birthDate}
+          onChange={(value) => setForm({ ...form, birthDate: value })}
+          placeholder="مثال: 1365/03/21"
+          className={inputClass}
+        />
       </div>
       <div>
         <label className={labelClass}>شماره شناسنامه</label>
@@ -1140,12 +1146,22 @@ const CompanyDriverForm: React.FC<{
         </select>
       </div>
       <div>
-        <label className={labelClass}>تاریخ استخدام</label>
-        <input type="date" value={form.hireDate} onChange={e => setForm({...form, hireDate: e.target.value})} className={inputClass} />
+        <label className={labelClass}>تاریخ استخدام (شمسی)</label>
+        <JalaliDateInput
+          value={form.hireDate}
+          onChange={(value) => setForm({ ...form, hireDate: value })}
+          placeholder="مثال: 1400/05/01"
+          className={inputClass}
+        />
       </div>
       <div>
-        <label className={labelClass}>تاریخ پایان کار</label>
-        <input type="date" value={form.terminationDate} onChange={e => setForm({...form, terminationDate: e.target.value})} className={inputClass} />
+        <label className={labelClass}>تاریخ پایان کار (شمسی)</label>
+        <JalaliDateInput
+          value={form.terminationDate}
+          onChange={(value) => setForm({ ...form, terminationDate: value })}
+          placeholder="مثال: 1404/12/29"
+          className={inputClass}
+        />
       </div>
       <div>
         <label className={labelClass}>شماره گواهینامه</label>
@@ -1161,16 +1177,26 @@ const CompanyDriverForm: React.FC<{
         </select>
       </div>
       <div>
-        <label className={labelClass}>تاریخ صدور گواهینامه</label>
-        <input type="date" value={form.licenseIssueDate} onChange={e => setForm({...form, licenseIssueDate: e.target.value})} className={inputClass} />
+        <label className={labelClass}>تاریخ صدور گواهینامه (شمسی)</label>
+        <JalaliDateInput
+          value={form.licenseIssueDate}
+          onChange={(value) => setForm({ ...form, licenseIssueDate: value })}
+          placeholder="مثال: 1398/06/10"
+          className={inputClass}
+        />
       </div>
       <div>
         <label className={labelClass}>محل صدور گواهینامه</label>
         <input type="text" value={form.licenseIssuePlace} onChange={e => setForm({...form, licenseIssuePlace: e.target.value})} className={inputClass} />
       </div>
       <div>
-        <label className={labelClass}>تاریخ انقضا گواهینامه</label>
-        <input type="date" value={form.licenseExpiryDate} onChange={e => setForm({...form, licenseExpiryDate: e.target.value})} className={inputClass} />
+        <label className={labelClass}>تاریخ انقضا گواهینامه (شمسی)</label>
+        <JalaliDateInput
+          value={form.licenseExpiryDate}
+          onChange={(value) => setForm({ ...form, licenseExpiryDate: value })}
+          placeholder="مثال: 1408/06/10"
+          className={inputClass}
+        />
       </div>
       <div>
         <label className={labelClass}>شماره حساب</label>

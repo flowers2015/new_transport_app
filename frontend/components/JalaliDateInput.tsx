@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { parseJalaliDateString, jalaliToGregorian } from '../utils/jalali';
+import React, { useEffect, useState } from 'react';
+import { gregorianToJalali, parseJalaliDateString } from '../utils/jalali';
 
 interface JalaliDateInputProps {
     value: string;
@@ -9,72 +9,89 @@ interface JalaliDateInputProps {
     required?: boolean;
 }
 
+const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
+
+const toGregorianInputValue = (value: string): string => {
+    if (!value) return '';
+
+    if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(value)) {
+        const date = parseJalaliDateString(value);
+        if (!date) return '';
+        return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+    }
+
+    if (value.includes('T')) {
+        return value.split('T')[0];
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+        return value.split(' ')[0];
+    }
+
+    return '';
+};
+
+const toJalaliDisplay = (value: string): string => {
+    if (!value) return '';
+
+    if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(value) && !value.includes('T')) {
+        const normalized = value.replace(/-/g, '/');
+        const parts = normalized.split('/');
+        if (parts.length === 3) {
+            const [y, m, d] = parts;
+            return `${y}/${pad2(Number(m))}/${pad2(Number(d))}`;
+        }
+        return normalized;
+    }
+
+    const gregorianValue = toGregorianInputValue(value);
+    if (!gregorianValue) return '';
+
+    const [gy, gm, gd] = gregorianValue.split('-').map(Number);
+    const [jy, jm, jd] = gregorianToJalali(gy, gm, gd);
+    return `${jy}/${pad2(jm)}/${pad2(jd)}`;
+};
+
 const JalaliDateInput: React.FC<JalaliDateInputProps> = ({
     value,
     onChange,
-    placeholder = "تاریخ شمسی",
-    className = "input-style",
-    required = false
+    placeholder = 'مثال: 1403/01/15',
+    className = 'input-style',
+    required = false,
 }) => {
     const [jalaliValue, setJalaliValue] = useState('');
-    const [gregorianValue, setGregorianValue] = useState('');
 
-    // تبدیل میلادی به شمسی برای نمایش
     useEffect(() => {
-        if (value) {
-            try {
-                const date = new Date(value);
-                if (!isNaN(date.getTime())) {
-                    const [jy, jm, jd] = jalaliToGregorian(
-                        date.getFullYear(),
-                        date.getMonth() + 1,
-                        date.getDate()
-                    );
-                    setJalaliValue(`${jy}/${jm.toString().padStart(2, '0')}/${jd.toString().padStart(2, '0')}`);
-                    setGregorianValue(value);
-                }
-            } catch (error) {
-                console.warn('Error converting date to Jalali:', error);
-            }
-        } else {
-            setJalaliValue('');
-            setGregorianValue('');
-        }
+        setJalaliValue(toJalaliDisplay(value));
     }, [value]);
 
     const handleJalaliChange = (jalaliInput: string) => {
         setJalaliValue(jalaliInput);
-        
-        // تبدیل شمسی به میلادی
-        if (jalaliInput.match(/^\d{4}\/\d{1,2}\/\d{1,2}$/)) {
-            try {
-                const [jy, jm, jd] = jalaliInput.split('/').map(Number);
-                const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
-                const gregorianDate = new Date(gy, gm - 1, gd);
-                const isoString = gregorianDate.toISOString().split('T')[0];
-                setGregorianValue(isoString);
-                onChange(isoString);
-            } catch (error) {
-                console.warn('Error converting Jalali to Gregorian:', error);
+
+        if (!jalaliInput.trim()) {
+            onChange('');
+            return;
+        }
+
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jalaliInput)) {
+            const date = parseJalaliDateString(jalaliInput);
+            if (date) {
+                onChange(`${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`);
             }
         }
     };
 
     return (
-        <div className="relative">
-            <input
-                type="text"
-                value={jalaliValue}
-                onChange={(e) => handleJalaliChange(e.target.value)}
-                placeholder={placeholder}
-                className={className}
-                required={required}
-                dir="rtl"
-            />
-            <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500">
-                شمسی
-            </div>
-        </div>
+        <input
+            type="text"
+            value={jalaliValue}
+            onChange={(e) => handleJalaliChange(e.target.value)}
+            placeholder={placeholder}
+            className={className}
+            required={required}
+            dir="rtl"
+            inputMode="numeric"
+        />
     );
 };
 
