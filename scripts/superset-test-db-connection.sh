@@ -37,7 +37,7 @@ if [[ -z "$DB_PASSWORD" ]]; then
   exit 0
 fi
 
-docker exec -e DB_HOST="$DB_HOST" -e DB_PORT="$DB_PORT" -e DB_NAME="$DB_NAME" \
+docker exec -i -e DB_HOST="$DB_HOST" -e DB_PORT="$DB_PORT" -e DB_NAME="$DB_NAME" \
   -e DB_USER="$DB_USER" -e DB_PASSWORD="$DB_PASSWORD" transport-superset python3 <<'PY'
 import os, sys
 try:

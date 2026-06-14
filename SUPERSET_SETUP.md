@@ -222,10 +222,16 @@ SUPERSET_DB_PASSWORD='رمز-superset_reader' bash scripts/superset-test-db-conn
 | `no pg_hba.conf entry` | `bash scripts/superset-pg-docker-access.sh` و `sudo systemctl restart postgresql` |
 | TCP بسته | `listen_addresses = '*'` و restart postgres |
 
-**Reset رمز superset_reader:**
+**Reset رمز superset_reader** (اگر «incorrect password» می‌بینید):
 
 ```bash
 sudo -u postgres psql -d transport_app -c "ALTER USER superset_reader WITH PASSWORD 'رمز_جدید_قوی';"
+```
+
+سپس همان رمز را در Superset بگذارید و تست کنید:
+
+```bash
+SUPERSET_DB_PASSWORD='رمز_جدید_قوی' bash scripts/superset-test-db-connection.sh
 ```
 
 **اتصال با SQLAlchemy URI** (اگر فرم UI خطا داد):
