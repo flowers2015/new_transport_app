@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Driver, Vehicle, FreightAnnouncement, DriverAllowanceCalculation, DriverTourDetail } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
-import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali } from '../utils/jalali';
+import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali, toBillOfLadingDateString, formatBillOfLadingDateDisplay } from '../utils/jalali';
 import {
     buildInvoiceDownloadFilename,
     buildInvoiceFilenameFromContext,
@@ -139,7 +139,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             savedCalculations
                 .map(
                     (s: any) =>
-                        `${s.id ?? ''}:${s.announcement_id ?? s.announcementId ?? ''}:${s.is_paid ? 1 : 0}:${s.total_cost ?? 0}:${s.commission_status ?? ''}`
+                        `${s.id ?? ''}:${s.announcement_id ?? s.announcementId ?? ''}:${s.is_paid ? 1 : 0}:${s.total_cost ?? 0}:${s.commission_status ?? ''}:${s.period_id ?? ''}`
                 )
                 .join('|'),
         [savedCalculations]
@@ -609,7 +609,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fetch(getApiUrl('drivers'), { headers }),
                 fetch(getApiUrl('vehicles'), { headers }),
                 fetch(getApiUrl('freight-announcements?includeFinalized=true'), { headers }),
-                fetch(getApiUrl('driver-calculations'), { headers }),
+                fetch(getApiUrl('driver-calculations?includeClosed=1'), { headers }),
             ]);
 
             if (!driversRes.ok) throw new Error('خطا در دریافت رانندگان');
@@ -782,6 +782,22 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     };
 
     // محاسبه داده‌های رانندگان بر اساس اعلام بارها
+    const closedPeriodTourIds = useMemo(
+        () =>
+            new Set(
+                savedCalculations
+                    .filter(
+                        (item: any) =>
+                            item.commission_status === 'commission_calculated' ||
+                            item.commission_status === 'paid' ||
+                            item.period_id
+                    )
+                    .map((item: any) => item.announcement_id)
+                    .filter(Boolean)
+            ),
+        [savedCalculationsSyncKey]
+    );
+
     const calculateDriverData = useMemo(() => {
         if (!announcements.length || !drivers.length || !vehicles.length) return [];
 
@@ -789,6 +805,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
         announcements.forEach((ann: any) => {
             if (isFinanceRejectedAnn(ann)) return;
+            if (closedPeriodTourIds.has(ann.id)) return;
             const isFinanceException = ann.announcement_source === 'finance_exception';
             if (!ann.assigned_driver_id) return;
             if (!isFinanceException && ann.assignment_type !== 'company') return;
@@ -820,7 +837,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 destinations: (ann.destinations || []).map((d: any) => d.city || '').filter(Boolean),
                 roundTripKm,
                 billOfLadingNumber: ann.bill_of_lading_number || '',
-                billOfLadingDate: ann.bill_of_lading_date ? (typeof ann.bill_of_lading_date === 'string' ? new Date(ann.bill_of_lading_date) : ann.bill_of_lading_date) : undefined,
+                billOfLadingDate: toBillOfLadingDateString(ann.bill_of_lading_date),
                 announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
             };
 
@@ -844,7 +861,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         });
 
         return Array.from(driverMap.values());
-    }, [announcements, drivers, vehicles]);
+    }, [announcements, drivers, vehicles, closedPeriodTourIds]);
 
     // State برای force refresh داده‌ها
     const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -922,7 +939,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     // استفاده از نام متغیر متفاوت برای جلوگیری از مشکل "Cannot access 's' before initialization"
                     const closedTourIds = new Set(
                         savedData
-                            .filter((item: any) => item.commission_status === 'commission_calculated' || item.commission_status === 'paid')
+                            .filter(
+                                (item: any) =>
+                                    item.commission_status === 'commission_calculated' ||
+                                    item.commission_status === 'paid' ||
+                                    item.period_id
+                            )
                             .map((item: any) => item.announcement_id)
                     );
                     const rejectedTourIds = rejectedAnnouncementIdsRef.current;
@@ -986,7 +1008,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 destinations: (ann.destinations || []).map((d: any) => d.city || '').filter(Boolean),
                                 roundTripKm,
                                 billOfLadingNumber: ann.bill_of_lading_number || '',
-                                billOfLadingDate: ann.bill_of_lading_date ? (typeof ann.bill_of_lading_date === 'string' ? new Date(ann.bill_of_lading_date) : ann.bill_of_lading_date) : undefined,
+                                billOfLadingDate: toBillOfLadingDateString(ann.bill_of_lading_date),
                                 announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
                             };
                             
@@ -1052,7 +1074,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 destinations: ann?.destinations ? (ann.destinations.map((d: any) => d.city || '').filter(Boolean)) : (saved.destinations ? (typeof saved.destinations === 'string' ? saved.destinations.split(',').filter(Boolean) : [saved.destinations].filter(Boolean)) : []),
                                 roundTripKm,
                                 billOfLadingNumber: saved.bill_of_lading_number || '',
-                                billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                                billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
                                 announcementDate: ann?.created_at ? new Date(ann.created_at) : undefined,
                             };
                             
@@ -1185,7 +1207,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     return {
                                         ...tourWithFreshMeta,
                                         billOfLadingNumber: saved.bill_of_lading_number || saved.billOfLadingNumber || '',
-                                        billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                                        billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
                                         calculationDate: saved.calculation_date || saved.calculationDate || '',
                                         approvedKilometers,
                                         excessKilometers,
@@ -1287,7 +1309,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             lineType: saved.line_type || '',
                             destinations: saved.destinations ? (typeof saved.destinations === 'string' ? [saved.destinations] : saved.destinations) : [],
                             billOfLadingNumber: saved.bill_of_lading_number || '',
-                            billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                            billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
                             calculationDate: saved.calculation_date || '',
                             approvedKilometers: saved.approved_kilometers || 0,
                             excessKilometers: saved.excess_kilometers || 0,
@@ -1510,20 +1532,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 if (dateFilterType === 'billOfLading') {
                     // فیلتر بر اساس تاریخ صدور بارنامه
                     const billOfLadingDates = calc.tours
-                        .map(t => t.billOfLadingDate)
-                        .filter(Boolean)
-                        .map(d => {
-                            if (typeof d === 'string') return parseJalaliDateString(d);
-                            return d instanceof Date ? d : null;
-                        })
-                        .filter(Boolean) as Date[];
+                        .map(t => toBillOfLadingDateString(t.billOfLadingDate))
+                        .filter(Boolean) as string[];
                     
                     if (billOfLadingDates.length === 0) return false;
                     
-                    const firstDate = billOfLadingDates[0];
-                    if (!firstDate) return false;
-                    
-                    const jalaliDate = formatJalali(firstDate);
+                    const jalaliDate = billOfLadingDates[0];
                     
                     if (startDate && jalaliDate < startDate) return false;
                     if (endDate && jalaliDate > endDate) return false;
@@ -1575,16 +1589,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     bValue = b.tourCost || 0;
                     break;
                 case 'billOfLadingDate':
-                    const aDates = a.tours.map(t => t.billOfLadingDate).filter(Boolean).map(d => {
-                        if (typeof d === 'string') return parseJalaliDateString(d);
-                        return d instanceof Date ? d : null;
-                    }).filter(Boolean) as Date[];
-                    const bDates = b.tours.map(t => t.billOfLadingDate).filter(Boolean).map(d => {
-                        if (typeof d === 'string') return parseJalaliDateString(d);
-                        return d instanceof Date ? d : null;
-                    }).filter(Boolean) as Date[];
-                    aValue = aDates.length > 0 ? aDates[0].getTime() : 0;
-                    bValue = bDates.length > 0 ? bDates[0].getTime() : 0;
+                    const billDateSortKey = (calc: DriverCalculationRow) => {
+                        for (const t of calc.tours) {
+                            const str = toBillOfLadingDateString(t.billOfLadingDate);
+                            if (str) {
+                                const parsed = parseJalaliDateString(str);
+                                if (parsed) return parsed.getTime();
+                            }
+                        }
+                        return 0;
+                    };
+                    aValue = billDateSortKey(a);
+                    bValue = billDateSortKey(b);
                     break;
                 case 'queueType':
                     const queueTypeMap: { [key: string]: number } = { 'porsant': 1, 'fixed_allowance': 2, 'helper': 3 };
@@ -1713,20 +1729,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         return filteredAndSortedCalculations.filter(calc => {
             const billOfLadingDates = calc.tours
-                .map(t => t.billOfLadingDate)
-                .filter(Boolean)
-                .map(d => {
-                    if (typeof d === 'string') return parseJalaliDateString(d);
-                    return d instanceof Date ? d : null;
-                })
-                .filter(Boolean) as Date[];
+                .map(t => toBillOfLadingDateString(t.billOfLadingDate))
+                .filter(Boolean) as string[];
             
             if (billOfLadingDates.length === 0) return false;
             
-            const firstDate = billOfLadingDates[0];
-            if (!firstDate) return false;
-            
-            const jalaliDate = formatJalali(firstDate);
+            const jalaliDate = billOfLadingDates[0];
             
             if (excelStartDate && jalaliDate < excelStartDate) return false;
             if (excelEndDate && jalaliDate > excelEndDate) return false;
@@ -1780,12 +1788,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         // فیلتر بر اساس تاریخ صدور بارنامه
                         if (!tour.billOfLadingDate) return;
                         
-                        let jalaliDate: string;
-                        if (typeof tour.billOfLadingDate === 'string') {
-                            jalaliDate = tour.billOfLadingDate;
-                        } else {
-                            jalaliDate = formatJalali(tour.billOfLadingDate as Date);
-                        }
+                        const jalaliDate =
+                            toBillOfLadingDateString(tour.billOfLadingDate) || '';
+                        if (!jalaliDate) return;
                         
                         if (startDate || endDate) {
                             if (startDate && jalaliDate < startDate) return;
@@ -1921,7 +1926,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             excelData.forEach((calc) => {
                 calc.tours.forEach((tour) => {
                     const billDateStr = tour.billOfLadingDate
-                        ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                        ? formatBillOfLadingDateDisplay(tour.billOfLadingDate)
                         : '';
 
                     rows.push([
@@ -2029,7 +2034,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     destinations: ann?.destinations ? (ann.destinations.map((d: any) => d.city || '').filter(Boolean)) : (saved.destinations ? (typeof saved.destinations === 'string' ? saved.destinations.split(',').filter(Boolean) : [saved.destinations].filter(Boolean)) : []),
                                     roundTripKm,
                                     billOfLadingNumber: saved.bill_of_lading_number || '',
-                                    billOfLadingDate: saved.bill_of_lading_date ? (typeof saved.bill_of_lading_date === 'string' ? (saved.bill_of_lading_date.includes('/') ? parseJalaliDateString(saved.bill_of_lading_date) : new Date(saved.bill_of_lading_date)) : saved.bill_of_lading_date) : undefined,
+                                    billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
                                     announcementDate: ann?.created_at ? new Date(ann.created_at) : undefined,
                                     calculationDate: saved.calculation_date || '',
                                     approvedKilometers: saved.approved_kilometers || 0,
@@ -2158,7 +2163,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             
             // تاریخ صدور بارنامه
             const billDateStr = tour.billOfLadingDate 
-                ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                ? formatBillOfLadingDateDisplay(tour.billOfLadingDate)
                 : '';
             
             const computedFuelCost = computeTourFuelCost({
@@ -2264,7 +2269,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const defaultCalculationDate = `${jy}/${pad2(jm)}/${pad2(jd)}`;
             
             const billDateStr = tour.billOfLadingDate 
-                ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                ? formatBillOfLadingDateDisplay(tour.billOfLadingDate)
                 : '';
             
             const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
@@ -2353,7 +2358,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 driverId: calc.driverId,
                 bill_of_lading_number: tour.billOfLadingNumber,
                 billOfLadingNumber: tour.billOfLadingNumber,
-                bill_of_lading_date: tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '',
+                bill_of_lading_date: tour.billOfLadingDate ? formatBillOfLadingDateDisplay(tour.billOfLadingDate) : '',
                 billOfLadingDate: tour.billOfLadingDate,
                 calculation_date: tour.calculationDate || '',
                 calculationDate: tour.calculationDate || '',
@@ -2790,7 +2795,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 driverId: calc.driverId,
                 bill_of_lading_number: tour.billOfLadingNumber,
                 billOfLadingNumber: tour.billOfLadingNumber,
-                bill_of_lading_date: tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '',
+                bill_of_lading_date: tour.billOfLadingDate ? formatBillOfLadingDateDisplay(tour.billOfLadingDate) : '',
                 billOfLadingDate: tour.billOfLadingDate,
                 calculation_date: tour.calculationDate || '',
                 calculationDate: tour.calculationDate || '',
@@ -3204,19 +3209,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             // دریافت تاریخ صدور بارنامه از announcementData (که قبلاً خوانده شده)
             let billOfLadingDateStr = '';
             if (announcementRes.ok && announcementData) {
-                if (announcementData.bill_of_lading_date) {
-                    billOfLadingDateStr = typeof announcementData.bill_of_lading_date === 'string' 
-                        ? announcementData.bill_of_lading_date 
-                        : formatJalali(announcementData.bill_of_lading_date);
-                } else if (tour.billOfLadingDate) {
-                    billOfLadingDateStr = typeof tour.billOfLadingDate === 'string' 
-                        ? tour.billOfLadingDate 
-                        : formatJalali(tour.billOfLadingDate);
-                }
-            } else if (tour.billOfLadingDate) {
-                billOfLadingDateStr = typeof tour.billOfLadingDate === 'string' 
-                    ? tour.billOfLadingDate 
-                    : formatJalali(tour.billOfLadingDate);
+                billOfLadingDateStr =
+                    toBillOfLadingDateString(announcementData.bill_of_lading_date) ||
+                    toBillOfLadingDateString(tour.billOfLadingDate) ||
+                    '';
+            } else {
+                billOfLadingDateStr = toBillOfLadingDateString(tour.billOfLadingDate) || '';
             }
             
             const initialFuelCost = computeTourFuelCost({
@@ -3341,7 +3339,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             
             // تاریخ صدور بارنامه
             const billDateStr = tour.billOfLadingDate 
-                ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate))
+                ? formatBillOfLadingDateDisplay(tour.billOfLadingDate)
                 : '';
             
             const initialFuelCost = computeTourFuelCost({
@@ -3836,21 +3834,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             return t;
                         }
                         
-                        // تبدیل تاریخ بارنامه از string به Date اگر لازم باشد
-                        let billOfLadingDateValue: Date | undefined = undefined;
-                        if (savedInputDialogData.billOfLadingDate) {
-                            if (savedInputDialogData.billOfLadingDate.includes('/')) {
-                                billOfLadingDateValue = parseJalaliDateString(savedInputDialogData.billOfLadingDate);
-                            } else {
-                                billOfLadingDateValue = new Date(savedInputDialogData.billOfLadingDate);
-                            }
-                        }
-                        
-                        // به‌روزرسانی فوری تور با تمام اطلاعات جدید
                         const updatedTour: DriverTourDetailWithCalculation = {
                             ...t,
                             billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
-                            billOfLadingDate: billOfLadingDateValue,
+                            billOfLadingDate: toBillOfLadingDateString(savedInputDialogData.billOfLadingDate),
                             calculationDate: savedInputDialogData.calculationDate || '',
                             approvedKilometers: finalApprovedKm,
                             total_kilometers: finalTotalKm,
@@ -3926,19 +3913,10 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         return t;
                     }
                     
-                    let billOfLadingDateValue: Date | undefined = undefined;
-                    if (savedInputDialogData.billOfLadingDate) {
-                        if (savedInputDialogData.billOfLadingDate.includes('/')) {
-                            billOfLadingDateValue = parseJalaliDateString(savedInputDialogData.billOfLadingDate);
-                        } else {
-                            billOfLadingDateValue = new Date(savedInputDialogData.billOfLadingDate);
-                        }
-                    }
-                    
                     return {
                         ...t,
                         billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
-                        billOfLadingDate: billOfLadingDateValue,
+                        billOfLadingDate: toBillOfLadingDateString(savedInputDialogData.billOfLadingDate),
                         calculationDate: savedInputDialogData.calculationDate || '',
                         approvedKilometers: finalApprovedKm,
                         total_kilometers: finalTotalKm,
@@ -6055,7 +6033,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                             {tour.billOfLadingNumber || '-'}
                                                         </td>
                                                         <td className="p-3 border-l border-slate-200 text-xs">
-                                                            {tour.billOfLadingDate ? (typeof tour.billOfLadingDate === 'string' ? tour.billOfLadingDate : formatJalali(tour.billOfLadingDate)) : '-'}
+                                                            {tour.billOfLadingDate ? formatBillOfLadingDateDisplay(tour.billOfLadingDate) : '-'}
                                                         </td>
                                                         <td className="p-3 border-l border-slate-200 text-xs">
                                                             {tour.calculationDate || '-'}

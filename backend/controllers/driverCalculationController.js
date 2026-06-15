@@ -864,7 +864,9 @@ async function getDriverCalculations(req, res) {
       console.error('⚠️ [getDriverCalculations] خطا در بررسی/اضافه کردن ستون‌ها:', alterError);
     }
 
-    const { driverId, startDate, endDate } = req.query;
+    const { driverId, startDate, endDate, includeClosed } = req.query;
+    const includeClosedRecords =
+      includeClosed === '1' || includeClosed === 'true' || includeClosed === true;
 
     let query = `
       SELECT dc.*, 
@@ -882,8 +884,12 @@ async function getDriverCalculations(req, res) {
       LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
       LEFT JOIN drivers d ON dc.driver_id = d.id
       WHERE 1=1
-        AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
     `;
+    if (!includeClosedRecords) {
+      query += `
+        AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
+      `;
+    }
     const params = [];
     let paramIndex = 1;
 

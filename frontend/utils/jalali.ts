@@ -118,11 +118,46 @@ export function gregorianToJalali(gy: number, gm: number, gd: number): [number, 
 function isLeapGregorian(y: number): boolean { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
 
 export function parseJalaliDateString(jalali: string): Date | null {
-    // Expect format YYYY/MM/DD
+    // Expect format YYYY/MM/DD or YYYY-MM-DD
     const m = /^\s*(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*$/.exec(jalali);
     if (!m) return null;
     const jy = parseInt(m[1], 10), jm = parseInt(m[2], 10), jd = parseInt(m[3], 10);
     const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
     // Use local time instead of UTC to avoid timezone issues
     return new Date(gy, gm - 1, gd);
+}
+
+/** تشخیص رشته تاریخ شمسی (سال ۱۲۰۰–۱۶۰۰) */
+function looksLikeJalaliDateString(value: string): boolean {
+    const m = /^\s*(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*$/.exec(value.trim());
+    if (!m) return false;
+    const y = parseInt(m[1], 10);
+    return y >= 1200 && y <= 1600;
+}
+
+/** تاریخ صدور بارنامه → رشته شمسی YYYY/MM/DD (بدون تبدیل اشتباه به میلادی) */
+export function toBillOfLadingDateString(value: Date | string | null | undefined): string | undefined {
+    if (value == null || value === '') return undefined;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (looksLikeJalaliDateString(trimmed)) {
+            const m = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/.exec(trimmed)!;
+            return `${m[1]}/${pad2(parseInt(m[2], 10))}/${pad2(parseInt(m[3], 10))}`;
+        }
+        const parsed = parseJalaliDateString(trimmed);
+        if (parsed) return formatJalali(parsed);
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
+            return formatJalali(d);
+        }
+        return undefined;
+    }
+    if (value instanceof Date && !isNaN(value.getTime()) && value.getFullYear() >= 1900) {
+        return formatJalali(value);
+    }
+    return undefined;
+}
+
+export function formatBillOfLadingDateDisplay(value: Date | string | null | undefined): string {
+    return toBillOfLadingDateString(value) || '-';
 }
