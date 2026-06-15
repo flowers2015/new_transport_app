@@ -997,6 +997,7 @@ async function getCalculationsByDateRange(req, res) {
       WHERE dc.bill_of_lading_date IS NOT NULL 
         AND dc.bill_of_lading_date >= $1
         AND dc.bill_of_lading_date <= $2
+        AND (dc.commission_status IS NULL OR dc.commission_status NOT IN ('commission_calculated', 'paid'))
       ORDER BY d.employee_id, dc.bill_of_lading_date
     `;
 

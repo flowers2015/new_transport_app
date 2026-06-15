@@ -7,6 +7,7 @@ const {
   reopenPeriod,
   archivePeriod,
   getPeriodTours,
+  getDriverCommissionHistory,
   getAuditLogs
 } = require('../controllers/financialPeriodController');
 const { authenticateToken, authorizeRole } = require('../middleware/authMiddleware');
@@ -22,6 +23,14 @@ router.get(
   authenticateToken,
   authorizeRole(financeRoles),
   getFinancialPeriods
+);
+
+// تاریخچه پورسانت راننده در دوره‌های بسته (قبل از :periodId)
+router.get(
+  '/periods/driver-history',
+  authenticateToken,
+  authorizeRole(financeRoles),
+  getDriverCommissionHistory
 );
 
 // دریافت تورهای یک دوره

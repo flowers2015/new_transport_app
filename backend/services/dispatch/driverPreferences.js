@@ -242,25 +242,33 @@ async function fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd) {
   const map = new Map();
   if (!driverIds?.length) return map;
 
+  // هر سفر (اعلام بار) = بیشترین پیمایش بین مقصدهای تخلیه؛ سپس جمع سفرهای دوره
   const { rows } = await pool.query(
     `
       SELECT
-        da.driver_id,
-        SUM(COALESCE(dr.round_trip_km, da.distance_km, 0))::float AS total_km
-      FROM dispatch_assignments da
-      LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-      LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
-      WHERE da.driver_id = ANY($1::varchar[])
-        AND da.created_at >= $2
-        AND da.created_at <= $3
-        AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-        AND fa.status NOT IN ('Cancelled')
-        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
-        AND (
-          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-          OR fa.status = 'Finalized'
-        )
-      GROUP BY da.driver_id
+        per_trip.driver_id,
+        SUM(per_trip.trip_km)::float AS total_km
+      FROM (
+        SELECT
+          da.driver_id,
+          da.freight_announcement_id,
+          MAX(COALESCE(dr.round_trip_km, da.distance_km, 0))::float AS trip_km
+        FROM dispatch_assignments da
+        LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
+        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+        WHERE da.driver_id = ANY($1::varchar[])
+          AND da.created_at >= $2
+          AND da.created_at <= $3
+          AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
+          AND fa.status NOT IN ('Cancelled')
+          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+          AND (
+            COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
+            OR fa.status = 'Finalized'
+          )
+        GROUP BY da.driver_id, da.freight_announcement_id
+      ) per_trip
+      GROUP BY per_trip.driver_id
     `,
     [driverIds, cycleStart, cycleEnd]
   );

@@ -234,13 +234,17 @@ sudo -u postgres psql -d transport_app -c "ALTER USER superset_reader WITH PASSW
 SUPERSET_DB_PASSWORD='رمز_جدید_قوی' bash scripts/superset-test-db-connection.sh
 ```
 
-**اتصال با SQLAlchemy URI** (اگر فرم UI خطا داد):
+**اتصال با SQLAlchemy URI** (اگر فرم UI خطا داد یا رمز `@` دارد):
 
 Settings → Database → PostgreSQL → **Connect using SQLAlchemy URI**:
 
 ```
 postgresql+psycopg2://superset_reader:رمز@host.docker.internal:5432/transport_app
 ```
+
+> اگر رمز شامل `@` `#` `%` و ... است، در URI باید URL-encode شود.  
+> مثال: رمز `fms@13579` → `fms%4013579`  
+> `postgresql+psycopg2://superset_reader:fms%4013579@host.docker.internal:5432/transport_app`
 
 > `installHook.js` مربوط به افزونه مرورگر است؛ نادیده بگیرید.
 

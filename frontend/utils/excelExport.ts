@@ -52,24 +52,29 @@ export function withRowNumberColumn(
     };
 }
 
-export async function downloadStyledExcel(opts: StyledExcelExportOptions): Promise<void> {
-    const includeRowNumber = opts.includeRowNumber !== false;
-    const { headers, rows } = withRowNumberColumn(opts.headers, opts.rows, includeRowNumber);
+export interface StyledExcelSheet {
+    sheetName: string;
+    headers: string[];
+    rows: ExcelCellValue[][];
+    includeRowNumber?: boolean;
+}
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet(opts.sheetName);
+export interface StyledExcelWorkbookOptions {
+    fileName: string;
+    sheets: StyledExcelSheet[];
+    numericColumnMatchers?: string[];
+}
+
+function applyStyledSheet(
+    workbook: ExcelJS.Workbook,
+    sheetOpts: StyledExcelSheet,
+    matchers: string[]
+): void {
+    const includeRowNumber = sheetOpts.includeRowNumber !== false;
+    const { headers, rows } = withRowNumberColumn(sheetOpts.headers, sheetOpts.rows, includeRowNumber);
+
+    const worksheet = workbook.addWorksheet(sheetOpts.sheetName);
     worksheet.views = [{ rightToLeft: true }];
-
-    const matchers = opts.numericColumnMatchers ?? [
-        'تناژ',
-        'کرایه',
-        'ارزش',
-        'مبلغ',
-        'کارتن',
-        'تعداد',
-        'ریال',
-        'کیلو',
-    ];
 
     const headerRow = worksheet.addRow(headers);
     headerRow.eachCell(cell => {
@@ -92,7 +97,6 @@ export async function downloadStyledExcel(opts: StyledExcelExportOptions): Promi
         );
         const fill = rowIndex % 2 === 0 ? ZEBRA_FILL : 'FFFFFFFF';
         excelRow.eachCell((cell, colNumber) => {
-            const header = headers[colNumber - 1] || '';
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
             cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
             cell.border = {
@@ -116,6 +120,44 @@ export async function downloadStyledExcel(opts: StyledExcelExportOptions): Promi
         });
         col.width = Math.min(50, Math.max(10, maxLen + 2));
     });
+}
+
+export async function downloadStyledExcelWorkbook(opts: StyledExcelWorkbookOptions): Promise<void> {
+    const workbook = new ExcelJS.Workbook();
+    const matchers = opts.numericColumnMatchers ?? [
+        'تناژ', 'کرایه', 'ارزش', 'مبلغ', 'کارتن', 'تعداد', 'ریال', 'کیلو', 'پیمایش', 'اجرت', 'تور',
+    ];
+    opts.sheets.forEach(sheet => applyStyledSheet(workbook, sheet, matchers));
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = opts.fileName.endsWith('.xlsx') ? opts.fileName : `${opts.fileName}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+export async function downloadStyledExcel(opts: StyledExcelExportOptions): Promise<void> {
+    const includeRowNumber = opts.includeRowNumber !== false;
+    const { headers, rows } = withRowNumberColumn(opts.headers, opts.rows, includeRowNumber);
+
+    const workbook = new ExcelJS.Workbook();
+    const matchers = opts.numericColumnMatchers ?? [
+        'تناژ',
+        'کرایه',
+        'ارزش',
+        'مبلغ',
+        'کارتن',
+        'تعداد',
+        'ریال',
+        'کیلو',
+    ];
+
+    applyStyledSheet(workbook, { sheetName: opts.sheetName, headers, rows, includeRowNumber: false }, matchers);
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {

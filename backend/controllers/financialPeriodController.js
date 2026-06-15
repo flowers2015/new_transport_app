@@ -783,6 +783,7 @@ async function getPeriodTours(req, res) {
         d.employee_id,
         fa.announcement_code,
         fa.loading_date,
+        COALESCE(fa.vehicle_type, dc.vehicle_code, '') as vehicle_type,
         COALESCE(
           (
             SELECT json_agg(json_build_object('city', fd.city, 'representative_name', fd.representative_name) ORDER BY fd.created_at ASC)
@@ -797,6 +798,16 @@ async function getPeriodTours(req, res) {
       WHERE dc.period_id = $1
       ORDER BY dc.bill_of_lading_date DESC, d.name ASC
     `, [periodId]);
+
+    const calcTotalKm = (row) => {
+      const stored = parseInt(row.total_kilometers, 10) || 0;
+      if (stored > 0) return stored;
+      return (
+        (parseInt(row.approved_kilometers, 10) || 0) +
+        (parseInt(row.excess_kilometers, 10) || 0) +
+        (parseInt(row.depot_total_mileage, 10) || 0)
+      );
+    };
 
     const tours = toursResult.rows.map(row => {
       // Parse destinations - می‌تونه JSON string یا object باشه
@@ -824,18 +835,13 @@ async function getPeriodTours(req, res) {
         billOfLadingDate: row.bill_of_lading_date,
         loadingDate: row.loading_date,
         destinations: destinations,
-        vehicleType: row.vehicle_type,
+        vehicleType: row.vehicle_type || row.vehicle_code || '',
         queueType: row.queue_type,
       approvedKilometers: parseInt(row.approved_kilometers) || 0,
       excessKilometers: parseInt(row.excess_kilometers) || 0,
-      totalKilometers: (parseInt(row.approved_kilometers) || 0) + (parseInt(row.excess_kilometers) || 0),
-      // اجرت: برای نمایش، اجرت پورسانتی = tour_cost (که شامل اجرت + هزینه‌های دیگه هست)
-      // برای اجرت ثابت = fixed_allowance
-      // در واقع tour_cost کل هزینه تور هست، نه فقط اجرت
-      commission: row.queue_type === 'fixed_allowance' 
-        ? 0
-        : (parseInt(row.tour_cost) || 0), // برای نمایش: tour_cost (که شامل اجرت پورسانتی هست)
-      fixedAllowance: row.queue_type === 'fixed_allowance' 
+      depotTotalMileage: parseInt(row.depot_total_mileage) || 0,
+      totalKilometers: calcTotalKm(row),
+      fixedAllowance: row.queue_type === 'fixed_allowance'
         ? (parseInt(row.fixed_allowance) || parseInt(row.tour_cost) || 0)
         : 0,
       foodCost: parseInt(row.food_cost) || 0,
@@ -869,6 +875,74 @@ async function getPeriodTours(req, res) {
   } catch (error) {
     console.error('❌ [getPeriodTours] Error:', error);
     res.status(500).json({ message: 'خطا در دریافت تورهای دوره: ' + error.message });
+  }
+}
+
+/**
+ * تاریخچه پورسانت یک راننده در دوره‌های بسته/بایگانی
+ */
+async function getDriverCommissionHistory(req, res) {
+  try {
+    const { search, periodLimit = '10' } = req.query;
+    const limit = Math.min(parseInt(periodLimit, 10) || 10, 30);
+
+    if (!search || !String(search).trim()) {
+      return res.status(400).json({ message: 'کد پرسنلی یا نام راننده الزامی است.' });
+    }
+
+    const term = `%${String(search).trim()}%`;
+
+    const periodsResult = await pool.query(`
+      SELECT id, period_name, start_date, end_date, status, closed_at
+      FROM financial_periods
+      WHERE status IN ('closed', 'archived')
+      ORDER BY closed_at DESC NULLS LAST, start_date DESC
+      LIMIT $1
+    `, [limit]);
+
+    if (periodsResult.rows.length === 0) {
+      return res.json({ periods: [], rows: [] });
+    }
+
+    const periodIds = periodsResult.rows.map(p => p.id);
+
+    const toursResult = await pool.query(`
+      SELECT
+        dc.*,
+        d.name as driver_name,
+        d.employee_id,
+        fp.id as period_id,
+        fp.period_name,
+        fp.start_date,
+        fp.end_date,
+        fp.status as period_status,
+        COALESCE(fa.vehicle_type, dc.vehicle_code, '') as vehicle_type
+      FROM driver_calculations dc
+      JOIN financial_periods fp ON fp.id = dc.period_id
+      LEFT JOIN drivers d ON dc.driver_id = d.id
+      LEFT JOIN freight_announcements fa ON dc.announcement_id = fa.id
+      WHERE dc.period_id = ANY($1::varchar[])
+        AND (
+          d.employee_id ILIKE $2
+          OR d.name ILIKE $2
+        )
+      ORDER BY fp.closed_at DESC NULLS LAST, dc.bill_of_lading_date DESC
+    `, [periodIds, term]);
+
+    res.json({
+      periods: periodsResult.rows.map(p => ({
+        id: p.id,
+        periodName: p.period_name,
+        startDate: p.start_date,
+        endDate: p.end_date,
+        status: p.status,
+        closedAt: p.closed_at,
+      })),
+      calculations: toursResult.rows,
+    });
+  } catch (error) {
+    console.error('❌ [getDriverCommissionHistory] Error:', error);
+    res.status(500).json({ message: 'خطا در دریافت تاریخچه راننده: ' + error.message });
   }
 }
 
@@ -939,6 +1013,7 @@ module.exports = {
   reopenPeriod,
   archivePeriod,
   getPeriodTours,
+  getDriverCommissionHistory,
   getAuditLogs
 };
 

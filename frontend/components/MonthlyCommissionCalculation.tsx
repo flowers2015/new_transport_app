@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
-import { formatJalali, parseJalaliDateString, gregorianToJalali } from '../utils/jalali';
-import { getTotalKilometersFromCalculation } from '../utils/tourMileage';
+import { gregorianToJalali } from '../utils/jalali';
+import {
+    buildCommissionSummaries,
+    buildTourDetailsFromCalculations,
+    DriverCommissionSummary,
+    DriverTourDetail,
+    MileageRegulation,
+} from '../utils/commissionSummary';
+import CommissionPeriodArchiveDialog from './CommissionPeriodArchiveDialog';
 import * as XLSX from 'xlsx';
 
 interface MonthlyCommissionCalculationProps {
@@ -11,70 +18,6 @@ interface MonthlyCommissionCalculationProps {
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
-
-interface DriverCommissionSummary {
-    driverId: string;
-    employeeId: string;
-    driverName: string;
-    // نوع صف
-    queueType: 'porsant' | 'fixed_allowance' | 'mixed';
-    queueTypeLabel: string;
-    // تعداد تورها
-    trailerTourCount: number; // تریلی + مینی تریلی
-    tenWheelerTourCount: number; // ده چرخ
-    totalTourCount: number;
-    // پیمایش
-    trailerKilometers: number;
-    tenWheelerKilometers: number;
-    totalKilometers: number;
-    // اجرت پیمایش/ثابت
-    trailerCommission: number;
-    tenWheelerCommission: number;
-    totalCommission: number;
-    // اجرت ثابت جداگانه
-    fixedAllowance: number;
-    // هزینه‌های اضافی
-    totalFoodCost: number;
-    totalFuelCost: number;
-    totalTollCost: number;
-    totalLoadingCost: number;
-    totalReturnCargoCost: number;
-    totalReturnBillOfLadingCost: number;
-    totalMultiUnloadCost: number;
-    totalExcessMissionCost: number;
-    totalHelperDriverCost: number;
-    // مبنای محاسبه
-    commissionBase: 'تریلی' | 'ده چرخ';
-    // جمع کل قابل پرداخت
-    totalPayable: number;
-    // وضعیت
-    commissionStatus: string;
-}
-
-// تورهای جداگانه هر راننده
-interface DriverTourDetail {
-    id: string;
-    driverId: string;
-    employeeId: string;
-    driverName: string;
-    announcementId: string;
-    billOfLadingNumber: string;
-    billOfLadingDate: string;
-    destinations: string;
-    vehicleType: string;
-    queueType: string;
-    queueTypeLabel: string;
-    approvedKilometers: number;
-    excessKilometers: number;
-    totalKilometers: number;
-    commission: number;
-    fixedAllowance: number;
-    foodCost: number;
-    fuelCost: number;
-    tollCost: number;
-    totalCost: number;
-    commissionStatus: string;
-}
 
 type VehicleTab = 'trailer' | 'tenWheeler';
 
@@ -123,7 +66,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
     const [itemsPerPage, setItemsPerPage] = useState<number>(30);
     
     // بخشنامه‌های اجرت پیمایش
-    const [mileageRegulations, setMileageRegulations] = useState<any[]>([]);
+    const [mileageRegulations, setMileageRegulations] = useState<MileageRegulation[]>([]);
     
     // دیالوگ بستن دوره
     const [showClosePeriodDialog, setShowClosePeriodDialog] = useState(false);
@@ -143,14 +86,9 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
         }
     }, [showUnrecordedDriversDialog, periodCheckData]);
     
-    // دوره‌های مالی
+    // دوره‌های مالی / بایگانی
     const [financialPeriods, setFinancialPeriods] = useState<any[]>([]);
     const [showPeriodsDialog, setShowPeriodsDialog] = useState(false);
-    
-    // تورهای یک دوره
-    const [selectedPeriodTours, setSelectedPeriodTours] = useState<any[]>([]);
-    const [showPeriodToursDialog, setShowPeriodToursDialog] = useState(false);
-    const [selectedPeriod, setSelectedPeriod] = useState<any>(null);
     const [loadingPeriodTours, setLoadingPeriodTours] = useState(false);
     
     // گزارش راننده
@@ -180,51 +118,16 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
         
         fetchRegulations();
     }, []);
-    
-    // محاسبه اجرت بر اساس بخشنامه و تاریخ بارنامه
-    const calculateMileageAllowance = (vehicleType: string, kilometers: number, billOfLadingDate?: string): number => {
-        // تعیین نوع خودرو برای بخشنامه
-        const isTrailerOrMini = vehicleType.includes('تریلی') || vehicleType.includes('مینی');
-        const isTenWheeler = vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
-        
-        const regType = isTrailerOrMini ? 'تریلی' : (isTenWheeler ? 'ده چرخ' : null);
-        if (!regType) return 0;
-        
-        // فیلتر بخشنامه‌ها بر اساس تاریخ بارنامه (اگه موجود باشه)
-        let filteredRegs = mileageRegulations.filter(r => r.vehicleType === regType);
-        
-        if (billOfLadingDate && filteredRegs.some(r => r.startDate && r.endDate)) {
-            // فقط بخشنامه‌هایی که تاریخ بارنامه در بازه زمانیشون هست
-            const regsInDateRange = filteredRegs.filter(r => {
-                if (!r.startDate || !r.endDate) return true; // اگه تاریخ نداشت، همه رو بگیر
-                return billOfLadingDate >= r.startDate && billOfLadingDate <= r.endDate;
-            });
-            
-            if (regsInDateRange.length > 0) {
-                filteredRegs = regsInDateRange;
-            }
+
+    useEffect(() => {
+        if (calculations.length > 0 && mileageRegulations.length > 0) {
+            setSummaries(buildCommissionSummaries(calculations, mileageRegulations));
+            setTourDetails(buildTourDetailsFromCalculations(calculations));
+        } else if (calculations.length === 0) {
+            setSummaries([]);
+            setTourDetails([]);
         }
-        
-        // پیدا کردن بخشنامه مناسب بر اساس بازه کیلومتر
-        const regulation = filteredRegs.find(r => 
-            kilometers >= r.minKilometers &&
-            kilometers <= r.maxKilometers
-        );
-        
-        if (regulation) {
-            return kilometers * regulation.allowancePerKm;
-        }
-        
-        // اگر بخشنامه‌ای پیدا نشد، بالاترین بازه رو بگیر
-        const highestReg = filteredRegs
-            .sort((a, b) => b.maxKilometers - a.maxKilometers)[0];
-        
-        if (highestReg && kilometers > highestReg.maxKilometers) {
-            return kilometers * highestReg.allowancePerKm;
-        }
-        
-        return 0;
-    };
+    }, [calculations, mileageRegulations]);
     
     // محاسبه پورسانت
     const handleCalculate = async () => {
@@ -243,7 +146,6 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                 'Content-Type': 'application/json',
             };
             
-            // دریافت محاسبات ذخیره شده در بازه زمانی
             const res = await fetch(
                 getApiUrl(`driver-calculations/by-date-range?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`),
                 { headers }
@@ -253,185 +155,14 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                 throw new Error('خطا در دریافت داده‌ها');
             }
             
-            const data = await res.json();
+            const rawData = await res.json();
+            const data = rawData.filter(
+                (calc: Record<string, unknown>) =>
+                    !calc.commission_status ||
+                    !['commission_calculated', 'paid'].includes(String(calc.commission_status))
+            );
             console.log('📦 [MonthlyCommission] داده‌های دریافتی:', data.length, 'رکورد');
             setCalculations(data);
-            
-            // تورهای جداگانه — پیمایش فقط از رکورد ذخیره‌شده محاسبه هزینه تور
-            const details: DriverTourDetail[] = data.map((calc: any) => {
-                const queueType = calc.queue_type || 'porsant';
-                const vehicleType = calc.vehicle_type || '';
-                const approvedKm = Number(calc.approved_kilometers) || 0;
-                const excessKm = Number(calc.excess_kilometers) || 0;
-                const totalKm = getTotalKilometersFromCalculation(calc);
-                const billOfLadingDate = calc.bill_of_lading_date || '';
-                
-                let commission = 0;
-                let fixedAllowance = 0;
-                
-                if (queueType === 'fixed_allowance') {
-                    fixedAllowance = Number(calc.fixed_allowance) || Number(calc.tour_cost) || 0;
-                } else {
-                    commission = calculateMileageAllowance(vehicleType, totalKm, billOfLadingDate);
-                }
-                
-                return {
-                    id: calc.id,
-                    driverId: calc.driver_id,
-                    employeeId: calc.employee_id || '',
-                    driverName: calc.driver_name || '',
-                    announcementId: calc.announcement_id,
-                    billOfLadingNumber: calc.bill_of_lading_number || '',
-                    billOfLadingDate,
-                    destinations: calc.destinations || '',
-                    vehicleType,
-                    queueType,
-                    queueTypeLabel: queueType === 'fixed_allowance' ? 'اجرت ثابت' : 'پورسانتی',
-                    approvedKilometers: approvedKm,
-                    excessKilometers: excessKm,
-                    totalKilometers: totalKm,
-                    commission,
-                    fixedAllowance,
-                    foodCost: Number(calc.food_cost) || 0,
-                    fuelCost: Number(calc.fuel_cost) || 0,
-                    tollCost: Number(calc.toll_cost) || 0,
-                    totalCost: Number(calc.total_cost) || 0,
-                    commissionStatus: calc.commission_status || 'recorded',
-                };
-            });
-            setTourDetails(details);
-            
-            // جمع‌بندی بر اساس راننده
-            const driverMap = new Map<string, DriverCommissionSummary>();
-            
-            data.forEach((calc: any) => {
-                const driverId = calc.driver_id;
-                const vehicleType = calc.vehicle_type || '';
-                const queueType = calc.queue_type || 'porsant'; // صف (پورسانت، اجرت ثابت)
-                const isTrailerOrMini = vehicleType.includes('تریلی') || vehicleType.includes('مینی');
-                const isTenWheeler = vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
-                
-                const approvedKm = Number(calc.approved_kilometers) || 0;
-                const excessKm = Number(calc.excess_kilometers) || 0;
-                const totalKm = getTotalKilometersFromCalculation(calc);
-                const billOfLadingDate = calc.bill_of_lading_date || '';
-                
-                // محاسبه اجرت بر اساس صف
-                let commission = 0;
-                let fixedAllowanceVal = 0;
-                if (queueType === 'fixed_allowance') {
-                    // اجرت ثابت: از مقدار ذخیره شده
-                    fixedAllowanceVal = Number(calc.fixed_allowance) || Number(calc.tour_cost) || 0;
-                } else {
-                    // پورسانت: از بخشنامه پلکانی
-                    commission = calculateMileageAllowance(vehicleType, totalKm, billOfLadingDate);
-                }
-                
-                const existing = driverMap.get(driverId);
-                
-                if (existing) {
-                    // به‌روزرسانی
-                    if (isTrailerOrMini) {
-                        existing.trailerTourCount += 1;
-                        existing.trailerKilometers += totalKm;
-                        existing.trailerCommission += commission + fixedAllowanceVal;
-                    } else if (isTenWheeler) {
-                        existing.tenWheelerTourCount += 1;
-                        existing.tenWheelerKilometers += totalKm;
-                        existing.tenWheelerCommission += commission + fixedAllowanceVal;
-                    }
-                    
-                    existing.totalTourCount += 1;
-                    existing.totalKilometers += totalKm;
-                    existing.totalCommission += commission;
-                    existing.fixedAllowance += fixedAllowanceVal;
-                    
-                    // تعیین نوع صف
-                    if (existing.queueType === 'porsant' && queueType === 'fixed_allowance') {
-                        existing.queueType = 'mixed';
-                    } else if (existing.queueType === 'fixed_allowance' && queueType === 'porsant') {
-                        existing.queueType = 'mixed';
-                    }
-                    
-                    // هزینه‌های اضافی
-                    existing.totalFoodCost += Number(calc.food_cost) || 0;
-                    existing.totalFuelCost += Number(calc.fuel_cost) || 0;
-                    existing.totalTollCost += Number(calc.toll_cost) || 0;
-                    existing.totalLoadingCost += Number(calc.loading_cost) || 0;
-                    existing.totalReturnCargoCost += Number(calc.return_cargo_cost) || 0;
-                    existing.totalReturnBillOfLadingCost += Number(calc.return_bill_of_lading_cost) || 0;
-                    existing.totalMultiUnloadCost += Number(calc.multi_unload_cost) || 0;
-                    existing.totalExcessMissionCost += Number(calc.excess_mission_cost) || 0;
-                    existing.totalHelperDriverCost += Number(calc.helper_driver_cost) || 0;
-                } else {
-                    // ایجاد جدید
-                    driverMap.set(driverId, {
-                        driverId,
-                        employeeId: calc.employee_id || '',
-                        driverName: calc.driver_name || '',
-                        queueType: queueType as 'porsant' | 'fixed_allowance',
-                        queueTypeLabel: queueType === 'fixed_allowance' ? 'اجرت ثابت' : 'پورسانتی',
-                        trailerTourCount: isTrailerOrMini ? 1 : 0,
-                        tenWheelerTourCount: isTenWheeler ? 1 : 0,
-                        totalTourCount: 1,
-                        trailerKilometers: isTrailerOrMini ? totalKm : 0,
-                        tenWheelerKilometers: isTenWheeler ? totalKm : 0,
-                        totalKilometers: totalKm,
-                        trailerCommission: isTrailerOrMini ? (commission + fixedAllowanceVal) : 0,
-                        tenWheelerCommission: isTenWheeler ? (commission + fixedAllowanceVal) : 0,
-                        totalCommission: commission,
-                        fixedAllowance: fixedAllowanceVal,
-                        totalFoodCost: Number(calc.food_cost) || 0,
-                        totalFuelCost: Number(calc.fuel_cost) || 0,
-                        totalTollCost: Number(calc.toll_cost) || 0,
-                        totalLoadingCost: Number(calc.loading_cost) || 0,
-                        totalReturnCargoCost: Number(calc.return_cargo_cost) || 0,
-                        totalReturnBillOfLadingCost: Number(calc.return_bill_of_lading_cost) || 0,
-                        totalMultiUnloadCost: Number(calc.multi_unload_cost) || 0,
-                        totalExcessMissionCost: Number(calc.excess_mission_cost) || 0,
-                        totalHelperDriverCost: Number(calc.helper_driver_cost) || 0,
-                        commissionBase: 'تریلی',
-                        totalPayable: 0,
-                        commissionStatus: calc.commission_status || 'recorded',
-                    });
-                }
-            });
-            
-            // محاسبه مبنای پورسانت و جمع کل
-            const summaryList = Array.from(driverMap.values()).map(summary => {
-                // تعیین مبنای محاسبه (>50% تریلی/مینی = تریلی)
-                const trailerPercent = summary.totalTourCount > 0 
-                    ? (summary.trailerTourCount / summary.totalTourCount) * 100 
-                    : 0;
-                summary.commissionBase = trailerPercent >= 50 ? 'تریلی' : 'ده چرخ';
-                
-                // تعیین لیبل صف
-                if (summary.queueType === 'mixed') {
-                    summary.queueTypeLabel = 'ترکیبی';
-                } else if (summary.queueType === 'fixed_allowance') {
-                    summary.queueTypeLabel = 'اجرت ثابت';
-                } else {
-                    summary.queueTypeLabel = 'پورسانتی';
-                }
-                
-                // محاسبه جمع کل قابل پرداخت
-                summary.totalPayable = 
-                    summary.totalCommission +
-                    summary.fixedAllowance +
-                    summary.totalFoodCost +
-                    summary.totalFuelCost +
-                    summary.totalTollCost +
-                    summary.totalLoadingCost +
-                    summary.totalReturnCargoCost +
-                    summary.totalReturnBillOfLadingCost +
-                    summary.totalMultiUnloadCost +
-                    summary.totalExcessMissionCost;
-                
-                return summary;
-            });
-            
-            setSummaries(summaryList);
-            console.log('✅ [MonthlyCommission] جمع‌بندی:', summaryList.length, 'راننده');
             
         } catch (err: any) {
             console.error('❌ [MonthlyCommission] خطا:', err);
@@ -728,13 +459,13 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
             }
             
             const result = await res.json();
-            alert(`✅ دوره با موفقیت بسته شد!\n\n📊 ${result.recordedTours} تور محاسبه شد\n⚠️ ${result.unrecordedTours} تور ثبت نشده باقی ماند`);
+            alert(`✅ دوره با موفقیت بسته شد!\n\n📊 ${result.recordedTours} تور از محاسبه هزینه تور و پورسانت خارج شد\n⚠️ ${result.unrecordedTours} تور ثبت نشده باقی ماند`);
             
             setShowClosePeriodDialog(false);
             setPeriodCheckData(null);
-            
-            // رفرش داده‌ها
-            handleCalculate();
+            setSummaries([]);
+            setTourDetails([]);
+            setCalculations([]);
             
         } catch (err: any) {
             console.error('❌ خطا در بستن دوره:', err);
@@ -771,181 +502,45 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
         setShowDriverReportDialog(true);
     };
     
-    // دریافت تورهای یک دوره
-    const handleViewPeriodTours = async (period: any) => {
+    // دریافت تورهای یک دوره (برای بایگانی)
+    const fetchPeriodCalculations = async (period: any): Promise<Record<string, unknown>[]> => {
         setLoadingPeriodTours(true);
-        setSelectedPeriod(period);
-        
         try {
             const token = localStorage.getItem('token');
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            };
-            
-            const res = await fetch(getApiUrl(`financial/periods/${period.id}/tours`), { headers });
-            
-            if (!res.ok) {
-                throw new Error('خطا در دریافت تورهای دوره');
-            }
-            
+            const res = await fetch(getApiUrl(`financial/periods/${period.id}/tours`), {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('خطا در دریافت تورهای دوره');
             const data = await res.json();
-            setSelectedPeriodTours(data.tours || []);
-            setShowPeriodToursDialog(true);
-            
-        } catch (err: any) {
-            console.error('❌ خطا در دریافت تورهای دوره:', err);
-            alert('خطا: ' + (err.message || 'خطا در دریافت تورهای دوره'));
+            return (data.tours || []).map((t: Record<string, unknown>) => ({
+                id: t.id,
+                driver_id: t.driverId,
+                driver_name: t.driverName,
+                employee_id: t.employeeId,
+                announcement_id: t.announcementId,
+                bill_of_lading_number: t.billOfLadingNumber,
+                bill_of_lading_date: t.billOfLadingDate,
+                destinations: t.destinations,
+                vehicle_type: t.vehicleType,
+                vehicle_code: t.vehicleType,
+                queue_type: t.queueType,
+                approved_kilometers: t.approvedKilometers,
+                excess_kilometers: t.excessKilometers,
+                depot_total_mileage: t.depotTotalMileage,
+                total_kilometers: t.totalKilometers,
+                fixed_allowance: t.fixedAllowance,
+                food_cost: t.foodCost,
+                fuel_cost: t.fuelCost,
+                toll_cost: t.tollCost,
+                total_cost: t.totalCost,
+                commission_status: t.commissionStatus,
+            }));
+        } catch (err: unknown) {
+            alert('خطا: ' + (err instanceof Error ? err.message : 'دریافت تورهای دوره'));
+            return [];
         } finally {
             setLoadingPeriodTours(false);
         }
-    };
-    
-    // خروجی اکسل از تورهای یک دوره
-    const handleExportPeriodExcel = (period: any, tours: any[]) => {
-        if (tours.length === 0) {
-            alert('تورهایی برای خروجی وجود ندارد.');
-            return;
-        }
-        
-        const wb = XLSX.utils.book_new();
-        let sheetAdded = false;
-        
-        // شیت تریلی
-        const trailerTours = tours.filter(t => {
-            const vehicleType = (t.vehicleType || '').toString().toLowerCase();
-            return vehicleType.includes('تریلی') || vehicleType.includes('مینی');
-        });
-        if (trailerTours.length > 0) {
-            const wsTrailer = createPeriodToursSheet(trailerTours, 'تریلی');
-            XLSX.utils.book_append_sheet(wb, wsTrailer, 'تریلی');
-            sheetAdded = true;
-        }
-        
-        // شیت ده چرخ
-        const tenWheelerTours = tours.filter(t => {
-            const vehicleType = (t.vehicleType || '').toString().toLowerCase();
-            return vehicleType.includes('ده چرخ') || vehicleType.includes('دهچرخ');
-        });
-        if (tenWheelerTours.length > 0) {
-            const wsTenWheeler = createPeriodToursSheet(tenWheelerTours, 'ده چرخ');
-            XLSX.utils.book_append_sheet(wb, wsTenWheeler, 'ده چرخ');
-            sheetAdded = true;
-        }
-        
-        // اگر هیچ شیتی اضافه نشد، همه تورها رو در یک شیت بذار
-        if (!sheetAdded) {
-            const wsAll = createPeriodToursSheet(tours, 'همه تورها');
-            XLSX.utils.book_append_sheet(wb, wsAll, 'همه تورها');
-        }
-        
-        const fileName = `تورهای_دوره_${period.periodName.replace(/\s/g, '_')}.xlsx`;
-        XLSX.writeFile(wb, fileName);
-    };
-    
-    // تابع ایجاد شیت تورهای دوره
-    const createPeriodToursSheet = (tours: any[], sheetName: string) => {
-        const wsData = [
-            ['ردیف', 'کد پرسنلی', 'نام راننده', 'شماره بارنامه', 'تاریخ بارنامه', 'مقاصد', 
-             'نوع خودرو', 'نوع صف', 'پیمایش (کیلومتر)', 'اجرت پورسانتی', 'اجرت ثابت',
-             'هزینه غذا', 'هزینه سوخت', 'هزینه عوارض', 'هزینه بارنامه', 'بار برگشتی',
-             'بارنامه برگشتی', 'چندجا تخلیه', 'ماموریت مازاد', 'راننده کمکی', 'جمع کل (ریال)']
-        ];
-        
-        tours.forEach((tour, idx) => {
-            // Parse destinations
-            let destinationsStr = '';
-            if (tour.destinations) {
-                if (Array.isArray(tour.destinations)) {
-                    destinationsStr = tour.destinations.map((d: any) => {
-                        if (typeof d === 'string') return d;
-                        if (d && typeof d === 'object') return d.city || d.representative_name || JSON.stringify(d);
-                        return String(d);
-                    }).join(' - ');
-                } else if (typeof tour.destinations === 'string') {
-                    try {
-                        const parsed = JSON.parse(tour.destinations);
-                        if (Array.isArray(parsed)) {
-                            destinationsStr = parsed.map((d: any) => {
-                                if (typeof d === 'string') return d;
-                                if (d && typeof d === 'object') return d.city || d.representative_name || JSON.stringify(d);
-                                return String(d);
-                            }).join(' - ');
-                        } else {
-                            destinationsStr = tour.destinations;
-                        }
-                    } catch {
-                        destinationsStr = tour.destinations;
-                    }
-                } else {
-                    destinationsStr = String(tour.destinations);
-                }
-            }
-            
-            // Parse numeric fields
-            const parseNum = (val: any) => {
-                if (val === null || val === undefined) return 0;
-                const num = typeof val === 'string' ? parseInt(val, 10) : Number(val);
-                return isNaN(num) ? 0 : num;
-            };
-            
-            wsData.push([
-                idx + 1,
-                tour.employeeId || '',
-                tour.driverName || '',
-                tour.billOfLadingNumber || '',
-                tour.billOfLadingDate || '',
-                destinationsStr,
-                tour.vehicleType || '',
-                tour.queueType === 'fixed_allowance' ? 'اجرت ثابت' : 'پورسانتی',
-                parseNum(tour.totalKilometers),
-                tour.queueType === 'fixed_allowance' ? 0 : parseNum(tour.commission),
-                tour.queueType === 'fixed_allowance' ? parseNum(tour.fixedAllowance) : 0,
-                parseNum(tour.foodCost),
-                parseNum(tour.fuelCost),
-                parseNum(tour.tollCost),
-                parseNum(tour.billOfLadingCost),
-                parseNum(tour.returnCargoCost),
-                parseNum(tour.returnBillOfLadingCost),
-                parseNum(tour.multiUnloadCost),
-                parseNum(tour.excessMissionCost),
-                parseNum(tour.helperDriverCost),
-                parseNum(tour.totalCost)
-            ] as any);
-        });
-        
-        // جمع کل
-        const parseNum = (val: any) => {
-            if (val === null || val === undefined) return 0;
-            const num = typeof val === 'string' ? parseInt(val, 10) : Number(val);
-            return isNaN(num) ? 0 : num;
-        };
-        
-        wsData.push([
-            '',
-            'جمع کل',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            tours.reduce((s, t) => s + parseNum(t.totalKilometers), 0),
-            tours.reduce((s, t) => s + (t.queueType === 'fixed_allowance' ? 0 : parseNum(t.commission)), 0),
-            tours.reduce((s, t) => s + (t.queueType === 'fixed_allowance' ? parseNum(t.fixedAllowance) : 0), 0),
-            tours.reduce((s, t) => s + parseNum(t.foodCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.fuelCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.tollCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.billOfLadingCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.returnCargoCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.returnBillOfLadingCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.multiUnloadCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.excessMissionCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.helperDriverCost), 0),
-            tours.reduce((s, t) => s + parseNum(t.totalCost), 0)
-        ] as any);
-        
-        return XLSX.utils.aoa_to_sheet(wsData);
     };
 
     return (
@@ -1474,208 +1069,15 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                 </div>
             )}
             
-            {/* دیالوگ بایگانی دوره‌ها */}
-            {showPeriodsDialog && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
-                        <h2 className="text-xl font-bold text-slate-800 mb-4">
-                            📁 بایگانی دوره‌های مالی
-                        </h2>
-                        
-                        {financialPeriods.length === 0 ? (
-                            <p className="text-slate-500 text-center py-8">هیچ دوره‌ای ثبت نشده است.</p>
-                        ) : (
-                            <table className="w-full text-sm border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-700 text-white">
-                                        <th className="p-2 border">ردیف</th>
-                                        <th className="p-2 border">نام دوره</th>
-                                        <th className="p-2 border">از تاریخ</th>
-                                        <th className="p-2 border">تا تاریخ</th>
-                                        <th className="p-2 border">تعداد تور</th>
-                                        <th className="p-2 border">مبلغ کل (ریال)</th>
-                                        <th className="p-2 border">وضعیت</th>
-                                        <th className="p-2 border">تاریخ بستن</th>
-                                        <th className="p-2 border">عملیات</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {financialPeriods.map((period: any, idx: number) => (
-                                        <tr key={period.id} className="hover:bg-slate-50">
-                                            <td className="p-2 border text-center">{idx + 1}</td>
-                                            <td className="p-2 border font-medium">{period.periodName}</td>
-                                            <td className="p-2 border text-center">{period.startDate}</td>
-                                            <td className="p-2 border text-center">{period.endDate}</td>
-                                            <td className="p-2 border text-center">{period.recordedTours}</td>
-                                            <td className="p-2 border text-left">{period.totalAmount?.toLocaleString('fa-IR')}</td>
-                                            <td className="p-2 border text-center">
-                                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                                                    period.status === 'open'
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : period.status === 'closed'
-                                                        ? 'bg-red-100 text-red-800'
-                                                        : 'bg-slate-100 text-slate-800'
-                                                }`}>
-                                                    {period.status === 'open' ? 'باز' : period.status === 'closed' ? 'بسته' : 'بایگانی'}
-                                                </span>
-                                            </td>
-                                            <td className="p-2 border text-center text-xs">
-                                                {period.closedAt ? new Date(period.closedAt).toLocaleDateString('fa-IR') : '-'}
-                                            </td>
-                                            <td className="p-2 border text-center">
-                                                <div className="flex gap-1 justify-center">
-                                                    <button
-                                                        onClick={() => handleViewPeriodTours(period)}
-                                                        disabled={loadingPeriodTours}
-                                                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:bg-slate-400"
-                                                        title="مشاهده تورها"
-                                                    >
-                                                        {loadingPeriodTours && selectedPeriod?.id === period.id ? '⏳' : '📋'}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
-                        
-                        <div className="flex justify-end mt-4">
-                            <button
-                                onClick={() => setShowPeriodsDialog(false)}
-                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300"
-                            >
-                                بستن
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            
-            {/* دیالوگ نمایش تورهای یک دوره */}
-            {showPeriodToursDialog && selectedPeriod && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-slate-800">
-                                📋 تورهای دوره: {selectedPeriod.periodName}
-                            </h2>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => handleExportPeriodExcel(selectedPeriod, selectedPeriodTours)}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-                                >
-                                    📥 خروجی اکسل
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setShowPeriodToursDialog(false);
-                                        setSelectedPeriod(null);
-                                        setSelectedPeriodTours([]);
-                                    }}
-                                    className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md text-sm hover:bg-slate-300"
-                                >
-                                    بستن
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div className="bg-slate-50 rounded-lg p-3 mb-4">
-                            <div className="grid grid-cols-4 gap-4 text-sm">
-                                <div>
-                                    <span className="text-slate-500">از تاریخ:</span>
-                                    <span className="font-medium mr-2">{selectedPeriod.startDate}</span>
-                                </div>
-                                <div>
-                                    <span className="text-slate-500">تا تاریخ:</span>
-                                    <span className="font-medium mr-2">{selectedPeriod.endDate}</span>
-                                </div>
-                                <div>
-                                    <span className="text-slate-500">تعداد تور:</span>
-                                    <span className="font-medium text-blue-600 mr-2">{selectedPeriodTours.length}</span>
-                                </div>
-                                <div>
-                                    <span className="text-slate-500">مبلغ کل:</span>
-                                    <span className="font-medium text-green-600 mr-2">
-                                        {selectedPeriodTours.reduce((s, t) => s + (t.totalCost || 0), 0).toLocaleString('fa-IR')} ریال
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        {selectedPeriodTours.length === 0 ? (
-                            <p className="text-slate-500 text-center py-8">تورهایی یافت نشد.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-xs border-collapse">
-                                    <thead>
-                                        <tr className="bg-slate-600 text-white">
-                                            <th className="p-2 border">ردیف</th>
-                                            <th className="p-2 border">کد پرسنلی</th>
-                                            <th className="p-2 border">نام راننده</th>
-                                            <th className="p-2 border">شماره بارنامه</th>
-                                            <th className="p-2 border">تاریخ بارنامه</th>
-                                            <th className="p-2 border">مقاصد</th>
-                                            <th className="p-2 border">نوع خودرو</th>
-                                            <th className="p-2 border">نوع صف</th>
-                                            <th className="p-2 border">پیمایش</th>
-                                            <th className="p-2 border">اجرت</th>
-                                            <th className="p-2 border">هزینه کل</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {selectedPeriodTours.map((tour, idx) => (
-                                            <tr key={tour.id} className="hover:bg-slate-50">
-                                                <td className="p-2 border text-center">{idx + 1}</td>
-                                                <td className="p-2 border">{tour.employeeId || '-'}</td>
-                                                <td className="p-2 border font-medium">{tour.driverName || ''}</td>
-                                                <td className="p-2 border">{tour.billOfLadingNumber || '-'}</td>
-                                                <td className="p-2 border text-center">{tour.billOfLadingDate || '-'}</td>
-                                                <td className="p-2 border">
-                                                    {Array.isArray(tour.destinations) 
-                                                        ? tour.destinations.map((d: any) => d.city || d).join(' - ')
-                                                        : (tour.destinations || '-')}
-                                                </td>
-                                                <td className="p-2 border">{tour.vehicleType || '-'}</td>
-                                                <td className="p-2 border text-center">
-                                                    <span className={`inline-flex items-center px-1 py-0.5 rounded text-xs ${
-                                                        tour.queueType === 'fixed_allowance'
-                                                            ? 'bg-blue-100 text-blue-800'
-                                                            : 'bg-green-100 text-green-800'
-                                                    }`}>
-                                                        {tour.queueType === 'fixed_allowance' ? 'اجرت ثابت' : 'پورسانتی'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-2 border text-left">{tour.totalKilometers?.toLocaleString('fa-IR') || 0}</td>
-                                                <td className="p-2 border text-left">
-                                                    {(tour.commission + tour.fixedAllowance).toLocaleString('fa-IR')}
-                                                </td>
-                                                <td className="p-2 border text-left font-medium">
-                                                    {tour.totalCost?.toLocaleString('fa-IR') || 0}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot>
-                                        <tr className="bg-slate-100 font-bold">
-                                            <td colSpan={8} className="p-2 border text-right">جمع کل:</td>
-                                            <td className="p-2 border text-left">
-                                                {selectedPeriodTours.reduce((s, t) => s + (t.totalKilometers || 0), 0).toLocaleString('fa-IR')}
-                                            </td>
-                                            <td className="p-2 border text-left">
-                                                {selectedPeriodTours.reduce((s, t) => s + (t.commission + t.fixedAllowance), 0).toLocaleString('fa-IR')}
-                                            </td>
-                                            <td className="p-2 border text-left">
-                                                {selectedPeriodTours.reduce((s, t) => s + (t.totalCost || 0), 0).toLocaleString('fa-IR')}
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            {/* بایگانی دوره‌ها */}
+            <CommissionPeriodArchiveDialog
+                open={showPeriodsDialog}
+                onClose={() => setShowPeriodsDialog(false)}
+                periods={financialPeriods.filter((p) => p.status === 'closed' || p.status === 'archived')}
+                mileageRegulations={mileageRegulations}
+                onSelectPeriod={fetchPeriodCalculations}
+                loadingPeriodTours={loadingPeriodTours}
+            />
             
             {/* دیالوگ گزارش راننده */}
             {showDriverReportDialog && driverReportData.length > 0 && (
@@ -1701,7 +1103,6 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                         <th className="p-2 border">پیمایش</th>
                                         <th className="p-2 border">اجرت پورسانتی</th>
                                         <th className="p-2 border">اجرت ثابت</th>
-                                        <th className="p-2 border">هزینه کل</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1724,7 +1125,6 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                             <td className="p-2 border text-left">{tour.totalKilometers.toLocaleString('fa-IR')}</td>
                                             <td className="p-2 border text-left">{tour.commission.toLocaleString('fa-IR')}</td>
                                             <td className="p-2 border text-left">{tour.fixedAllowance.toLocaleString('fa-IR')}</td>
-                                            <td className="p-2 border text-left font-medium">{tour.totalCost.toLocaleString('fa-IR')}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1734,7 +1134,6 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                                         <td className="p-2 border text-left">{driverReportData.reduce((s, t) => s + t.totalKilometers, 0).toLocaleString('fa-IR')}</td>
                                         <td className="p-2 border text-left">{driverReportData.reduce((s, t) => s + t.commission, 0).toLocaleString('fa-IR')}</td>
                                         <td className="p-2 border text-left">{driverReportData.reduce((s, t) => s + t.fixedAllowance, 0).toLocaleString('fa-IR')}</td>
-                                        <td className="p-2 border text-left">{driverReportData.reduce((s, t) => s + t.totalCost, 0).toLocaleString('fa-IR')}</td>
                                     </tr>
                                 </tfoot>
                             </table>
