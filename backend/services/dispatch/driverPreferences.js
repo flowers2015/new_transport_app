@@ -71,6 +71,9 @@ function mapAssignmentRow(row, timestampToJalaliDate) {
     vehicleType: row.vehicle_type,
     originCity: row.origin_city,
     destinationCity: row.destination_city,
+    destinationOrder: row.destination_created_at
+      ? new Date(row.destination_created_at).getTime()
+      : 0,
     routeCategory: row.route_category,
     distanceCategory: row.distance_category,
     roundTripKm:
@@ -293,4 +296,5 @@ module.exports = {
   resolveAssignmentCertainty,
   isFarOrVeryFarOpportunity,
   fetchDriversFinalizedKm,
+  groupAssignmentsByTrip: require('./multiDestinationAssignments').groupAssignmentsByTrip,
 };

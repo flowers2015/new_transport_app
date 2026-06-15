@@ -2490,8 +2490,10 @@ async function assignVehicleAndDriverInternal(req, res) {
             // ادامه می‌دهیم با assignedAtJalali = null
           }
 
-          // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
-          for (const dest of allDestRows.rows) {
+          // برای هر مقصد یک dispatch_assignments — route و km همان مقصد
+          for (let i = 0; i < allDestRows.rows.length; i++) {
+            const dest = allDestRows.rows[i];
+            const destRoute = routeResults[i]?.rows?.[0] || null;
             try {
               // تعیین queue_type بر اساس نوبت، route یا stage
               let queueType = queueEntryRow?.queue_type || null;
@@ -2515,8 +2517,8 @@ async function assignVehicleAndDriverInternal(req, res) {
                   vehicleId,
                   driverId,
                   stage,
-                  route ? route.id : null,
-                  route ? route.round_trip_km : null,
+                  destRoute ? destRoute.id : null,
+                  destRoute ? destRoute.round_trip_km : null,
                   userId || null,
                   assignedAtJalali,
                   queueType,

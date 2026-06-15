@@ -22,6 +22,7 @@ type DayQueueEntry = {
     tripKm: number | null;
     isVeryFar: boolean;
     isTarget: boolean;
+    announcementId?: string;
 };
 
 type DayRow = {
@@ -87,6 +88,7 @@ function buildDayTable(
             tripKm: item.roundTripKm ?? null,
             isVeryFar: Boolean(item.isVeryFar),
             isTarget: true,
+            announcementId: item.announcementId,
         });
     }
 
@@ -102,8 +104,24 @@ function buildDayTable(
             tripKm: peer.roundTripKm ?? null,
             isVeryFar: Boolean(peer.isVeryFar),
             isTarget: false,
+            announcementId: peer.announcementId,
         });
     }
+
+    const dedupeBucket = (list: DayQueueEntry[]) => {
+        const seen = new Set<string>();
+        const out: DayQueueEntry[] = [];
+        for (const entry of list) {
+            const key =
+                entry.announcementId && entry.driverName
+                    ? `${entry.announcementId}:${entry.driverName}`
+                    : `${entry.driverName}:${entry.destination}:${entry.tripKm ?? ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push(entry);
+        }
+        return out;
+    };
 
     const sortEntries = (list: DayQueueEntry[]) =>
         [...list].sort((a, b) => (a.queuePosition ?? 999) - (b.queuePosition ?? 999));
@@ -111,8 +129,8 @@ function buildDayTable(
     return Array.from(dayMap.values())
         .map(day => ({
             ...day,
-            far: sortEntries(day.far),
-            near: sortEntries(day.near),
+            far: sortEntries(dedupeBucket(day.far)),
+            near: sortEntries(dedupeBucket(day.near)),
         }))
         .filter(day => day.far.length > 0 || day.near.length > 0)
         .sort((a, b) => a.key.localeCompare(b.key));

@@ -11,7 +11,12 @@ const {
   routeIsVeryFar,
   resolveAssignmentCertainty,
   isFarOrVeryFarOpportunity,
+  groupAssignmentsByTrip,
 } = require('../services/dispatch/driverPreferences');
+const {
+  lookupRoutesForDestinations,
+  pickPrimaryRouteFromList,
+} = require('../services/dispatch/multiDestinationAssignments');
 const { formatJalali } = require('../utils/jalali');
 const {
   jalaliToGregorian,
@@ -1535,45 +1540,9 @@ async function assignFreight(req, res) {
       return res.status(400).json({ message: 'اعلام بار مقصدی ندارد.' });
     }
 
-    // پیدا کردن route برای آخرین مقصد (یا مقصدی که بیشترین کیلومتر را دارد)
-    let route = null;
-    let maxKm = 0;
-    let primaryDestination = allDestRows[allDestRows.length - 1]; // آخرین مقصد به عنوان primary
-    
-    for (const dest of allDestRows) {
-      const { rows: routeRows } = await client.query(
-        `SELECT id, city, province, route_category, round_trip_km, distance_category
-         FROM dispatch_routes
-         WHERE is_active = TRUE AND city = $1
-         ORDER BY route_category DESC`,
-        [dest.city]
-      );
-      if (routeRows.length > 0) {
-        const routeKm = routeRows[0].round_trip_km ? Number(routeRows[0].round_trip_km) : 0;
-        // اگر این route کیلومتر بیشتری دارد، آن را انتخاب کن
-        if (routeKm > maxKm) {
-          maxKm = routeKm;
-          route = routeRows[0];
-          primaryDestination = dest;
-        }
-      }
-    }
-    
-    // اگر route پیدا نشد، از آخرین مقصد استفاده کن
-    if (!route && allDestRows.length > 0) {
-      const lastDest = allDestRows[allDestRows.length - 1];
-      const { rows: routeRows } = await client.query(
-        `SELECT id, city, province, route_category, round_trip_km, distance_category
-         FROM dispatch_routes
-         WHERE is_active = TRUE AND city = $1
-         ORDER BY route_category DESC`,
-        [lastDest.city]
-      );
-      if (routeRows.length > 0) {
-        route = routeRows[0];
-        primaryDestination = lastDest;
-      }
-    }
+    // پیدا کردن route اصلی (دورترین مقصد) برای queue_type و stage
+    const destRoutes = await lookupRoutesForDestinations(client, allDestRows);
+    const { route, primaryDestination } = pickPrimaryRouteFromList(allDestRows, destRoutes);
 
     let actingUserId = req.user?.id || null;
     if (!actingUserId && queueEntryId) {
@@ -1695,21 +1664,22 @@ async function assignFreight(req, res) {
       announcementVehicleType: announcement.vehicle_type,
     });
     
-    // برای همه مقاصد یک dispatch_assignments record ایجاد می‌کنیم
-    // اما route و distance_km را از primary destination (آخرین یا بیشترین کیلومتر) می‌گیریم
-    for (const dest of allDestRows) {
+    // برای هر مقصد یک dispatch_assignments — route و km همان مقصد (نه دورترین)
+    for (let i = 0; i < allDestRows.length; i++) {
+      const dest = allDestRows[i];
+      const destRoute = destRoutes[i] || null;
       await client.query(
         `INSERT INTO dispatch_assignments
           (freight_announcement_id, freight_destination_id, vehicle_id, driver_id, stage, route_id, distance_km, created_by, created_at, queue_position, assigned_at_jalali, queue_entry_id, queue_type, vehicle_category)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)`,
         [
           freightAnnouncementId,
-          dest.id, // هر مقصد
+          dest.id,
           vehicleId,
           driverId,
           stage,
-          route ? route.id : null, // route از primary destination (آخرین یا بیشترین کیلومتر)
-          route ? route.round_trip_km : null, // distance از primary route
+          destRoute ? destRoute.id : null,
+          destRoute ? destRoute.round_trip_km : null,
           actingUserId,
           queuePosition,
           timestampToJalaliDate(now),
@@ -1824,6 +1794,7 @@ async function getDriverPreferences(req, res) {
           fa.brand,
           fa.priority,
           fd.city AS destination_city,
+          fd.created_at AS destination_created_at,
           dr.route_category,
           dr.distance_category,
           dr.round_trip_km,
@@ -1851,14 +1822,16 @@ async function getDriverPreferences(req, res) {
           AND da.created_at BETWEEN $2 AND $3
           AND fa.status != 'Cancelled'
           AND (fa.status IN ('Assigned', 'InTransit', 'Finalized') OR da.is_cancelled = TRUE)
-        ORDER BY dr.round_trip_km DESC NULLS LAST, da.created_at DESC
+        ORDER BY da.created_at DESC, fd.created_at ASC
       `,
       [driverId, fromISO, toISO]
     );
 
     const assignmentsWithQueueType = assignmentsRes.rows;
 
-    let taken = assignmentsWithQueueType.map(row => mapAssignmentRow(row, timestampToJalaliDate));
+    let taken = groupAssignmentsByTrip(
+      assignmentsWithQueueType.map(row => mapAssignmentRow(row, timestampToJalaliDate))
+    );
     if (vehicleCategoryFilter) {
       taken = taken.filter(item => vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter));
     }
@@ -1928,6 +1901,7 @@ async function getDriverPreferences(req, res) {
         `
           SELECT
             da.id,
+            da.freight_announcement_id,
             da.driver_id,
             d.name AS driver_name,
             d.employee_id,
@@ -1945,6 +1919,7 @@ async function getDriverPreferences(req, res) {
             fa.status AS freight_status,
             COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at,
             fd.city AS destination_city,
+            fd.created_at AS destination_created_at,
             v.vehicle_code,
             prev.origin_city AS previous_origin_city
           FROM dispatch_assignments da
@@ -1965,15 +1940,16 @@ async function getDriverPreferences(req, res) {
           WHERE da.created_at BETWEEN $1 AND $2
             AND (fa.status IS NULL OR fa.status NOT IN ('Cancelled') OR da.is_cancelled = TRUE)
             ${categoryClause}
-          ORDER BY da.created_at DESC
+          ORDER BY da.created_at DESC, fd.created_at ASC
           LIMIT 150
         `,
         peerValues
       );
-      return peerRes.rows.map(row => {
+      const peerMapped = peerRes.rows.map(row => {
         const certaintyInfo = resolveAssignmentCertainty(row);
         return {
           id: row.id,
+          announcementId: row.freight_announcement_id,
           driverId: row.driver_id,
           driverName: row.driver_name,
           employeeId: row.employee_id,
@@ -1982,6 +1958,9 @@ async function getDriverPreferences(req, res) {
           queueType: row.queue_type || (row.stage === 'stage1' ? 'far' : 'near'),
           lineType: row.line_type,
           destinationCity: row.destination_city,
+          destinationOrder: row.destination_created_at
+            ? new Date(row.destination_created_at).getTime()
+            : 0,
           roundTripKm: row.round_trip_km != null ? Number(row.round_trip_km) : null,
           vehicleCode: row.vehicle_code || null,
           isVeryFar: routeIsVeryFar(row),
@@ -1994,6 +1973,28 @@ async function getDriverPreferences(req, res) {
           certaintyLabel: certaintyInfo.certaintyLabel,
         };
       });
+      return groupAssignmentsByTrip(peerMapped).map(item => ({
+        id: item.id,
+        announcementId: item.announcementId,
+        driverId: item.driverId,
+        driverName: item.driverName,
+        employeeId: item.employeeId,
+        stage: item.stage,
+        queuePosition: item.queuePosition ?? null,
+        queueType: item.queueType,
+        lineType: item.lineType,
+        destinationCity: item.destinationCity,
+        roundTripKm: item.roundTripKm,
+        vehicleCode: item.vehicleCode,
+        isVeryFar: item.isVeryFar,
+        assignedAt: item.assignedAt,
+        assignedAtJalali: item.assignedAtJalali,
+        previousOriginCity: item.previousOriginCity,
+        announcementCode: item.announcementCode,
+        isCancelled: item.isCancelled,
+        certainty: item.certainty,
+        certaintyLabel: item.certaintyLabel,
+      }));
     })();
 
     res.json({

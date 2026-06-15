@@ -891,6 +891,7 @@ export interface DriverPreferenceAssignment {
 export interface DriverPreferencePeerAssignment {
     id: string;
     driverId: string;
+    announcementId?: string;
     driverName?: string | null;
     employeeId?: string | null;
     stage?: string | null;
