@@ -7,6 +7,28 @@ import {
     buildInvoiceFilenameFromContext,
     resolveInvoiceDestinationsFromSources,
 } from '../utils/invoiceDownloadFilename';
+import { generateUUID } from '../utils/uuid';
+import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
+import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
+import html2canvas from 'html2canvas';
+import ReactDOMServer from 'react-dom/server';
+import {
+    convertToInvoiceDataFormatHorizontal,
+    renderInvoiceLayoutHorizontal,
+    PaymentRecord,
+    calculateMainDriverCostGlobal,
+} from './InvoiceImageHelper';
+import CityManagement from './CityManagement';
+import FinanceExceptionTourDialog from './FinanceExceptionTourDialog';
+import {
+    enrichAnnouncementsWithRouteMileage,
+    getTotalKilometersFromCalculation,
+    getTourTotalKilometers,
+    resolveTourRouteMileageForTour,
+} from '../utils/tourMileage';
+import { isFinanceRejectedAnn } from '../utils/financeRejection';
+import { computeTourFuelCost } from '../utils/fuelCostCalculation';
+import { subscribeFinanceDataChanged } from '../utils/financeDataSync';
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
@@ -102,84 +124,6 @@ function buildSavedCalculationRecord(
     };
 }
 
-/** اگر merge هزینه‌های ثبت‌شده را صفر کند، مقادیر قبلی حفظ می‌شود */
-function preserveRecordedTourCosts(
-    prev: DriverCalculationRow[],
-    merged: DriverCalculationRow[]
-): DriverCalculationRow[] {
-    const prevTourMap = new Map<string, DriverTourDetailWithCalculation>();
-    prev.forEach((calc) => {
-        calc.tours.forEach((tour) => {
-            if (tour.isDataRecorded) {
-                prevTourMap.set(`${calc.driverId}_${tour.announcementId}`, tour);
-            }
-        });
-    });
-
-    const costKeys = [
-        'tollCost',
-        'returnCargoCost',
-        'returnInterBranchCargoCost',
-        'returnBillOfLadingCost',
-        'multiUnloadCost',
-        'billOfLadingCost',
-        'foodCost',
-        'fuelCost',
-        'excessMissionCost',
-        'depotCargoHandlingCost',
-        'depotMissionCost',
-        'depotKilometerRate',
-        'fixedAllowance',
-        'totalCost',
-    ] as const;
-
-    return merged.map((calc) => {
-        const tours = calc.tours.map((tour) => {
-            const prevTour = prevTourMap.get(`${calc.driverId}_${tour.announcementId}`);
-            if (!prevTour) return tour;
-
-            const patch: Partial<DriverTourDetailWithCalculation> = {};
-            let changed = false;
-            for (const key of costKeys) {
-                const mergedVal = Number((tour as any)[key]) || 0;
-                const prevVal = Number((prevTour as any)[key]) || 0;
-                if (prevVal > 0 && mergedVal === 0) {
-                    (patch as any)[key] = prevVal;
-                    changed = true;
-                }
-            }
-            if (!changed) return tour;
-            return { ...tour, ...patch, isDataRecorded: true };
-        });
-
-        const tourCost = tours.reduce((sum, t) => sum + (Number(t.totalCost) || 0), 0);
-        const totalKm = tours.reduce((sum, t) => sum + getTourTotalKilometers(t), 0);
-        return { ...calc, tours, tourCost, totalKilometers: totalKm };
-    });
-}
-import { generateUUID } from '../utils/uuid';
-import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
-import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
-import html2canvas from 'html2canvas';
-import ReactDOMServer from 'react-dom/server';
-import { 
-    convertToInvoiceDataFormatHorizontal, 
-    renderInvoiceLayoutHorizontal, 
-    PaymentRecord,
-    calculateMainDriverCostGlobal,
-} from './InvoiceImageHelper';
-import CityManagement from './CityManagement';
-import FinanceExceptionTourDialog from './FinanceExceptionTourDialog';
-import {
-    enrichAnnouncementsWithRouteMileage,
-    getTotalKilometersFromCalculation,
-    getTourTotalKilometers,
-    resolveTourRouteMileageForTour,
-} from '../utils/tourMileage';
-import { isFinanceRejectedAnn } from '../utils/financeRejection';
-import { computeTourFuelCost } from '../utils/fuelCostCalculation';
-import { subscribeFinanceDataChanged } from '../utils/financeDataSync';
-
 interface TransportFinanceCalculationProps {
     currentUser: User;
 }
@@ -272,6 +216,136 @@ interface AllowanceInputDialogData {
         billOfLadingNumber: string; // شماره بارنامه
     }>;
     queueType?: 'porsant' | 'fixed_allowance' | 'helper'; // نوع محاسبه اجرت (پورسانت یا اجرت ثابت)
+}
+
+function readTourNumericField(tour: any, camel: string, snake: string): number {
+    const raw = tour?.[camel] ?? tour?.[snake];
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function readTourStringField(tour: any, camel: string, snake: string): string {
+    const raw = tour?.[camel] ?? tour?.[snake];
+    return raw == null ? '' : String(raw).trim();
+}
+
+const RECORDED_TOUR_NUMERIC_FIELDS: Array<{ camel: string; snake: string }> = [
+    { camel: 'approvedKilometers', snake: 'approved_kilometers' },
+    { camel: 'excessKilometers', snake: 'excess_kilometers' },
+    { camel: 'totalKilometers', snake: 'total_kilometers' },
+    { camel: 'approvedMissionDays', snake: 'approved_mission_days' },
+    { camel: 'excessMissionDays', snake: 'excess_mission_days' },
+    { camel: 'tollCost', snake: 'toll_cost' },
+    { camel: 'loadingCost', snake: 'loading_cost' },
+    { camel: 'billOfLadingCost', snake: 'bill_of_lading_cost' },
+    { camel: 'returnCargoCost', snake: 'return_cargo_cost' },
+    { camel: 'returnInterBranchCargoCost', snake: 'return_inter_branch_cargo_cost' },
+    { camel: 'returnBillOfLadingCost', snake: 'return_bill_of_lading_cost' },
+    { camel: 'multiUnloadCost', snake: 'multi_unload_cost' },
+    { camel: 'excessMissionCost', snake: 'excess_mission_cost' },
+    { camel: 'helperDriverCost', snake: 'helper_driver_cost' },
+    { camel: 'fixedAllowance', snake: 'fixed_allowance' },
+    { camel: 'foodCost', snake: 'food_cost' },
+    { camel: 'fuelCost', snake: 'fuel_cost' },
+    { camel: 'tourCost', snake: 'tour_cost' },
+    { camel: 'totalCost', snake: 'total_cost' },
+    { camel: 'helperDriverAllowance', snake: 'helper_driver_allowance' },
+    { camel: 'helperDriverFoodCost', snake: 'helper_driver_food_cost' },
+    { camel: 'helperDriverExcessMissionDays', snake: 'helper_driver_excess_mission_days' },
+    { camel: 'helperDriverExcessMissionCost', snake: 'helper_driver_excess_mission_cost' },
+    { camel: 'helperDriverExcessKilometers', snake: 'helper_driver_excess_kilometers' },
+    { camel: 'depotMissionDays', snake: 'depot_mission_days' },
+    { camel: 'depotShipmentCount', snake: 'depot_shipment_count' },
+    { camel: 'depotCargoHandlingCost', snake: 'depot_cargo_handling_cost' },
+    { camel: 'depotKilometerRate', snake: 'depot_kilometer_rate' },
+    { camel: 'depotTotalMileage', snake: 'depot_total_mileage' },
+    { camel: 'depotFoodCost', snake: 'depot_food_cost' },
+    { camel: 'depotMissionCost', snake: 'depot_mission_cost' },
+    { camel: 'advancePayment', snake: 'advance_payment' },
+    { camel: 'multiUnloadCount', snake: 'multi_unload_count' },
+];
+
+const RECORDED_TOUR_STRING_FIELDS: Array<{ camel: string; snake: string }> = [
+    { camel: 'billOfLadingNumber', snake: 'bill_of_lading_number' },
+    { camel: 'calculationDate', snake: 'calculation_date' },
+    { camel: 'notes', snake: 'notes' },
+    { camel: 'helperDriverId', snake: 'helper_driver_id' },
+    { camel: 'helperDriverEmployeeId', snake: 'helper_driver_employee_id' },
+    { camel: 'helperDriverName', snake: 'helper_driver_name' },
+    { camel: 'queueType', snake: 'queue_type' },
+];
+
+/** اگر merge فیلدهای ثبت‌شده را خالی/صفر کند، مقادیر قبلی حفظ می‌شود */
+function preserveRecordedTourCosts(
+    prev: DriverCalculationRow[],
+    merged: DriverCalculationRow[]
+): DriverCalculationRow[] {
+    const prevTourMap = new Map<string, DriverTourDetailWithCalculation>();
+    prev.forEach((calc) => {
+        calc.tours.forEach((tour) => {
+            if (tour.isDataRecorded) {
+                prevTourMap.set(`${calc.driverId}_${tour.announcementId}`, tour);
+            }
+        });
+    });
+
+    return merged.map((calc) => {
+        const tours = calc.tours.map((tour) => {
+            const prevTour = prevTourMap.get(`${calc.driverId}_${tour.announcementId}`);
+            if (!prevTour) return tour;
+
+            const patch: Record<string, unknown> = {};
+            let changed = false;
+
+            for (const { camel, snake } of RECORDED_TOUR_NUMERIC_FIELDS) {
+                const mergedVal = readTourNumericField(tour, camel, snake);
+                const prevVal = readTourNumericField(prevTour, camel, snake);
+                if (prevVal !== 0 && mergedVal === 0) {
+                    patch[camel] = prevVal;
+                    changed = true;
+                }
+            }
+
+            for (const { camel, snake } of RECORDED_TOUR_STRING_FIELDS) {
+                const mergedVal = readTourStringField(tour, camel, snake);
+                const prevVal = readTourStringField(prevTour, camel, snake);
+                if (prevVal && !mergedVal) {
+                    patch[camel] = prevVal;
+                    changed = true;
+                }
+            }
+
+            const prevBillDate =
+                toBillOfLadingDateString((prevTour as any).billOfLadingDate) ||
+                toBillOfLadingDateString((prevTour as any).bill_of_lading_date);
+            const mergedBillDate =
+                toBillOfLadingDateString((tour as any).billOfLadingDate) ||
+                toBillOfLadingDateString((tour as any).bill_of_lading_date);
+            if (prevBillDate && !mergedBillDate) {
+                patch.billOfLadingDate = prevBillDate;
+                changed = true;
+            }
+
+            const prevRows = (prevTour as any).depotRows ?? (prevTour as any).depot_rows;
+            const mergedRows = (tour as any).depotRows ?? (tour as any).depot_rows;
+            if (Array.isArray(prevRows) && prevRows.length > 0 && (!Array.isArray(mergedRows) || mergedRows.length === 0)) {
+                patch.depotRows = prevRows;
+                changed = true;
+            }
+
+            if (prevTour.isDataRecorded && !tour.isDataRecorded) {
+                patch.isDataRecorded = true;
+                changed = true;
+            }
+
+            if (!changed) return tour;
+            return { ...tour, ...patch, isDataRecorded: true } as DriverTourDetailWithCalculation;
+        });
+
+        const tourCost = tours.reduce((sum, t) => sum + (Number(t.totalCost) || 0), 0);
+        const totalKm = tours.reduce((sum, t) => sum + getTourTotalKilometers(t), 0);
+        return { ...calc, tours, tourCost, totalKilometers: totalKm };
+    });
 }
 
 const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = ({ currentUser }) => {
