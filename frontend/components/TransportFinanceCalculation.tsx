@@ -10,6 +10,153 @@ import {
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
+
+function savedCalculationKey(item: {
+    driver_id?: string;
+    driverId?: string;
+    announcement_id?: string;
+    announcementId?: string;
+}): string {
+    const driverId = item.driver_id ?? item.driverId ?? '';
+    const announcementId = item.announcement_id ?? item.announcementId ?? '';
+    return `${driverId}_${announcementId}`;
+}
+
+/** ادغام لیست محاسبات سرور با نسخهٔ محلی؛ رکورد با updated_at جدیدتر برنده است */
+function mergeSavedCalculationLists(fetched: any[], local: any[]): any[] {
+    const byKey = new Map<string, any>();
+    const put = (item: any) => {
+        const key = savedCalculationKey(item);
+        if (!key || key === '_') return;
+        const existing = byKey.get(key);
+        if (!existing) {
+            byKey.set(key, item);
+            return;
+        }
+        const existingTs = Date.parse(existing.updated_at || '') || 0;
+        const newTs = Date.parse(item.updated_at || '') || 0;
+        if (newTs >= existingTs) {
+            byKey.set(key, item);
+        }
+    };
+    fetched.forEach(put);
+    local.forEach(put);
+    return Array.from(byKey.values());
+}
+
+function buildSavedCalculationRecord(
+    requestBody: Record<string, any>,
+    extras: { id?: string; helperDriverCost: number }
+): Record<string, any> {
+    return {
+        id: extras.id,
+        driver_id: requestBody.driverId,
+        announcement_id: requestBody.announcementId,
+        bill_of_lading_number: requestBody.billOfLadingNumber ?? '',
+        bill_of_lading_date: requestBody.billOfLadingDate ?? '',
+        bill_of_lading_cost: requestBody.billOfLadingCost ?? 0,
+        approved_kilometers: requestBody.approvedKilometers ?? 0,
+        excess_kilometers: requestBody.excessKilometers ?? 0,
+        total_kilometers: requestBody.totalKilometers ?? 0,
+        approved_mission_days: requestBody.approvedMissionDays ?? 0,
+        excess_mission_days: requestBody.excessMissionDays ?? 0,
+        toll_cost: requestBody.tollCost ?? 0,
+        loading_cost: requestBody.loadingCost ?? 0,
+        return_cargo_cost: requestBody.returnCargoCost ?? 0,
+        return_inter_branch_cargo_cost: requestBody.returnInterBranchCargoCost ?? 0,
+        return_bill_of_lading_cost: requestBody.returnBillOfLadingCost ?? 0,
+        multi_unload_cost: requestBody.multiUnloadCost ?? 0,
+        excess_mission_cost: requestBody.excessMissionCost ?? 0,
+        helper_driver_cost: extras.helperDriverCost ?? 0,
+        fixed_allowance: requestBody.fixedAllowance ?? 0,
+        helper_driver_id: requestBody.helperDriverId ?? '',
+        helper_driver_employee_id: requestBody.helperDriverEmployeeId ?? '',
+        helper_driver_name: requestBody.helperDriverName ?? '',
+        helper_driver_allowance: requestBody.helperDriverAllowance ?? 0,
+        helper_driver_food_cost: requestBody.helperDriverFoodCost ?? 0,
+        helper_driver_excess_mission_days: requestBody.helperDriverExcessMissionDays ?? 0,
+        helper_driver_excess_mission_cost: requestBody.helperDriverExcessMissionCost ?? 0,
+        helper_driver_excess_kilometers: requestBody.helperDriverExcessKilometers ?? 0,
+        food_cost: requestBody.foodCost ?? 0,
+        fuel_cost: requestBody.fuelCost ?? 0,
+        tour_cost: requestBody.tourCost ?? 0,
+        total_cost: requestBody.totalCost ?? 0,
+        notes: requestBody.notes ?? '',
+        queue_type: requestBody.queueType ?? '',
+        calculation_date: requestBody.calculationDate ?? '',
+        vehicle_code: requestBody.vehicleCode ?? '',
+        vehicle_plate: requestBody.vehiclePlate ?? '',
+        destinations: requestBody.destinations ?? '',
+        multi_unload_count: requestBody.multiUnloadCount ?? 0,
+        advance_payment: requestBody.advancePayment ?? 0,
+        depot_total_mileage: requestBody.depotTotalMileage ?? 0,
+        depot_shipment_count: requestBody.depotShipmentCount ?? 0,
+        depot_cargo_handling_cost: requestBody.depotCargoHandlingCost ?? 0,
+        depot_mission_days: requestBody.depotMissionDays ?? 0,
+        depot_kilometer_rate: requestBody.depotKilometerRate ?? 0,
+        depot_food_cost: requestBody.depotFoodCost ?? 0,
+        depot_mission_cost: requestBody.depotMissionCost ?? 0,
+        depot_rows: requestBody.depotRows ?? null,
+        commission_status: 'recorded',
+        updated_at: new Date().toISOString(),
+    };
+}
+
+/** اگر merge هزینه‌های ثبت‌شده را صفر کند، مقادیر قبلی حفظ می‌شود */
+function preserveRecordedTourCosts(
+    prev: DriverCalculationRow[],
+    merged: DriverCalculationRow[]
+): DriverCalculationRow[] {
+    const prevTourMap = new Map<string, DriverTourDetailWithCalculation>();
+    prev.forEach((calc) => {
+        calc.tours.forEach((tour) => {
+            if (tour.isDataRecorded) {
+                prevTourMap.set(`${calc.driverId}_${tour.announcementId}`, tour);
+            }
+        });
+    });
+
+    const costKeys = [
+        'tollCost',
+        'returnCargoCost',
+        'returnInterBranchCargoCost',
+        'returnBillOfLadingCost',
+        'multiUnloadCost',
+        'billOfLadingCost',
+        'foodCost',
+        'fuelCost',
+        'excessMissionCost',
+        'depotCargoHandlingCost',
+        'depotMissionCost',
+        'depotKilometerRate',
+        'fixedAllowance',
+        'totalCost',
+    ] as const;
+
+    return merged.map((calc) => {
+        const tours = calc.tours.map((tour) => {
+            const prevTour = prevTourMap.get(`${calc.driverId}_${tour.announcementId}`);
+            if (!prevTour) return tour;
+
+            const patch: Partial<DriverTourDetailWithCalculation> = {};
+            let changed = false;
+            for (const key of costKeys) {
+                const mergedVal = Number((tour as any)[key]) || 0;
+                const prevVal = Number((prevTour as any)[key]) || 0;
+                if (prevVal > 0 && mergedVal === 0) {
+                    (patch as any)[key] = prevVal;
+                    changed = true;
+                }
+            }
+            if (!changed) return tour;
+            return { ...tour, ...patch, isDataRecorded: true };
+        });
+
+        const tourCost = tours.reduce((sum, t) => sum + (Number(t.totalCost) || 0), 0);
+        const totalKm = tours.reduce((sum, t) => sum + getTourTotalKilometers(t), 0);
+        return { ...calc, tours, tourCost, totalKilometers: totalKm };
+    });
+}
 import { generateUUID } from '../utils/uuid';
 import { formatNumberWhileTyping, parseNumberFromFormatted } from '../utils/numberFormatter';
 import { buildExcelFileName, downloadStyledExcel } from '../utils/excelExport';
@@ -212,11 +359,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     
     // دیالوگ نمایش جزئیات تور
     const [showTourDetailsDialog, setShowTourDetailsDialog] = useState(false);
-    const [selectedTourDetails, setSelectedTourDetails] = useState<DriverTourDetailWithCalculation[] | null>(null);
-    const [selectedDriverName, setSelectedDriverName] = useState<string>('');
     const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+    const [selectedDriverName, setSelectedDriverName] = useState<string>('');
     const [selectedDriverQueueType, setSelectedDriverQueueType] = useState<'porsant' | 'fixed_allowance' | 'helper'>('porsant');
     const [expandedTours, setExpandedTours] = useState<Set<string>>(new Set());
+
+    // جزئیات تور از calculations خوانده می‌شود تا بعد از ثبت، هزینه‌ها از state جداگانه از دست نروند
+    const activeDialogTours = useMemo(() => {
+        if (!showTourDetailsDialog || !selectedDriverId) return null;
+        const calc = calculations.find((c) => c.driverId === selectedDriverId);
+        return calc?.tours ?? null;
+    }, [calculations, showTourDetailsDialog, selectedDriverId]);
     
     // State برای باز/بستن بخش محاسبات دپو
     const [isDepotSectionOpen, setIsDepotSectionOpen] = useState(false);
@@ -625,7 +778,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
             setDrivers(Array.isArray(driversData) ? driversData : []);
             setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
-            setSavedCalculations(Array.isArray(calculationsData) ? calculationsData : []);
+            setSavedCalculations((prev) =>
+                mergeSavedCalculationLists(
+                    Array.isArray(calculationsData) ? calculationsData : [],
+                    prev
+                )
+            );
             
             const rawAnnouncements = Array.isArray(announcementsData) ? announcementsData : [];
             rejectedAnnouncementIdsRef.current = new Set(
@@ -775,8 +933,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 };
             })
         );
-
-        setSelectedTourDetails((prev) => (prev ? prev.map(patchExceptionTour) : null));
 
         setRefreshTrigger((t) => t + 1);
     };
@@ -1405,7 +1561,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             toursLength: filteredUpdated[0].tours.length
                         }
                     } : 'خالی');
-                    setCalculations(filteredUpdated);
+                    setCalculations((prev) => preserveRecordedTourCosts(prev, filteredUpdated));
                     console.log('✅ [loadSavedCalculations] setCalculations فراخوانی شد با', filteredUpdated.length, 'راننده');
                     
                     // 🔴 DEBUG: ذخیره نتیجه برای بررسی در console
@@ -1487,7 +1643,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const handleExpandRow = (driverId: string) => {
         const calc = calculations.find(c => c.driverId === driverId);
         if (calc) {
-            setSelectedTourDetails(calc.tours);
             setSelectedDriverName(calc.driverName);
             setSelectedDriverId(calc.driverId);
             setSelectedDriverQueueType(calc.queueType || 'porsant');
@@ -1495,16 +1650,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
     };
 
-    useEffect(() => {
-        if (!showTourDetailsDialog || !selectedDriverId) return;
-        const calc = calculations.find((c) => c.driverId === selectedDriverId);
-        if (calc?.tours) {
-            setSelectedTourDetails(calc.tours);
-            setSelectedDriverName(calc.driverName);
-        }
-    }, [calculations, showTourDetailsDialog, selectedDriverId]);
     
-
     // فیلتر و جستجو
     const filteredAndSortedCalculations = useMemo(() => {
         // استفاده از calculations برای جلوگیری از مشکل "Cannot access 's' before initialization"
@@ -2631,12 +2777,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
             setFinanceRejectDialogOpen(false);
             rejectedAnnouncementIdsRef.current.add(financeRejectTarget.announcementId);
-
-            if (showTourDetailsDialog && selectedDriverName === financeRejectTarget.driverName) {
-                setSelectedTourDetails((prev) =>
-                    prev ? prev.filter((t) => t.announcementId !== financeRejectTarget.announcementId) : prev
-                );
-            }
 
             await fetchData({ silent: true });
             setRefreshTrigger((t) => t + 1);
@@ -3820,6 +3960,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('✅ [SAVE_AFTER] ========== ثبت موفق ==========');
             console.log('✅ [SAVE_AFTER] Response:', JSON.stringify(saveResult, null, 2));
             console.log('✅ [SAVE_AFTER] Status:', saveRes.status);
+
+            // همگام‌سازی فوری savedCalculations تا loadSavedCalculations با دادهٔ قدیمی merge نکند
+            const savedRecord = buildSavedCalculationRecord(requestBody, {
+                id: saveResult.id,
+                helperDriverCost: helperDriverTotalCost,
+            });
+            setSavedCalculations((prev) => {
+                const key = savedCalculationKey(savedRecord);
+                return [...prev.filter((s) => savedCalculationKey(s) !== key), savedRecord];
+            });
             
             // ⚡ OPTIMISTIC UPDATE: فوراً state را به‌روزرسانی کن (بدون منتظر fetch)
             console.log('⚡ [handleSaveInputData] شروع به‌روزرسانی فوری state...');
@@ -3905,63 +4055,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             });
             
             console.log('⚡ [handleSaveInputData] به‌روزرسانی فوری state انجام شد!');
-            
-            // ⚡ به‌روزرسانی فوری selectedTourDetails برای نمایش آنی در جدول جزئیات
-            if (selectedTourDetails && selectedDriverId === savedInputDialogData.driverId) {
-                const updatedSelectedTours = selectedTourDetails.map(t => {
-                    if (t.announcementId !== savedInputDialogData.tourId) {
-                        return t;
-                    }
-                    
-                    return {
-                        ...t,
-                        billOfLadingNumber: savedInputDialogData.billOfLadingNumber || '',
-                        billOfLadingDate: toBillOfLadingDateString(savedInputDialogData.billOfLadingDate),
-                        calculationDate: savedInputDialogData.calculationDate || '',
-                        approvedKilometers: finalApprovedKm,
-                        total_kilometers: finalTotalKm,
-                        totalKilometers: finalTotalKm,
-                        excessKilometers: finalExcessKm,
-                        approvedMissionDays: finalApprovedDays || Number(savedInputDialogData.approvedMissionDays) || 0,
-                        excessMissionDays: Number(savedInputDialogData.excessMissionDays) || 0,
-                        tollCost: tollCostNum,
-                        loadingCost: loadingCostNum,
-                        billOfLadingCost: billOfLadingCostNum,
-                        returnCargoCost: returnCargoCostNum,
-                        returnBillOfLadingCost: returnBillOfLadingCostNum,
-                        multiUnloadCost: multiUnloadCostNum,
-                        excessMissionCost: excessMissionCostNum,
-                        helperDriverCost: helperDriverTotalCost,
-                        fixedAllowance: fixedAllowanceNum,
-                        foodCost: foodCost,
-                        fuelCost: fuelCost,
-                        tourCost: tourCost,
-                        totalCost: totalCost,
-                        notes: savedInputDialogData.notes || '',
-                        isDataRecorded: true,
-                        commissionStatus: 'recorded',
-                        helperDriverId: savedInputDialogData.helperDriverId || '',
-                        helperDriverEmployeeId: savedInputDialogData.helperDriverEmployeeId || '',
-                        helperDriverName: savedInputDialogData.helperDriverName || '',
-                        helperDriverAllowance: calculatedHelperDriverAllowance,
-                        helperDriverFoodCost: calculatedHelperDriverFoodCost,
-                        helperDriverExcessMissionDays: helperExcessMissionDays,
-                        helperDriverExcessMissionCost: calculatedHelperDriverExcessMissionCost,
-                        helperDriverExcessKilometers: helperExcessKilometers,
-                        depotMissionDays: Number(savedInputDialogData.depotMissionDays) || 0,
-                        depotShipmentCount: Number(savedInputDialogData.depotShipmentCount) || 0,
-                        depotCargoHandlingCost: depotCargoHandlingCostNum,
-                        depotKilometerRate: Number(savedInputDialogData.depotKilometerRate) || 0,
-                        depotTotalMileage: Number(savedInputDialogData.depotTotalMileage) || 0,
-                        depotFoodCost: Number(savedInputDialogData.depotFoodCost) || 0,
-                        depotMissionCost: depotMissionCostNum,
-                        depotRows: savedInputDialogData.depotRows || [],
-                        advancePayment: Math.round(Number(savedInputDialogData.advancePayment) || 0) || 0,
-                    } as DriverTourDetailWithCalculation;
-                });
-                setSelectedTourDetails(updatedSelectedTours);
-                console.log('⚡ [handleSaveInputData] selectedTourDetails به‌روزرسانی شد');
-            }
             
             // ⚠️ نکته: setRefreshTrigger را حذف کردیم چون optimistic update کافی است
             // و فراخوانی مجدد loadSavedCalculations ممکن است optimistic update را overwrite کند
@@ -5835,7 +5928,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             )}
             
             {/* صفحه نمایش جزئیات تور - تمام صفحه */}
-            {showTourDetailsDialog && selectedTourDetails && (
+            {showTourDetailsDialog && activeDialogTours && (
                 <div className="fixed inset-0 bg-white z-50 overflow-hidden flex flex-col">
                     <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
                         <h2 className="text-xl font-bold text-slate-800">
@@ -5844,7 +5937,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         <button
                             onClick={() => {
                                 setShowTourDetailsDialog(false);
-                                setSelectedTourDetails(null);
                                 setSelectedDriverName('');
                                 setSelectedDriverId('');
                             }}
@@ -5874,7 +5966,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {selectedTourDetails.map((tour, tourIdx) => {
+                                        {activeDialogTours.map((tour, tourIdx) => {
                                             const isExpanded = expandedTours.has(tour.announcementId);
                                             
                                             const totalMileage = getTourTotalKilometers(tour);
