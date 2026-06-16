@@ -6,6 +6,7 @@ import {
     matchesFreightLine,
     parseNumericField,
     TransportLiveTab,
+    isPendingBillOfLading,
 } from '../utils/freightDisplay';
 
 type Props = {
@@ -83,7 +84,10 @@ const DestinationTransferDialog: React.FC<Props> = ({
     }, [sourceAnnouncement]);
 
     const sameLineAnnouncements = useMemo(
-        () => allAnnouncements.filter(a => matchesFreightLine(a, sourceLine)),
+        () =>
+            allAnnouncements.filter(
+                a => matchesFreightLine(a, sourceLine) && !isPendingBillOfLading(a)
+            ),
         [allAnnouncements, sourceLine]
     );
 
@@ -178,12 +182,6 @@ const DestinationTransferDialog: React.FC<Props> = ({
                 <span>کد {ann.announcementCode || '—'}</span>
                 <span>·</span>
                 <span>{ann.vehicleType || '—'}</span>
-                {ann.originCity && (
-                    <>
-                        <span>·</span>
-                        <span>مبدا: {ann.originCity}</span>
-                    </>
-                )}
             </div>
             <div className="space-y-1">
                 {ann.destinations.length === 0 ? (
@@ -299,23 +297,6 @@ const DestinationTransferDialog: React.FC<Props> = ({
                                 </div>
                             )}
                         </div>
-                        {targetAnnouncement && (
-                            <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-3">
-                                <div className="text-xs font-semibold text-sky-800 mb-2">
-                                    ردیف انتخاب‌شده:
-                                </div>
-                                <div className="space-y-1">
-                                    {targetAnnouncement.destinations.map((d, idx) => (
-                                        <div key={d.id} className="text-sm text-slate-800">
-                                            {formatTransferDestinationLine(d, idx, targetAnnouncement)}
-                                        </div>
-                                    ))}
-                                    {targetAnnouncement.destinations.length === 0 && (
-                                        <div className="text-sm text-slate-500">فعلاً مقصدی ندارد</div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
                     </section>
 
                     <section className="space-y-2">

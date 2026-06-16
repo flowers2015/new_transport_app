@@ -19,6 +19,18 @@ import {
     parseNumericField,
 } from '../utils/freightDisplay';
 
+const dedupeAnnouncementsById = (items: FreightAnnouncement[]): FreightAnnouncement[] => {
+    const seen = new Set<string>();
+    const result: FreightAnnouncement[] = [];
+    for (const ann of items) {
+        const id = String(ann?.id || '');
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        result.push(ann);
+    }
+    return result;
+};
+
 const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     console.log('🔄 [TransportLiveContainer] Component rendering', { 
         userId: currentUser?.id, 
@@ -285,13 +297,14 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     userId: currentUser?.id
                 });
 
-                setAnnouncements((prev) =>
-                    silent
+                setAnnouncements((prev) => {
+                    const next = silent
                         ? filteredAnnouncements.map((ann) =>
                               mergeAssignmentDisplayFields(ann, prev.find((p) => p.id === ann.id))
                           )
-                        : filteredAnnouncements
-                );
+                        : filteredAnnouncements;
+                    return dedupeAnnouncementsById(next);
+                });
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
                 setDrivers(Array.isArray(driversData) ? driversData : []);
 
@@ -515,7 +528,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                 
                                 if (shouldShow) {
                                     // اضافه کردن فوری به ابتدای لیست - بدون تاخیر
-                                    return [normalizedAnnouncement, ...prev];
+                                    return dedupeAnnouncementsById([normalizedAnnouncement, ...prev]);
                                 }
                             } catch (normalizeError) {
                                 // Silent fail - اگر normalize نشد، fetch می‌کنیم
