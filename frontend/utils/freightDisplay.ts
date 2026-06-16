@@ -225,17 +225,58 @@ export function mergeAssignmentDisplayFields(
 ): FreightAnnouncement {
     if (!previous || previous.id !== incoming.id) return incoming;
 
-    const pendingWithoutAssignment =
+    const incomingPendingWithoutAssignment =
         isPendingAssignmentStatus(incoming.status) &&
         !incoming.assignedDriverId &&
         !incoming.assignedVehicleId;
 
-    if (pendingWithoutAssignment) {
+    const previousHasAssignment = Boolean(
+        previous.assignedDriverId || previous.assignedVehicleId
+    );
+
+    // فقط وقتی قبلاً هم تخصیص نداشته، از روی refresh خالی پاک کن
+    if (incomingPendingWithoutAssignment && !previousHasAssignment) {
         return clearAssignmentFromAnnouncement(incoming);
+    }
+
+    // کش/API قدیمی: ردیف هنوز Pending است ولی UI تازه تخصیص دارد — تخصیص را نگه دار
+    if (incomingPendingWithoutAssignment && previousHasAssignment) {
+        return {
+            ...incoming,
+            status: previous.status,
+            assignmentType: previous.assignmentType || incoming.assignmentType,
+            assignedDriverId: previous.assignedDriverId,
+            assignedVehicleId: previous.assignedVehicleId,
+            assignedDriverName: pickNonEmptyText(previous.assignedDriverName, incoming.assignedDriverName),
+            assignedDriverContact: pickNonEmptyText(
+                previous.assignedDriverContact,
+                incoming.assignedDriverContact
+            ),
+            assignedVehiclePlate: pickNonEmptyText(
+                previous.assignedVehiclePlate,
+                incoming.assignedVehiclePlate
+            ),
+            billOfLadingNumber: pickNonEmptyText(
+                previous.billOfLadingNumber,
+                incoming.billOfLadingNumber
+            ),
+            totalFreightCost: previous.totalFreightCost ?? incoming.totalFreightCost,
+            destinations:
+                incoming.destinations?.length > 0 ? incoming.destinations : previous.destinations,
+        };
     }
 
     return {
         ...incoming,
+        status:
+            incoming.status === FreightAnnouncementStatus.Assigned ||
+            incoming.status === 'Assigned'
+                ? incoming.status
+                : previous.status === FreightAnnouncementStatus.Assigned ||
+                    previous.status === 'Assigned'
+                  ? previous.status
+                  : incoming.status,
+        assignmentType: incoming.assignmentType || previous.assignmentType,
         assignedDriverId: incoming.assignedDriverId || previous.assignedDriverId,
         assignedVehicleId: incoming.assignedVehicleId || previous.assignedVehicleId,
         assignedDriverName: pickNonEmptyText(incoming.assignedDriverName, previous.assignedDriverName),

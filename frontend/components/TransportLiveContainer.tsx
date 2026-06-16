@@ -567,7 +567,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
                     const cancelledOrUnassigned =
                         updateType === 'cancelled' ||
-                        (isPendingAssignmentStatus(statusFromEvent) &&
+                        updateType === 'unassigned' ||
+                        (updateType === 'queue_changed' &&
+                            isPendingAssignmentStatus(statusFromEvent) &&
                             existing &&
                             Boolean(existing.assignedDriverId || existing.assignedVehicleId) &&
                             !assignmentPatch.assignedDriverId &&
@@ -694,22 +696,20 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 currentUser?.role === 'personal_transport_user' ||
                 currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
             
-            // Invalidate cache برای personal resources اگر assignment شخصی است
-            if (shouldIncludePersonal) {
-                try {
-                    const { apiCache } = await import('../utils/apiCache');
+            try {
+                const { apiCache } = await import('../utils/apiCache');
+                apiCache.invalidate(`GET:${getApiUrl('freight-announcements')}`);
+                if (shouldIncludePersonal) {
                     apiCache.invalidate(`GET:${getApiUrl('personal-drivers?page=1&limit=500')}`);
                     apiCache.invalidate(`GET:${getApiUrl('personal-vehicles?page=1&limit=500')}`);
-                    console.log('🗑️ [onUpdateAssignment] Cache invalidated for personal resources');
-                } catch (err) {
-                    console.warn('⚠️ [onUpdateAssignment] Failed to invalidate cache:', err);
                 }
+                console.log('🗑️ [onUpdateAssignment] Cache invalidated after assignment');
+            } catch (err) {
+                console.warn('⚠️ [onUpdateAssignment] Failed to invalidate cache:', err);
             }
-            
-            // حذف delay و استفاده از silent refresh برای تجربه کاربری بهتر
-            // backend transaction معمولاً سریع commit می‌شود و نیازی به delay نیست
-            // استفاده از silent: true برای جلوگیری از نمایش loading state در کل صفحه
-            fetchDataRef.current(true, shouldIncludePersonal); // silent refresh برای نمایش تغییرات بدون loading
+
+            // forceRefresh تا کش قدیمی تخصیص را پاک نکند
+            fetchDataRef.current(true, shouldIncludePersonal, true);
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             // در صورت خطا، rollback انجام شده است

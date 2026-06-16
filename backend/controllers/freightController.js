@@ -1897,6 +1897,16 @@ async function assignPersonalDriverAndVehicle(req, res) {
       }
     }
     
+    const notifyPlate = `${platePart1}${plateLetter}${platePart2}-${plateCityCode}`;
+
+    const vehiclePlateColumn = await client.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'vehicle_plate'`
+    );
+    if (vehiclePlateColumn.rowCount > 0) {
+      updateFields.push(`vehicle_plate = $${paramIndex++}`);
+      updateValues.push(notifyPlate);
+    }
+
     updateValues.push(announcementId);
     await client.query(
       `UPDATE freight_announcements SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
@@ -1943,7 +1953,44 @@ async function assignPersonalDriverAndVehicle(req, res) {
     });
 
     await client.query('COMMIT');
-    res.json({ message: 'Assignment successful.' });
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'assigned',
+        {
+          status: 'Assigned',
+          assignment_type: 'personal',
+          assigned_driver_id: personalDriverId,
+          assigned_vehicle_id: personalVehicleId,
+          assigned_driver_name: driverName,
+          resolved_driver_contact: driverContact,
+          vehicle_plate: notifyPlate,
+          bill_of_lading_number: billOfLadingNumber || null,
+          total_freight_cost: totalFreightCost || null,
+        },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [assignPersonalDriverAndVehicle] Error sending realtime notification:', realtimeError);
+    }
+
+    res.json({
+      message: 'Assignment successful.',
+      announcement: {
+        id: announcementId,
+        status: 'Assigned',
+        assignment_type: 'personal',
+        assigned_driver_id: personalDriverId,
+        assigned_vehicle_id: personalVehicleId,
+        assigned_driver_name: driverName,
+        resolved_driver_contact: driverContact,
+        vehicle_plate: notifyPlate,
+        bill_of_lading_number: billOfLadingNumber || null,
+        total_freight_cost: totalFreightCost || null,
+      },
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error in personal assignment:', error);
