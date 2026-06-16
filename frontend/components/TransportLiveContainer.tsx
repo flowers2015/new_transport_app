@@ -864,7 +864,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
-    const onTransferDestination = async (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => {
+    const onTransferDestination = async (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        targetAnnouncementId: string,
+        newPosition: number
+    ): Promise<boolean> => {
         console.log('🔄 [TransportLive] Destination Transfer Request:', {
             sourceAnnouncementId,
             destinationId,
@@ -878,7 +883,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!token) {
                 console.error('❌ [TransportLive] No token found');
                 alert('لطفا دوباره وارد شوید');
-                return;
+                return false;
             }
             
             // پیدا کردن source و target announcements برای لاگ
@@ -942,30 +947,25 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             
             const result = await res.json();
             console.log('✅ [TransportLive] Transfer API response:', result);
-            
-            // به‌روزرسانی state بدون reload کامل
+
             setAnnouncements(prev => {
                 const sourceAnn = prev.find(a => a.id === sourceAnnouncementId);
                 const updated = prev.map(ann => {
                     if (ann.id === sourceAnnouncementId) {
-                        // حذف مقصد از source
                         const updatedDestinations = ann.destinations.filter(d => d.id !== destinationId);
-                        // اگر همه مقاصد جابجا شدند، ردیف را حذف کن (null برگردان تا بعداً فیلتر شود)
-                        if (updatedDestinations.length === 0) {
-                            return null; // علامت برای حذف
+                        if (updatedDestinations.length === 0 || result.sourceAnnouncementDeleted) {
+                            return null;
                         }
                         return { ...ann, destinations: updatedDestinations };
-                    } else if (ann.id === targetAnnouncementId) {
-                        // اضافه کردن مقصد به target در موقعیت جدید
+                    }
+                    if (ann.id === targetAnnouncementId) {
                         const transferredDest = sourceAnn?.destinations.find(d => d.id === destinationId);
                         if (transferredDest) {
                             const newDestinations = [...ann.destinations];
-                            // حذف مقصد از موقعیت فعلی (اگر در همان ردیف است)
                             const existingIndex = newDestinations.findIndex(d => d.id === destinationId);
                             if (existingIndex >= 0) {
                                 newDestinations.splice(existingIndex, 1);
                             }
-                            // اضافه کردن در موقعیت جدید
                             const insertIndex = Math.min(newPosition - 1, newDestinations.length);
                             newDestinations.splice(insertIndex, 0, transferredDest);
                             return { ...ann, destinations: newDestinations };
@@ -973,16 +973,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     }
                     return ann;
                 });
-                // حذف ردیف‌هایی که null هستند (همه مقاصدشان جابجا شده)
-                return updated.filter(ann => ann !== null);
+                return updated.filter((ann): ann is FreightAnnouncement => ann !== null);
             });
-            
-            console.log('✅ [TransportLive] State updated without full reload');
-            
-            // بدون refresh - state به‌روزرسانی شده است
+
+            void fetchData(true, needsPersonalResourcesRef.current, true);
+            alert(result.message || 'انتقال مقصد با موفقیت انجام شد.');
+            return true;
         } catch (error: any) {
-            console.error('❌ [TransportLive] Transfer error:', error);
             console.error('❌ [TransportLive] Transfer destination error:', error);
+            let message = 'خطا در انتقال مقصد';
+            try {
+                message = JSON.parse(error?.message || '').message || message;
+            } catch {
+                if (error?.message) message = error.message;
+            }
+            alert(message);
+            return false;
         }
     };
 
@@ -1117,7 +1123,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
-    const onChangeVehicleType = async (announcementId: string, vehicleType: string) => {
+    const onChangeVehicleType = async (announcementId: string, vehicleType: string): Promise<boolean> => {
         console.log('🔄 [TransportLive] Change Vehicle Type Request:', {
             announcementId,
             vehicleType,
@@ -1129,7 +1135,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!token) {
                 console.error('❌ [TransportLive] No token found');
                 alert('لطفا دوباره وارد شوید');
-                return;
+                return false;
             }
             
             const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/vehicle-type`), {
@@ -1157,16 +1163,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 throw new Error(errorText || 'خطا در تغییر نوع خودرو');
             }
             
-            const result = await res.json();
-            console.log('✅ [TransportLive] Change Vehicle Type successful:', result);
-            
-            // Real-time update will handle the UI update
-            
-            // Refresh data after successful change
-            await fetchData(true, needsPersonalResourcesRef.current);
+            await res.json();
+
+            setAnnouncements(prev =>
+                prev.map(ann => (ann.id === announcementId ? { ...ann, vehicleType } : ann))
+            );
+
+            void fetchData(true, needsPersonalResourcesRef.current, true);
+            return true;
         } catch (error: any) {
-            console.error('❌ [TransportLive] Change Vehicle Type error:', error);
             console.error('❌ [TransportLive] Change vehicle type error:', error);
+            alert(error?.message || 'خطا در تغییر نوع خودرو');
+            return false;
         }
     };
 

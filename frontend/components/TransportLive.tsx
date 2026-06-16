@@ -7,8 +7,7 @@ import IranianPlateInput, {
     formatIranianPlateString,
     type IranianPlateParts,
 } from './IranianPlateInput';
-import {
-    getDestinationCitiesLabel,
+import DestinationTransferDialog from './DestinationTransferDialog';
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
@@ -65,11 +64,11 @@ interface TransportLiveProps {
     }) => void;
     onFinalize: (announcementIds: string[], lineTypeForBackend?: string) => void | Promise<void>;
     finalizePermissions?: Record<string, boolean>;
-    onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => void;
+    onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => Promise<boolean>;
     onForward: (announcementId: string) => void;
     onCancel: (announcementId: string) => void;
     onChangeRequest: (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => void;
-    onChangeVehicleType: (announcementId: string, vehicleType: string) => void;
+    onChangeVehicleType: (announcementId: string, vehicleType: string) => Promise<boolean>;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
     onOpenAssignmentDialog?: (announcement: FreightAnnouncement) => void;
     currentUser: User;
@@ -1904,7 +1903,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 </div>
             </div>
              {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog announcement={selectedAnnouncement} drivers={drivers} vehicles={vehicles} personalDrivers={personalDrivers} personalVehicles={personalVehicles} onUpdateAssignment={onUpdateAssignment} currentUser={currentUser} onChangeRequest={onChangeRequest} onChangeVehicleType={onChangeVehicleType} onOpenHistory={onOpenHistory} onOpenAssignmentDialog={onOpenAssignmentDialog} activeLine={activeLine} setActiveLine={setActiveLine} finalizePermissions={finalizePermissions} onClose={handleCloseDialog} />}
-             {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} activeLine={activeLine} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
+             {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
              {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
@@ -3016,317 +3015,6 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     );
 };
 
-const DestinationTransferDialog: React.FC<{sourceAnnouncement: FreightAnnouncement, allAnnouncements: FreightAnnouncement[], activeLine: TransportLiveTab, onClose: ()=>void, onSave: TransportLiveProps['onTransferDestination']}> = 
-({ sourceAnnouncement, allAnnouncements, activeLine, onClose, onSave }) => {
-    const sourceLine = useMemo(() => {
-        const backend = lineTypeFromAnnouncement(sourceAnnouncement);
-        if (backend === 'IceCream') return FreightLineType.IceCream;
-        if (backend === 'Dairy') return FreightLineType.Dairy;
-        return FreightLineType.Ambient;
-    }, [sourceAnnouncement]);
-
-    const sameLineAnnouncements = useMemo(
-        () => allAnnouncements.filter((a) => matchesFreightLine(a, sourceLine)),
-        [allAnnouncements, sourceLine]
-    );
-    const [destinationId, setDestinationId] = useState('');
-    const [targetAnnouncementId, setTargetAnnouncementId] = useState('');
-    const [newPosition, setNewPosition] = useState(1);
-    
-    // محاسبه تعداد مقاصد موجود در بار هدف برای تعیین موقعیت‌های ممکن
-    const targetAnnouncement = allAnnouncements.find(a => a.id === targetAnnouncementId);
-    // اگر همان ردیف انتخاب شده، باید مقاصد فعلی را در نظر بگیریم (منهای مقصدی که می‌خواهیم جابجا کنیم)
-    const isSameRow = targetAnnouncementId === sourceAnnouncement.id;
-    const currentDestCount = targetAnnouncement ? targetAnnouncement.destinations.length : 0;
-    const maxPosition = isSameRow && destinationId 
-        ? currentDestCount // اگر همان ردیف است، موقعیت‌ها برابر با تعداد مقاصد فعلی است
-        : currentDestCount + 1; // اگر ردیف دیگر است، می‌توانیم به آخر اضافه کنیم
-    const availablePositions = Array.from({ length: maxPosition }, (_, i) => i + 1);
-    
-    // Reset position when target changes
-    useEffect(() => {
-        if (targetAnnouncementId && targetAnnouncement) {
-            setNewPosition(1); // Reset to first position when target changes
-        }
-    }, [targetAnnouncementId, targetAnnouncement]);
-    
-    const handleSave = () => {
-        console.log('🔄 [DestinationTransferDialog] Save clicked:', {
-            sourceAnnouncementId: sourceAnnouncement.id,
-            sourceAnnouncementCode: sourceAnnouncement.announcementCode,
-            destinationId,
-            targetAnnouncementId,
-            newPosition,
-            targetDestinationsCount: targetAnnouncement?.destinations.length || 0,
-            sourceDestinations: sourceAnnouncement.destinations,
-            selectedDestination: sourceAnnouncement.destinations.find(d => d.id === destinationId),
-            timestamp: new Date().toISOString()
-        });
-        
-        if(!destinationId || !targetAnnouncementId) { 
-            console.warn('⚠️ [DestinationTransferDialog] Missing required fields:', { destinationId, targetAnnouncementId });
-            alert('لطفا مقصد و بار هدف را انتخاب کنید.'); 
-            return; 
-        }
-        
-        console.log('✅ [DestinationTransferDialog] Calling onSave with:', {
-            sourceAnnouncementId: sourceAnnouncement.id,
-            destinationId,
-            targetAnnouncementId,
-            newPosition
-        });
-        
-        onSave(sourceAnnouncement.id, destinationId, targetAnnouncementId, newPosition);
-        onClose();
-    }
-    
-    // پیدا کردن شماره ردیف برای هر اعلام بار (فقط در لاین فعلی)
-    const getRowNumber = (announcementId: string): number => {
-        const index = sameLineAnnouncements.findIndex(a => a.id === announcementId);
-        return index >= 0 ? index + 1 : 0;
-    };
-    
-    // تابع برای فرمت کردن نمایش مقصد مبدا: "ردیف X - (پخش/نماینده) شهر (تناژ)"
-    const formatSourceDestination = (dest: Destination, destIndex: number) => {
-        // بررسی نوع نماینده - ابتدا از announcement
-        let repType = '';
-        const repTypeValue = sourceAnnouncement.representativeType;
-        // بررسی نوع نماینده از representativeType
-        if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-            repType = 'پخش';
-        } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-            repType = 'نماینده';
-        }
-        
-        // اگر در announcement نبود، از representativeName در announcement استفاده کن
-        if (!repType && sourceAnnouncement.representativeName) {
-            const repName = sourceAnnouncement.representativeName.toLowerCase();
-            if (repName.includes('پخش') || repName.includes('distributor')) {
-                repType = 'پخش';
-            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                repType = 'نماینده';
-            }
-        }
-        
-        // اگر در announcement نبود، از destination بررسی کن
-        if (!repType && (dest as any).representativeType) {
-            const destRepType = (dest as any).representativeType;
-            if (destRepType === 'distributor' || destRepType === 'agent' || destRepType === 'پخش') {
-                repType = 'پخش';
-            } else if (destRepType === 'representative' || destRepType === 'نماینده') {
-                repType = 'نماینده';
-            }
-        }
-        
-        // اگر هنوز پیدا نشد، از representativeName در destination استفاده کن
-        if (!repType && dest.representativeName) {
-            const repName = dest.representativeName.toLowerCase();
-            if (repName.includes('پخش') || repName.includes('distributor')) {
-                repType = 'پخش';
-            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                repType = 'نماینده';
-            }
-        }
-        
-        const tonnage = dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : '';
-        const rowNum = getRowNumber(sourceAnnouncement.id);
-        // برای استفاده در dropdown، باید string برگردانیم
-        return `ردیف ${rowNum} - ${destIndex + 1}-${repType ? `(${repType}) ` : ''}${dest.city}${tonnage ? ` (${tonnage})` : ''}`;
-    };
-    
-    // تابع جداگانه برای نمایش در dropdown با HTML
-    const formatSourceDestinationHTML = (dest: Destination, destIndex: number) => {
-        let repType = '';
-        const repTypeValue = sourceAnnouncement.representativeType;
-        if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-            repType = 'پخش';
-        } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-            repType = 'نماینده';
-        }
-        
-        if (!repType && sourceAnnouncement.representativeName) {
-            const repName = sourceAnnouncement.representativeName.toLowerCase();
-            if (repName.includes('پخش') || repName.includes('distributor')) {
-                repType = 'پخش';
-            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                repType = 'نماینده';
-            }
-        }
-        
-        if (!repType && (dest as any).representativeType) {
-            const destRepType = (dest as any).representativeType;
-            if (destRepType === 'distributor' || destRepType === 'agent' || destRepType === 'پخش') {
-                repType = 'پخش';
-            } else if (destRepType === 'representative' || destRepType === 'نماینده') {
-                repType = 'نماینده';
-            }
-        }
-        
-        if (!repType && dest.representativeName) {
-            const repName = dest.representativeName.toLowerCase();
-            if (repName.includes('پخش') || repName.includes('distributor')) {
-                repType = 'پخش';
-            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                repType = 'نماینده';
-            }
-        }
-        
-        const tonnage = dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : '';
-        const rowNum = getRowNumber(sourceAnnouncement.id);
-        const city = dest.city;
-        return `ردیف ${rowNum} - ${destIndex + 1}-${repType ? `(${repType}) ` : ''}<strong style="font-weight: bold; color: #1e40af;">${city}</strong>${tonnage ? ` (${tonnage})` : ''}`;
-    };
-    
-    // تابع برای فرمت کردن نمایش بار هدف: "ردیف X - 1-(پخش/نماینده) شهر (تناژ)-..."
-    const formatTargetAnnouncement = (ann: FreightAnnouncement) => {
-        // بررسی نوع نماینده - ابتدا از announcement
-        let repType = '';
-        const repTypeValue = ann.representativeType;
-        if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-            repType = 'پخش';
-        } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-            repType = 'نماینده';
-        }
-        
-        // اگر در announcement نبود، از representativeName در announcement استفاده کن
-        if (!repType && ann.representativeName) {
-            const repName = ann.representativeName.toLowerCase();
-            if (repName.includes('پخش') || repName.includes('distributor')) {
-                repType = 'پخش';
-            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                repType = 'نماینده';
-            }
-        }
-        
-        const rowNum = getRowNumber(ann.id);
-        const destinationsStr = ann.destinations
-            .map((d, idx) => {
-                // اگر در announcement نبود، از destination بررسی کن
-                let destRepType = repType;
-                if (!destRepType && (d as any).representativeType) {
-                    const destRep = (d as any).representativeType;
-                    if (destRep === 'distributor' || destRep === 'agent' || destRep === 'پخش') {
-                        destRepType = 'پخش';
-                    } else if (destRep === 'representative' || destRep === 'نماینده') {
-                        destRepType = 'نماینده';
-                    }
-                }
-                // اگر هنوز پیدا نشد، از representativeName در destination استفاده کن
-                if (!destRepType && d.representativeName) {
-                    const repName = d.representativeName.toLowerCase();
-                    if (repName.includes('پخش') || repName.includes('distributor')) {
-                        destRepType = 'پخش';
-                    } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                        destRepType = 'نماینده';
-                    }
-                }
-                const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
-                // برای استفاده در dropdown، باید string برگردانیم
-                return `${idx + 1}-${destRepType ? `(${destRepType}) ` : ''}${d.city}${tonnage ? ` (${tonnage})` : ''}`;
-            })
-            .join('-');
-        return `ردیف ${rowNum} - ${destinationsStr}`;
-    };
-    
-    // تابع جداگانه برای نمایش در dropdown با HTML
-    const formatTargetAnnouncementHTML = (ann: FreightAnnouncement) => {
-        let repType = '';
-        const repTypeValue = ann.representativeType;
-        if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-            repType = 'پخش';
-        } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-            repType = 'نماینده';
-        }
-        
-        if (!repType && ann.representativeName) {
-            const repName = ann.representativeName.toLowerCase();
-            if (repName.includes('پخش') || repName.includes('distributor')) {
-                repType = 'پخش';
-            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                repType = 'نماینده';
-            }
-        }
-        
-        const rowNum = getRowNumber(ann.id);
-        const destinationsStr = ann.destinations
-            .map((d, idx) => {
-                let destRepType = repType;
-                if (!destRepType && (d as any).representativeType) {
-                    const destRep = (d as any).representativeType;
-                    if (destRep === 'distributor' || destRep === 'agent' || destRep === 'پخش') {
-                        destRepType = 'پخش';
-                    } else if (destRep === 'representative' || destRep === 'نماینده') {
-                        destRepType = 'نماینده';
-                    }
-                }
-                if (!destRepType && d.representativeName) {
-                    const repName = d.representativeName.toLowerCase();
-                    if (repName.includes('پخش') || repName.includes('distributor')) {
-                        destRepType = 'پخش';
-                    } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                        destRepType = 'نماینده';
-                    }
-                }
-                const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
-                const city = d.city;
-                return `${idx + 1}-${destRepType ? `(${destRepType}) ` : ''}<strong style="font-weight: bold; color: #1e40af;">${city}</strong>${tonnage ? ` (${tonnage})` : ''}`;
-            })
-            .join('-');
-        return `ردیف ${rowNum} - ${destinationsStr}`;
-    };
-    
-    return (
-         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl" onClick={e=>e.stopPropagation()}>
-                <div className="p-4 border-b"><h3 className="text-lg font-bold">انتقال مقصد از بار #{sourceAnnouncement.announcementCode}</h3></div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label>۱. انتخاب بار مورد نظر</label>
-                        <select value={targetAnnouncementId} onChange={e=>setTargetAnnouncementId(e.target.value)} className="input-style mt-1 font-medium" autoComplete="off" style={{fontFamily: 'inherit', fontWeight: '500'}}>
-                            <option value="">-- انتخاب بار --</option>
-                            <option value={sourceAnnouncement.id} className="font-semibold bg-blue-50" style={{fontWeight: '600'}}>
-                                ردیف {getRowNumber(sourceAnnouncement.id)} (همان ردیف - تغییر ترتیب)
-                            </option>
-                            {sameLineAnnouncements.filter(a => a.id !== sourceAnnouncement.id).map(a=>
-                                <option key={a.id} value={a.id} style={{fontWeight: '600'}}>
-                                    {formatTargetAnnouncement(a)}
-                                </option>
-                            )}
-                        </select>
-                    </div>
-                    <div>
-                        <label>۲. انتخاب ردیف انتقالی</label>
-                        <select value={destinationId} onChange={e=>setDestinationId(e.target.value)} className="input-style mt-1 font-medium" autoComplete="off" style={{fontFamily: 'inherit', fontWeight: '500'}}>
-                            <option value="">-- انتخاب مقصد --</option>
-                            {sourceAnnouncement.destinations.map((d, idx)=>
-                                <option key={d.id} value={d.id} style={{fontWeight: '600'}}>
-                                    {formatSourceDestination(d, idx)}
-                                </option>
-                            )}
-                        </select>
-                    </div>
-                    <div>
-                        <label>۳. موقعیت جدید</label>
-                        <select value={newPosition} onChange={e=>setNewPosition(Number(e.target.value))} className="input-style mt-1" autoComplete="off" disabled={!targetAnnouncementId}>
-                            {availablePositions.map(n=><option key={n} value={n}>مقصد {n}</option>)}
-                        </select>
-                        {targetAnnouncement && (
-                            <div className="text-xs text-slate-500 mt-1">
-                                {targetAnnouncement.destinations.length > 0 
-                                    ? `بار هدف ${targetAnnouncement.destinations.length} مقصد دارد`
-                                    : 'بار هدف فعلاً مقصدی ندارد'}
-                            </div>
-                        )}
-                    </div>
-                </div>
-                 <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
-                    <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-sm">انصراف</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">انتقال</button>
-                </div>
-             </div>
-         </div>
-    )
-}
 
 const VehicleTypeChangeDialog: React.FC<{ announcement: FreightAnnouncement, onClose: ()=>void, onSave: TransportLiveProps['onChangeVehicleType'] }> = ({ announcement, onClose, onSave }) => {
     const [vehicleType, setVehicleType] = useState(announcement.vehicleType || '');
@@ -3353,7 +3041,7 @@ const VehicleTypeChangeDialog: React.FC<{ announcement: FreightAnnouncement, onC
         fetchVehicleTypes();
     }, []);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!vehicleType || vehicleType.trim() === '') {
             alert('لطفا نوع خودرو را انتخاب کنید.');
             return;
@@ -3362,8 +3050,8 @@ const VehicleTypeChangeDialog: React.FC<{ announcement: FreightAnnouncement, onC
             alert('نوع خودرو تغییر نکرده است.');
             return;
         }
-        onSave(announcement.id, vehicleType);
-        onClose();
+        const ok = await onSave(announcement.id, vehicleType);
+        if (ok) onClose();
     };
 
     return (
