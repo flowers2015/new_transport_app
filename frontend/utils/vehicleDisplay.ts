@@ -1,5 +1,6 @@
-import { Vehicle } from '../types';
+import { Driver, Vehicle } from '../types';
 import { formatPlateNumber } from './jalali';
+import { getApiUrl } from './apiConfig';
 
 export function formatCompanyVehiclePlate(vehicle: Vehicle): string {
     if (vehicle.plateNumber) {
@@ -78,4 +79,108 @@ export function mapVehicleSearchApiRow(row: {
               }
             : undefined,
     } as Vehicle;
+}
+
+export function formatCompanyDriverOptionLabel(driver: Driver): string {
+    return `${driver.employeeId || '—'} — ${driver.name || '—'}`;
+}
+
+export function resolveDriverIdFromQuery(drivers: Driver[], query: string, currentId?: string): string | null {
+    if (currentId && drivers.some((d) => d.id === currentId)) return currentId;
+    const q = query.trim();
+    if (!q) return null;
+
+    const exact = drivers.find((d) => formatCompanyDriverOptionLabel(d) === q);
+    if (exact) return exact.id;
+
+    const byEmployeeId = drivers.filter((d) => (d.employeeId || '').trim() === q);
+    if (byEmployeeId.length === 1) return byEmployeeId[0].id;
+
+    const qLower = q.toLowerCase();
+    const partial = drivers.filter(
+        (d) =>
+            (d.employeeId || '').toLowerCase().includes(qLower) ||
+            (d.name || '').toLowerCase().includes(qLower) ||
+            formatCompanyDriverOptionLabel(d).toLowerCase().includes(qLower)
+    );
+    if (partial.length === 1) return partial[0].id;
+
+    return null;
+}
+
+export function resolveVehicleIdFromLocalList(
+    vehicles: Vehicle[],
+    query: string,
+    currentId?: string
+): string | null {
+    if (currentId && vehicles.some((v) => v.id === currentId)) return currentId;
+    const q = query.trim();
+    if (q.length < 2) return null;
+
+    const exact = vehicles.find((v) => formatCompanyVehicleOptionLabel(v) === q);
+    if (exact) return exact.id;
+
+    const partial = vehicles.filter((v) => vehicleMatchesSearchQuery(v, q));
+    if (partial.length === 1) return partial[0].id;
+
+    return null;
+}
+
+export async function resolveVehicleIdFromQuery(
+    vehicles: Vehicle[],
+    query: string,
+    currentId?: string
+): Promise<string | null> {
+    const local = resolveVehicleIdFromLocalList(vehicles, query, currentId);
+    if (local) return local;
+
+    const q = query.trim();
+    if (q.length < 2) return null;
+
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(getApiUrl(`vehicles/search?q=${encodeURIComponent(q)}`), {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const mapped = Array.isArray(data) ? data.map(mapVehicleSearchApiRow) : [];
+        const exact = mapped.find((v) => formatCompanyVehicleOptionLabel(v) === q);
+        if (exact) return exact.id;
+        if (mapped.length === 1) return mapped[0].id;
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+export async function fetchCompanyVehicleById(vehicleId: string): Promise<Vehicle | null> {
+    if (!vehicleId) return null;
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(getApiUrl(`vehicles/${vehicleId}`), {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        if (!res.ok) return null;
+        const row = await res.json();
+        return {
+            id: row.id,
+            vehicleCode: row.vehicleCode || undefined,
+            vehicleType: row.vehicleType || row.type || undefined,
+            currentVehicleType: row.vehicleType || row.type || undefined,
+            vehicleCategory: row.vehicleCategory || undefined,
+            brand: row.brand || undefined,
+            model: row.model || undefined,
+            plateNumber: row.plateNumber || undefined,
+            serialNumber: row.serialNumber || undefined,
+        } as Vehicle;
+    } catch {
+        return null;
+    }
 }

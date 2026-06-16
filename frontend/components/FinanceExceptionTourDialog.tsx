@@ -1,8 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Driver, FreightAnnouncement, Vehicle } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import CityAutocomplete from './CityAutocomplete';
-import { CompanyDriverSelect, CompanyVehicleSelect } from './CompanyResourceSelect';
+import {
+    CompanyDriverSelect,
+    CompanyVehicleSelect,
+    CompanyDriverSelectHandle,
+    CompanyVehicleSelectHandle,
+} from './CompanyResourceSelect';
+
+const FINANCE_EXCEPTION_LAST_SELECTION_KEY = 'finance_exception_last_selection';
 
 /** همان گزینه‌های اعلام بار — مبنای محاسبه پورسانت/اجرت */
 export const CALCULATION_VEHICLE_TYPES = [
@@ -49,6 +56,26 @@ type FinanceExceptionPrefill = {
     vehicleType?: string;
 };
 
+function readLastFinanceExceptionSelection(): FinanceExceptionPrefill | null {
+    try {
+        const raw = localStorage.getItem(FINANCE_EXCEPTION_LAST_SELECTION_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as FinanceExceptionPrefill;
+    } catch {
+        return null;
+    }
+}
+
+function writeLastFinanceExceptionSelection(selection: FinanceExceptionPrefill) {
+    try {
+        localStorage.setItem(FINANCE_EXCEPTION_LAST_SELECTION_KEY, JSON.stringify(selection));
+    } catch {
+        // ignore
+    }
+}
+
 type Props = {
     open: boolean;
     onClose: () => void;
@@ -81,6 +108,8 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
 
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const driverSelectRef = useRef<CompanyDriverSelectHandle>(null);
+    const vehicleSelectRef = useRef<CompanyVehicleSelectHandle>(null);
     const [form, setForm] = useState<FinanceExceptionFormState>({
         lineType: 'پاستوریزه',
         vehicleType: '',
@@ -128,13 +157,14 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
                 destinations: dests,
             });
         } else {
-            const vt = initialPrefill?.vehicleType || '';
+            const last = readLastFinanceExceptionSelection();
+            const vt = initialPrefill?.vehicleType || last?.vehicleType || '';
             const normalizedType = CALCULATION_VEHICLE_TYPES.includes(vt as any) ? vt : '';
             setForm({
-                lineType: initialPrefill?.lineType || 'پاستوریزه',
+                lineType: initialPrefill?.lineType || last?.lineType || 'پاستوریزه',
                 vehicleType: normalizedType,
-                driverId: initialPrefill?.driverId || '',
-                vehicleId: initialPrefill?.vehicleId || '',
+                driverId: initialPrefill?.driverId || last?.driverId || '',
+                vehicleId: initialPrefill?.vehicleId || last?.vehicleId || '',
                 loadingDate: '',
                 billOfLadingNumber: '',
                 billOfLadingDate: '',
@@ -180,8 +210,22 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
     });
 
     const handleSave = async () => {
-        if (!form.driverId || !form.vehicleId) {
-            setError('انتخاب راننده و خودرو شرکتی الزامی است.');
+        const resolvedDriverId = driverSelectRef.current?.resolvePending() || form.driverId;
+        const resolvedVehicleId =
+            (await vehicleSelectRef.current?.resolvePending()) || form.vehicleId;
+
+        if (resolvedDriverId !== form.driverId || resolvedVehicleId !== form.vehicleId) {
+            setForm((prev) => ({
+                ...prev,
+                driverId: resolvedDriverId,
+                vehicleId: resolvedVehicleId,
+            }));
+        }
+
+        if (!resolvedDriverId || !resolvedVehicleId) {
+            setError(
+                'انتخاب راننده و خودرو شرکتی الزامی است — لطفاً از لیست پیشنهادها انتخاب کنید (فقط تایپ کردن کافی نیست).'
+            );
             return;
         }
         if (!form.vehicleType.trim()) {
@@ -201,17 +245,32 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
             };
+            const payload = {
+                ...buildPayload(),
+                driverId: resolvedDriverId,
+                vehicleId: resolvedVehicleId,
+            };
             const url = isEdit
                 ? getApiUrl(`freight-announcements/${editAnnouncement!.id}/finance-exception`)
                 : getApiUrl('freight-announcements/finance-exception');
             const res = await fetch(url, {
                 method: isEdit ? 'PUT' : 'POST',
                 headers,
-                body: JSON.stringify(buildPayload()),
+                body: JSON.stringify(payload),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'خطا در ذخیره');
-            await onSaved(data.announcement, buildPayload().destinations);
+
+            if (!isEdit) {
+                writeLastFinanceExceptionSelection({
+                    driverId: resolvedDriverId,
+                    vehicleId: resolvedVehicleId,
+                    lineType: form.lineType,
+                    vehicleType: form.vehicleType,
+                });
+            }
+
+            await onSaved(data.announcement, payload.destinations);
             onClose();
         } catch (e: any) {
             setError(e.message || 'خطا در ذخیره');
@@ -323,6 +382,7 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
                             <span className="text-slate-700 font-medium">راننده شرکتی *</span>
                             <div className="mt-1">
                                 <CompanyDriverSelect
+                                    ref={driverSelectRef}
                                     drivers={drivers}
                                     driverId={form.driverId}
                                     onSelect={(id) => setForm((f) => ({ ...f, driverId: id }))}
@@ -334,6 +394,7 @@ const FinanceExceptionTourDialog: React.FC<Props> = ({
                             <span className="text-slate-700 font-medium">خودرو شرکتی (پلاک / کد) *</span>
                             <div className="mt-1">
                                 <CompanyVehicleSelect
+                                    ref={vehicleSelectRef}
                                     vehicles={vehicles}
                                     vehicleId={form.vehicleId}
                                     onSelect={(id) => setForm((f) => ({ ...f, vehicleId: id }))}
