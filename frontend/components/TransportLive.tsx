@@ -8,6 +8,8 @@ import IranianPlateInput, {
     type IranianPlateParts,
 } from './IranianPlateInput';
 import DestinationTransferDialog from './DestinationTransferDialog';
+import {
+    getDestinationCitiesLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
