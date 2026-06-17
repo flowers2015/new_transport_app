@@ -45,6 +45,8 @@ type BaleStatus = {
     activeSession: BaleSession | null;
     activeSessions?: BaleSession[];
     channels: BaleChannel[];
+    channelPlans?: Array<{ category: string; slot: number; chatId: string; pilotCombined: boolean }>;
+    categoryQueues?: Array<{ category: string; queueCount: number }>;
 };
 
 const MODES = [
@@ -348,6 +350,44 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const sessionForCategory = (category: string) =>
         activeSessions.find(s => s.vehicleCategory === category);
 
+    const channelPlanForCategory = (category: string) =>
+        status?.channelPlans?.find(p => p.category === category);
+
+    const queueCountForCategory = (category: string) =>
+        status?.categoryQueues?.find(q => q.category === category)?.queueCount ?? null;
+
+    const channelRowForSlot = (slot: number) =>
+        status?.channels?.find(c => c.slot_number === slot);
+
+    const channelReadyHint = (slot: number, category: string) => {
+        if (isTestMode) {
+            if (!groupChatId) {
+                return 'گروه تست (اسلات ۱) chat_id ندارد — ادمین تنظیم کند.';
+            }
+            return null;
+        }
+        const plan = channelPlanForCategory(category);
+        if (plan) return null;
+        const ch = channelRowForSlot(slot);
+        if (ch?.chat_id != null && ch.is_active === false) {
+            return 'کانال chat_id دارد ولی غیرفعال است — ادمین دوباره «ذخیره» بزند.';
+        }
+        if (!ch?.chat_id) {
+            return 'chat_id کانال تنظیم نشده — از پنل ادمین (تنظیمات بله).';
+        }
+        return 'کانال برای شروع آماده نیست.';
+    };
+
+    const startBlockedReason = (slot: number, category: string) => {
+        const channelHint = channelReadyHint(slot, category);
+        if (channelHint) return channelHint;
+        const queueCount = queueCountForCategory(category);
+        if (queueCount === 0) {
+            return 'صف نوبت این دسته خالی است — ابتدا در «ثبت نوبت» راننده اضافه کنید.';
+        }
+        return null;
+    };
+
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6" dir="rtl">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -596,6 +636,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         {CATEGORY_SLOTS.map(({ slot, category, label, channelLabel }) => {
                             const catSession = sessionForCategory(category);
                             const isActive = Boolean(catSession);
+                            const blockedReason = startBlockedReason(slot, category);
+                            const queueCount = queueCountForCategory(category);
+                            const channelPlan = channelPlanForCategory(category);
                             const canOperateTurn =
                                 isActive &&
                                 catSession &&
@@ -619,18 +662,39 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                     ? 'گروه تست (اسلات ۱)'
                                                     : channelLabel}
                                             </div>
-                                            {!isTestMode && (
-                                                <div className="text-xs font-mono ltr text-slate-500 mt-0.5">
-                                                    chat: {channelChatIds[slot] || '—'}
-                                                </div>
-                                            )}
+                                            <div className="text-xs text-slate-500 mt-0.5 space-y-0.5">
+                                                {!isTestMode && (
+                                                    <div className="font-mono ltr">
+                                                        chat:{' '}
+                                                        {channelPlan?.chatId ||
+                                                            channelChatIds[slot] ||
+                                                            '—'}
+                                                    </div>
+                                                )}
+                                                {queueCount != null && (
+                                                    <div>
+                                                        صف نوبت:{' '}
+                                                        {queueCount > 0 ? (
+                                                            <span className="text-emerald-700">
+                                                                {queueCount} راننده
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-red-600">خالی</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {blockedReason && (
+                                                    <div className="text-amber-700">{blockedReason}</div>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                             <button
                                                 type="button"
-                                                disabled={busy || isActive}
+                                                disabled={busy || isActive || Boolean(blockedReason)}
                                                 onClick={() => startCategorySession(category)}
                                                 className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
+                                                title={blockedReason || undefined}
                                             >
                                                 شروع
                                             </button>

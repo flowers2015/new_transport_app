@@ -65,6 +65,7 @@ const CityManagement = React.lazy(() => import('./components/CityManagement'));
 const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
 const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
 const DebugDriverCalculations = React.lazy(() => import('./components/DebugDriverCalculations'));
+const ViewerPortal = React.lazy(() => import('./viewer/ViewerPortal'));
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
@@ -80,6 +81,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
             return View.CentralFinance; // کارتابل مالی ستاد
         case UserRole.TransportationFinance:
             return View.TransportFinanceCalculation; // محاسبه هزینه تور
+        case UserRole.Viewer:
+            return View.TransportLive;
         default:
             return View.Dashboard;
     }
@@ -133,6 +136,7 @@ const App: React.FC = () => {
             case 'accident': return UserRole.AccidentExpert;
             case 'allocation': return UserRole.VehicleAllocationExpert;
             case 'insurance': return UserRole.InsuranceExpert;
+            case 'viewer': return UserRole.Viewer;
             default: return null;
         }
     };
@@ -721,6 +725,31 @@ const App: React.FC = () => {
     };
 
     const defaultDashboardView = getDefaultViewForRole(currentUser?.role);
+
+    if (currentUser?.role === UserRole.Viewer) {
+        return (
+            <div dir="rtl" className="bg-slate-50 min-h-screen font-vazirmatn">
+                <Suspense
+                    fallback={
+                        <div className="flex items-center justify-center h-screen text-lg">
+                            در حال بارگذاری...
+                        </div>
+                    }
+                >
+                    <ViewerPortal currentUser={currentUser} onLogout={handleLogout} />
+                </Suspense>
+                {forcePasswordChange && (
+                    <ChangePasswordDialog
+                        isOpen
+                        forced
+                        forceReason={forcePasswordReason}
+                        onClose={() => {}}
+                        onSuccess={handleForcedPasswordChangeSuccess}
+                    />
+                )}
+            </div>
+        );
+    }
  
     return (
         <div dir="rtl" className="bg-slate-50 min-h-screen font-vazirmatn">

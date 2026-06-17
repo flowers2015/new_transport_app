@@ -181,6 +181,15 @@ const rolePermissions = {
       'insurance_management'
     ],
     description: 'کارشناس بیمه'
+  },
+
+  // بیننده — فقط مشاهده اعلام بار (بدون ویرایش)
+  viewer: {
+    menus: [
+      'freight_tracking',
+      'freight_archive'
+    ],
+    description: 'بیننده — مشاهده پیگیری زنده و آرشیو اعلام بار'
   }
 };
 

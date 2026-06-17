@@ -7,7 +7,12 @@ const {
   getRuntimeSettings,
   setRuntimeSettings,
 } = require('../services/bale/baleSettings');
-const { getDispatchChannelPlans } = require('../services/bale/baleCategoryChannels');
+const {
+  getDispatchChannelPlans,
+  loadChannelRows,
+  describeChannelBlocker,
+  getCategoryQueueCounts,
+} = require('../services/bale/baleCategoryChannels');
 
 function mapSession(row) {
   if (!row) return null;
@@ -66,6 +71,10 @@ async function getStatus(req, res) {
       `SELECT slot_number, chat_id, vehicle_category, label, is_active
        FROM bale_channels ORDER BY slot_number`
     );
+    const [channelPlans, categoryQueues] = await Promise.all([
+      getDispatchChannelPlans(),
+      getCategoryQueueCounts(),
+    ]);
     res.json({
       configured,
       bot,
@@ -73,6 +82,8 @@ async function getStatus(req, res) {
       activeSession: activeSessions[0] ? mapSession(activeSessions[0]) : null,
       activeSessions: activeSessions.map(mapSession),
       channels,
+      channelPlans,
+      categoryQueues,
     });
   } catch (error) {
     console.error('❌ [bale] getStatus:', error);
@@ -260,15 +271,16 @@ async function startSession(req, res) {
     sessionEngine.ensureTickTimer();
 
     if (vehicleCategory || slot != null) {
-      const plans = await getDispatchChannelPlans();
+      const [plans, channelRows] = await Promise.all([
+        getDispatchChannelPlans(),
+        loadChannelRows(),
+      ]);
       const plan = slot != null
         ? plans.find(p => p.slot === Number(slot))
         : plans.find(p => p.category === vehicleCategory);
       if (!plan) {
         return res.status(400).json({
-          message: vehicleCategory
-            ? `کانال فعالی برای «${vehicleCategory}» تنظیم نشده.`
-            : `اسلات ${slot} فعال نیست یا chat_id ندارد.`,
+          message: describeChannelBlocker(channelRows, { vehicleCategory, slot }),
         });
       }
 

@@ -74,6 +74,7 @@ export enum UserRole {
     Transportation_Personal_Vehicle_User = 'کاربر ترابری (خودرو شخصی)',
     CentralFinance = 'مالی مرکزی',
     TransportationFinance = 'مالی ترابری',
+    Viewer = 'بیننده',
 }
 
 export enum RepairStatus {
