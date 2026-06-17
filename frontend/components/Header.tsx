@@ -73,6 +73,7 @@ const Header: React.FC<HeaderProps> = ({
 
     const transportMenuOrder: View[] = [
         View.TransportDispatchQueue,
+        View.TransportUpcomingFreight,
         View.TransportLive,
         View.TransportBaleSession,
         View.TransportDispatchBoard,
@@ -113,6 +114,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.CentralFinance, label: 'کارتابل مالی ستاد', roles: [UserRole.CentralFinance] },
       { view: View.TransportDashboard, label: 'داشبورد ترابری', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.TransportDispatchQueue, label: 'ثبت نوبت', roles: [UserRole.TransportationUser] },
+      { view: View.TransportUpcomingFreight, label: 'اعلام بار بعدی', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.TransportDispatchBoard, label: 'تابلو اعلام بار', roles: [UserRole.TransportationUser] },
       { view: View.TransportBaleSession, label: 'اعلام بار بله', roles: [UserRole.TransportationUser] },
       { view: View.TransportReports, label: 'گزارش BI', roles: [UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.TransportationFinance] },

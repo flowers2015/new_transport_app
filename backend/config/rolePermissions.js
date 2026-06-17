@@ -53,7 +53,8 @@ const rolePermissions = {
   // کاربر ترابری (شرکت)
   transport_user: {
     menus: [
-      'freight_tracking'
+      'freight_tracking',
+      'upcoming_freight'
     ],
     description: 'کاربر ترابری (شرکت)'
   },
@@ -61,7 +62,8 @@ const rolePermissions = {
   // کاربر ترابری (خودرو شخصی)
   personal_transport_user: {
     menus: [
-      'freight_tracking'
+      'freight_tracking',
+      'upcoming_freight'
     ],
     description: 'کاربر ترابری (خودرو شخصی)'
   },

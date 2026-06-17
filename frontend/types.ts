@@ -37,6 +37,7 @@ export enum View {
     TransportDispatchBoard = 'transport-dispatch-board',
     TransportBaleSession = 'transport-bale-session',
     TransportReports = 'transport-reports',
+    TransportUpcomingFreight = 'transport-upcoming-freight',
     BaleAdminSettings = 'bale-admin-settings',
     AdminSupportTickets = 'admin-support-tickets',
     CentralFinance = 'central-finance',

@@ -66,6 +66,7 @@ const FinalizePermissionManagement = React.lazy(() => import('./components/Final
 const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
 const DebugDriverCalculations = React.lazy(() => import('./components/DebugDriverCalculations'));
 const ViewerPortal = React.lazy(() => import('./viewer/ViewerPortal'));
+const TransportUpcomingFreight = React.lazy(() => import('./transport/TransportUpcomingFreight'));
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
@@ -641,6 +642,9 @@ const App: React.FC = () => {
             case View.TransportReports:
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <MetabaseReports currentUser={currentUser} />;
+            case View.TransportUpcomingFreight:
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <TransportUpcomingFreight />;
             case View.FreightPlanning:
                 console.log('[App] Render view:', View.FreightPlanning);
                 return (
