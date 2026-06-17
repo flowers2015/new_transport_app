@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import ViewerFreightLive from './ViewerFreightLive';
-import ViewerFreightArchive from './ViewerFreightArchive';
+import ViewerTransportLiveShell from './ViewerTransportLiveShell';
+import ViewerFreightHistoryShell from './ViewerFreightHistoryShell';
 
 type ViewerTab = 'live' | 'archive';
 
@@ -63,8 +63,12 @@ const ViewerPortal: React.FC<Props> = ({ currentUser, onLogout }) => {
                 </div>
             </header>
 
-            <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
-                {tab === 'live' ? <ViewerFreightLive /> : <ViewerFreightArchive />}
+            <main className="flex-1 w-full max-w-[100%] mx-auto p-2 sm:p-4 md:p-6 overflow-x-auto">
+                {tab === 'live' ? (
+                    <ViewerTransportLiveShell currentUser={currentUser} />
+                ) : (
+                    <ViewerFreightHistoryShell currentUser={currentUser} />
+                )}
             </main>
         </div>
     );

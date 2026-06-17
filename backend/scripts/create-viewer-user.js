@@ -62,7 +62,7 @@ async function main() {
   }
   if (cols.has('must_change_password')) {
     insertColumns.push('must_change_password');
-    insertValues.push(true);
+    insertValues.push(false);
   }
 
   const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');

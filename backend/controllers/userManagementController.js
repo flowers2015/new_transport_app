@@ -322,7 +322,7 @@ async function createUser(req, res) {
     `);
     if (mustChangeCol.rows.length > 0) {
       insertColumns.push('must_change_password');
-      insertValues.push(true);
+      insertValues.push(String(role).toLowerCase() === 'viewer' ? false : true);
     }
     
     const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
@@ -445,7 +445,12 @@ async function updateUser(req, res) {
         WHERE table_name = 'users' AND column_name = 'must_change_password'
       `);
       if (mustChangeCol.rows.length > 0) {
-        updates.push('must_change_password = TRUE');
+        const effectiveRole = String(role ?? oldUser.role ?? '').toLowerCase();
+        updates.push(
+          effectiveRole === 'viewer'
+            ? 'must_change_password = FALSE'
+            : 'must_change_password = TRUE'
+        );
       }
       const pwdChangedCol = await pool.query(`
         SELECT column_name FROM information_schema.columns

@@ -128,7 +128,8 @@ async function login(req, res) {
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }); // 7 روز اعتبار
 
     const mustChangePassword = user.must_change_password === true;
-    const forcePasswordChange = mustChangePassword || passwordExpired;
+    const isViewer = String(user.role || '').toLowerCase() === 'viewer';
+    const forcePasswordChange = isViewer ? false : mustChangePassword || passwordExpired;
 
     // Return both token and user data
     res.json({ 
@@ -142,8 +143,8 @@ async function login(req, res) {
         email: user.email || null,
         branchCity: branchCityValue
       },
-      mustChangePassword,
-      passwordExpired,
+      mustChangePassword: isViewer ? false : mustChangePassword,
+      passwordExpired: isViewer ? false : passwordExpired,
       forcePasswordChange,
       passwordExpiresIn: passwordExpiresIn !== null ? Math.max(0, passwordExpiresIn) : null
     });
@@ -191,7 +192,11 @@ async function changePassword(req, res) {
       return res.status(404).json({ message: 'کاربر یافت نشد' });
     }
 
-    // بررسی رمز عبور فعلی
+    if (String(user.role || '').toLowerCase() === 'viewer') {
+      return res.status(403).json({
+        message: 'کاربر بیننده مجاز به تغییر رمز عبور نیست. با ادمین تماس بگیرید.',
+      });
+    }
     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: 'رمز عبور فعلی اشتباه است' });

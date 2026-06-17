@@ -178,7 +178,13 @@ const App: React.FC = () => {
         setCurrentView(View.Login);
     }, []);
 
-    const applyAuthFlags = useCallback((flags?: LoginAuthFlags) => {
+    const applyAuthFlags = useCallback((flags?: LoginAuthFlags, role?: UserRole | null) => {
+        if (role === UserRole.Viewer) {
+            localStorage.removeItem('forcePasswordChange');
+            localStorage.removeItem('forcePasswordReason');
+            setForcePasswordChange(false);
+            return;
+        }
         const force = !!(flags?.forcePasswordChange || flags?.mustChangePassword || flags?.passwordExpired);
         if (force) {
             const reason: ForcePasswordReason =
@@ -220,7 +226,11 @@ const App: React.FC = () => {
                 if (normalized) {
                     setCurrentUser(normalized);
                     setCurrentView(getDefaultViewForRole(normalized.role));
-                    if (localStorage.getItem('forcePasswordChange') === '1') {
+                    if (normalized.role === UserRole.Viewer) {
+                        localStorage.removeItem('forcePasswordChange');
+                        localStorage.removeItem('forcePasswordReason');
+                        setForcePasswordChange(false);
+                    } else if (localStorage.getItem('forcePasswordChange') === '1') {
                         const reason = localStorage.getItem('forcePasswordReason');
                         setForcePasswordReason(reason === 'expired' ? 'expired' : 'must_change');
                         setForcePasswordChange(true);
@@ -262,7 +272,7 @@ const App: React.FC = () => {
         setCurrentUser(normalized);
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(normalized));
-        applyAuthFlags(authFlags);
+        applyAuthFlags(authFlags, normalized.role);
         setCurrentView(getDefaultViewForRole(normalized.role));
     };
 
