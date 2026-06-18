@@ -11,6 +11,7 @@ import {
     mergeAssignmentDisplayFields,
     clearAssignmentFromAnnouncement,
     isPendingAssignmentStatus,
+    hasDriverAndVehicleAssigned,
     TransportLiveTab,
     lineTypeToBackend,
     isPendingBillOfLadingTab,
@@ -224,6 +225,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         representativeType: a.representative_type || a.representativeType || null,
                         representativeName: a.representative_name || a.representativeName,
                         cartonCount: a.carton_count ?? a.cartonCount,
+                        palletCount: a.pallet_count ?? a.palletCount,
+                        loadingType: a.loading_type || a.loadingType,
+                        displayPinned: !!(a.display_pinned ?? a.displayPinned),
+                        displaySortOrder:
+                            a.display_sort_order != null
+                                ? Number(a.display_sort_order)
+                                : a.displaySortOrder != null
+                                  ? Number(a.displaySortOrder)
+                                  : null,
                         priority: a.priority,
                         products: a.products || [],
                         platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
@@ -455,6 +465,26 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
                     return;
                 }
+
+                if (updateType === 'display_order_updated') {
+                    setAnnouncements((prev) =>
+                        prev.map((a) =>
+                            a.id === announcementId
+                                ? {
+                                      ...a,
+                                      displayPinned: !!(data.displayPinned ?? data.display_pinned ?? a.displayPinned),
+                                      displaySortOrder:
+                                          data.displaySortOrder != null
+                                              ? Number(data.displaySortOrder)
+                                              : data.display_sort_order != null
+                                                ? Number(data.display_sort_order)
+                                                : a.displaySortOrder ?? null,
+                                  }
+                                : a
+                        )
+                    );
+                    return;
+                }
                 
                 // اعمال optimistic update - فوری اضافه کردن/حذف بدون تاخیر
                 setAnnouncements(prev => {
@@ -496,6 +526,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                     representativeType: data.representativeType || data.representative_type || null,
                                     representativeName: data.representativeName || data.representative_name || null,
                                     cartonCount: data.cartonCount ?? data.carton_count ?? null,
+                                    palletCount: data.palletCount ?? data.pallet_count ?? null,
+                                    loadingType: data.loadingType || data.loading_type || null,
+                                    displayPinned: !!(data.displayPinned ?? data.display_pinned),
+                                    displaySortOrder:
+                                        data.displaySortOrder != null
+                                            ? Number(data.displaySortOrder)
+                                            : data.display_sort_order != null
+                                              ? Number(data.display_sort_order)
+                                              : null,
                                     priority: data.priority || null,
                                     products: Array.isArray(data.products) ? data.products : (data.products ? [data.products] : []),
                                     platformArrivalTime: data.platformArrivalTime || data.platform_arrival_time || null,
@@ -746,6 +785,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const ann = announcements.find((a) => a.id === id);
             if (!ann) return true;
             if (
+                hasDriverAndVehicleAssigned(ann) &&
                 isPersonalAssignmentType(ann.assignmentType) &&
                 !hasBillOfLadingNumber(ann)
             ) {
@@ -809,6 +849,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                     : a
                             )
                         );
+                        alert(result.message || 'شماره بارنامه برای برخی اعلام بارهای شخصی ثبت نشده است.');
+                        return;
                     } else {
                         console.log('❌ [TransportLiveContainer] Finalize failed completely, rolling back optimistic update');
                         setAnnouncements(originalAnnouncements);
@@ -835,18 +877,28 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         });
                     }
                 }
-                if (result.missingBillOfLadingIds?.length) {
-                    setTimeout(() => {
-                        fetchDataRef.current(true, needsPersonalResourcesRef.current);
-                    }, 500);
-                }
                 throw new Error(result.message || 'خطا در اتمام تخصیص');
             }
             
+            if (result.missingBillOfLadingIds && result.missingBillOfLadingIds.length > 0) {
+                const failedIds = result.missingBillOfLadingIds as string[];
+                const nowIso = new Date().toISOString();
+                setAnnouncements((prev) =>
+                    prev.map((a) =>
+                        failedIds.includes(a.id)
+                            ? { ...a, awaitingBillOfLadingAt: a.awaitingBillOfLadingAt || nowIso }
+                            : a
+                    )
+                );
+            }
+
             // نمایش پیام موفقیت
             if (result.partial) {
                 // اگر برخی finalize شدند و برخی نه
-                alert(`${result.message || `${result.finalizedCount || 0} اعلام بار نهایی شد. ${result.missingBillOfLadingCount || 0} اعلام بار بدون شماره بارنامه در کارتابل باقی ماند.`}`);
+                alert(
+                    result.message ||
+                        `${result.finalizedCount || 0} اعلام بار نهایی شد. ${result.missingBillOfLadingCount || 0} اعلام بار شخصی بدون شماره بارنامه به تب «در انتظار بارنامه» منتقل شد.`
+                );
             } else {
                 // اگر همه finalize شدند
                 alert(`اتمام تخصیص انجام شد:\n${result.finalizedCount || result.finalized || 0} مورد نهایی شد${result.leftover ? `\n${result.leftover} مورد به بارهای مانده برگشت` : ''}`);
@@ -862,10 +914,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
             }
             
-            // Real-time updates باید finalized ها را از لیست حذف کنند
-            // اما برای leftover ها یا missing bill of lading، ممکن است نیاز به refresh باشد
-            if ((result.leftover && result.leftover > 0) || (result.missingBillOfLadingCount && result.missingBillOfLadingCount > 0)) {
-                console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover/missing bill of lading announcements...');
+            // Real-time updates finalized/awaiting-bill را پوشش می‌دهند.
+            // فقط برای leftover یک sync کوتاه نگه می‌داریم تا همه نماها یکدست بمانند.
+            if (result.leftover && result.leftover > 0) {
+                console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover announcements...');
                 // با کمی تاخیر برای اطمینان از به‌روزرسانی backend
                 setTimeout(async () => {
                     await fetchDataRef.current(true, needsPersonalResourcesRef.current);

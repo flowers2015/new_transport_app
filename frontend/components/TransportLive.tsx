@@ -28,7 +28,9 @@ import {
     sumDestinationTonnageKg,
     formatPersianGroupedNumber,
     formatRepresentativeType,
+    formatLoadingType,
     localizeExcelValue,
+    sortByIceCreamDisplayOrder,
 } from '../utils/freightDisplay';
 import { getApiUrl } from '../utils/apiConfig';
 import { TruckIcon } from './icons/CarIcon';
@@ -457,8 +459,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }},
             { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatTotalFreightCost(ann.totalFreightCost) },
             
-            // Full View Specific - Ice Cream
-            { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
+            // Ice Cream (فشرده و کامل)
+            { header: 'نوع بارگیری', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
+            { header: 'نوع نماینده', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
+            { header: 'کارتن', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+            { header: 'پالت', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
             { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
             // Full View Specific - Dairy/Ambient
             { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
@@ -611,12 +616,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [liveAnnouncements]);
 
     const filteredAnnouncements = useMemo(() => {
+        let list: FreightAnnouncement[];
         if (isPendingBillOfLadingTab(activeLine)) {
-            return liveAnnouncements.filter(isPendingBillOfLading);
+            list = liveAnnouncements.filter(isPendingBillOfLading);
+        } else {
+            list = liveAnnouncements.filter(
+                (a) => matchesFreightLine(a, activeLine as FreightLineType) && !isPendingBillOfLading(a)
+            );
         }
-        return liveAnnouncements.filter(
-            (a) => matchesFreightLine(a, activeLine as FreightLineType) && !isPendingBillOfLading(a)
-        );
+        if (activeLine === FreightLineType.IceCream && !isPendingBillOfLadingTab(activeLine)) {
+            return sortByIceCreamDisplayOrder(list);
+        }
+        return list;
     }, [liveAnnouncements, activeLine]);
 
     const canFinalizeCurrentTab = useMemo(() => {
@@ -714,12 +725,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
+                { header: 'نوع بارگیری', render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
+                { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
                 { header: 'کارتن', render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+                { header: 'پالت', render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -1112,13 +1125,23 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         (viewMode === 'full' && !isPendingBillOfLadingTab(activeLine));
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
+    const resolveExportColumns = useCallback(
+        (mode: 'compact' | 'full') => {
+            if (isPendingBillOfLadingTab(activeLine) || activeLine === FreightLineType.IceCream) {
+                return visibleColumns;
+            }
+            if (mode === viewMode) {
+                return visibleColumns;
+            }
+            const lineForExport = activeLine as FreightLineType;
+            return columnsConfig(mode).filter((c: any) => c.display(lineForExport));
+        },
+        [activeLine, columnsConfig, viewMode, visibleColumns]
+    );
+
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
     const generateExcelExport = (mode: 'compact' | 'full') => {
-        const cols = columnsConfig(mode);
-        const lineForExport = isPendingBillOfLadingTab(activeLine) ? FreightLineType.Dairy : (activeLine as FreightLineType);
-        const visibleCols = isPendingBillOfLadingTab(activeLine)
-            ? visibleColumns
-            : cols.filter(c => c.display(lineForExport));
+        const visibleCols = resolveExportColumns(mode);
         const isFullDairyAmbientMode =
             mode === 'full' &&
             !isPendingBillOfLadingTab(activeLine) &&
@@ -1165,7 +1188,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     let value: any = '';
                     
                     // بررسی اینکه آیا این ستون عددی است (مثل تناژ، کرایه، ارزش بار)
-                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                     const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
                     
                     if (col.render) {
@@ -1231,10 +1254,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
-                        const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
-                                       (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
-                                       (dest.representativeName || '').includes('پخش') ? 'پخش' : 
-                                       (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                        const repType = formatRepresentativeType((dest as any).representativeType);
                         const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
@@ -1278,7 +1298,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         // تنظیم فرمت اعداد برای ستون‌های عددی
         const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
         headers.forEach((header, colIdx) => {
-            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header.includes(h));
             if (isNumericColumn) {
                 // برای تمام ردیف‌های داده، فرمت عددی تنظیم می‌کنیم
                 for (let row = 1; row <= filteredAnnouncements.length; row++) {
@@ -1357,11 +1377,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const worksheet = workbook.addWorksheet('اعلام بار');
             
             // Get headers and data - استفاده از همان منطق generateExcelExport
-            const cols = columnsConfig(mode);
-            const lineForExport = isPendingBillOfLadingTab(activeLine) ? FreightLineType.Dairy : (activeLine as FreightLineType);
-            const visibleCols = isPendingBillOfLadingTab(activeLine)
-                ? visibleColumns
-                : cols.filter((c: any) => c.display(lineForExport));
+            const visibleCols = resolveExportColumns(mode);
             const isFullDairyAmbientMode =
                 mode === 'full' &&
                 !isPendingBillOfLadingTab(activeLine) &&
@@ -1416,7 +1432,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             
             // Helper to get value for header - استفاده از همان منطق generateExcelExport
             const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
-                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'];
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                 const isNumericColumn = numericHeaders.some(h => header.includes(h));
                 
                 if (header === 'انتخاب') {
@@ -1559,7 +1575,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     
                     // Format numbers
                     const header = headers[colNumber - 1];
-                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه'].some(h => header.includes(h));
+                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header.includes(h));
                     if (isNumericColumn && typeof cell.value === 'number') {
                         // برای اطمینان از نمایش صحیح اعداد بزرگ بدون نماد علمی
                         // استفاده از فرمت عددی با جداکننده هزارگان
@@ -2950,7 +2966,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                             <strong>مقصد {i + 1}:</strong> {dest.city}{' '}
                                             (
                                             {isIceCreamAnnouncement
-                                                ? `${announcement.cartonCount != null ? Number(announcement.cartonCount).toLocaleString('fa-IR') : '-'} کارتن`
+                                                ? [
+                                                    announcement.cartonCount != null ? `${Number(announcement.cartonCount).toLocaleString('fa-IR')} کارتن` : null,
+                                                    announcement.palletCount != null ? `${Number(announcement.palletCount).toLocaleString('fa-IR')} پالت` : null,
+                                                  ].filter(Boolean).join(' / ') || '-'
                                                 : `${dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : 0} کیلوگرم`}
                                             )
                                         </div>

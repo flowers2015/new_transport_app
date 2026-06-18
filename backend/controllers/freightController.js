@@ -211,6 +211,14 @@ async function getFreightAnnouncements(req, res) {
         ALTER TABLE freight_announcements 
         ADD COLUMN IF NOT EXISTS finance_exception_metadata_locked BOOLEAN DEFAULT FALSE
       `);
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS display_pinned BOOLEAN DEFAULT FALSE
+      `);
+      await pool.query(`
+        ALTER TABLE freight_announcements 
+        ADD COLUMN IF NOT EXISTS display_sort_order INTEGER
+      `);
       await ensureFinanceDispositionColumns(pool);
     } catch (alterError) {
       // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
@@ -568,6 +576,8 @@ async function updateFreightAnnouncement(req, res) {
       representativeType,
       representativeName,
       cartonCount,
+      palletCount,
+      loadingType,
       priority,
       products,
       platformArrivalTime,
@@ -637,6 +647,8 @@ async function updateFreightAnnouncement(req, res) {
       if (representativeType !== undefined) { fields.push(`representative_type = $${idx++}`); values.push(representativeType); }
       if (representativeName !== undefined) { fields.push(`representative_name = $${idx++}`); values.push(representativeName); }
       if (cartonCount !== undefined) { fields.push(`carton_count = $${idx++}`); values.push(cartonCount); }
+      if (palletCount !== undefined) { fields.push(`pallet_count = $${idx++}`); values.push(palletCount); }
+      if (loadingType !== undefined) { fields.push(`loading_type = $${idx++}`); values.push(loadingType); }
       if (priority !== undefined) { fields.push(`priority = $${idx++}`); values.push(priority); }
       if (products !== undefined) { 
         fields.push(`products = $${idx++}`); 
@@ -723,7 +735,7 @@ async function updateFreightAnnouncement(req, res) {
       const fieldsToTrack = [
         'loading_date', 'line_type', 'cargo_value', 'vehicle_type', 'notes', 'status',
         'origin_city', 'brand', 'representative_type', 'representative_name', 
-        'carton_count', 'priority', 'products', 'platform_arrival_time', 'total_freight_cost',
+        'carton_count', 'pallet_count', 'loading_type', 'priority', 'products', 'platform_arrival_time', 'total_freight_cost',
         'bill_of_lading_number', 'assigned_driver_id', 'assigned_driver_name', 
         'assigned_driver_employee_id', 'assigned_vehicle_id', 'assigned_vehicle_model',
         'assigned_vehicle_brand', 'vehicle_plate', 'assignment_type'
@@ -932,6 +944,8 @@ async function createFreightAnnouncement(req, res) {
       representativeType,
       representativeName,
       cartonCount,
+      palletCount,
+      loadingType,
       priority,
       products,
       platformArrivalTime,
@@ -997,14 +1011,15 @@ async function createFreightAnnouncement(req, res) {
       INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
         vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
-        total_freight_cost, platform_arrival_time, carton_count, created_at, updated_at,
+        total_freight_cost, platform_arrival_time, carton_count, pallet_count, loading_type,
+        created_at, updated_at,
         origin_city, brand, representative_type, representative_name, priority, products, notes,
         created_by_user_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, NULL, NULL,
-        $10, $11, $12, NOW(), NOW(),
-        $13, $14, $15, $16, $17, $18, $19, $20
+        $10, $11, $12, $13, $14, NOW(), NOW(),
+        $15, $16, $17, $18, $19, $20, $21, $22
       )
     `;
 
@@ -1032,6 +1047,8 @@ async function createFreightAnnouncement(req, res) {
       totalFreightCost || null,
       platformArrivalTime || null,
       cartonCount || null,
+      palletCount || null,
+      loadingType || null,
       originCity || null,
       brand || null,
       representativeType || null,
@@ -1217,6 +1234,8 @@ async function createFreightAnnouncement(req, res) {
         representativeType: representativeType,
         representativeName: representativeName,
         cartonCount: cartonCount,
+        palletCount: palletCount,
+        loadingType: loadingType,
         priority: priority,
         products: products,
         platformArrivalTime: platformArrivalTime,
@@ -1429,6 +1448,8 @@ async function approveAnnouncement(req, res) {
           representativeType: fullAnnouncement.representative_type,
           representativeName: fullAnnouncement.representative_name,
           cartonCount: fullAnnouncement.carton_count,
+          palletCount: fullAnnouncement.pallet_count,
+          loadingType: fullAnnouncement.loading_type,
           priority: fullAnnouncement.priority,
           products: fullAnnouncement.products ? (typeof fullAnnouncement.products === 'string' ? JSON.parse(fullAnnouncement.products) : fullAnnouncement.products) : [],
           platformArrivalTime: fullAnnouncement.platform_arrival_time,
@@ -2838,6 +2859,8 @@ async function setAssignmentQueue(req, res) {
           representativeType: fullAnnouncement.representative_type,
           representativeName: fullAnnouncement.representative_name,
           cartonCount: fullAnnouncement.carton_count,
+          palletCount: fullAnnouncement.pallet_count,
+          loadingType: fullAnnouncement.loading_type,
           priority: fullAnnouncement.priority,
           products: fullAnnouncement.products ? (typeof fullAnnouncement.products === 'string' ? JSON.parse(fullAnnouncement.products) : fullAnnouncement.products) : [],
           platformArrivalTime: fullAnnouncement.platform_arrival_time,
@@ -3413,8 +3436,12 @@ async function finalizeAssignments(req, res) {
       
       console.log(`✅ [finalizeAssignments] Final assignment_type for ${annId}: ${assignmentType}`);
       
-      // بررسی شماره بارنامه فقط برای خودروهای شخصی
-      if (assignmentType === 'personal') {
+      // بررسی تخصیص
+      const hasAssignment = ann.assigned_vehicle_id && ann.assigned_driver_id;
+
+      // فقط وقتی تخصیص شخصی کامل وجود دارد، نبود بارنامه باید آن را به «در انتظار بارنامه» ببرد.
+      // اگر اصلاً تخصیص انجام نشده باشد باید طبق روال قدیم به برنامه‌ریزی برگردد.
+      if (hasAssignment && assignmentType === 'personal') {
         const billOfLadingNumber = ann.bill_of_lading_number;
         if (!billOfLadingNumber || billOfLadingNumber.trim() === '') {
           console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) missing bill_of_lading_number - SKIPPING finalization`);
@@ -3462,9 +3489,6 @@ async function finalizeAssignments(req, res) {
       }
       
       console.log(`✅ [finalizeAssignments] Line type match: ${ann.line_type} === ${lineType} (persian: ${persianLineType})`);
-      
-      // بررسی تخصیص
-      const hasAssignment = ann.assigned_vehicle_id && ann.assigned_driver_id;
       
       console.log(`🔍 [finalizeAssignments] Processing ${annId}: hasAssignment=${hasAssignment}, status=${ann.status}, line_type=${ann.line_type}`);
       
@@ -3697,7 +3721,7 @@ async function finalizeAssignments(req, res) {
         return res.status(200).json({
           success: true,
           partial: true,
-          message: `${finalizedIds.length} اعلام بار نهایی شد. ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه در کارتابل باقی ماند.`,
+          message: `${finalizedIds.length} اعلام بار نهایی شد. ${missingBillOfLadingIds.length} اعلام بار شخصی بدون شماره بارنامه به «در انتظار بارنامه» منتقل شد.`,
           finalizedCount: finalizedIds.length,
           finalizedIds: finalizedIds,
           missingBillOfLadingCount: missingBillOfLadingIds.length,
@@ -6934,6 +6958,105 @@ async function finalizeFinanceExceptionMetadata(req, res) {
   }
 }
 
+/**
+ * PUT /api/freight-announcements/ice-cream-display-order
+ * به‌روزرسانی ترتیب نمایش و سنجاق اعلام بار بستنی (مشترک بین برنامه‌ریزی و ترابری)
+ */
+async function updateIceCreamDisplayOrder(req, res) {
+  const userId = req.user?.id || req.user?.userId;
+  const role = req.user?.role;
+  const allowedRoles = [
+    'Admin',
+    'ادمین',
+    'PlanningEmployee',
+    'PlanningManager',
+    'planner',
+    'planner_manager',
+    'کارمند برنامه‌ریزی',
+    'مدیر برنامه‌ریزی',
+  ];
+
+  if (!allowedRoles.includes(role)) {
+    return res.status(403).json({ message: 'شما مجوز تغییر ترتیب نمایش بستنی را ندارید.' });
+  }
+
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: 'items array is required.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query(`
+      ALTER TABLE freight_announcements 
+      ADD COLUMN IF NOT EXISTS display_pinned BOOLEAN DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE freight_announcements 
+      ADD COLUMN IF NOT EXISTS display_sort_order INTEGER
+    `);
+
+    const updatedIds = [];
+    for (const item of items) {
+      if (!item?.id) continue;
+      const annCheck = await client.query(
+        `SELECT id, line_type FROM freight_announcements WHERE id = $1`,
+        [item.id]
+      );
+      if (annCheck.rowCount === 0) continue;
+      const lineType = annCheck.rows[0].line_type;
+      if (lineType !== 'IceCream' && lineType !== 'بستنی') continue;
+
+      await client.query(
+        `UPDATE freight_announcements
+         SET display_pinned = $1, display_sort_order = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [
+          !!item.displayPinned,
+          item.displaySortOrder != null ? Number(item.displaySortOrder) : null,
+          item.id,
+        ]
+      );
+      updatedIds.push(item.id);
+    }
+
+    await client.query('COMMIT');
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      updatedIds.forEach((announcementId) => {
+        const patch = items.find((i) => i.id === announcementId);
+        realtimeService.notifyAnnouncementUpdate(
+          announcementId,
+          'display_order_updated',
+          {
+            displayPinned: !!patch?.displayPinned,
+            displaySortOrder: patch?.displaySortOrder ?? null,
+            lineType: 'IceCream',
+          },
+          userId
+        );
+      });
+    } catch (notifErr) {
+      console.warn('⚠️ [updateIceCreamDisplayOrder] SSE notify failed:', notifErr.message);
+    }
+
+    return res.status(200).json({
+      message: 'ترتیب نمایش بستنی ذخیره شد.',
+      updatedCount: updatedIds.length,
+      updatedIds,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [updateIceCreamDisplayOrder] Failed:', error);
+    return res.status(500).json({ message: 'خطا در ذخیره ترتیب نمایش.' });
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getFreightAnnouncements,
   getFreightAnnouncementById,
@@ -6960,6 +7083,7 @@ module.exports = {
   finalizeFinanceExceptionMetadata,
   rejectFinanceTour,
   ensureFinanceDispositionColumns,
+  updateIceCreamDisplayOrder,
   FINANCE_EXCEPTION_TRANSPORT_ROLES,
 };
 

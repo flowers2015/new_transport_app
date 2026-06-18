@@ -6,16 +6,34 @@ export function formatRepresentativeType(value?: string | null): string {
     if (!value) return '-';
     const v = String(value).trim().toLowerCase();
     if (v === 'distributor' || v === 'distribution' || v === 'پخش') return 'پخش';
+    if (v === 'depot' || v === 'دپو') return 'دپو';
     if (v === 'agent' || v === 'representative' || v === 'نماینده') return 'نماینده';
-    if (value === 'پخش' || value === 'نماینده') return value;
+    if (value === 'پخش' || value === 'نماینده' || value === 'دپو') return value;
     return String(value);
+}
+
+/** نوع بارگیری بستنی — تک مبدا / دو مبدا */
+export function formatLoadingType(
+    value?: string | null,
+    ann?: Pick<FreightAnnouncement, 'destinations' | 'originCity'>
+): string {
+    if (value === 'double') return 'دو مبدا بارگیری';
+    if (value === 'single') return 'تک مبدا';
+    if (ann) {
+        if ((ann.destinations?.length ?? 0) >= 2) return 'دو مبدا بارگیری';
+        if (ann.originCity?.includes(' و ')) return 'دو مبدا بارگیری';
+    }
+    return 'تک مبدا';
 }
 
 const EXCEL_EN_FA: Record<string, string> = {
     distributor: 'پخش',
     distribution: 'پخش',
+    depot: 'دپو',
     agent: 'نماینده',
     representative: 'نماینده',
+    single: 'تک مبدا',
+    double: 'دو مبدا بارگیری',
     low: 'کم اهمیت',
     normal: 'عادی',
     high: 'فوری',
@@ -376,6 +394,57 @@ export function lineTypeToBackend(line: FreightLineType | string): string {
 
 export function lineTypeFromAnnouncement(ann: FreightAnnouncement): string {
     return lineTypeToBackend(ann.lineType as string);
+}
+
+export type IceCreamDisplayOrderItem = {
+    id: string;
+    displayPinned: boolean;
+    displaySortOrder: number;
+};
+
+type DisplayOrderSortable = Pick<FreightAnnouncement, 'displayPinned' | 'displaySortOrder' | 'createdAt'>;
+
+/** ترتیب نمایش بستنی: سنجاق‌شده‌ها اول، سپس displaySortOrder، سپس تاریخ ثبت */
+export function sortByIceCreamDisplayOrder<T extends DisplayOrderSortable>(items: T[]): T[] {
+    return [...items].sort((a, b) => {
+        const pinA = a.displayPinned ? 0 : 1;
+        const pinB = b.displayPinned ? 0 : 1;
+        if (pinA !== pinB) return pinA - pinB;
+
+        const orderA = a.displaySortOrder ?? Number.MAX_SAFE_INTEGER;
+        const orderB = b.displaySortOrder ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+
+        const aTime = new Date(a.createdAt as string | Date).getTime();
+        const bTime = new Date(b.createdAt as string | Date).getTime();
+        return bTime - aTime;
+    });
+}
+
+export function buildIceCreamDisplayOrderPayload(
+    ordered: Array<Pick<FreightAnnouncement, 'id' | 'displayPinned'>>
+): IceCreamDisplayOrderItem[] {
+    return ordered.map((ann, index) => ({
+        id: ann.id,
+        displayPinned: !!ann.displayPinned,
+        displaySortOrder: index,
+    }));
+}
+
+export function applyIceCreamDisplayOrderUpdates(
+    announcements: FreightAnnouncement[],
+    items: IceCreamDisplayOrderItem[]
+): FreightAnnouncement[] {
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return announcements.map((ann) => {
+        const patch = byId.get(ann.id);
+        if (!patch) return ann;
+        return {
+            ...ann,
+            displayPinned: patch.displayPinned,
+            displaySortOrder: patch.displaySortOrder,
+        };
+    });
 }
 
 const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';

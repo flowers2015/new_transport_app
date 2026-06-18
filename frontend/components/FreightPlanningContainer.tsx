@@ -5,6 +5,7 @@ import { useCallback } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem } from '../utils/freightDisplay';
 
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -78,6 +79,15 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 representativeType: a.representative_type || a.representativeType,
                 representativeName: a.representative_name || a.representativeName,
                 cartonCount: a.carton_count ?? a.cartonCount,
+                palletCount: a.pallet_count ?? a.palletCount,
+                loadingType: a.loading_type || a.loadingType,
+                displayPinned: !!(a.display_pinned ?? a.displayPinned),
+                displaySortOrder:
+                    a.display_sort_order != null
+                        ? Number(a.display_sort_order)
+                        : a.displaySortOrder != null
+                          ? Number(a.displaySortOrder)
+                          : null,
                 priority: a.priority,
                 products: a.products || [],
                 platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
@@ -141,6 +151,26 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 if (updateType === 'finalized' || data.status === 'Finalized') {
                     console.log('🗑️ [FreightPlanningContainer] Announcement finalized, removing from list');
                     setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+                    return;
+                }
+
+                if (updateType === 'display_order_updated') {
+                    setAnnouncements((prev) =>
+                        prev.map((a) =>
+                            a.id === announcementId
+                                ? {
+                                      ...a,
+                                      displayPinned: !!(data.displayPinned ?? data.display_pinned ?? a.displayPinned),
+                                      displaySortOrder:
+                                          data.displaySortOrder != null
+                                              ? Number(data.displaySortOrder)
+                                              : data.display_sort_order != null
+                                                ? Number(data.display_sort_order)
+                                                : a.displaySortOrder ?? null,
+                                  }
+                                : a
+                        )
+                    );
                     return;
                 }
                 
@@ -306,6 +336,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     representativeType: updated.representativeType,
                     representativeName: updated.representativeName,
                     cartonCount: updated.cartonCount,
+                    palletCount: (updated as any).palletCount,
+                    loadingType: (updated as any).loadingType,
                     priority: updated.priority,
                     products: updated.products,
                     platformArrivalTime: (updated as any).platformArrivalTime,
@@ -336,6 +368,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     representativeType: updated.representativeType,
                     representativeName: updated.representativeName,
                     cartonCount: updated.cartonCount,
+                    palletCount: (updated as any).palletCount,
+                    loadingType: (updated as any).loadingType,
                     priority: updated.priority,
                     products: updated.products,
                     platformArrivalTime: (updated as any).platformArrivalTime,
@@ -442,6 +476,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     representativeType: announcement.representativeType,
                     representativeName: announcement.representativeName,
                     cartonCount: announcement.cartonCount,
+                    palletCount: (announcement as any).palletCount,
+                    loadingType: (announcement as any).loadingType,
                     priority: announcement.priority,
                     products: announcement.products,
                     platformArrivalTime: (announcement as any).platformArrivalTime,
@@ -479,6 +515,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     representativeType: announcement.representativeType,
                     representativeName: announcement.representativeName,
                     cartonCount: announcement.cartonCount,
+                    palletCount: (announcement as any).palletCount,
+                    loadingType: (announcement as any).loadingType,
                     priority: announcement.priority,
                     products: announcement.products,
                     platformArrivalTime: (announcement as any).platformArrivalTime,
@@ -590,6 +628,27 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
+    const handleUpdateIceCreamDisplayOrder = async (items: IceCreamDisplayOrderItem[]) => {
+        const previous = announcements;
+        setAnnouncements((prev) => applyIceCreamDisplayOrderUpdates(prev, items));
+        try {
+            const res = await fetch(getApiUrl('freight-announcements/ice-cream-display-order'), {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ items }),
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || 'خطا در ذخیره ترتیب نمایش');
+            }
+        } catch (e: any) {
+            setAnnouncements(previous);
+            console.error('❌ [FreightPlanning] Ice cream display order failed:', e);
+            alert(e?.message || 'خطا در ذخیره ترتیب نمایش بستنی');
+            throw e;
+        }
+    };
+
     return (
         <div>
             {loading && <div className="mb-2 text-sm text-slate-500">در حال بارگذاری...</div>}
@@ -611,6 +670,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 onApproveChangeRequest={handleApproveChangeRequest}
                 onRejectChangeRequest={handleRejectChangeRequest}
                 onArchiveChangeRequest={handleArchiveChangeRequest}
+                onUpdateIceCreamDisplayOrder={handleUpdateIceCreamDisplayOrder}
             />
         </div>
     );

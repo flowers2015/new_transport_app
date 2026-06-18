@@ -118,6 +118,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                     representativeType: a.representative_type || a.representativeType,
                     representativeName: a.representative_name || a.representativeName,
                     cartonCount: a.carton_count ?? a.cartonCount,
+                    palletCount: a.pallet_count ?? a.palletCount,
+                    loadingType: a.loading_type || a.loadingType,
                     priority: a.priority,
                     products: Array.isArray(a.products) ? a.products : (a.products ? JSON.parse(a.products) : []),
                     platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,

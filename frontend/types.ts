@@ -640,7 +640,7 @@ export interface Destination {
     brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
     freightCost?: number;
     deliveryDate?: string; // تاریخ تحویل بار (شمسی)
-    representativeType?: 'agent' | 'distribution'; // نوع نماینده: نماینده یا پخش
+    representativeType?: 'agent' | 'distributor' | 'depot' | 'distribution'; // نوع نماینده: نماینده، پخش یا دپو
 }
 
 export interface AnnouncementHistory {
@@ -679,12 +679,17 @@ export interface FreightAnnouncement {
     awaitingBillOfLadingAt?: string | Date;
     originCity?: string;
     brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
-    representativeType?: 'agent' | 'distributor';
+    representativeType?: 'agent' | 'distributor' | 'depot';
     representativeName?: string;
     cartonCount?: number;
+    palletCount?: number;
+    loadingType?: 'single' | 'double';
     priority?: 'low' | 'normal' | 'high';
     products?: string[];
     platformArrivalTime?: string;
+    /** ترتیب نمایشی بستنی — سنجاق و جابجایی دستی */
+    displayPinned?: boolean;
+    displaySortOrder?: number | null;
     destinations: Destination[];
     history: AnnouncementHistory[];
 }

@@ -277,6 +277,10 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       representative_name: 'نام نماینده',
       cartonCount: 'تعداد کارتن',
       carton_count: 'تعداد کارتن',
+      palletCount: 'تعداد پالت',
+      pallet_count: 'تعداد پالت',
+      loadingType: 'نوع بارگیری',
+      loading_type: 'نوع بارگیری',
       priority: 'اولویت',
       products: 'محصولات',
       
@@ -326,7 +330,7 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
         const label = fieldLabels[field] || field;
         
         // نمایش مقدار قبل و بعد برای فیلدهای عددی مهم
-        if (['cargoValue', 'cartonCount', 'cargo_value', 'carton_count'].includes(field)) {
+        if (['cargoValue', 'cartonCount', 'palletCount', 'cargo_value', 'carton_count', 'pallet_count'].includes(field)) {
           // اگه هر دو مقدار معتبر باشند
           if ((change.old !== null && change.old !== undefined) || (change.new !== null && change.new !== undefined)) {
             descriptions.push(`${label}: از ${formatNumber(change.old)} به ${formatNumber(change.new)}`);

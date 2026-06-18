@@ -12,8 +12,9 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatRepresentativeType, getDestinationCitiesLabel, localizeExcelValue } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, localizeExcelValue, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
 import CityAutocomplete from './CityAutocomplete';
+import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
 
 // --- Constants from user request ---
 const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پانلا', 'آلینوس'];
@@ -52,6 +53,7 @@ interface FreightDashboardProps {
     onApproveChangeRequest?: (requestId: string, newAnnouncements?: any[]) => void;
     onRejectChangeRequest?: (requestId: string, reviewNote?: string) => void;
     onArchiveChangeRequest?: (requestId: string) => void;
+    onUpdateIceCreamDisplayOrder?: (items: import('../utils/freightDisplay').IceCreamDisplayOrderItem[]) => Promise<void>;
 }
 
 const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
@@ -77,12 +79,13 @@ type IceCreamLeg = {
     originCity: string;
     brand: string;
     destinationCity: string;
-    representativeType: 'agent' | 'distributor';
+    representativeType: 'agent' | 'distributor' | 'depot';
     representativeName: string;
 };
 
-const normalizeIceCreamRepType = (value?: string): 'agent' | 'distributor' => {
+const normalizeIceCreamRepType = (value?: string): 'agent' | 'distributor' | 'depot' => {
     if (value === 'distributor' || value === 'distribution') return 'distributor';
+    if (value === 'depot' || value === 'دپو') return 'depot';
     return 'agent';
 };
 
@@ -183,7 +186,7 @@ const buildIceCreamFromLegs = (
     brandType: 'single' | 'double';
     brand1: string;
     brand2: string | null;
-    representativeType: 'agent' | 'distributor';
+    representativeType: 'agent' | 'distributor' | 'depot';
     representativeName: string;
 } | null => {
     const activeLegs = routeType === 'double' ? legs : [legs[0]];
@@ -317,15 +320,34 @@ const columnsConfig = (props: {
                 />
             );
         }, accessor: (_: any) => '' },
-        // --- Ice Cream (بستنی) desired order in both compact/full ---
+        { header: 'ترتیب', width: '110px', display: (_vm: string, lt: any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
+            const o = props.iceCreamOrder;
+            if (!o?.enabled) return null;
+            return (
+                <IceCreamDisplayOrderControls
+                    announcement={ann}
+                    index={idx}
+                    total={o.total}
+                    disabled={o.disabled}
+                    onTogglePin={o.onTogglePin}
+                    onMove={o.onMove}
+                    onDragStart={o.onDragStart}
+                    onDragOver={o.onDragOver}
+                    onDrop={o.onDrop}
+                    isDragOver={o.dragOverId === ann.id}
+                />
+            );
+        }, accessor: () => '' },
         { header: 'ردیف', width: '70px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
         { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.vehicleType },
-        { header: 'نماینده (پخش/نماینده)', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
+        { header: 'نوع بارگیری', accessor: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann), width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
+        { header: 'نوع نماینده', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
         { header: 'مقصد', accessor: (ann: FreightAnnouncement) => getDestinationCitiesLabel(ann), width: '200px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
         { header: 'مبدا', accessor: 'originCity', width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'محصولات', accessor: (ann: FreightAnnouncement) => ann.products?.join(', '), width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
-        { header: 'کارتن', accessor: 'cartonCount', width: '90px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+        { header: 'کارتن', accessor: 'cartonCount', width: '80px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+        { header: 'پالت', accessor: 'palletCount', width: '80px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
         { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
         { header: 'اولویت', accessor: 'priority', width: '100px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => PRIORITIES[ann.priority || 'normal'] },
         { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => ann.creator_full_name || ann.creator_username || '-', width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: any) => <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span> },
@@ -670,7 +692,7 @@ const columnsConfig = (props: {
 };
 
 const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
-    const { announcements, onAddAnnouncement, onUpdateAnnouncement, onApprove, onReject, onDelete, onReAnnounce, currentUser, onSendForApproval, changeRequests = [], loadingChangeRequests = false, onFetchChangeRequests, onApproveChangeRequest, onRejectChangeRequest, onArchiveChangeRequest } = props;
+    const { announcements, onAddAnnouncement, onUpdateAnnouncement, onApprove, onReject, onDelete, onReAnnounce, currentUser, onSendForApproval, changeRequests = [], loadingChangeRequests = false, onFetchChangeRequests, onApproveChangeRequest, onRejectChangeRequest, onArchiveChangeRequest, onUpdateIceCreamDisplayOrder } = props;
     
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelData, setPanelData] = useState<FreightAnnouncement | null>(null); // null for new, object for edit
@@ -688,6 +710,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const [routeQuery, setRouteQuery] = useState('');
     const [routeSuggestions, setRouteSuggestions] = useState<DispatchRouteSuggestion[]>([]);
     const routeSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [iceCreamDragSourceId, setIceCreamDragSourceId] = useState<string | null>(null);
+    const [iceCreamDragOverId, setIceCreamDragOverId] = useState<string | null>(null);
+    const [iceCreamOrderSaving, setIceCreamOrderSaving] = useState(false);
     
     // مجوزهای کاربر
     const [userPermissions, setUserPermissions] = useState<{ lineType: string; permissionType: 'approval' | 'create' }[]>([]);
@@ -1253,8 +1278,131 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             });
         });
 
-        return data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns]);
+        const sorted =
+            activeTab === FreightLineType.IceCream
+                ? sortByIceCreamDisplayOrder(data)
+                : data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return sorted;
+    }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, allowedLineTypes, currentUser]);
+
+    const canManageIceCreamOrder =
+        activeTab === FreightLineType.IceCream && typeof onUpdateIceCreamDisplayOrder === 'function';
+
+    const tableAnnouncements = filteredAnnouncements;
+
+    const persistIceCreamOrder = useCallback(
+        async (ordered: FreightAnnouncement[]) => {
+            if (!onUpdateIceCreamDisplayOrder) return;
+            setIceCreamOrderSaving(true);
+            try {
+                await onUpdateIceCreamDisplayOrder(buildIceCreamDisplayOrderPayload(ordered));
+            } finally {
+                setIceCreamOrderSaving(false);
+            }
+        },
+        [onUpdateIceCreamDisplayOrder]
+    );
+
+    const handleIceCreamTogglePin = useCallback(
+        (id: string) => {
+            const list = tableAnnouncements.map((a) => ({ ...a }));
+            const idx = list.findIndex((a) => a.id === id);
+            if (idx < 0) return;
+            const item = { ...list[idx], displayPinned: !list[idx].displayPinned };
+            list.splice(idx, 1);
+            if (item.displayPinned) {
+                list.unshift(item);
+            } else {
+                const firstUnpinned = list.findIndex((a) => !a.displayPinned);
+                list.splice(firstUnpinned === -1 ? list.length : firstUnpinned, 0, item);
+            }
+            void persistIceCreamOrder(list);
+        },
+        [tableAnnouncements, persistIceCreamOrder]
+    );
+
+    const handleIceCreamMoveRow = useCallback(
+        (id: string, direction: 'up' | 'down') => {
+            const list = [...tableAnnouncements];
+            const idx = list.findIndex((a) => a.id === id);
+            const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (idx < 0 || swapIdx < 0 || swapIdx >= list.length) return;
+            [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
+            void persistIceCreamOrder(list);
+        },
+        [tableAnnouncements, persistIceCreamOrder]
+    );
+
+    const handleIceCreamDrop = useCallback(
+        (targetId: string) => {
+            if (!iceCreamDragSourceId || iceCreamDragSourceId === targetId) return;
+            const list = [...tableAnnouncements];
+            const fromIdx = list.findIndex((a) => a.id === iceCreamDragSourceId);
+            const toIdx = list.findIndex((a) => a.id === targetId);
+            if (fromIdx < 0 || toIdx < 0) return;
+            const [moved] = list.splice(fromIdx, 1);
+            list.splice(toIdx, 0, moved);
+            void persistIceCreamOrder(list);
+            setIceCreamDragSourceId(null);
+            setIceCreamDragOverId(null);
+        },
+        [iceCreamDragSourceId, tableAnnouncements, persistIceCreamOrder]
+    );
+
+    const iceCreamOrderProps = useMemo(
+        () => ({
+            enabled: canManageIceCreamOrder,
+            total: tableAnnouncements.length,
+            disabled: iceCreamOrderSaving,
+            dragOverId: iceCreamDragOverId,
+            onTogglePin: handleIceCreamTogglePin,
+            onMove: handleIceCreamMoveRow,
+            onDragStart: (id: string) => setIceCreamDragSourceId(id),
+            onDragOver: (_e: React.DragEvent, id: string) => setIceCreamDragOverId(id),
+            onDrop: handleIceCreamDrop,
+        }),
+        [
+            canManageIceCreamOrder,
+            tableAnnouncements.length,
+            iceCreamOrderSaving,
+            iceCreamDragOverId,
+            handleIceCreamTogglePin,
+            handleIceCreamMoveRow,
+            handleIceCreamDrop,
+        ]
+    );
+
+    const tableCellProps = useMemo(
+        () => ({
+            changeRequests,
+            onApproveChangeRequest,
+            onRejectChangeRequest,
+            onArchiveChangeRequest,
+            onOpenHistory: handleOpenHistory,
+            currentUser,
+            onEdit: handleOpenEditPanel,
+            onSendForApproval: handleSendForApproval,
+            onDelete,
+            onApprove,
+            onReject: handleOpenRejectDialog,
+            onReAnnounce,
+            selectedIds,
+            onToggleSelect: handleToggleSelect,
+            iceCreamOrder: iceCreamOrderProps,
+        }),
+        [
+            changeRequests,
+            onApproveChangeRequest,
+            onRejectChangeRequest,
+            onArchiveChangeRequest,
+            currentUser,
+            onDelete,
+            onApprove,
+            onReAnnounce,
+            selectedIds,
+            iceCreamOrderProps,
+        ]
+    );
 
     // Helper function to check if an announcement is selectable
     const isAnnouncementSelectable = useCallback((ann: FreightAnnouncement) => {
@@ -1443,6 +1591,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                     <button key={lt} onClick={() => setActiveTab(lt as any)} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === lt ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>{lt}</button>
                                 ))}
                         </div>
+                        {canManageIceCreamOrder && iceCreamOrderSaving && (
+                            <p className="text-xs text-sky-600 mb-2 print:hidden">در حال ذخیره ترتیب نمایش...</p>
+                        )}
                         {(
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -1518,8 +1669,27 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredAnnouncements.map((ann, idx) => (
-                                        <tr key={ann.id} className="border-b hover:bg-slate-50">
+                                    {tableAnnouncements.map((ann, idx) => (
+                                        <tr
+                                            key={ann.id}
+                                            className={`border-b hover:bg-slate-50 ${canManageIceCreamOrder && iceCreamDragOverId === ann.id ? 'bg-sky-50' : ''}`}
+                                            onDragOver={
+                                                canManageIceCreamOrder
+                                                    ? (e) => {
+                                                          e.preventDefault();
+                                                          setIceCreamDragOverId(ann.id);
+                                                      }
+                                                    : undefined
+                                            }
+                                            onDrop={
+                                                canManageIceCreamOrder
+                                                    ? (e) => {
+                                                          e.preventDefault();
+                                                          handleIceCreamDrop(ann.id);
+                                                      }
+                                                    : undefined
+                                            }
+                                        >
                                              {isFullDairyAmbient ? (
                                                 <>
                                                     {/* Checkbox column */}
@@ -1533,7 +1703,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             />
                                                         )}
                                                     </td>
-                                                    {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>)}
+                                                    {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)}
                                                     {[0, 1, 2, 3].map(i => {
                                                         const dest = ann.destinations[i];
                                                         return (
@@ -1547,14 +1717,14 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             </React.Fragment>
                                                         );
                                                     })}
-                                                        {actionCol && <td className="p-2 text-center">{actionCol.render(ann, idx, { ...props, onOpenHistory: handleOpenHistory, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete, onApprove: onApprove, onReject: handleOpenRejectDialog, onReAnnounce: onReAnnounce, changeRequests: changeRequests, onApproveChangeRequest: onApproveChangeRequest, onRejectChangeRequest: onRejectChangeRequest, onArchiveChangeRequest: onArchiveChangeRequest, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>}
+                                                        {actionCol && <td className="p-2 text-center">{actionCol.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>}
                                                 </>
                                             ) : (
-                                                    visibleColumns.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { changeRequests: changeRequests, onApproveChangeRequest: onApproveChangeRequest, onRejectChangeRequest: onRejectChangeRequest, onArchiveChangeRequest: onArchiveChangeRequest, onOpenHistory: handleOpenHistory, currentUser, onEdit: handleOpenEditPanel, onSendForApproval: handleSendForApproval, onDelete: onDelete, onApprove: onApprove, onReject: handleOpenRejectDialog, onReAnnounce: onReAnnounce, selectedIds: selectedIds, onToggleSelect: handleToggleSelect }, activeTab as FreightLineType)}</td>)
+                                                    visibleColumns.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)
                                             )}
                                         </tr>
                                     ))}
-                                    {filteredAnnouncements.length === 0 && (
+                                    {tableAnnouncements.length === 0 && (
                                         <tr><td colSpan={isFullDairyAmbient ? commonCols.length + 25 : visibleColumns.length} className="text-center py-8 text-slate-500">موردی یافت نشد.</td></tr>
                                     )}
                                 </tbody>
@@ -1638,7 +1808,7 @@ const AnnouncementPanel: React.FC<{
     const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: '', vehicleType: '', notes: '' };
-    const initialIceCreamState = { originCity: '', brand: 'میهن', cartonCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
+    const initialIceCreamState = { originCity: '', brand: 'میهن', cartonCount: '', palletCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
     const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }];
     const initialLoadingLocationState = { loadingType: 'single' as 'single' | 'double', originCity1: '', originCity2: '' };
@@ -1840,6 +2010,7 @@ const AnnouncementPanel: React.FC<{
                             ? `${parsedLegs.legs[0].brand} و ${parsedLegs.legs[1].brand}`
                             : parsedLegs.legs[0].brand,
                         cartonCount: String(data.cartonCount || ''),
+                        palletCount: String((data as any).palletCount || ''),
                         priority: data.priority || 'normal',
                         products: data.products || [],
                     });
@@ -2093,7 +2264,8 @@ const AnnouncementPanel: React.FC<{
                 brand: finalBrand as any, 
                 representativeType: iceCreamBuilt!.representativeType as any,
                 representativeName: iceCreamBuilt!.representativeName,
-                cartonCount: Number(iceCreamState.cartonCount), 
+                cartonCount: Number(iceCreamState.cartonCount),
+                palletCount: iceCreamState.palletCount ? Number(iceCreamState.palletCount) : null,
                 priority: iceCreamState.priority, 
                 products: iceCreamState.products, 
                 destinations: iceCreamBuilt!.destinations,
@@ -2382,9 +2554,9 @@ const AnnouncementPanel: React.FC<{
                     {lineType === FreightLineType.IceCream && (
                         <>
                         <fieldset className="p-3 border rounded-lg bg-white">
-                            <legend className="font-semibold px-1 text-sm">مسیر و بار</legend>
+                            <legend className="font-semibold px-1 text-sm">اطلاعات بارگیری</legend>
                             <div className="mb-3">
-                                <label className="text-xs font-semibold mb-2 block">تعداد مقصد</label>
+                                <label className="text-xs font-semibold mb-2 block">نوع بارگیری</label>
                                 <div className="flex gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
@@ -2398,7 +2570,7 @@ const AnnouncementPanel: React.FC<{
                                             }}
                                             className="cursor-pointer"
                                         />
-                                        <span className="text-xs">یک مقصد</span>
+                                        <span className="text-xs">تک مبدا</span>
                                     </label>
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
@@ -2409,7 +2581,7 @@ const AnnouncementPanel: React.FC<{
                                             onChange={() => setIceCreamRouteType('double')}
                                             className="cursor-pointer"
                                         />
-                                        <span className="text-xs">دو مقصد (هر مقصد با مبدا و برند جدا)</span>
+                                        <span className="text-xs">دو مبدا بارگیری</span>
                                     </label>
                                 </div>
                             </div>
@@ -2523,7 +2695,7 @@ const AnnouncementPanel: React.FC<{
                                                         ];
                                                         next[legIndex] = {
                                                             ...next[legIndex],
-                                                            representativeType: e.target.value as 'agent' | 'distributor',
+                                                            representativeType: e.target.value as 'agent' | 'distributor' | 'depot',
                                                         };
                                                         return next;
                                                     });
@@ -2532,10 +2704,11 @@ const AnnouncementPanel: React.FC<{
                                             >
                                                 <option value="agent">نماینده</option>
                                                 <option value="distributor">پخش</option>
+                                                <option value="depot">دپو</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="text-xs">نام نماینده/پخش</label>
+                                            <label className="text-xs">نام نماینده/پخش/دپو</label>
                                             <input
                                                 value={iceCreamLegs[legIndex].representativeName}
                                                 onChange={(e) => {
@@ -2558,15 +2731,27 @@ const AnnouncementPanel: React.FC<{
                                 </fieldset>
                             ))}
 
-                            <div className="max-w-xs">
-                                <label className="text-xs">تعداد کارتن*</label>
-                                <input
-                                    type="number"
-                                    value={iceCreamState.cartonCount}
-                                    onChange={(e) => setIceCreamState((s) => ({ ...s, cartonCount: e.target.value }))}
-                                    className="input-style mt-1"
-                                    required
-                                />
+                            <div className="grid grid-cols-2 gap-3 max-w-md">
+                                <div>
+                                    <label className="text-xs">تعداد کارتن*</label>
+                                    <input
+                                        type="number"
+                                        value={iceCreamState.cartonCount}
+                                        onChange={(e) => setIceCreamState((s) => ({ ...s, cartonCount: e.target.value }))}
+                                        className="input-style mt-1"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs">تعداد پالت</label>
+                                    <input
+                                        type="number"
+                                        value={iceCreamState.palletCount}
+                                        onChange={(e) => setIceCreamState((s) => ({ ...s, palletCount: e.target.value }))}
+                                        className="input-style mt-1"
+                                        min={0}
+                                    />
+                                </div>
                             </div>
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-white">

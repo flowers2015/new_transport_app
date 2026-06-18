@@ -36,6 +36,7 @@ const {
   transferDestination,
   getVehicleTypes,
   changeVehicleType,
+  updateIceCreamDisplayOrder,
 } = require('../controllers/freightController');
 
 const { getPerformanceIndex, getPersonalPerformanceIndex } = require('../controllers/performanceIndexController');
@@ -101,6 +102,14 @@ router.post(
   authenticateToken,
   authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'transport_finance', 'admin']),
   finalizeAssignments
+);
+
+// ترتیب نمایش اعلام بار بستنی (سنجاق / جابجایی)
+router.put(
+  '/ice-cream-display-order',
+  authenticateToken,
+  authorizeRole(PLANNER_ROLES),
+  updateIceCreamDisplayOrder
 );
 
 // Get history for a specific announcement (must be before /:id route)

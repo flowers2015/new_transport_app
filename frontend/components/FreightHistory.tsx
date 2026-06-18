@@ -10,6 +10,7 @@ import {
     TOTAL_FREIGHT_HEADER,
     formatFreightAmountCell,
     formatRepresentativeType,
+    formatLoadingType,
     localizeExcelValue,
 } from '../utils/freightDisplay';
 import { getFinanceRejectType, getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
@@ -246,8 +247,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             }},
             { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
             
-            // Full View Specific - Ice Cream
-            { header: 'تعداد کارتن', align: 'center', display: (lt:any) => viewMode === 'full' && lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount },
+            // Ice Cream (فشرده و کامل)
+            { header: 'نوع بارگیری', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
+            { header: 'نوع نماینده', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
+            { header: 'کارتن', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+            { header: 'پالت', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
             { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
             { header: 'توضیحات', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
             
@@ -319,20 +323,16 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         return '';
     };
 
+    const resolveExportColumns = (mode: 'compact' | 'full') => {
+        if (activeLine === FreightLineType.IceCream || mode === viewMode) {
+            return visibleColumns;
+        }
+        return columnsConfig(mode).filter((c: any) => c.display(activeLine));
+    };
+
     // Function to generate Excel export based on filtered data
     const generateExcelExport = (mode: 'compact' | 'full' = viewMode) => {
-        // استفاده از visibleColumns برای حفظ ترتیب دقیق جدول frontend
-        // اما باید مطمئن شویم که viewMode درست است
-        // اگر mode با viewMode متفاوت است، باید از columnsConfig استفاده کنیم
-        let cols: any[] = [];
-        
-        if (mode === viewMode) {
-            // اگر mode با viewMode یکسان است، از visibleColumns استفاده می‌کنیم
-            cols = visibleColumns;
-        } else {
-            // اگر mode متفاوت است، از columnsConfig استفاده می‌کنیم
-            cols = columnsConfig(mode);
-        }
+        const cols = resolveExportColumns(mode);
         
         const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
         
@@ -369,7 +369,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             // Helper to get value for a column header - دقیقاً مطابق با ترتیب headers
             const getValueForHeader = (header: string): any => {
                 // بررسی اینکه آیا این ستون عددی است
-                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                 const isNumericColumn = numericHeaders.some(h => header.includes(h));
                 
                 // Handle special columns directly - اولویت با اینهاست
@@ -467,10 +467,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
-                        const repType = (dest as any).representativeType === 'distributor' || (dest as any).representativeType === 'پخش' ? 'پخش' : 
-                                       (dest as any).representativeType === 'representative' || (dest as any).representativeType === 'نماینده' ? 'نماینده' : 
-                                       (dest.representativeName || '').includes('پخش') ? 'پخش' : 
-                                       (dest.representativeName || '').includes('نماینده') ? 'نماینده' : '';
+                        const repType = formatRepresentativeType((dest as any).representativeType);
                         const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
@@ -510,7 +507,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         
         // تنظیم فرمت اعداد برای ستون‌های عددی
         headers.forEach((header, colIdx) => {
-            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h));
             if (isNumericColumn) {
                 for (let row = 1; row <= filteredAnnouncements.length; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
@@ -550,7 +547,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 const worksheet = workbook.addWorksheet('تاریخچه اعلام بار');
                 
                 // Get headers and data
-                const cols = mode === viewMode ? visibleColumns : columnsConfig(mode);
+                const cols = resolveExportColumns(mode);
                 const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
                 
                 const headers: string[] = [];
@@ -600,7 +597,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 
                 // Helper to get value for header
                 const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
-                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'مبلغ کرایه', 'کارتن'];
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                     const isNumericColumn = numericHeaders.some(h => header.includes(h));
                     
                     if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
@@ -728,7 +725,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         
                         // Format numbers
                         const header = headers[colNumber - 1];
-                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'مبلغ کرایه', 'کل تناژ'].some(h => header.includes(h));
+                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h));
                         if (isNumericColumn && typeof cell.value === 'number') {
                             // برای اعداد بزرگ، از فرمت عددی بدون نماد علمی استفاده می‌کنیم
                             if (cell.value > 1e15) {
@@ -793,12 +790,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'نماینده (پخش/نماینده)', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
+                { header: 'نوع بارگیری', render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
+                { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
                 { header: 'کارتن', render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+                { header: 'پالت', render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
