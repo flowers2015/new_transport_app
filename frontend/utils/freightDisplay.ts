@@ -396,6 +396,11 @@ export function lineTypeFromAnnouncement(ann: FreightAnnouncement): string {
     return lineTypeToBackend(ann.lineType as string);
 }
 
+/** ستون‌های جزئیات مقصد در اکسل کامل — نه «مقاصد» فشرده */
+export function isFreightDestinationDetailHeader(header: string): boolean {
+    return /^مقصد \d+ -/.test(header);
+}
+
 export type IceCreamDisplayOrderItem = {
     id: string;
     displayPinned: boolean;

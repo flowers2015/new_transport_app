@@ -393,13 +393,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     }, [needsPersonalResources, personalDrivers.length, personalVehicles.length]);
     
-    // بارگذاری اولیه: کش برای سرعت + همگام‌سازی پس‌زمینه
+    // بارگذاری اولیه: داده تازه بدون کش قدیمی
     useEffect(() => {
-        fetchDataRef.current(false, false, false);
-        const syncTimer = setTimeout(() => {
-            fetchDataRef.current(true, needsPersonalResourcesRef.current, false);
-        }, 150);
-        return () => clearTimeout(syncTimer);
+        fetchDataRef.current(false, false, true);
     }, [currentUser?.id]);
     
     // Auto-refresh به عنوان fallback (همیشه فعال برای اطمینان از دریافت اعلام بارهای جدید)
@@ -426,7 +422,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 refreshIntervalRef.current = null;
             }
         };
-    }, [sseConnected, announcements.length]);
+    }, [sseConnected]);
 
     // بررسی دسترسی‌ها برای همه تب‌ها (با Promise.all برای parallel requests)
     useEffect(() => {

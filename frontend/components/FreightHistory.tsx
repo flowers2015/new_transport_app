@@ -12,6 +12,7 @@ import {
     formatRepresentativeType,
     formatLoadingType,
     localizeExcelValue,
+    isFreightDestinationDetailHeader,
 } from '../utils/freightDisplay';
 import { getFinanceRejectType, getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
 import { TruckIcon } from './icons/CarIcon';
@@ -457,7 +458,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             
             // Process columns in header order - دقیقاً همان ترتیب headers
             headers.forEach(header => {
-                if (!header.startsWith('مقصد')) {
+                if (!isFreightDestinationDetailHeader(header)) {
                     row.push(getValueForHeader(header));
                 }
             });
@@ -560,30 +561,18 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     }
                 });
                 
-                if (!seenHeaders.has(TOTAL_FREIGHT_HEADER) && !seenHeaders.has('کرایه کل')) {
-                    headers.push(TOTAL_FREIGHT_HEADER);
-                }
-                if (!seenHeaders.has('ارزش بار') && !seenHeaders.has('ارزش بار (ریال)')) {
-                    headers.push('ارزش بار');
-                }
-                
                 if (isFullDairyAmbientMode) {
                     for (let i = 1; i <= 4; i++) {
                         headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
                     }
                 }
 
-                if (!headers.includes('ردیف')) {
-                    headers.unshift('ردیف');
-                }
-                
-                // Add headers with styling
                 const headerRow = worksheet.addRow(headers);
-                headerRow.eachCell((cell: any, colNumber: number) => {
+                headerRow.eachCell((cell: any) => {
                     cell.fill = {
                         type: 'pattern',
                         pattern: 'solid',
-                        fgColor: { argb: 'FF4472C4' } // آبی تیره
+                        fgColor: { argb: 'FF4472C4' },
                     };
                     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -591,15 +580,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         top: { style: 'thin', color: { argb: 'FF000000' } },
                         bottom: { style: 'thin', color: { argb: 'FF000000' } },
                         left: { style: 'thin', color: { argb: 'FF000000' } },
-                        right: { style: 'thin', color: { argb: 'FF000000' } }
+                        right: { style: 'thin', color: { argb: 'FF000000' } },
                     };
                 });
-                
-                // Helper to get value for header
+
                 const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
                     const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
-                    const isNumericColumn = numericHeaders.some(h => header.includes(h));
-                    
+                    const isNumericColumn = numericHeaders.some((h) => header.includes(h));
+
                     if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                         return ann.totalFreightCost || 0;
                     }
@@ -607,68 +595,58 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         return ann.cargoValue || 0;
                     }
                     if (header === 'اولویت') {
-                        const priorityMap: { [key: string]: string } = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
+                        const priorityMap: Record<string, string> = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
                         return priorityMap[ann.priority || 'normal'] || ann.priority || 'عادی';
                     }
                     if (header === 'کل تناژ (کیلوگرم)') {
                         return ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
                     }
-                    
-                    const col = cols.find(c => c.header === header);
+
+                    const col = cols.find((c) => c.header === header);
                     if (!col) return '';
-                    
+
                     let value: any = '';
                     if (col.render) {
                         const rendered = col.render(ann, idx);
-                        if (typeof rendered === 'string') {
-                            value = rendered;
-                        } else if (typeof rendered === 'number') {
+                        if (typeof rendered === 'string' || typeof rendered === 'number') {
                             value = rendered;
                         } else if (React.isValidElement(rendered)) {
-                            value = extractTextFromElement(rendered);
-                            value = value.replace(/[📅🕐]/g, '').trim();
+                            value = extractTextFromElement(rendered).replace(/[📅🕐]/g, '').trim();
                         } else if (Array.isArray(rendered)) {
-                            value = rendered.map((item: any) => {
-                                if (React.isValidElement(item)) {
-                                    let text = extractTextFromElement(item);
-                                    text = text.replace(/[📅🕐]/g, '').trim();
-                                    return text;
-                                }
-                                return String(item || '');
-                            }).join('، ');
+                            value = rendered
+                                .map((item: any) =>
+                                    React.isValidElement(item)
+                                        ? extractTextFromElement(item).replace(/[📅🕐]/g, '').trim()
+                                        : String(item || '')
+                                )
+                                .join('، ');
                         } else {
                             value = String(rendered || '');
                         }
                     } else {
                         value = (ann as any)[col.header] || '';
                     }
-                    
+
                     if (typeof value === 'string') {
                         value = value.replace(/<[^>]*>/g, '').trim();
                         value = localizeExcelValue(value);
                     }
-                    
+
                     if (isNumericColumn && typeof value === 'string') {
                         const cleaned = value.replace(/[^\d]/g, '');
                         const numValue = parseFloat(cleaned);
-                        if (!isNaN(numValue) && numValue > 0) {
-                            value = numValue;
-                        } else {
-                            value = '';
-                        }
+                        value = !isNaN(numValue) && numValue > 0 ? numValue : '';
                     }
-                    
+
                     return value;
                 };
-                
+
                 // Add data rows with zebra striping
                 filteredAnnouncements.forEach((ann, idx) => {
-                    const rowData: any[] = [idx + 1];
-                    headers.forEach(header => {
-                        if (header === 'ردیف') return;
-                        if (!header.startsWith('مقصد')) {
-                            rowData.push(getValueForHeader(header, ann, idx));
-                        }
+                    const rowData: any[] = [];
+                    headers.forEach((header) => {
+                        if (isFreightDestinationDetailHeader(header)) return;
+                        rowData.push(header === 'ردیف' ? idx + 1 : getValueForHeader(header, ann, idx));
                     });
                     
                     if (isFullDairyAmbientMode) {

@@ -219,6 +219,7 @@ const TransportUpcomingFreight: React.FC = () => {
                                     <th className="p-2 text-right font-medium">برند</th>
                                     <th className="p-2 text-right font-medium">محصولات</th>
                                     <th className="p-2 text-right font-medium">کارتن</th>
+                                    <th className="p-2 text-right font-medium">پالت</th>
                                     <th className="p-2 text-right font-medium">اولویت</th>
                                     <th className="p-2 text-right font-medium">تاریخ تحویل</th>
                                 </>
@@ -240,7 +241,7 @@ const TransportUpcomingFreight: React.FC = () => {
                         {rows.length === 0 ? (
                             <tr>
                                 <td
-                                    colSpan={isIceCream ? 14 : 12}
+                                    colSpan={isIceCream ? 15 : 12}
                                     className="p-8 text-center text-slate-500"
                                 >
                                     اعلام باری در انتظار تایید مدیر برای این خط نیست
@@ -273,6 +274,7 @@ const TransportUpcomingFreight: React.FC = () => {
                                                 {ann.products?.join('، ') || '—'}
                                             </td>
                                             <td className="p-2">{ann.cartonCount ?? '—'}</td>
+                                            <td className="p-2">{ann.palletCount ?? '—'}</td>
                                             <td className="p-2">
                                                 {PRIORITY_LABELS[ann.priority || 'normal'] ||
                                                     ann.priority ||

@@ -67,6 +67,8 @@ export function normalizeUpcomingAnnouncement(raw: Record<string, unknown>): Fre
         representativeType: (raw.representative_type || raw.representativeType) as string | undefined,
         representativeName: (raw.representative_name || raw.representativeName) as string | undefined,
         cartonCount: (raw.carton_count ?? raw.cartonCount) as number | undefined,
+        palletCount: (raw.pallet_count ?? raw.palletCount) as number | undefined,
+        loadingType: (raw.loading_type || raw.loadingType) as string | undefined,
         priority: raw.priority as string | undefined,
         products,
         platformArrivalTime: (raw.platform_arrival_time || raw.platformArrivalTime) as string | undefined,

@@ -31,6 +31,7 @@ import {
     formatLoadingType,
     localizeExcelValue,
     sortByIceCreamDisplayOrder,
+    isFreightDestinationDetailHeader,
 } from '../utils/freightDisplay';
 import { getApiUrl } from '../utils/apiConfig';
 import { TruckIcon } from './icons/CarIcon';
@@ -1394,14 +1395,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
             });
             
-            // اطمینان از وجود "کرایه کل" و "ارزش بار" در headers
-            if (!headers.includes(TOTAL_FREIGHT_HEADER) && !headers.some(h => h.includes('کرایه کل'))) {
-                headers.push(TOTAL_FREIGHT_HEADER);
-            }
-            if (mode === 'full' && !headers.includes('ارزش بار') && !headers.includes('ارزش بار (ریال)') && !headers.some(h => h.includes('ارزش بار'))) {
-                headers.push('ارزش بار');
-            }
-            
             if (isFullDairyAmbientMode) {
                 for (let i = 1; i <= 4; i++) {
                     headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
@@ -1506,18 +1499,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             
             // Add data rows with zebra striping
             filteredAnnouncements.forEach((ann, idx) => {
-                const rowData: any[] = [idx + 1];
-                
-                // اضافه کردن ستون انتخاب اگر وجود دارد
-                if (canPerformActions) {
-                    rowData.push('');
-                }
-                
-                headers.forEach(header => {
-                    if (header === 'ردیف' || header === 'انتخاب' || header.startsWith('مقصد')) {
-                        return;
+                const rowData: any[] = [];
+                headers.forEach((header) => {
+                    if (isFreightDestinationDetailHeader(header)) return;
+                    if (header === 'ردیف') {
+                        rowData.push(idx + 1);
+                    } else if (header === 'انتخاب') {
+                        rowData.push('');
+                    } else {
+                        rowData.push(getValueForHeader(header, ann, idx));
                     }
-                    rowData.push(getValueForHeader(header, ann, idx));
                 });
                 
                 if (isFullDairyAmbientMode) {
