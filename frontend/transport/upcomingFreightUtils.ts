@@ -88,6 +88,12 @@ export function normalizeUpcomingAnnouncement(raw: Record<string, unknown>): Fre
     } as FreightAnnouncement;
 }
 
+export function getCreatorDisplayName(ann: FreightAnnouncement): string {
+    const full = ann.creator_full_name?.trim();
+    const username = ann.creator_username?.trim();
+    return full || username || '—';
+}
+
 export function isPendingManagerApproval(ann: FreightAnnouncement): boolean {
     const s = String(ann.status || '');
     return (

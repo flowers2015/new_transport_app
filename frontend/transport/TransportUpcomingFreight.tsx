@@ -14,6 +14,7 @@ import {
     normalizeUpcomingAnnouncement,
     summarizeVehicleTypes,
     totalTonnage,
+    getCreatorDisplayName,
 } from './upcomingFreightUtils';
 
 const DestinationsList: React.FC<{ ann: FreightAnnouncement }> = ({ ann }) => (
@@ -93,7 +94,7 @@ const TransportUpcomingFreight: React.FC = () => {
             const q = filter.trim().toLowerCase();
             data = data.filter(
                 a =>
-                    (a.announcementCode || '').toLowerCase().includes(q) ||
+                    getCreatorDisplayName(a).toLowerCase().includes(q) ||
                     (a.vehicleType || '').toLowerCase().includes(q) ||
                     (a.destinations || []).some(d =>
                         String(d.city || '')
@@ -195,7 +196,7 @@ const TransportUpcomingFreight: React.FC = () => {
             <div className="flex flex-wrap gap-3 items-center">
                 <input
                     className="border rounded-md px-3 py-2 text-sm w-full max-w-md"
-                    placeholder="جستجو: کد، نوع خودرو، مقصد..."
+                    placeholder="جستجو: اعلام‌کننده، نوع خودرو، مقصد..."
                     value={filter}
                     onChange={e => setFilter(e.target.value)}
                 />
@@ -209,7 +210,7 @@ const TransportUpcomingFreight: React.FC = () => {
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
                             <th className="p-2 text-right font-medium w-12">ردیف</th>
-                            <th className="p-2 text-right font-medium">کد</th>
+                            <th className="p-2 text-right font-medium">کارمند اعلام‌کننده</th>
                             <th className="p-2 text-right font-medium">نوع خودرو</th>
                             {isIceCream ? (
                                 <>
@@ -254,8 +255,8 @@ const TransportUpcomingFreight: React.FC = () => {
                                     className="border-t border-slate-100 hover:bg-amber-50/40 align-top"
                                 >
                                     <td className="p-2 text-slate-500">{idx + 1}</td>
-                                    <td className="p-2 font-mono text-xs whitespace-nowrap">
-                                        {ann.announcementCode || '—'}
+                                    <td className="p-2 text-slate-800 whitespace-nowrap">
+                                        {getCreatorDisplayName(ann)}
                                     </td>
                                     <td className="p-2 font-medium text-slate-800 whitespace-nowrap">
                                         {ann.vehicleType || '—'}

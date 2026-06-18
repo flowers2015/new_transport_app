@@ -2910,6 +2910,47 @@ async function setAssignmentQueue(req, res) {
   }
 }
 
+async function safeDeleteByAnnouncementId(client, sql, announcementId) {
+  try {
+    await client.query(sql, [announcementId]);
+  } catch (error) {
+    if (error.code === '42P01') return;
+    throw error;
+  }
+}
+
+async function purgeFreightAnnouncementDependencies(client, announcementId) {
+  await safeDeleteByAnnouncementId(
+    client,
+    'DELETE FROM freight_transactions WHERE announcement_id = $1',
+    announcementId
+  );
+  await safeDeleteByAnnouncementId(
+    client,
+    'DELETE FROM dispatch_driver_opportunities WHERE freight_announcement_id = $1',
+    announcementId
+  );
+  await safeDeleteByAnnouncementId(
+    client,
+    'DELETE FROM dispatch_assignments WHERE freight_announcement_id = $1',
+    announcementId
+  );
+  await safeDeleteByAnnouncementId(
+    client,
+    'DELETE FROM driver_calculations WHERE announcement_id = $1',
+    announcementId
+  );
+  await safeDeleteByAnnouncementId(
+    client,
+    'DELETE FROM freight_change_requests WHERE freight_announcement_id = $1',
+    announcementId
+  );
+  await client.query(
+    'DELETE FROM freight_destinations WHERE freight_announcement_id = $1',
+    [announcementId]
+  );
+}
+
 async function deleteFreightAnnouncement(req, res) {
   const { id } = req.params;
   const { reason } = req.body; // دلیل حذف (برای audit trail)
@@ -2921,7 +2962,7 @@ async function deleteFreightAnnouncement(req, res) {
     await client.query('BEGIN');
     
     // گرفتن اطلاعات قبل از حذف
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       'SELECT * FROM freight_announcements WHERE id = $1',
       [id]
     );
@@ -2960,8 +3001,7 @@ async function deleteFreightAnnouncement(req, res) {
       );
     }
     
-    // حذف مقاصد
-    await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);
+    await purgeFreightAnnouncementDependencies(client, id);
     
     // حذف اعلام بار (تاریخچه به دلیل CASCADE خودکار حذف میشه)
     await client.query('DELETE FROM freight_announcements WHERE id = $1', [id]);

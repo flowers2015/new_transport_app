@@ -151,6 +151,9 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [editReason, setEditReason] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
+  const [deleteTargetIds, setDeleteTargetIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [history, setHistory] = useState<AdminAction[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const currentPageRef = useRef(1);
@@ -668,7 +671,37 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
   // باز کردن دیالوگ حذف
   const openDeleteDialog = (announcement: FreightAnnouncement) => {
     setSelectedAnnouncement(announcement);
+    setDeleteTargetIds([announcement.id]);
     setShowDeleteDialog(true);
+  };
+
+  const openBulkDeleteDialog = () => {
+    if (selectedIds.length === 0) return;
+    setSelectedAnnouncement(null);
+    setDeleteTargetIds([...selectedIds]);
+    setShowDeleteDialog(true);
+  };
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]
+    );
+  };
+
+  const currentPageIds = useMemo(
+    () => paginatedAnnouncements.map((ann) => ann.id),
+    [paginatedAnnouncements]
+  );
+
+  const allCurrentPageSelected =
+    currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectAllCurrentPage = () => {
+    if (allCurrentPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !currentPageIds.includes(id)));
+      return;
+    }
+    setSelectedIds((prev) => [...new Set([...prev, ...currentPageIds])]);
   };
 
   // باز کردن دیالوگ تاریخچه
@@ -759,40 +792,72 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     }
   };
 
-  // حذف اعلام بار
+  // حذف اعلام بار (تکی یا گروهی)
   const handleDelete = async () => {
+    const idsToDelete =
+      deleteTargetIds.length > 0
+        ? deleteTargetIds
+        : selectedAnnouncement
+          ? [selectedAnnouncement.id]
+          : [];
+
+    if (idsToDelete.length === 0) return;
+
     try {
-      if (!deleteReason) {
+      if (!deleteReason.trim()) {
         alert('لطفاً دلیل حذف را وارد کنید');
         return;
       }
 
-      if (!selectedAnnouncement) return;
+      setIsDeleting(true);
+      const succeeded: string[] = [];
+      const failed: string[] = [];
 
-      const res = await fetch(getApiUrl(`freight-announcements/${selectedAnnouncement.id}`), {
-        method: 'DELETE',
-        headers: getHeaders(),
-        body: JSON.stringify({ reason: deleteReason }),
-        cache: 'no-cache'
-      });
+      for (const id of idsToDelete) {
+        try {
+          const res = await fetch(getApiUrl(`freight-announcements/${id}`), {
+            method: 'DELETE',
+            headers: getHeaders(),
+            body: JSON.stringify({ reason: deleteReason }),
+            cache: 'no-cache',
+          });
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || 'خطا در حذف اعلام بار');
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.message || 'خطا در حذف اعلام بار');
+          }
+
+          succeeded.push(id);
+        } catch {
+          failed.push(id);
+        }
       }
 
-      alert('اعلام بار با موفقیت حذف شد');
+      if (succeeded.length > 0) {
+        setAnnouncements((prev) => prev.filter((ann) => !succeeded.includes(ann.id)));
+        setSelectedIds((prev) => prev.filter((id) => !succeeded.includes(id)));
+      }
+
       setShowDeleteDialog(false);
       setSelectedAnnouncement(null);
       setDeleteReason('');
-      // به‌روزرسانی لیست
-      await fetchAnnouncements();
-      // Force re-render با تغییر tableKey و refreshTrigger
-      setTableKey(prev => prev + 1);
-      setRefreshTrigger(prev => prev + 1);
-      setCurrentPage(1); // بازگشت به صفحه اول
+      setDeleteTargetIds([]);
+
+      if (failed.length === 0) {
+        alert(
+          succeeded.length === 1
+            ? 'اعلام بار با موفقیت حذف شد'
+            : `${succeeded.length} اعلام بار با موفقیت حذف شد`
+        );
+      } else if (succeeded.length === 0) {
+        alert('حذف انجام نشد. احتمالاً رکورد وابستگی دارد یا خطای سرور رخ داده است.');
+      } else {
+        alert(`${succeeded.length} مورد حذف شد و ${failed.length} مورد با خطا مواجه شد.`);
+      }
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -854,6 +919,15 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
             <option key={key} value={key}>{label}</option>
           ))}
         </select>
+        {selectedIds.length > 0 && (
+          <button
+            type="button"
+            onClick={openBulkDeleteDialog}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 whitespace-nowrap"
+          >
+            حذف انتخاب‌شده‌ها ({selectedIds.length})
+          </button>
+        )}
       </div>
 
       {/* جدول اعلام بارها */}
@@ -861,6 +935,15 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
         <table className="min-w-full divide-y divide-gray-200" key={`table-${tableKey}`}>
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 w-10">
+                <input
+                  type="checkbox"
+                  checked={allCurrentPageSelected}
+                  onChange={toggleSelectAllCurrentPage}
+                  disabled={paginatedAnnouncements.length === 0}
+                  title="انتخاب همه ردیف‌های این صفحه"
+                />
+              </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کد</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">خط</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">وضعیت</th>
@@ -905,8 +988,15 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
               <tr 
                 key={`${ann.id}-${tableKey}-${idx}`} 
                 data-announcement-id={ann.id}
-                className="hover:bg-gray-50"
+                className={selectedIds.includes(ann.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}
               >
+                <td className="px-3 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(ann.id)}
+                    onChange={() => toggleRowSelection(ann.id)}
+                  />
+                </td>
                 {/* کد اعلام بار */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
                   {ann.announcementCode || '-'}
@@ -1029,7 +1119,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
             );
             }) : (
               <tr>
-                <td colSpan={13} className="px-4 py-4 text-center text-sm text-gray-500">
+                <td colSpan={14} className="px-4 py-4 text-center text-sm text-gray-500">
                   هیچ اعلام باری یافت نشد
                 </td>
               </tr>
@@ -1413,11 +1503,25 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       )}
 
       {/* دیالوگ حذف */}
-      {showDeleteDialog && selectedAnnouncement && (
+      {showDeleteDialog && deleteTargetIds.length > 0 && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4 text-red-600">حذف اعلام بار</h2>
-            <p className="mb-4">آیا از حذف اعلام بار <strong>{selectedAnnouncement.announcementCode}</strong> مطمئن هستید؟</p>
+            {deleteTargetIds.length > 1 ? (
+              <p className="mb-4">
+                آیا از حذف <strong>{deleteTargetIds.length}</strong> اعلام بار انتخاب‌شده مطمئن هستید؟
+              </p>
+            ) : (
+              <p className="mb-4">
+                آیا از حذف اعلام بار{' '}
+                <strong>
+                  {selectedAnnouncement?.announcementCode ||
+                    announcements.find((ann) => ann.id === deleteTargetIds[0])?.announcementCode ||
+                    '-'}
+                </strong>{' '}
+                مطمئن هستید؟
+              </p>
+            )}
             <div>
               <label className="block text-sm font-medium mb-1">دلیل حذف *</label>
               <textarea
@@ -1434,16 +1538,19 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   setShowDeleteDialog(false);
                   setSelectedAnnouncement(null);
                   setDeleteReason('');
+                  setDeleteTargetIds([]);
                 }}
                 className="px-4 py-2 border rounded"
+                disabled={isDeleting}
               >
                 انصراف
               </button>
               <button
                 onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
               >
-                حذف
+                {isDeleting ? 'در حال حذف...' : 'حذف'}
               </button>
             </div>
           </div>
