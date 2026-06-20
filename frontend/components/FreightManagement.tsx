@@ -3,6 +3,8 @@ import { FreightAnnouncement, FreightLineType, FreightAnnouncementStatus, User, 
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalaliDateTime, formatJalali } from '../utils/jalali';
 import { formatNumberWhileTyping, parseNumberFromFormatted, formatNumberWithSeparator } from '../utils/numberFormatter';
+import { formatCargoValueShort, formatRialsPreview } from '../utils/cargoValueUtils';
+import CargoValueInput from './CargoValueInput';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 interface FreightManagementProps {
@@ -1022,8 +1024,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   {ann.loadingDate ? (typeof ann.loadingDate === 'string' ? ann.loadingDate : formatJalali(ann.loadingDate)) : '-'}
                 </td>
                 {/* ارزش بار */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500" dir="ltr">
-                  {ann.cargoValue && Number(ann.cargoValue) > 0 ? formatNumberWithSeparator(ann.cargoValue) : '-'}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500" title={ann.cargoValue ? formatRialsPreview(Number(ann.cargoValue)) : undefined}>
+                  {ann.cargoValue && Number(ann.cargoValue) > 0 ? formatCargoValueShort(Number(ann.cargoValue)) : '-'}
                 </td>
                 {/* نوع خودرو */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
@@ -1208,25 +1210,13 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">ارزش بار (ریال)</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={rawNumericValues.cargoValue !== undefined ? rawNumericValues.cargoValue : (formData.cargoValue ? String(formData.cargoValue) : '')}
-                    onChange={(e) => {
-                      // فقط اعداد را نگه دار
-                      const cleaned = e.target.value.replace(/[^\d]/g, '');
-                      setRawNumericValues({ ...rawNumericValues, cargoValue: cleaned });
-                      setFormData({ ...formData, cargoValue: cleaned ? Number(cleaned) : 0 });
-                    }}
-                    onBlur={(e) => {
-                      // فرمت کردن هنگام خروج از فیلد
-                      const num = Number(e.target.value.replace(/[^\d]/g, '')) || 0;
-                      setFormData({ ...formData, cargoValue: num });
-                      setRawNumericValues({ ...rawNumericValues, cargoValue: num ? formatNumberWithSeparator(num) : '' });
-                    }}
-                    className="w-full px-3 py-2 border rounded"
-                    dir="ltr"
+                  <label className="block text-sm font-medium mb-1">ارزش بار</label>
+                  <CargoValueInput
+                    valueRials={Number(formData.cargoValue) || 0}
+                    onChangeRials={(rials) => setFormData({ ...formData, cargoValue: rials })}
+                    resetKey={selectedAnnouncement?.id ?? 'edit'}
+                    inputClassName="w-full px-3 py-2 border rounded"
+                    selectClassName="px-3 py-2 border rounded bg-white min-w-[140px]"
                   />
                 </div>
                 <div>

@@ -13,6 +13,7 @@ import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
 import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, localizeExcelValue, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
+import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
 
@@ -122,7 +123,7 @@ const applyLastFreightChoices = (
             React.SetStateAction<{
                 loadingDate: string;
                 deliveryDate: string;
-                cargoValue: string;
+                cargoValue: number;
                 vehicleType: string;
                 notes: string;
             }>
@@ -1913,7 +1914,7 @@ const AnnouncementPanel: React.FC<{
 }> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [] }) => {
     const isEditMode = !!(data && data.id);
     
-    const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: '', vehicleType: '', notes: '' };
+    const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: 0, vehicleType: '', notes: '' };
     const initialIceCreamState = { originCity: '', brand: 'میهن', cartonCount: '', palletCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
     const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }];
@@ -2029,11 +2030,13 @@ const AnnouncementPanel: React.FC<{
                     });
                 }
                 console.log(`📅 [FreightDashboard] Final loadingDateStr for form:`, loadingDateStr);
-                // تبدیل cargoValue از ریال به میلیارد با گرد کردن برای جلوگیری از خطای floating point
-                // فرمت cargoValue به صورت سه رقم سه رقم (مستقیماً ریال)
-                const cargoValueInRials = data.cargoValue || 0;
-                const formattedCargoValue = cargoValueInRials > 0 ? cargoValueInRials.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '';
-                setCommonState({ loadingDate: loadingDateStr, deliveryDate: data.deliveryDate || '', cargoValue: formattedCargoValue, vehicleType: data.vehicleType, notes: data.notes || '' });
+                setCommonState({
+                    loadingDate: loadingDateStr,
+                    deliveryDate: data.deliveryDate || '',
+                    cargoValue: Number(data.cargoValue) || 0,
+                    vehicleType: data.vehicleType,
+                    notes: data.notes || '',
+                });
                 
                 // بارگذاری داده‌های دو جا بارگیری از data (اگر وجود داشته باشد)
                 let loadingLocationData: { loadingType: 'single' | 'double', originCity1: string, originCity2: string };
@@ -2210,12 +2213,10 @@ const AnnouncementPanel: React.FC<{
 
     const handleSubmit = (e: React.FormEvent, isDraft: boolean = false) => {
         e.preventDefault();
-        // تبدیل از رشته با کاما به عدد (مستقیماً ریال)
-        const cargoValueStr = commonState.cargoValue.replace(/,/g, '');
-        const cargoValueInRials = parseInt(cargoValueStr, 10);
-        if (isNaN(cargoValueInRials) || cargoValueInRials <= 0) { 
-            alert('ارزش بار باید بزرگتر از صفر باشد.'); 
-            return; 
+        const cargoValueInRials = commonState.cargoValue;
+        if (!cargoValueInRials || cargoValueInRials <= 0) {
+            alert('ارزش بار باید بزرگتر از صفر باشد.');
+            return;
         }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
 
@@ -2616,40 +2617,15 @@ const AnnouncementPanel: React.FC<{
                             <RequiredField label="نوع خودرو*">
                                 <select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1 w-full" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select>
                             </RequiredField>
-                                <RequiredField label="ارزش بار (ریال)*">
-                                   <div className="flex items-center gap-2">
-                                       <input 
-                                           type="text" 
-                                           value={commonState.cargoValue} 
-                                           onChange={e => {
-                                               // فقط اعداد و کاما را بپذیر
-                                               let value = e.target.value.replace(/[^\d,]/g, '');
-                                               // حذف کاماها برای محاسبه
-                                               const numValue = value.replace(/,/g, '');
-                                               // اگر خالی است، مقدار خالی بگذار
-                                               if (numValue === '') {
-                                                   setCommonState(s=>({...s, cargoValue: ''}));
-                                                   return;
-                                               }
-                                               // اگر عدد معتبر است، فرمت سه رقم سه رقم اعمال کن
-                                               if (/^\d+$/.test(numValue)) {
-                                                   const formatted = numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                                                   setCommonState(s=>({...s, cargoValue: formatted}));
-                                               }
-                                           }}
-                                           onKeyPress={e => {
-                                               // فقط اعداد را بپذیر
-                                               if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
-                                                   e.preventDefault();
-                                               }
-                                           }}
-                                           className="input-style mt-1 flex-1" 
-                                           required
-                                           placeholder="25,000,000"
-                                           maxLength={15}
-                                       />
-                                       <span className="text-xs text-slate-600 mt-1">ریال</span>
-                                   </div>
+                                <RequiredField label="ارزش بار*">
+                                    <CargoValueInput
+                                        valueRials={commonState.cargoValue}
+                                        onChangeRials={(rials) => setCommonState((s) => ({ ...s, cargoValue: rials }))}
+                                        resetKey={data?.id ?? 'new'}
+                                        required
+                                        inputClassName="input-style mt-1"
+                                        selectClassName="input-style mt-1 min-w-[140px]"
+                                    />
                                 </RequiredField>
                         </div>
                     </fieldset>
