@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { User, Driver, Vehicle, FreightAnnouncement, DriverAllowanceCalculation, DriverTourDetail } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali, toBillOfLadingDateString, formatBillOfLadingDateDisplay } from '../utils/jalali';
@@ -19,6 +19,7 @@ import {
     calculateMainDriverCostGlobal,
 } from './InvoiceImageHelper';
 import CityManagement from './CityManagement';
+import CityAutocomplete from './CityAutocomplete';
 import FinanceExceptionTourDialog from './FinanceExceptionTourDialog';
 import {
     enrichAnnouncementsWithRouteMileage,
@@ -229,6 +230,97 @@ function readTourStringField(tour: any, camel: string, snake: string): string {
     return raw == null ? '' : String(raw).trim();
 }
 
+type TourDetailSortField =
+    | 'announcementCode'
+    | 'vehicleType'
+    | 'plate'
+    | 'lineType'
+    | 'destinations'
+    | 'billOfLadingNumber'
+    | 'billOfLadingDate'
+    | 'calculationDate'
+    | 'totalMileage'
+    | 'totalMission'
+    | 'totalCost';
+
+function getTourDetailDisplayCost(tour: DriverTourDetailWithCalculation): number {
+    return calculateMainDriverCostGlobal({
+        bill_of_lading_cost: readTourNumericField(tour, 'billOfLadingCost', 'bill_of_lading_cost'),
+        billOfLadingCost: readTourNumericField(tour, 'billOfLadingCost', 'bill_of_lading_cost'),
+        food_cost: readTourNumericField(tour, 'foodCost', 'food_cost'),
+        foodCost: readTourNumericField(tour, 'foodCost', 'food_cost'),
+        fuel_cost: readTourNumericField(tour, 'fuelCost', 'fuel_cost'),
+        fuelCost: readTourNumericField(tour, 'fuelCost', 'fuel_cost'),
+        toll_cost: readTourNumericField(tour, 'tollCost', 'toll_cost'),
+        tollCost: readTourNumericField(tour, 'tollCost', 'toll_cost'),
+        return_cargo_cost: readTourNumericField(tour, 'returnCargoCost', 'return_cargo_cost'),
+        returnCargoCost: readTourNumericField(tour, 'returnCargoCost', 'return_cargo_cost'),
+        return_inter_branch_cargo_cost: readTourNumericField(tour, 'returnInterBranchCargoCost', 'return_inter_branch_cargo_cost'),
+        returnInterBranchCargoCost: readTourNumericField(tour, 'returnInterBranchCargoCost', 'return_inter_branch_cargo_cost'),
+        return_bill_of_lading_cost: readTourNumericField(tour, 'returnBillOfLadingCost', 'return_bill_of_lading_cost'),
+        returnBillOfLadingCost: readTourNumericField(tour, 'returnBillOfLadingCost', 'return_bill_of_lading_cost'),
+        multi_unload_cost: readTourNumericField(tour, 'multiUnloadCost', 'multi_unload_cost'),
+        multiUnloadCost: readTourNumericField(tour, 'multiUnloadCost', 'multi_unload_cost'),
+        excess_mission_cost: readTourNumericField(tour, 'excessMissionCost', 'excess_mission_cost'),
+        excessMissionCost: readTourNumericField(tour, 'excessMissionCost', 'excess_mission_cost'),
+        fixed_allowance: readTourNumericField(tour, 'fixedAllowance', 'fixed_allowance'),
+        fixedAllowance: readTourNumericField(tour, 'fixedAllowance', 'fixed_allowance'),
+        depot_cargo_handling_cost: readTourNumericField(tour, 'depotCargoHandlingCost', 'depot_cargo_handling_cost'),
+        depotCargoHandlingCost: readTourNumericField(tour, 'depotCargoHandlingCost', 'depot_cargo_handling_cost'),
+        depot_kilometer_rate: readTourNumericField(tour, 'depotKilometerRate', 'depot_kilometer_rate'),
+        depotKilometerRate: readTourNumericField(tour, 'depotKilometerRate', 'depot_kilometer_rate'),
+        depot_mission_cost: readTourNumericField(tour, 'depotMissionCost', 'depot_mission_cost'),
+        depotMissionCost: readTourNumericField(tour, 'depotMissionCost', 'depot_mission_cost'),
+    });
+}
+
+function getTourDetailSortValue(tour: DriverTourDetailWithCalculation, field: TourDetailSortField): string | number {
+    switch (field) {
+        case 'announcementCode':
+            return tour.announcementCode || '';
+        case 'vehicleType':
+            return tour.vehicleType || '';
+        case 'plate':
+            return `${tour.vehicleCode || ''} ${tour.plateNumber || ''}`.trim();
+        case 'lineType':
+            return tour.lineType || '';
+        case 'destinations':
+            return Array.isArray(tour.destinations)
+                ? tour.destinations.join('، ')
+                : String(tour.destinations || '');
+        case 'billOfLadingNumber':
+            return tour.billOfLadingNumber || '';
+        case 'billOfLadingDate':
+            return toBillOfLadingDateString(tour.billOfLadingDate) || '';
+        case 'calculationDate':
+            return tour.calculationDate || '';
+        case 'totalMileage':
+            return getTourTotalKilometers(tour);
+        case 'totalMission':
+            return (
+                readTourNumericField(tour, 'approvedMissionDays', 'approved_mission_days') +
+                readTourNumericField(tour, 'excessMissionDays', 'excess_mission_days') +
+                readTourNumericField(tour, 'depotMissionDays', 'depot_mission_days')
+            );
+        case 'totalCost':
+            return getTourDetailDisplayCost(tour);
+        default:
+            return '';
+    }
+}
+
+function compareTourDetailSortValues(
+    aValue: string | number,
+    bValue: string | number,
+    direction: 'asc' | 'desc'
+): number {
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+    }
+    const cmp = String(aValue).localeCompare(String(bValue), 'fa', { numeric: true });
+    return direction === 'asc' ? cmp : -cmp;
+}
+
 const RECORDED_TOUR_NUMERIC_FIELDS: Array<{ camel: string; snake: string }> = [
     { camel: 'approvedKilometers', snake: 'approved_kilometers' },
     { camel: 'excessKilometers', snake: 'excess_kilometers' },
@@ -437,6 +529,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [selectedDriverName, setSelectedDriverName] = useState<string>('');
     const [selectedDriverQueueType, setSelectedDriverQueueType] = useState<'porsant' | 'fixed_allowance' | 'helper'>('porsant');
     const [expandedTours, setExpandedTours] = useState<Set<string>>(new Set());
+    const [tourDetailSortField, setTourDetailSortField] = useState<TourDetailSortField>('billOfLadingDate');
+    const [tourDetailSortDirection, setTourDetailSortDirection] = useState<'asc' | 'desc'>('desc');
 
     // جزئیات تور از calculations خوانده می‌شود تا بعد از ثبت، هزینه‌ها از state جداگانه از دست نروند
     const activeDialogTours = useMemo(() => {
@@ -444,6 +538,17 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const calc = calculations.find((c) => c.driverId === selectedDriverId);
         return calc?.tours ?? null;
     }, [calculations, showTourDetailsDialog, selectedDriverId]);
+
+    const sortedActiveDialogTours = useMemo(() => {
+        if (!activeDialogTours) return null;
+        const sorted = [...activeDialogTours];
+        sorted.sort((a, b) => {
+            const aValue = getTourDetailSortValue(a, tourDetailSortField);
+            const bValue = getTourDetailSortValue(b, tourDetailSortField);
+            return compareTourDetailSortValues(aValue, bValue, tourDetailSortDirection);
+        });
+        return sorted;
+    }, [activeDialogTours, tourDetailSortField, tourDetailSortDirection]);
     
     // State برای باز/بستن بخش محاسبات دپو
     const [isDepotSectionOpen, setIsDepotSectionOpen] = useState(false);
@@ -651,6 +756,41 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         return () => clearTimeout(timeoutId);
     }, [showInputDialog, inputDialogData?.tourId, inputDialogData?.approvedKilometers, inputDialogData?.excessKilometers, inputDialogData?.depotTotalMileage, inputDialogData?.queueType]);
+
+    const updateDepotRow = useCallback(
+        (
+            rowId: string,
+            isInDepotRows: boolean,
+            patch: Partial<{ destination: string; mileage: number; billOfLadingNumber: string }>
+        ) => {
+            setInputDialogData((prev) => {
+                if (!prev) return prev;
+                let currentRows = [...(prev.depotRows || [])];
+                if (!isInDepotRows) {
+                    if (currentRows.length === 0) {
+                        currentRows = Array.from({ length: 4 }, (_, i) => ({
+                            id: `depot-default-${i}`,
+                            destination: '',
+                            mileage: 0,
+                            billOfLadingNumber: '',
+                        }));
+                    } else if (!currentRows.some((r) => r.id === rowId)) {
+                        currentRows.push({
+                            id: rowId,
+                            destination: '',
+                            mileage: 0,
+                            billOfLadingNumber: '',
+                        });
+                    }
+                }
+                const updatedRows = currentRows.map((r) =>
+                    r.id === rowId ? { ...r, ...patch } : r
+                );
+                return { ...prev, depotRows: updatedRows };
+            });
+        },
+        []
+    );
 
     // محاسبه خودکار فیلدهای محاسبات دپو
     useEffect(() => {
@@ -1720,7 +1860,19 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             setSelectedDriverName(calc.driverName);
             setSelectedDriverId(calc.driverId);
             setSelectedDriverQueueType(calc.queueType || 'porsant');
+            setTourDetailSortField('billOfLadingDate');
+            setTourDetailSortDirection('desc');
+            setExpandedTours(new Set());
             setShowTourDetailsDialog(true);
+        }
+    };
+
+    const handleTourDetailSort = (field: TourDetailSortField) => {
+        if (tourDetailSortField === field) {
+            setTourDetailSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setTourDetailSortField(field);
+            setTourDetailSortDirection('asc');
         }
     };
 
@@ -5710,46 +5862,27 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     <td className="p-2 border-l border-slate-200 text-center">
                                                         {index + 1}
                                                     </td>
-                                                    <td className="p-2 border-l border-slate-200">
-                                                        <input
-                                                            type="text"
+                                                    <td className="p-2 border-l border-slate-200 overflow-visible">
+                                                        <CityAutocomplete
                                                             value={row.destination || ''}
-                                                            onChange={(e) => {
-                                                                let currentRows = inputDialogData.depotRows || [];
-                                                                
-                                                                // اگر ردیف در depotRows نیست، ابتدا آن را اضافه کن
-                                                                if (!isInDepotRows) {
-                                                                    // اگر depotRows خالی است، ابتدا ردیف‌های پیش‌فرض را ایجاد کن
-                                                                    if (currentRows.length === 0) {
-                                                                        currentRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                            id: `depot-default-${i}`,
-                                                                            destination: '',
-                                                                            mileage: 0,
-                                                                            billOfLadingNumber: ''
-                                                                        }));
-                                                                    } else {
-                                                                        // ردیف جدید را اضافه کن
-                                                                        currentRows = [...currentRows, {
-                                                                            id: row.id,
-                                                                            destination: '',
-                                                                            mileage: 0,
-                                                                            billOfLadingNumber: ''
-                                                                        }];
-                                                                    }
-                                                                }
-                                                                
-                                                                // حالا ردیف را به‌روزرسانی کن
-                                                                const updatedRows = currentRows.map(r => 
-                                                                    r.id === row.id ? { ...r, destination: e.target.value } : r
-                                                                );
-                                                                
-                                                                setInputDialogData({
-                                                                    ...inputDialogData,
-                                                                    depotRows: updatedRows
+                                                            onChange={(city) =>
+                                                                updateDepotRow(row.id, isInDepotRows, { destination: city })
+                                                            }
+                                                            onRouteSelect={(option) => {
+                                                                const km =
+                                                                    option.roundTripKm != null &&
+                                                                    !Number.isNaN(Number(option.roundTripKm))
+                                                                        ? Math.round(Number(option.roundTripKm))
+                                                                        : 0;
+                                                                updateDepotRow(row.id, isInDepotRows, {
+                                                                    destination: option.city,
+                                                                    ...(km > 0 ? { mileage: km } : {}),
                                                                 });
                                                             }}
+                                                            requireSelection
+                                                            inModal
+                                                            placeholder="نام شهر را تایپ کنید..."
                                                             className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                                                            placeholder="مقصد"
                                                         />
                                                     </td>
                                                     <td className="p-2 border-l border-slate-200">
@@ -5761,82 +5894,22 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                 const inputValue = e.target.value.replace(/,/g, '');
                                                                 const cleaned = inputValue.replace(/[^\d]/g, '');
                                                                 const numValue = cleaned ? Number(cleaned) : 0;
-                                                                
-                                                                let currentRows = inputDialogData.depotRows || [];
-                                                                
-                                                                // اگر ردیف در depotRows نیست، ابتدا آن را اضافه کن
-                                                                if (!isInDepotRows) {
-                                                                    // اگر depotRows خالی است، ابتدا ردیف‌های پیش‌فرض را ایجاد کن
-                                                                    if (currentRows.length === 0) {
-                                                                        currentRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                            id: `depot-default-${i}`,
-                                                                            destination: '',
-                                                                            mileage: 0,
-                                                                            billOfLadingNumber: ''
-                                                                        }));
-                                                                    } else {
-                                                                        // ردیف جدید را اضافه کن
-                                                                        currentRows = [...currentRows, {
-                                                                            id: row.id,
-                                                                            destination: '',
-                                                                            mileage: 0,
-                                                                            billOfLadingNumber: ''
-                                                                        }];
-                                                                    }
-                                                                }
-                                                                
-                                                                // حالا ردیف را به‌روزرسانی کن
-                                                                const updatedRows = currentRows.map(r => 
-                                                                    r.id === row.id ? { ...r, mileage: numValue } : r
-                                                                );
-                                                                
-                                                                setInputDialogData({
-                                                                    ...inputDialogData,
-                                                                    depotRows: updatedRows
-                                                                });
+                                                                updateDepotRow(row.id, isInDepotRows, { mileage: numValue });
                                                             }}
-                                                            className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                                            className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500 bg-slate-50"
                                                             placeholder="0"
+                                                            title="پس از انتخاب شهر از لیست، خودکار پر می‌شود"
                                                         />
                                                     </td>
                                                     <td className="p-2 border-l border-slate-200">
                                                         <input
                                                             type="text"
                                                             value={row.billOfLadingNumber || ''}
-                                                            onChange={(e) => {
-                                                                let currentRows = inputDialogData.depotRows || [];
-                                                                
-                                                                // اگر ردیف در depotRows نیست، ابتدا آن را اضافه کن
-                                                                if (!isInDepotRows) {
-                                                                    // اگر depotRows خالی است، ابتدا ردیف‌های پیش‌فرض را ایجاد کن
-                                                                    if (currentRows.length === 0) {
-                                                                        currentRows = Array.from({ length: 4 }, (_, i) => ({
-                                                                            id: `depot-default-${i}`,
-                                                                            destination: '',
-                                                                            mileage: 0,
-                                                                            billOfLadingNumber: ''
-                                                                        }));
-                                                                    } else {
-                                                                        // ردیف جدید را اضافه کن
-                                                                        currentRows = [...currentRows, {
-                                                                            id: row.id,
-                                                                            destination: '',
-                                                                            mileage: 0,
-                                                                            billOfLadingNumber: ''
-                                                                        }];
-                                                                    }
-                                                                }
-                                                                
-                                                                // حالا ردیف را به‌روزرسانی کن
-                                                                const updatedRows = currentRows.map(r => 
-                                                                    r.id === row.id ? { ...r, billOfLadingNumber: e.target.value } : r
-                                                                );
-                                                                
-                                                                setInputDialogData({
-                                                                    ...inputDialogData,
-                                                                    depotRows: updatedRows
-                                                                });
-                                                            }}
+                                                            onChange={(e) =>
+                                                                updateDepotRow(row.id, isInDepotRows, {
+                                                                    billOfLadingNumber: e.target.value,
+                                                                })
+                                                            }
                                                             className="w-full px-2 py-1 border border-slate-300 rounded text-left focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                                             placeholder="توضیحات"
                                                         />
@@ -6002,7 +6075,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             )}
             
             {/* صفحه نمایش جزئیات تور - تمام صفحه */}
-            {showTourDetailsDialog && activeDialogTours && (
+            {showTourDetailsDialog && sortedActiveDialogTours && (
                 <div className="fixed inset-0 bg-white z-50 overflow-hidden flex flex-col">
                     <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
                         <h2 className="text-xl font-bold text-slate-800">
@@ -6023,24 +6096,79 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     <div className="flex-1 overflow-y-auto p-6">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-right border-collapse">
-                                    <thead>
+                                    <thead className="sticky top-0 z-10">
                                         <tr className="bg-slate-700 text-white border-b">
-                                            <th className="p-3 text-right border-l border-slate-600">شماره تور</th>
-                                            <th className="p-3 text-right border-l border-slate-600">نوع خودرو</th>
-                                            <th className="p-3 text-right border-l border-slate-600">کد * پلاک</th>
-                                            <th className="p-3 text-right border-l border-slate-600">لاین</th>
-                                            <th className="p-3 text-right border-l border-slate-600">مقاصد</th>
-                                            <th className="p-3 text-right border-l border-slate-600">شماره بارنامه</th>
-                                            <th className="p-3 text-right border-l border-slate-600">تاریخ صدور بارنامه</th>
-                                            <th className="p-3 text-right border-l border-slate-600">تاریخ محاسبه</th>
-                                            <th className="p-3 text-right border-l border-slate-600">پیمایش کل (کیلومتر)</th>
-                                            <th className="p-3 text-right border-l border-slate-600">مجموع ماموریت (روز)</th>
-                                            <th className="p-3 text-right border-l border-slate-600">هزینه‌ها (ریال)</th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('announcementCode')}
+                                            >
+                                                شماره تور{tourDetailSortField === 'announcementCode' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('vehicleType')}
+                                            >
+                                                نوع خودرو{tourDetailSortField === 'vehicleType' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('plate')}
+                                            >
+                                                کد * پلاک{tourDetailSortField === 'plate' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('lineType')}
+                                            >
+                                                لاین{tourDetailSortField === 'lineType' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('destinations')}
+                                            >
+                                                مقاصد{tourDetailSortField === 'destinations' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('billOfLadingNumber')}
+                                            >
+                                                شماره بارنامه{tourDetailSortField === 'billOfLadingNumber' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('billOfLadingDate')}
+                                            >
+                                                تاریخ صدور بارنامه{tourDetailSortField === 'billOfLadingDate' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('calculationDate')}
+                                            >
+                                                تاریخ محاسبه{tourDetailSortField === 'calculationDate' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('totalMileage')}
+                                            >
+                                                پیمایش کل (کیلومتر){tourDetailSortField === 'totalMileage' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('totalMission')}
+                                            >
+                                                مجموع ماموریت (روز){tourDetailSortField === 'totalMission' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('totalCost')}
+                                            >
+                                                هزینه‌ها (ریال){tourDetailSortField === 'totalCost' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
                                             <th className="p-3 text-right">عملیات</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {activeDialogTours.map((tour, tourIdx) => {
+                                        {sortedActiveDialogTours.map((tour, tourIdx) => {
                                             const isExpanded = expandedTours.has(tour.announcementId);
                                             
                                             const totalMileage = getTourTotalKilometers(tour);
