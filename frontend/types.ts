@@ -637,7 +637,7 @@ export interface Destination {
     representativeName: string;
     tonnage?: number;
     unloadTime?: string;
-    brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
+    brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس' | 'فروتلند';
     freightCost?: number;
     deliveryDate?: string; // تاریخ تحویل بار (شمسی)
     representativeType?: 'agent' | 'distributor' | 'depot' | 'distribution'; // نوع نماینده: نماینده، پخش یا دپو
@@ -678,7 +678,7 @@ export interface FreightAnnouncement {
     /** پس از اتمام تخصیص بدون بارنامه — نمایش در تب «در انتظار بارنامه» */
     awaitingBillOfLadingAt?: string | Date;
     originCity?: string;
-    brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس';
+    brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس' | 'فروتلند';
     representativeType?: 'agent' | 'distributor' | 'depot';
     representativeName?: string;
     cartonCount?: number;

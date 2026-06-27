@@ -18,7 +18,7 @@ import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
 
 // --- Constants from user request ---
-const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پانلا', 'آلینوس'];
+const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پانلا', 'آلینوس', 'فروتلند'];
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 const PRIORITIES = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
 const ICE_CREAM_PRODUCTS = ['کره', 'کترینگ', 'پنیر پیتزا', 'خامه قنادی'];
