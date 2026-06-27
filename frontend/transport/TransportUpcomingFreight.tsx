@@ -5,6 +5,7 @@ import { formatJalaliDateTime } from '../utils/jalali';
 import {
     formatRepresentativeType,
     getDestinationCitiesLabel,
+    getRepresentativeNameLabel,
 } from '../utils/freightDisplay';
 import {
     LINE_TABS,
@@ -214,8 +215,9 @@ const TransportUpcomingFreight: React.FC = () => {
                             <th className="p-2 text-right font-medium">نوع خودرو</th>
                             {isIceCream ? (
                                 <>
-                                    <th className="p-2 text-right font-medium">نماینده</th>
+                                    <th className="p-2 text-right font-medium">نوع نماینده</th>
                                     <th className="p-2 text-right font-medium">مقصد</th>
+                                    <th className="p-2 text-right font-medium">نام نماینده</th>
                                     <th className="p-2 text-right font-medium">مبدا</th>
                                     <th className="p-2 text-right font-medium">برند</th>
                                     <th className="p-2 text-right font-medium">محصولات</th>
@@ -242,7 +244,7 @@ const TransportUpcomingFreight: React.FC = () => {
                         {rows.length === 0 ? (
                             <tr>
                                 <td
-                                    colSpan={isIceCream ? 15 : 12}
+                                    colSpan={isIceCream ? 16 : 12}
                                     className="p-8 text-center text-slate-500"
                                 >
                                     اعلام باری در انتظار تایید مدیر برای این خط نیست
@@ -269,6 +271,7 @@ const TransportUpcomingFreight: React.FC = () => {
                                             <td className="p-2 text-blue-700 font-semibold">
                                                 {getDestinationCitiesLabel(ann)}
                                             </td>
+                                            <td className="p-2">{getRepresentativeNameLabel(ann)}</td>
                                             <td className="p-2">{ann.originCity || '—'}</td>
                                             <td className="p-2">{ann.brand || '—'}</td>
                                             <td className="p-2 max-w-[160px]">

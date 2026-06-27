@@ -84,6 +84,19 @@ export function getDestinationCitiesLabel(
     return cities.length > 0 ? cities.join('، ') : '-';
 }
 
+/** نام نماینده/پخش — سطح اعلام بار (بستنی) یا تجمیع مقاصد (پاستوریزه/لبنیات) */
+export function getRepresentativeNameLabel(
+    ann: Pick<FreightAnnouncement, 'representativeName' | 'destinations'> | null | undefined
+): string {
+    const fromAnn = (ann?.representativeName || '').trim();
+    if (fromAnn) return fromAnn;
+    const names = (ann?.destinations || [])
+        .map((d: Destination) => (d.representativeName || '').trim())
+        .filter(Boolean);
+    const unique = [...new Set(names)];
+    return unique.length > 0 ? unique.join('، ') : '-';
+}
+
 /** پلاک از پاسخ خام API (ستون‌های JOIN) */
 export function buildAssignedVehiclePlateFromApiRow(row: Record<string, unknown>): string | undefined {
     const p1 = row.plate_part1 as string | undefined;

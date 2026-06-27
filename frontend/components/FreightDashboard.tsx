@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, localizeExcelValue, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getRepresentativeNameLabel, localizeExcelValue, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -450,6 +450,7 @@ const columnsConfig = (props: {
         { header: 'نوع بارگیری', accessor: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann), width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
         { header: 'نوع نماینده', accessor: (ann: FreightAnnouncement) => ann.representativeType, width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
         { header: 'مقصد', accessor: (ann: FreightAnnouncement) => getDestinationCitiesLabel(ann), width: '200px', display: (_:string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
+        { header: 'نام نماینده', accessor: (ann: FreightAnnouncement) => getRepresentativeNameLabel(ann), width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => getRepresentativeNameLabel(ann) },
         { header: 'مبدا', accessor: 'originCity', width: '140px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
         { header: 'برند', accessor: 'brand', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.brand || '-' },
         { header: 'محصولات', accessor: (ann: FreightAnnouncement) => ann.products?.join(', '), width: '150px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },

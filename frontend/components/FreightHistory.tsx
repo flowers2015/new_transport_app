@@ -4,6 +4,7 @@ import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, Freigh
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
 import {
     getDestinationCitiesLabel,
+    getRepresentativeNameLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
@@ -771,6 +772,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'نوع بارگیری', render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
                 { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
+                { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getRepresentativeNameLabel(ann) },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
