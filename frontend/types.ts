@@ -795,6 +795,13 @@ export interface DispatchAnnouncementCandidate {
         tonnage?: number;
         freightCost?: number;
     };
+    allDestinations?: Array<{
+        id: string;
+        city?: string;
+        representativeName?: string;
+        tonnage?: number;
+        freightCost?: number;
+    }>;
     route?: {
         id: string;
         city?: string;

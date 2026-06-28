@@ -5,6 +5,12 @@ import {
 } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
 
+const formatOriginToDestination = (origin?: string | null, destination?: string | null) => {
+    const from = (origin || '').trim() || 'مبدا نامشخص';
+    const to = (destination || '').trim() || 'مقصد نامشخص';
+    return `${from} ← ${to}`;
+};
+
 type StageKey = 'stage1' | 'stage2';
 
 type StageResponse = {
@@ -225,7 +231,7 @@ const DispatchAssignmentManager: React.FC = () => {
                                                 <span>{item.lineType || ''}</span>
                                             </div>
                                             <div className="text-slate-500 mt-1">
-                                                {item.originCity || 'مبدا نامشخص'} → {item.destination?.city || 'مقصد نامشخص'}
+                                                {formatOriginToDestination(item.originCity, item.destination?.city)}
                                             </div>
                                             {item.route && (
                                                 <div className="text-slate-400 mt-1">

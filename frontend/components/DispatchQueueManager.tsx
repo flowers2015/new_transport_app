@@ -511,6 +511,162 @@ const formatDistance = (km?: number | null) => {
     return `${km.toLocaleString('fa-IR')} کیلومتر`;
 };
 
+/** مبدا (راست) ← مقصد (چپ) — مناسب RTL */
+const formatOriginToDestination = (origin?: string | null, destination?: string | null) => {
+    const from = (origin || '').trim() || 'مبدا';
+    const to = (destination || '').trim();
+    if (!to) return from;
+    return `${from} ← ${to}`;
+};
+
+const priorityLabels: Record<string, string> = {
+    high: 'فوری',
+    urgent: 'فوری',
+    normal: 'عادی',
+    low: 'کم اهمیت',
+};
+
+const EyeIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+        <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        />
+    </svg>
+);
+
+const DispatchAnnouncementDetailDialog: React.FC<{
+    item: AnnouncementWithEligibility;
+    onClose: () => void;
+}> = ({ item, onClose }) => {
+    const destRows =
+        item.allDestinations && item.allDestinations.length > 0
+            ? item.allDestinations
+            : item.destination
+              ? [item.destination]
+              : [];
+
+    const detailRow = (label: string, value: React.ReactNode) => (
+        <div className="grid grid-cols-[7rem_1fr] gap-2 py-1.5 border-b border-slate-100 last:border-0">
+            <dt className="text-slate-500 shrink-0">{label}</dt>
+            <dd className="text-slate-800 font-medium break-words">{value}</dd>
+        </div>
+    );
+
+    return (
+        <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 px-4 py-8"
+            onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+            }}
+        >
+            <div
+                className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 max-h-[85vh] overflow-hidden flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-800">
+                        جزئیات اعلام بار {item.announcementCode ? `#${item.announcementCode}` : ''}
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-slate-500 hover:text-slate-700 text-sm px-2 py-1"
+                    >
+                        بستن
+                    </button>
+                </div>
+                <div className="px-4 py-3 overflow-y-auto text-xs">
+                    <dl>
+                        {detailRow('نوع خط', item.lineType || '—')}
+                        {detailRow(
+                            'مبدا ← مقصد',
+                            formatOriginToDestination(item.originCity, item.destination?.city)
+                        )}
+                        {detailRow('نوع خودرو', item.vehicleType || '—')}
+                        {detailRow('ارزش بار', formatCurrencyToman(item.cargoValue))}
+                        {item.totalFreightCost != null &&
+                            detailRow('کرایه کل', formatCurrencyToman(item.totalFreightCost))}
+                        {item.brand && detailRow('برند', item.brand)}
+                        {item.priority &&
+                            detailRow(
+                                'اولویت',
+                                priorityLabels[String(item.priority).toLowerCase()] || item.priority
+                            )}
+                        {item.products && item.products.length > 0 &&
+                            detailRow('محصولات', item.products.join('، '))}
+                        {item.route &&
+                            detailRow(
+                                'مسیر / کیلومتر',
+                                <>
+                                    {item.route.route_category || item.route.distance_category || '—'}
+                                    {item.route.round_trip_km
+                                        ? ` • ${formatDistance(item.route.round_trip_km)}`
+                                        : ''}
+                                    {item.route.province ? ` • ${item.route.province}` : ''}
+                                </>
+                            )}
+                        {item.createdAt &&
+                            detailRow(
+                                'تاریخ ثبت',
+                                new Date(item.createdAt).toLocaleDateString('fa-IR', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                })
+                            )}
+                        {item.notes && detailRow('توضیحات', item.notes)}
+                    </dl>
+                    {destRows.length > 0 && (
+                        <div className="mt-3">
+                            <div className="text-slate-600 font-semibold mb-2">مقصدها</div>
+                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                <table className="min-w-full text-[11px]">
+                                    <thead className="bg-slate-50 text-slate-600">
+                                        <tr>
+                                            <th className="px-2 py-1.5 text-right font-medium">شهر</th>
+                                            <th className="px-2 py-1.5 text-right font-medium">نماینده</th>
+                                            <th className="px-2 py-1.5 text-right font-medium">تناژ</th>
+                                            <th className="px-2 py-1.5 text-right font-medium">کرایه</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {destRows.map((d) => (
+                                            <tr key={d.id}>
+                                                <td className="px-2 py-1.5">{d.city || '—'}</td>
+                                                <td className="px-2 py-1.5">{d.representativeName || '—'}</td>
+                                                <td className="px-2 py-1.5">
+                                                    {d.tonnage != null
+                                                        ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg`
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-2 py-1.5">
+                                                    {d.freightCost != null
+                                                        ? formatCurrencyToman(d.freightCost)
+                                                        : '—'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const pad2 = (value: number) => (value < 10 ? `0${value}` : `${value}`);
 
 const getDefaultJalaliCycleRange = () => {
@@ -719,6 +875,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const [loadingQueue, setLoadingQueue] = useState(false);
     const [positionEdits, setPositionEdits] = useState<Record<string, PositionEditState>>({});
     const [assignDialog, setAssignDialog] = useState<AssignDialogState>(initialAssignDialogState);
+    const [assignPreviewAnnouncement, setAssignPreviewAnnouncement] =
+        useState<AnnouncementWithEligibility | null>(null);
     const [assignHintsMap, setAssignHintsMap] = useState<Record<string, QueueAssignHints>>({});
     const [assignModeByCategory, setAssignModeByCategory] = useState<Record<string, AssignMode>>(
         () => loadAssignModeByCategory()
@@ -1260,6 +1418,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     };
 
     const openAssignDialog = (entry: DispatchQueueEntry, categoryLabel: string) => {
+        setAssignPreviewAnnouncement(null);
         setAssignDialog({
             ...initialAssignDialogState,
             isOpen: true,
@@ -1271,6 +1430,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     };
 
     const closeAssignDialog = () => {
+        setAssignPreviewAnnouncement(null);
         setAssignDialog(initialAssignDialogState);
     };
 
@@ -2404,7 +2564,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                     <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide sticky top-0">
                                                         <tr className="border-b border-slate-200">
                                                             <th className="px-2 py-2 text-right font-medium">نوع خط</th>
-                                                            <th className="px-2 py-2 text-right font-medium">مبدا → مقصد</th>
+                                                            <th className="px-2 py-2 text-right font-medium">مبدا ← مقصد</th>
                                                             <th className="px-2 py-2 text-right font-medium">مسیر / کیلومتر</th>
                                                             <th className="px-2 py-2 text-right font-medium">وضعیت</th>
                                                         </tr>
@@ -2443,7 +2603,10 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                                     </td>
                                                                     <td className="px-2 py-1.5 align-top">
                                                                         {item.destination?.city
-                                                                            ? `${item.originCity || 'مبدا'} → ${item.destination.city}`
+                                                                            ? formatOriginToDestination(
+                                                                                  item.originCity,
+                                                                                  item.destination.city
+                                                                              )
                                                                             : item.originCity || '—'}
                                                                     </td>
                                                                     <td className="px-2 py-1.5 align-top">
@@ -2451,16 +2614,30 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                                         {vfBadge && <div>{vfBadge}</div>}
                                                                     </td>
                                                                     <td className="px-2 py-1.5 align-top text-[10px]">
-                                                                        {item.eligible ? (
-                                                                            <span className="text-emerald-700">مجاز</span>
-                                                                        ) : (
-                                                                            <span className={isDialogFreeMode ? 'text-amber-700' : ''}>
-                                                                                {item.lockReason
-                                                                                    ? lockReasonLabels[item.lockReason] ||
-                                                                                      item.lockReason
-                                                                                    : 'غیرفعال'}
-                                                                            </span>
-                                                                        )}
+                                                                        <span className="inline-flex items-center gap-1.5">
+                                                                            {item.eligible ? (
+                                                                                <span className="text-emerald-700">مجاز</span>
+                                                                            ) : (
+                                                                                <span className={isDialogFreeMode ? 'text-amber-700' : ''}>
+                                                                                    {item.lockReason
+                                                                                        ? lockReasonLabels[item.lockReason] ||
+                                                                                          item.lockReason
+                                                                                        : 'غیرفعال'}
+                                                                                </span>
+                                                                            )}
+                                                                            <button
+                                                                                type="button"
+                                                                                title="مشاهده جزئیات بار"
+                                                                                aria-label="مشاهده جزئیات بار"
+                                                                                className="p-0.5 rounded text-slate-500 hover:text-sky-600 hover:bg-sky-50"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setAssignPreviewAnnouncement(item);
+                                                                                }}
+                                                                            >
+                                                                                <EyeIcon />
+                                                                            </button>
+                                                                        </span>
                                                                     </td>
                                                                 </tr>
                                                             );
@@ -2529,6 +2706,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                             </div>
                         </div>
                     </div>
+                    {assignPreviewAnnouncement && (
+                        <DispatchAnnouncementDetailDialog
+                            item={assignPreviewAnnouncement}
+                            onClose={() => setAssignPreviewAnnouncement(null)}
+                        />
+                    )}
                 </div>
             )}
 
