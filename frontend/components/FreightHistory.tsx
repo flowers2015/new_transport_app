@@ -15,6 +15,7 @@ import {
     localizeExcelValue,
     isFreightDestinationDetailHeader,
 } from '../utils/freightDisplay';
+import { getAssignedVehicleCode, shouldShowVehicleCodeColumn } from '../utils/transportLiveViewUtils';
 import { getFinanceRejectType, getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
@@ -235,6 +236,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     : getPersonalDriverContact(ann.assignedDriverId, props.personalDrivers);
                 return <span className="font-mono">{result}</span>;
             }},
+            { header: 'کد خودرو', display: (lt: any) => lt === FreightLineType.IceCream || lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => (
+                <span className="font-mono whitespace-nowrap">{getAssignedVehicleCode(ann, vehicles)}</span>
+            )},
             { header: 'پلاک خودرو', display: () => true, render: (ann: FreightAnnouncement) => {
                 const result = ann.assignmentType === 'company' 
                     ? getVehicleIdentifier(ann.assignedVehicleId, vehicles, props.personalVehicles)
@@ -755,10 +759,21 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     };
 
     const visibleColumns = useMemo(() => {
+        const showVehicleCode = shouldShowVehicleCodeColumn(activeLine);
         // Extra transport columns (for both modes, position differs)
         const extraCols = [
             { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
+            ...(showVehicleCode
+                ? [{
+                    header: 'کد خودرو',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="font-mono whitespace-nowrap">
+                            {getAssignedVehicleCode(ann, props.vehicles)}
+                        </span>
+                    ),
+                }]
+                : []),
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{getAssignedVehiclePlate(ann, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },

@@ -18,6 +18,7 @@ import {
     isPersonalAssignmentType,
     hasBillOfLadingNumber,
     parseNumericField,
+    PENDING_BILL_OF_LADING_TAB,
 } from '../utils/freightDisplay';
 
 const dedupeAnnouncementsById = (items: FreightAnnouncement[]): FreightAnnouncement[] => {
@@ -249,6 +250,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             representativeType: d.representative_type || d.representativeType,
                         })) : [],
                         history: a.history || [],
+                        isReannouncement: !!(a.is_reannouncement ?? a.isReannouncement),
                         assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,
                         awaitingBillOfLadingAt: a.awaiting_bill_of_lading_at || a.awaitingBillOfLadingAt,
                         // اطلاعات کارمند اعلام‌کننده
@@ -462,6 +464,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     return;
                 }
 
+                if (updateType === 'leftover' || data.status === 'Leftover' || data.status === 'بار مانده') {
+                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+                    return;
+                }
+
                 if (updateType === 'display_order_updated') {
                     setAnnouncements((prev) =>
                         prev.map((a) =>
@@ -546,6 +553,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                         representativeType: d.representativeType || d.representative_type,
                                     })) : [],
                                     history: [],
+                                    isReannouncement: !!(data.is_reannouncement ?? data.isReannouncement),
                                     assignmentFinalizedAt: data.assignmentFinalizedAt || data.assignment_finalized_at || null,
                                     creator_full_name: data.creator_full_name || data.creatorFullName || null,
                                     creator_username: data.creator_username || data.creatorUsername || null,
@@ -759,6 +767,32 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             lineTypeOverride,
             timestamp: new Date().toISOString()
         });
+
+        const syncAfterFinalize = async () => {
+            try {
+                const { apiCache } = await import('../utils/apiCache');
+                const transportLiveCacheKeys = [
+                    `GET:${getApiUrl('freight-announcements')}`,
+                    `GET:${getApiUrl('vehicles')}`,
+                    `GET:${getApiUrl('drivers')}`,
+                    `GET:${getApiUrl('personal-drivers?page=1&limit=500')}`,
+                    `GET:${getApiUrl('personal-vehicles?page=1&limit=500')}`,
+                ];
+                for (const cacheKey of transportLiveCacheKeys) {
+                    apiCache.invalidate(cacheKey);
+                }
+            } catch (err) {
+                console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
+            }
+            // silent=true — جدول ناپدید نشود؛ forceRefresh=true — داده تازه از سرور
+            await fetchDataRef.current(true, needsPersonalResourcesRef.current, true);
+        };
+
+        const moveToPendingTabIfNeeded = (missingIds: string[]) => {
+            if (missingIds.length > 0) {
+                setActiveLine(PENDING_BILL_OF_LADING_TAB);
+            }
+        };
         
         if (announcementIds.length === 0) {
             console.warn('⚠️ [TransportLive] No announcements selected for finalize');
@@ -845,6 +879,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                     : a
                             )
                         );
+                        try {
+                            await syncAfterFinalize();
+                        } catch (refreshErr) {
+                            console.warn('⚠️ [TransportLiveContainer] Post-finalize refresh failed:', refreshErr);
+                        }
+                        moveToPendingTabIfNeeded(failedIds);
                         alert(result.message || 'شماره بارنامه برای برخی اعلام بارهای شخصی ثبت نشده است.');
                         return;
                     } else {
@@ -888,36 +928,35 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 );
             }
 
-            // نمایش پیام موفقیت
+            const finalizedIdsFromServer: string[] = Array.isArray(result.finalizedIds)
+                ? result.finalizedIds
+                : announcementIds;
+            const leftoverIdsFromServer: string[] = Array.isArray(result.leftoverIds) ? result.leftoverIds : [];
+
+            setAnnouncements((prev) =>
+                prev.filter(
+                    (a) =>
+                        !finalizedIdsFromServer.includes(a.id) && !leftoverIdsFromServer.includes(a.id)
+                )
+            );
+
+            const missingIds = (result.missingBillOfLadingIds || []) as string[];
+
+            try {
+                await syncAfterFinalize();
+            } catch (refreshErr) {
+                console.warn('⚠️ [TransportLiveContainer] Post-finalize refresh failed:', refreshErr);
+            }
+            moveToPendingTabIfNeeded(missingIds);
+
+            // نمایش پیام — بعد از به‌روزرسانی جدول
             if (result.partial) {
-                // اگر برخی finalize شدند و برخی نه
                 alert(
                     result.message ||
                         `${result.finalizedCount || 0} اعلام بار نهایی شد. ${result.missingBillOfLadingCount || 0} اعلام بار شخصی بدون شماره بارنامه به تب «در انتظار بارنامه» منتقل شد.`
                 );
             } else {
-                // اگر همه finalize شدند
                 alert(`اتمام تخصیص انجام شد:\n${result.finalizedCount || result.finalized || 0} مورد نهایی شد${result.leftover ? `\n${result.leftover} مورد به بارهای مانده برگشت` : ''}`);
-            }
-            
-            // Invalidate cache برای freight-announcements تا داده جدید fetch شود
-            try {
-                const { apiCache } = await import('../utils/apiCache');
-                const cacheKey = `GET:${getApiUrl('freight-announcements')}`;
-                apiCache.invalidate(cacheKey);
-                console.log('🗑️ [TransportLiveContainer] Cache invalidated after finalize');
-            } catch (err) {
-                console.warn('⚠️ [TransportLiveContainer] Failed to invalidate cache:', err);
-            }
-            
-            // Real-time updates finalized/awaiting-bill را پوشش می‌دهند.
-            // فقط برای leftover یک sync کوتاه نگه می‌داریم تا همه نماها یکدست بمانند.
-            if (result.leftover && result.leftover > 0) {
-                console.log('🔄 [TransportLiveContainer] Finalize completed, refreshing for leftover announcements...');
-                // با کمی تاخیر برای اطمینان از به‌روزرسانی backend
-                setTimeout(async () => {
-                    await fetchDataRef.current(true, needsPersonalResourcesRef.current);
-                }, 500);
             }
         } catch (error: any) {
             console.error('❌ [TransportLive] Finalize error:', error);
@@ -1053,50 +1092,48 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
-    const onForward = async (announcementId: string) => {
+    const onForward = async (announcementId: string | string[]) => {
+        const ids = Array.isArray(announcementId) ? announcementId : [announcementId];
         try {
             const token = localStorage.getItem('token');
-            const current = announcements.find(a => a.id === announcementId);
-            if (!current) { 
-                console.warn('⚠️ [TransportLive] Announcement not found'); 
-                return; 
+            let successCount = 0;
+            let lastError: string | null = null;
+
+            for (const id of ids) {
+                const current = announcements.find(a => a.id === id);
+                if (!current) {
+                    console.warn('⚠️ [TransportLive] Announcement not found:', id);
+                    continue;
+                }
+
+                const nextQueue = current.assignmentType === 'company' ? 'personal' : 'company';
+                const res = await fetch(getApiUrl(`freight-announcements/${id}/assignment-queue`), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ nextQueue })
+                });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    lastError = errorText || 'خطا در ارجاع';
+                    console.error('❌ [TransportLive] Forward API error:', id, errorText);
+                    continue;
+                }
+                successCount += 1;
             }
-            
-            const nextQueue = current.assignmentType === 'company' ? 'personal' : 'company';
-            console.log('🔄 [TransportLive] Forward request:', {
-                announcementId,
-                currentAssignmentType: current.assignmentType,
-                nextQueue,
-                currentStatus: current.status,
-                announcementCode: current.announcementCode
-            });
-            
-            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/assignment-queue`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ nextQueue })
-            });
-            
-            if (!res.ok) {
-                const errorText = await res.text();
-                console.error('❌ [TransportLive] Forward API error:', errorText);
-                throw new Error(errorText || 'خطا در ارجاع');
+
+            if (successCount === 0) {
+                throw new Error(lastError || 'خطا در ارجاع');
             }
-            
-            const result = await res.json();
-            console.log('✅ [TransportLive] Forward successful:', result);
-            
-            // Real-time update will handle the UI update
-            
-            // بعد از ارجاع، باید داده‌ها را refresh کنیم
-            // چون assignment_type تغییر کرده، اعلام بار از لیست ترابری فعلی حذف می‌شود
-            // و در لیست ترابری دیگر ظاهر می‌شود
-            await fetchData(true, needsPersonalResourcesRef.current);
-            
-            console.log('🔄 [TransportLive] Data refreshed after forward');
-        } catch (e: any) {
-            console.error('❌ [TransportLive] Forward error:', e);
-            console.error('❌ [TransportLive] Forward error:', e);
+
+            if (successCount < ids.length) {
+                alert(`${successCount.toLocaleString('fa-IR')} مورد ارجاع شد؛ ${(ids.length - successCount).toLocaleString('fa-IR')} مورد ناموفق بود.`);
+            }
+
+            await fetchData(false, needsPersonalResources, true);
+        } catch (err) {
+            console.error('❌ [TransportLive] Forward failed:', err);
+            alert(err instanceof Error ? err.message : 'خطا در ارجاع');
         }
     };
 

@@ -692,6 +692,8 @@ export interface FreightAnnouncement {
     displaySortOrder?: number | null;
     destinations: Destination[];
     history: AnnouncementHistory[];
+    /** کارمند برنامه‌ریزی پس از «بار مانده» مجدداً برای تایید مدیر ارسال کرده */
+    isReannouncement?: boolean;
 }
 
 export interface FreightTransaction {

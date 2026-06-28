@@ -384,6 +384,29 @@ export function isPendingBillOfLading(ann: FreightAnnouncement): boolean {
     );
 }
 
+/** تماس/پلاک پیش‌فرض برای تخصیص شخصی لبنیات-فروتلند (فاز نام باربری) */
+export const DAIRY_AMBIENT_PLACEHOLDER_MOBILE = '11';
+export const DAIRY_AMBIENT_PLACEHOLDER_PLATE = '11ع111-11';
+
+export function isDairyOrAmbientLineType(lineType?: string | null): boolean {
+    const lt = String(lineType || '');
+    return (
+        lt === FreightLineType.Dairy ||
+        lt === FreightLineType.Ambient ||
+        lt === 'Dairy' ||
+        lt === 'Ambient' ||
+        lt === 'پاستوریزه' ||
+        lt === 'لبنیات-فروتلند'
+    );
+}
+
+/** تخصیص شخصی لبنیات/فروتلند: بدون جستجو از personal_drivers/vehicles */
+export function isDairyAmbientPersonalIsolatedAssignment(
+    ann: Pick<FreightAnnouncement, 'lineType' | 'assignmentType'>
+): boolean {
+    return isPersonalAssignmentType(ann.assignmentType) && isDairyOrAmbientLineType(ann.lineType);
+}
+
 export function matchesFreightLine(ann: FreightAnnouncement, line: FreightLineType): boolean {
     const lt = ann.lineType as string;
     if (line === FreightLineType.IceCream) {

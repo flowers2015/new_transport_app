@@ -314,6 +314,14 @@ async function getFreightAnnouncements(req, res) {
     const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
     const hasName = columnCheck.rows.some(r => r.column_name === 'name');
     const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+
+    const reannounceColCheck = await pool.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'freight_announcements' AND column_name = 'is_reannouncement'
+    `);
+    const isReannouncementSelect = reannounceColCheck.rowCount > 0
+      ? 'COALESCE(fa.is_reannouncement, FALSE) AS is_reannouncement'
+      : 'FALSE AS is_reannouncement';
     
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (fa.id)
@@ -344,7 +352,8 @@ async function getFreightAnnouncements(req, res) {
           WHEN fa.assignment_type IS NOT NULL THEN fa.assignment_type
           WHEN d.id IS NOT NULL THEN 'company'
           ELSE NULL
-        END as detected_assignment_type
+        END as detected_assignment_type,
+        ${isReannouncementSelect}
       FROM freight_announcements fa
       LEFT JOIN users u_creator ON fa.created_by_user_id = u_creator.id
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
@@ -682,6 +691,23 @@ async function updateFreightAnnouncement(req, res) {
       }
       
       if (status) { fields.push(`status = $${idx++}`); values.push(status); }
+
+      // اعلام مجدد: کارمند برنامه‌ریزی بار «بار مانده» را برای تایید مدیر دوباره ارسال کرده
+      const leftoverStatuses = ['Leftover', 'بار مانده'];
+      if (
+        status === 'PendingManagerApproval' &&
+        leftoverStatuses.includes(oldRecord.status)
+      ) {
+        const reannounceCol = await client.query(
+          `SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'freight_announcements' AND column_name = 'is_reannouncement'`
+        );
+        if (reannounceCol.rowCount > 0) {
+          fields.push(`is_reannouncement = $${idx++}`);
+          values.push(true);
+        }
+      }
+
       fields.push(`updated_at = NOW()`);
 
       if (fields.length > 1) { // حداقل updated_at
@@ -815,6 +841,12 @@ async function updateFreightAnnouncement(req, res) {
           action = 'DESTINATIONS_CHANGED';
         } else if (oldRecord.status !== newRecord.status) {
           action = 'STATUS_CHANGED';
+          if (
+            ['Leftover', 'بار مانده'].includes(oldRecord.status) &&
+            newRecord.status === 'PendingManagerApproval'
+          ) {
+            action = 'REANNOUNCED';
+          }
         }
         
         // اگر فقط وضعیت از Draft یا Leftover به PendingManagerApproval تغییر کرده (ارجاع)، فقط تغییر وضعیت را ثبت کن
@@ -1600,6 +1632,11 @@ async function rejectAnnouncement(req, res) {
   }
 }
 
+function isDairyOrAmbientLineType(lineType) {
+  const lt = String(lineType || '');
+  return ['Dairy', 'Ambient', 'پاستوریزه', 'لبنیات-فروتلند'].includes(lt);
+}
+
 /** کد ملی یکتا برای ثبت سریع (فرم ساده) */
 async function generateUniquePersonalNationalId(client, mobile) {
   const digits = String(mobile || '').replace(/\D/g, '');
@@ -1727,7 +1764,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     
     // Check if announcement exists
     const { rows } = await client.query(
-      'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code FROM freight_announcements WHERE id = $1',
+      'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code, line_type FROM freight_announcements WHERE id = $1',
       [announcementId]
     );
     if (rows.length === 0) {
@@ -1740,8 +1777,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
       assigned_driver_id: oldDriverId,
       assigned_vehicle_id: oldVehicleId,
       status: oldStatus,
-      announcement_code: code 
+      announcement_code: code,
+      line_type: lineType,
     } = rows[0];
+    const dairyAmbientIsolated = isDairyOrAmbientLineType(lineType);
     
     // Check if this is personal assignment
     if (assignmentType !== 'personal') {
@@ -1763,32 +1802,39 @@ async function assignPersonalDriverAndVehicle(req, res) {
     let effectiveTruckSmartId = (truckSmartId || '').trim();
 
     if (formMode === 'simple') {
-      const driverByMobile = await client.query(
-        'SELECT id, national_id, driver_smart_id FROM personal_drivers WHERE mobile = $1 LIMIT 1',
-        [driverContact]
-      );
-      if (driverByMobile.rows.length > 0) {
-        effectiveNationalId = driverByMobile.rows[0].national_id;
-        if (!effectiveDriverSmartId && driverByMobile.rows[0].driver_smart_id) {
-          effectiveDriverSmartId = driverByMobile.rows[0].driver_smart_id;
+      if (dairyAmbientIsolated) {
+        // هر اعلام بار رکورد جدا — بدون ادغام بر اساس موبایل/پلاک مشترک (مثلاً 11)
+        effectiveNationalId = `DA-${announcementId}`;
+        effectiveDriverSmartId = `DA-DRV-${announcementId}`.slice(0, 64);
+        effectiveTruckSmartId = `DA-TRK-${announcementId}`.slice(0, 64);
+      } else {
+        const driverByMobile = await client.query(
+          'SELECT id, national_id, driver_smart_id FROM personal_drivers WHERE mobile = $1 LIMIT 1',
+          [driverContact]
+        );
+        if (driverByMobile.rows.length > 0) {
+          effectiveNationalId = driverByMobile.rows[0].national_id;
+          if (!effectiveDriverSmartId && driverByMobile.rows[0].driver_smart_id) {
+            effectiveDriverSmartId = driverByMobile.rows[0].driver_smart_id;
+          }
+        } else if (!effectiveNationalId) {
+          effectiveNationalId = await generateUniquePersonalNationalId(client, driverContact);
         }
-      } else if (!effectiveNationalId) {
-        effectiveNationalId = await generateUniquePersonalNationalId(client, driverContact);
-      }
-      if (!effectiveDriverSmartId) {
-        effectiveDriverSmartId = `DRV-${Date.now()}`;
-      }
+        if (!effectiveDriverSmartId) {
+          effectiveDriverSmartId = `DRV-${Date.now()}`;
+        }
 
-      const vehicleByPlate = await client.query(
-        `SELECT id, truck_smart_id FROM personal_vehicles
-         WHERE plate_part1 = $1 AND plate_letter = $2 AND plate_part2 = $3 AND plate_city_code = $4
-         LIMIT 1`,
-        [platePart1, plateLetter, platePart2, plateCityCode]
-      );
-      if (vehicleByPlate.rows.length > 0) {
-        effectiveTruckSmartId = vehicleByPlate.rows[0].truck_smart_id;
-      } else if (!effectiveTruckSmartId) {
-        effectiveTruckSmartId = `TRK-${platePart1}${platePart2}${plateCityCode}-${Date.now()}`.slice(0, 64);
+        const vehicleByPlate = await client.query(
+          `SELECT id, truck_smart_id FROM personal_vehicles
+           WHERE plate_part1 = $1 AND plate_letter = $2 AND plate_part2 = $3 AND plate_city_code = $4
+           LIMIT 1`,
+          [platePart1, plateLetter, platePart2, plateCityCode]
+        );
+        if (vehicleByPlate.rows.length > 0) {
+          effectiveTruckSmartId = vehicleByPlate.rows[0].truck_smart_id;
+        } else if (!effectiveTruckSmartId) {
+          effectiveTruckSmartId = `TRK-${platePart1}${platePart2}${plateCityCode}-${Date.now()}`.slice(0, 64);
+        }
       }
     } else {
       effectiveNationalId = effectiveNationalId || nationalId;
@@ -1926,6 +1972,14 @@ async function assignPersonalDriverAndVehicle(req, res) {
     if (vehiclePlateColumn.rowCount > 0) {
       updateFields.push(`vehicle_plate = $${paramIndex++}`);
       updateValues.push(notifyPlate);
+    }
+
+    const driverNameColumn = await client.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'assigned_driver_name'`
+    );
+    if (driverNameColumn.rowCount > 0) {
+      updateFields.push(`assigned_driver_name = $${paramIndex++}`);
+      updateValues.push(driverName);
     }
 
     updateValues.push(announcementId);
