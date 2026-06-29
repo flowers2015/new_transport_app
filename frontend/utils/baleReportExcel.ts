@@ -4,7 +4,7 @@ import {
   COMPANY_BALE_REPORT_HEADERS,
 } from './baleCompanyReport';
 
-const COLUMN_WIDTHS = [6, 28, 18, 10, 12, 22, 10, 18, 14];
+const COLUMN_WIDTHS = [6, 10, 26, 16, 9, 10, 20, 14, 9, 16, 14];
 
 export async function downloadCompanyBaleReportExcel(rows: BaleCompanyReportRow[], filename?: string) {
   const workbook = new ExcelJS.Workbook();
@@ -30,11 +30,13 @@ export async function downloadCompanyBaleReportExcel(rows: BaleCompanyReportRow[
   rows.forEach((r) => {
     const dataRow = sheet.addRow([
       r.row,
+      r.vehicleType,
       r.destinations,
       r.origin,
       r.brand,
       r.representativeType,
       r.representativeName,
+      r.products,
       r.vehicleCode,
       r.driverName,
       r.driverContact,
@@ -42,7 +44,7 @@ export async function downloadCompanyBaleReportExcel(rows: BaleCompanyReportRow[
     dataRow.height = 20;
     dataRow.eachCell((cell, colNumber) => {
       cell.alignment = {
-        horizontal: colNumber === 1 || colNumber >= 7 ? 'center' : 'right',
+        horizontal: colNumber === 1 || colNumber === 2 || colNumber >= 9 ? 'center' : 'right',
         vertical: 'middle',
         wrapText: true,
       };

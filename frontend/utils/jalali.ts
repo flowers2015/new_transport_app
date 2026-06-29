@@ -117,6 +117,19 @@ export function gregorianToJalali(gy: number, gm: number, gd: number): [number, 
 
 function isLeapGregorian(y: number): boolean { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
 
+/** اختلاف روز تقویم شمسی بین دو تاریخ (برای تب‌های در انتظار بارنامه) */
+export function jalaliCalendarDayDiff(from: Date | string, to: Date = new Date()): number {
+    const fromDate = typeof from === 'string' ? new Date(from) : from;
+    if (Number.isNaN(fromDate.getTime())) return 0;
+    const [fjy, fjm, fjd] = gregorianToJalali(fromDate.getFullYear(), fromDate.getMonth() + 1, fromDate.getDate());
+    const [fgy, fgm, fgd] = jalaliToGregorian(fjy, fjm, fjd);
+    const [tjy, tjm, tjd] = gregorianToJalali(to.getFullYear(), to.getMonth() + 1, to.getDate());
+    const [tgy, tgm, tgd] = jalaliToGregorian(tjy, tjm, tjd);
+    const fromDay = Date.UTC(fgy, fgm - 1, fgd) / 86400000;
+    const toDay = Date.UTC(tgy, tgm - 1, tgd) / 86400000;
+    return Math.round(toDay - fromDay);
+}
+
 export function parseJalaliDateString(jalali: string): Date | null {
     // Expect format YYYY/MM/DD or YYYY-MM-DD
     const m = /^\s*(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*$/.exec(jalali);

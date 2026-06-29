@@ -332,7 +332,9 @@ async function getFreightAnnouncements(req, res) {
         u_creator.${nameColumn} as creator_full_name,
         u_creator.username as creator_username,
         -- اگر admin مقدار صریح set کرده، از آن استفاده کن، در غیر این صورت از JOIN
-        COALESCE(fa.assigned_driver_name, d.name, pd.name) as assigned_driver_name,
+        -- نام راننده ذخیره‌شده روی اعلام بار (بدون JOIN) — برای تفکیک از نام باربری
+        fa.assigned_driver_name,
+        fa.carrier_name,
         COALESCE(fa.assigned_driver_name, d.name, pd.name) as resolved_driver_name,
         COALESCE(d.mobile, pd.mobile) as resolved_driver_contact,
         COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
@@ -1637,6 +1639,15 @@ function isDairyOrAmbientLineType(lineType) {
   return ['Dairy', 'Ambient', 'پاستوریزه', 'لبنیات-فروتلند'].includes(lt);
 }
 
+const DAIRY_AMBIENT_PLACEHOLDER_MOBILE = '11';
+const DAIRY_AMBIENT_PLACEHOLDER_PLATE_RE = /11ع111/i;
+
+function isDairyAmbientPlaceholderPayload(driverContact, vehiclePlate) {
+  const mobile = String(driverContact || '').replace(/\D/g, '');
+  const plate = String(vehiclePlate || '').replace(/\s/g, '');
+  return mobile === DAIRY_AMBIENT_PLACEHOLDER_MOBILE && DAIRY_AMBIENT_PLACEHOLDER_PLATE_RE.test(plate);
+}
+
 /** کد ملی یکتا برای ثبت سریع (فرم ساده) */
 async function generateUniquePersonalNationalId(client, mobile) {
   const digits = String(mobile || '').replace(/\D/g, '');
@@ -1764,7 +1775,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     
     // Check if announcement exists
     const { rows } = await client.query(
-      'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code, line_type FROM freight_announcements WHERE id = $1',
+      'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code, line_type, awaiting_bill_of_lading_at, carrier_name FROM freight_announcements WHERE id = $1',
       [announcementId]
     );
     if (rows.length === 0) {
@@ -1779,8 +1790,31 @@ async function assignPersonalDriverAndVehicle(req, res) {
       status: oldStatus,
       announcement_code: code,
       line_type: lineType,
+      awaiting_bill_of_lading_at: awaitingBillOfLadingAt,
+      carrier_name: existingCarrierName,
     } = rows[0];
     const dairyAmbientIsolated = isDairyOrAmbientLineType(lineType);
+    const isCarrierOnlySave =
+      dairyAmbientIsolated &&
+      isDairyAmbientPlaceholderPayload(driverContact, vehiclePlate) &&
+      !awaitingBillOfLadingAt;
+    const snapshotDriverName = isCarrierOnlySave ? null : driverName;
+    let nextCarrierName = isCarrierOnlySave
+      ? String(driverName || '').trim() || null
+      : existingCarrierName || null;
+    if (!isCarrierOnlySave && dairyAmbientIsolated && !nextCarrierName && oldDriverId) {
+      const pdCarrierRow = await client.query(
+        'SELECT name, mobile FROM personal_drivers WHERE id = $1',
+        [oldDriverId]
+      );
+      const pdCarrier = pdCarrierRow.rows[0];
+      if (
+        pdCarrier?.name &&
+        String(pdCarrier.mobile || '').replace(/\D/g, '') === DAIRY_AMBIENT_PLACEHOLDER_MOBILE
+      ) {
+        nextCarrierName = String(pdCarrier.name).trim();
+      }
+    }
     
     // Check if this is personal assignment
     if (assignmentType !== 'personal') {
@@ -1979,7 +2013,20 @@ async function assignPersonalDriverAndVehicle(req, res) {
     );
     if (driverNameColumn.rowCount > 0) {
       updateFields.push(`assigned_driver_name = $${paramIndex++}`);
-      updateValues.push(driverName);
+      updateValues.push(snapshotDriverName);
+    }
+
+    const carrierNameColumn = await client.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'carrier_name'`
+    );
+    if (carrierNameColumn.rowCount > 0 && dairyAmbientIsolated && nextCarrierName) {
+      if (isCarrierOnlySave) {
+        updateFields.push(`carrier_name = $${paramIndex++}`);
+        updateValues.push(nextCarrierName);
+      } else if (!existingCarrierName) {
+        updateFields.push(`carrier_name = COALESCE(carrier_name, $${paramIndex++})`);
+        updateValues.push(nextCarrierName);
+      }
     }
 
     updateValues.push(announcementId);
@@ -2039,7 +2086,8 @@ async function assignPersonalDriverAndVehicle(req, res) {
           assignment_type: 'personal',
           assigned_driver_id: personalDriverId,
           assigned_vehicle_id: personalVehicleId,
-          assigned_driver_name: driverName,
+          assigned_driver_name: snapshotDriverName,
+          carrier_name: nextCarrierName,
           resolved_driver_contact: driverContact,
           vehicle_plate: notifyPlate,
           bill_of_lading_number: billOfLadingNumber || null,
@@ -2059,7 +2107,8 @@ async function assignPersonalDriverAndVehicle(req, res) {
         assignment_type: 'personal',
         assigned_driver_id: personalDriverId,
         assigned_vehicle_id: personalVehicleId,
-        assigned_driver_name: driverName,
+        assigned_driver_name: snapshotDriverName,
+        carrier_name: nextCarrierName,
         resolved_driver_contact: driverContact,
         vehicle_plate: notifyPlate,
         bill_of_lading_number: billOfLadingNumber || null,
@@ -3176,8 +3225,9 @@ async function getFreightHistory(req, res) {
         fa.*,
         fa.rejection_reason,
         fa.bill_of_lading_number,
-        -- اگر admin مقدار صریح set کرده، از آن استفاده کن، در غیر این صورت از JOIN
-        COALESCE(fa.assigned_driver_name, d.name, pd.name) as assigned_driver_name,
+        fa.assigned_driver_name,
+        fa.carrier_name,
+        COALESCE(fa.assigned_driver_name, d.name, pd.name) as resolved_driver_name,
         COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
         COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
         COALESCE(fa.assigned_vehicle_brand, v.brand) as assigned_vehicle_brand,
@@ -7296,6 +7346,7 @@ async function cancelAssignment(req, res) {
          SET assigned_driver_id = NULL,
              assigned_vehicle_id = NULL,
              assigned_driver_name = NULL,
+             carrier_name = NULL,
              assigned_driver_employee_id = NULL,
              assigned_vehicle_model = NULL,
              assigned_vehicle_brand = NULL,

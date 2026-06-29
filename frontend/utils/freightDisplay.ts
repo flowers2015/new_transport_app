@@ -1,5 +1,5 @@
 import { Destination, Driver, FreightAnnouncement, FreightAnnouncementStatus, FreightLineType, PersonalDriver, Vehicle } from '../types';
-import { formatPlateNumber } from './jalali';
+import { formatPlateNumber, jalaliCalendarDayDiff } from './jalali';
 
 /** نوع نماینده — همیشه فارسی برای UI و اکسل */
 export function formatRepresentativeType(value?: string | null): string {
@@ -126,6 +126,11 @@ export function getAssignedDriverDisplayName(
 ): string {
     const fromAnn = (ann.assignedDriverName || '').trim();
     if (fromAnn) return fromAnn;
+    if (
+        isDairyAmbientPlaceholderAssignment(ann as FreightAnnouncement)
+    ) {
+        return '-';
+    }
     const id = ann.assignedDriverId;
     if (!id) return '-';
     const driver = drivers.find((d) => d.id === id) || personalDrivers.find((d) => d.id === id);
@@ -175,6 +180,7 @@ export function clearAssignmentFromAnnouncement(
         assignedDriverName: undefined,
         assignedDriverContact: undefined,
         assignedVehiclePlate: undefined,
+        carrierName: undefined,
         billOfLadingNumber: undefined,
         totalFreightCost: undefined,
         awaitingBillOfLadingAt: undefined,
@@ -197,9 +203,9 @@ function readOptionalAssignmentText(value: unknown): string | undefined {
 /** فیلدهای تخصیص از پاسخ API (شامل payloadهای SSE و snake/camel case) */
 export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
     const driverName =
-        readOptionalAssignmentText(a.resolved_driver_name) ||
         readOptionalAssignmentText(a.assigned_driver_name) ||
         readOptionalAssignmentText(a.assignedDriverName) ||
+        readOptionalAssignmentText(a.resolved_driver_name) ||
         readOptionalAssignmentText(a.driverName);
     const driverContact =
         readOptionalAssignmentText(a.resolved_driver_contact) ||
@@ -231,6 +237,7 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
         assignedDriverName: driverName,
         assignedDriverContact: driverContact,
         assignedVehiclePlate,
+        carrierName: readOptionalAssignmentText(a.carrier_name ?? a.carrierName),
         billOfLadingNumber: readOptionalAssignmentText(
             a.bill_of_lading_number ?? a.billOfLadingNumber
         ),
@@ -287,6 +294,7 @@ export function mergeAssignmentDisplayFields(
                 previous.assignedVehiclePlate,
                 incoming.assignedVehiclePlate
             ),
+            carrierName: pickNonEmptyText(previous.carrierName, incoming.carrierName),
             billOfLadingNumber: pickNonEmptyText(
                 previous.billOfLadingNumber,
                 incoming.billOfLadingNumber
@@ -313,6 +321,7 @@ export function mergeAssignmentDisplayFields(
         assignedDriverName: pickNonEmptyText(incoming.assignedDriverName, previous.assignedDriverName),
         assignedDriverContact: pickNonEmptyText(incoming.assignedDriverContact, previous.assignedDriverContact),
         assignedVehiclePlate: pickNonEmptyText(incoming.assignedVehiclePlate, previous.assignedVehiclePlate),
+        carrierName: pickNonEmptyText(incoming.carrierName, previous.carrierName),
         billOfLadingNumber: pickNonEmptyText(incoming.billOfLadingNumber, previous.billOfLadingNumber),
         totalFreightCost: incoming.totalFreightCost ?? previous.totalFreightCost,
     };
@@ -422,6 +431,59 @@ export function isDairyOrAmbientLineType(lineType?: string | null): boolean {
         lt === 'پاستوریزه' ||
         lt === 'لبنیات-فروتلند'
     );
+}
+
+export function isDairyAmbientPlaceholderAssignment(
+    ann: Pick<
+        FreightAnnouncement,
+        'lineType' | 'assignmentType' | 'assignedDriverContact' | 'assignedVehiclePlate'
+    >
+): boolean {
+    if (!isDairyAmbientPersonalIsolatedAssignment(ann)) return false;
+    const contact = (ann.assignedDriverContact || '').replace(/\D/g, '');
+    const plate = (ann.assignedVehiclePlate || '').replace(/\s/g, '');
+    return contact === DAIRY_AMBIENT_PLACEHOLDER_MOBILE && plate.includes('11ع111');
+}
+
+export function getCarrierName(
+    ann: Pick<FreightAnnouncement, 'carrierName' | 'assignedDriverName' | 'assignedDriverId' | 'lineType' | 'assignmentType' | 'assignedDriverContact' | 'assignedVehiclePlate'>,
+    personalDrivers: Array<Pick<PersonalDriver, 'id' | 'name'>> = []
+): string {
+    const fromColumn = (ann.carrierName || '').trim();
+    if (fromColumn) return fromColumn;
+    if (isDairyAmbientPlaceholderAssignment(ann)) {
+        const legacy = (ann.assignedDriverName || '').trim();
+        if (legacy) return legacy;
+        const pd = personalDrivers.find((d) => d.id === ann.assignedDriverId);
+        if (pd?.name?.trim()) return pd.name.trim();
+    }
+    if (
+        isDairyAmbientPersonalIsolatedAssignment(ann) &&
+        ann.assignedDriverId &&
+        !(ann.assignedDriverName || '').trim()
+    ) {
+        const pd = personalDrivers.find((d) => d.id === ann.assignedDriverId);
+        const pdName = pd?.name?.trim();
+        if (pdName) return pdName;
+    }
+    return '-';
+}
+
+/** زمان «اتمام تخصیص» برای تب روز — awaiting برای صف بارنامه، finalized برای موارد نهایی‌شده */
+export function getAssignmentFinalizeAnchorDate(
+    ann: Pick<FreightAnnouncement, 'assignmentFinalizedAt' | 'awaitingBillOfLadingAt'>
+): Date | null {
+    const raw = ann.assignmentFinalizedAt ?? ann.awaitingBillOfLadingAt;
+    if (!raw) return null;
+    const d = typeof raw === 'string' ? new Date(raw) : raw;
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function getPendingBillAgeDays(ann: FreightAnnouncement): number | null {
+    const anchor = getAssignmentFinalizeAnchorDate(ann);
+    if (!anchor) return null;
+    const days = jalaliCalendarDayDiff(anchor, new Date());
+    return days < 0 ? 0 : days;
 }
 
 /** تخصیص شخصی لبنیات/فروتلند: بدون جستجو از personal_drivers/vehicles */

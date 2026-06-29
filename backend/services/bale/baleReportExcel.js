@@ -2,17 +2,19 @@ const ExcelJS = require('exceljs');
 
 const REPORT_HEADERS = [
   'ردیف',
+  'نوع خودرو',
   'مقاصد',
   'مبدا بارگیری',
   'برند',
   'نوع نماینده',
   'نام نماینده',
+  'محصولات',
   'کد خودرو',
   'نام راننده',
   'شماره تماس',
 ];
 
-const COLUMN_WIDTHS = [6, 28, 18, 10, 12, 22, 10, 18, 14];
+const COLUMN_WIDTHS = [6, 10, 26, 16, 9, 10, 20, 14, 9, 16, 14];
 
 async function buildExcelBuffer(rows) {
   const workbook = new ExcelJS.Workbook();
@@ -40,11 +42,13 @@ async function buildExcelBuffer(rows) {
   rows.forEach((r) => {
     const dataRow = sheet.addRow([
       r.row,
+      r.vehicleType,
       r.destinations,
       r.origin,
       r.brand,
       r.representativeType,
       r.representativeName,
+      r.products,
       r.vehicleCode,
       r.driverName,
       r.driverContact,
@@ -52,7 +56,7 @@ async function buildExcelBuffer(rows) {
     dataRow.height = 20;
     dataRow.eachCell((cell, colNumber) => {
       cell.alignment = {
-        horizontal: colNumber === 1 || colNumber >= 7 ? 'center' : 'right',
+        horizontal: colNumber === 1 || colNumber === 2 || colNumber >= 9 ? 'center' : 'right',
         vertical: 'middle',
         wrapText: true,
       };

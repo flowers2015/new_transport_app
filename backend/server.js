@@ -230,6 +230,11 @@ addBaleReportRecipients().catch(err => {
   console.error('❌ [Server] خطا در ایجاد جدول bale_report_recipients:', err);
 });
 
+const addCarrierNameColumn = require('./migrations/add_carrier_name_column');
+addCarrierNameColumn().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون carrier_name:', err);
+});
+
 const addVehicleCodeColumn = require('./migrations/add_vehicle_code_column');
 addVehicleCodeColumn().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون vehicle_code:', err);

@@ -674,6 +674,8 @@ export interface FreightAnnouncement {
     assignedDriverName?: string;
     assignedDriverContact?: string;
     assignedVehiclePlate?: string;
+    /** نام باربری (تخصیص شخصی لبنیات/فروتلند) */
+    carrierName?: string;
     assignmentFinalizedAt?: string | Date;
     /** پس از اتمام تخصیص بدون بارنامه — نمایش در تب «در انتظار بارنامه» */
     awaitingBillOfLadingAt?: string | Date;

@@ -253,6 +253,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         isReannouncement: !!(a.is_reannouncement ?? a.isReannouncement),
                         assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,
                         awaitingBillOfLadingAt: a.awaiting_bill_of_lading_at || a.awaitingBillOfLadingAt,
+                        carrierName: a.carrier_name || a.carrierName,
                         // اطلاعات کارمند اعلام‌کننده
                         creator_full_name: a.creator_full_name || a.creatorFullName,
                         creator_username: a.creator_username || a.creatorUsername,
@@ -676,6 +677,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             assignedVehiclePlate: assignment.assignedVehiclePlate,
             totalFreightCost: assignment.totalFreightCost,
             billOfLadingNumber: assignment.billOfLadingNumber,
+            carrierName: assignment.carrierName,
             notes: assignment.notes
         }));
 
@@ -717,6 +719,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             assignedDriverContact: assignment.assignedDriverContact,
                             assignedVehiclePlate: assignment.assignedVehiclePlate,
                             billOfLadingNumber: assignment.billOfLadingNumber,
+                            carrierName: assignment.carrierName,
                             totalFreightCost: assignment.totalFreightCost,
                             notes: assignment.notes,
                             ...fromApi,

@@ -1,5 +1,5 @@
 // This is a new file: components/TransportLive.tsx
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
 import IranianPlateInput, {
@@ -26,6 +26,9 @@ import {
     matchesFreightLine,
     lineTypeFromAnnouncement,
     isDairyAmbientPersonalIsolatedAssignment,
+    isDairyOrAmbientLineType,
+    getCarrierName,
+    getPendingBillAgeDays,
     DAIRY_AMBIENT_PLACEHOLDER_MOBILE,
     DAIRY_AMBIENT_PLACEHOLDER_PLATE,
     parseNumericField,
@@ -226,6 +229,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [baleReportOpen, setBaleReportOpen] = useState(false);
+    const [pendingSubLine, setPendingSubLine] = useState<FreightLineType>(FreightLineType.Dairy);
+    const [pendingDayOffset, setPendingDayOffset] = useState(0);
     const isTransportUser = isTransportRole(currentUser.role);
     const isCompanyTransportUser =
         currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
@@ -525,6 +530,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }},
 
             // Assignment Info (for all views)
+            { header: 'باربری', display: () => activeLine === FreightLineType.Dairy || activeLine === FreightLineType.Ambient || isPendingBillOfLadingTab(activeLine), render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) },
             { header: 'نام راننده', display: () => true, render: (ann: FreightAnnouncement) => {
                 const result = getAssignedDriverDisplayName(ann, drivers, props.personalDrivers);
                 // console.log('🔍 [Render] Driver name for', ann.id, ':', result);
@@ -569,7 +575,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         ];
 
         return columns;
-    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, onChangeVehicleType, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props]);
+    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, activeLine, onChangeVehicleType, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props]);
     
     const [selectedAnnouncement, setSelectedAnnouncement] = useState<FreightAnnouncement | null>(null);
 
@@ -585,7 +591,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const handleCloseDialog = useCallback(() => {
         setSelectedAnnouncement(null);
         setDialog(null);
-    }, [])
+    }, []);
+
+    useEffect(() => {
+        if (dialog !== 'assign' || !selectedAnnouncement) return;
+        const fresh = announcements.find((a) => a.id === selectedAnnouncement.id);
+        if (fresh) setSelectedAnnouncement(fresh);
+    }, [announcements, dialog, selectedAnnouncement?.id]);
 
     const liveAnnouncements = useMemo(() => {
         const filtered = announcements.filter(a => {
@@ -706,10 +718,56 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return { pendingBill, byLine };
     }, [liveAnnouncements]);
 
+    const pendingBolAnnouncements = useMemo(
+        () => liveAnnouncements.filter(isPendingBillOfLading),
+        [liveAnnouncements]
+    );
+
+    const pendingLineCounts = useMemo(() => {
+        return Object.values(FreightLineType).reduce(
+            (acc, line) => {
+                acc[line] = pendingBolAnnouncements.filter((a) => matchesFreightLine(a, line)).length;
+                return acc;
+            },
+            {} as Record<FreightLineType, number>
+        );
+    }, [pendingBolAnnouncements]);
+
+    const pendingForSubLine = useMemo(
+        () => pendingBolAnnouncements.filter((a) => matchesFreightLine(a, pendingSubLine)),
+        [pendingBolAnnouncements, pendingSubLine]
+    );
+
+    const pendingDayTabs = useMemo(() => {
+        const days = new Set<number>();
+        pendingForSubLine.forEach((ann) => {
+            const age = getPendingBillAgeDays(ann);
+            if (age !== null && age >= 0) days.add(age);
+        });
+        return Array.from(days).sort((a, b) => a - b);
+    }, [pendingForSubLine]);
+
+    useEffect(() => {
+        if (!isPendingBillOfLadingTab(activeLine)) return;
+        const firstLineWithData = Object.values(FreightLineType).find((line) => pendingLineCounts[line] > 0);
+        if (firstLineWithData && pendingLineCounts[pendingSubLine] === 0) {
+            setPendingSubLine(firstLineWithData);
+        }
+    }, [activeLine, pendingLineCounts, pendingSubLine]);
+
+    useEffect(() => {
+        if (!isPendingBillOfLadingTab(activeLine)) return;
+        if (pendingDayTabs.length === 0) return;
+        if (!pendingDayTabs.includes(pendingDayOffset)) {
+            setPendingDayOffset(pendingDayTabs[0]);
+        }
+    }, [activeLine, pendingSubLine, pendingDayTabs, pendingDayOffset]);
+
     const filteredAnnouncements = useMemo(() => {
         let list: FreightAnnouncement[];
         if (isPendingBillOfLadingTab(activeLine)) {
-            list = liveAnnouncements.filter(isPendingBillOfLading);
+            list = pendingBolAnnouncements.filter((a) => matchesFreightLine(a, pendingSubLine));
+            list = list.filter((a) => getPendingBillAgeDays(a) === pendingDayOffset);
         } else {
             list = liveAnnouncements.filter(
                 (a) => matchesFreightLine(a, activeLine as FreightLineType) && !isPendingBillOfLading(a)
@@ -719,7 +777,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             list = sortByIceCreamDisplayOrder(list);
         }
         return list;
-    }, [liveAnnouncements, activeLine]);
+    }, [liveAnnouncements, activeLine, pendingBolAnnouncements, pendingSubLine, pendingDayOffset]);
 
     const canFinalizeCurrentTab = useMemo(() => {
         if (currentUser.role === 'ادمین' || currentUser.role === 'Admin') return true;
@@ -776,7 +834,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
         // Extra transport columns (for both modes, position differs)
         const showVehicleCode = shouldShowVehicleCodeColumn(activeLine);
+        const showCarrierColumn =
+            isPendingBillOfLadingTab(activeLine) ||
+            activeLine === FreightLineType.Dairy ||
+            activeLine === FreightLineType.Ambient;
         const extraCols = [
+            ...(showCarrierColumn
+                ? [{ header: 'باربری', render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) }]
+                : []),
             { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
             ...(showVehicleCode
@@ -799,7 +864,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (isPendingBillOfLadingTab(activeLine)) {
             const pendingBase = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'خط', render: (ann: FreightAnnouncement) => <span className="font-medium">{ann.lineType}</span> },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
@@ -1248,6 +1312,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         sortDirection,
     ]);
 
+    /** بستنی + نمای من + پنهان ارجاع‌شده: اکسل همان ردیف‌های visible جدول */
+    const excelExportAnnouncements = useMemo(() => {
+        const matchVisibleMyView =
+            activeLine === FreightLineType.IceCream &&
+            !isPendingBillOfLadingTab(activeLine) &&
+            isTransportUser &&
+            iceCreamViewMode === 'my' &&
+            hideReferred;
+        return matchVisibleMyView ? displayAnnouncements : filteredAnnouncements;
+    }, [
+        activeLine,
+        isTransportUser,
+        iceCreamViewMode,
+        hideReferred,
+        displayAnnouncements,
+        filteredAnnouncements,
+    ]);
+
     const handleSort = useCallback((header: string) => {
         if (header === 'عملیات') return;
         setSortColumn((prev) => {
@@ -1369,7 +1451,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         wsData.push(headers);
         
         // Generate rows - دقیقاً همان ترتیب و محتوای frontend
-        filteredAnnouncements.forEach((ann, idx) => {
+        excelExportAnnouncements.forEach((ann, idx) => {
             const row: any[] = [];
             
             if (canPerformActions) {
@@ -1495,7 +1577,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header.includes(h));
             if (isNumericColumn) {
                 // برای تمام ردیف‌های داده، فرمت عددی تنظیم می‌کنیم
-                for (let row = 1; row <= filteredAnnouncements.length; row++) {
+                for (let row = 1; row <= excelExportAnnouncements.length; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
                     if (ws[cellAddress] && ws[cellAddress].v) {
                         // اگر مقدار عددی است، به صورت عدد نگه دار (Excel خودش فرمت می‌کند)
@@ -1691,7 +1773,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             };
             
             // Add data rows with zebra striping
-            filteredAnnouncements.forEach((ann, idx) => {
+            excelExportAnnouncements.forEach((ann, idx) => {
                 const rowData: any[] = [];
                 headers.forEach((header) => {
                     if (isFreightDestinationDetailHeader(header)) return;
@@ -1777,7 +1859,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             // Set column widths
             headers.forEach((header, idx) => {
                 let maxLength = header.length;
-                filteredAnnouncements.forEach(ann => {
+                excelExportAnnouncements.forEach(ann => {
                     const value = getValueForHeader(header, ann, 0);
                     const cellValue = String(value || '');
                     maxLength = Math.max(maxLength, cellValue.length);
@@ -1864,6 +1946,45 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 </button>
                             ))}
                         </div>
+                        {isPendingBillOfLadingTab(activeLine) && (
+                            <div className="flex flex-col gap-2 w-full mt-2">
+                                <div className="flex items-center p-1 bg-amber-50 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0 border border-amber-200">
+                                    {Object.values(FreightLineType).map((line) => (
+                                        <button
+                                            key={`pending-line-${line}`}
+                                            type="button"
+                                            onClick={() => setPendingSubLine(line)}
+                                            className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${
+                                                pendingSubLine === line
+                                                    ? 'bg-amber-600 text-white shadow'
+                                                    : 'text-amber-900 hover:bg-amber-100'
+                                            }`}
+                                        >
+                                            {line} ({pendingLineCounts[line].toLocaleString('fa-IR')})
+                                        </button>
+                                    ))}
+                                </div>
+                                {pendingDayTabs.length > 0 && (
+                                    <div className="flex items-center p-1 bg-slate-50 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0 border border-slate-200">
+                                        {pendingDayTabs.map((day) => (
+                                            <button
+                                                key={`pending-day-${day}`}
+                                                type="button"
+                                                onClick={() => setPendingDayOffset(day)}
+                                                className={`shrink-0 min-w-[2rem] px-2.5 py-1 rounded-md text-sm font-bold transition-colors ${
+                                                    pendingDayOffset === day
+                                                        ? 'bg-slate-700 text-white shadow'
+                                                        : 'text-slate-700 hover:bg-slate-200'
+                                                }`}
+                                                title={`${day.toLocaleString('fa-IR')} روز از اتمام تخصیص`}
+                                            >
+                                                {day.toLocaleString('fa-IR')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
                         {canPerformActions && selectedIds.size > 0 && (
@@ -2361,8 +2482,15 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         announcement.lineType === 'بستنی';
 
     const isDairyAmbientIsolated = isDairyAmbientPersonalIsolatedAssignment(announcement);
-    const isCarrierPlaceholderPhase =
-        isDairyAmbientIsolated && !isPendingBillOfLading(announcement);
+    const isAmbientIsolatedLine =
+        isDairyAmbientIsolated && matchesFreightLine(announcement, FreightLineType.Ambient);
+    const isDairyIsolatedLine =
+        isDairyAmbientIsolated && matchesFreightLine(announcement, FreightLineType.Dairy);
+    /** فقط لبنیات-فروتلند: فاز نام باربری با تماس/پلاک پیش‌فرض ۱۱ */
+    const isAmbientCarrierPhase =
+        isAmbientIsolatedLine && !isPendingBillOfLading(announcement);
+    const isPendingBolEdit = isDairyAmbientIsolated && isPendingBillOfLading(announcement);
+    const displayCarrierName = getCarrierName(announcement, personalDrivers);
 
     const handlePlatePartsChange = (next: IranianPlateParts) => {
         setPlateParts(next);
@@ -2389,8 +2517,12 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     // --- Common State ---
     const [blNumber, setBlNumber] = useState(announcement.billOfLadingNumber || '');
     const [notes, setNotes] = useState(announcement.notes || '');
+    const lastHydratedAnnouncementIdRef = useRef<string | null>(null);
 
     useEffect(() => {
+        if (lastHydratedAnnouncementIdRef.current === announcement.id) return;
+        lastHydratedAnnouncementIdRef.current = announcement.id;
+
         if (announcement.assignmentType === 'company') {
             const driver = drivers.find(d => d.id === announcement.assignedDriverId);
             const vehicle = vehicles.find(v => v.id === announcement.assignedVehicleId);
@@ -2408,44 +2540,45 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 setNationalId('');
 
                 const pendingBol = isPendingBillOfLading(announcement);
-                const placeholderPlateParts = parseIranianPlateString(DAIRY_AMBIENT_PLACEHOLDER_PLATE);
                 const annName = (announcement.assignedDriverName || '').trim();
                 const annContact = (announcement.assignedDriverContact || '').trim();
                 const annPlate = (announcement.assignedVehiclePlate || '').trim();
+                const resolvedPlate = (() => {
+                    const fromState = getAssignedVehiclePlate(announcement, vehicles, personalVehicles);
+                    if (fromState && fromState !== '-') return fromState.trim();
+                    return annPlate;
+                })();
                 const vehicleType = announcement.vehicleType || '';
 
                 if (pendingBol) {
                     const hadRealContact =
                         Boolean(annContact) && annContact !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
+                    const plateForForm =
+                        resolvedPlate ||
+                        (isAmbientIsolatedLine ? DAIRY_AMBIENT_PLACEHOLDER_PLATE : '');
                     const hadRealPlate =
-                        Boolean(annPlate) && annPlate !== DAIRY_AMBIENT_PLACEHOLDER_PLATE;
-                    const editingRealAssignment = hadRealContact || hadRealPlate;
+                        Boolean(resolvedPlate) &&
+                        resolvedPlate !== DAIRY_AMBIENT_PLACEHOLDER_PLATE;
+                    const editingRealDriver = hadRealContact || hadRealPlate;
+                    const driverNameForForm = editingRealDriver ? annName : '';
 
                     setPersonalDriverDetails({
-                        name: editingRealAssignment ? annName : '',
-                        mobile: editingRealAssignment ? annContact : '',
+                        name: driverNameForForm,
+                        mobile: hadRealContact ? annContact : '',
                         driverSmartId: '',
                     });
-                    if (editingRealAssignment && hadRealPlate) {
-                        const platePartsFromAnn = parseIranianPlateString(annPlate);
-                        setPlateParts(platePartsFromAnn);
-                        setPersonalVehicleDetails({
-                            type: vehicleType,
-                            plate: formatIranianPlateString(platePartsFromAnn),
-                            truckSmartId: '',
-                        });
-                    } else {
-                        setPlateParts({
-                            part1: '',
-                            letter: DEFAULT_PLATE_LETTER,
-                            part2: '',
-                            cityCode: '',
-                        });
-                        setPersonalVehicleDetails({ type: vehicleType, plate: '', truckSmartId: '' });
-                    }
-                } else {
+                    const platePartsForForm = parseIranianPlateString(plateForForm);
+                    setPlateParts(platePartsForForm);
+                    setPersonalVehicleDetails({
+                        type: vehicleType,
+                        plate: formatIranianPlateString(platePartsForForm),
+                        truckSmartId: '',
+                    });
+                } else if (isAmbientIsolatedLine) {
+                    const carrierLabel = getCarrierName(announcement, personalDrivers);
+                    const placeholderPlateParts = parseIranianPlateString(DAIRY_AMBIENT_PLACEHOLDER_PLATE);
                     setPersonalDriverDetails({
-                        name: annName,
+                        name: carrierLabel !== '-' ? carrierLabel : '',
                         mobile: DAIRY_AMBIENT_PLACEHOLDER_MOBILE,
                         driverSmartId: '',
                     });
@@ -2453,6 +2586,31 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                     setPersonalVehicleDetails({
                         type: vehicleType,
                         plate: DAIRY_AMBIENT_PLACEHOLDER_PLATE,
+                        truckSmartId: '',
+                    });
+                } else {
+                    const hadRealContact =
+                        Boolean(annContact) && annContact !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
+                    const hadRealPlate =
+                        Boolean(resolvedPlate) &&
+                        resolvedPlate !== DAIRY_AMBIENT_PLACEHOLDER_PLATE;
+                    const platePartsForDairy = hadRealPlate
+                        ? parseIranianPlateString(resolvedPlate)
+                        : {
+                              part1: '',
+                              letter: DEFAULT_PLATE_LETTER,
+                              part2: '',
+                              cityCode: '',
+                          };
+                    setPersonalDriverDetails({
+                        name: annName,
+                        mobile: hadRealContact ? annContact : '',
+                        driverSmartId: '',
+                    });
+                    setPlateParts(platePartsForDairy);
+                    setPersonalVehicleDetails({
+                        type: vehicleType,
+                        plate: hadRealPlate ? formatIranianPlateString(platePartsForDairy) : '',
                         truckSmartId: '',
                     });
                 }
@@ -2532,7 +2690,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             setCostMode('manual');
             setAutoTotalCost('');
         }
-    }, [announcement, drivers, vehicles]);
+    }, [announcement.id, drivers, vehicles, personalVehicles]);
     
     // محاسبه خودکار کرایه هر مقصد بر اساس کرایه کل و تناژ (در حالت auto)
     useEffect(() => {
@@ -2819,15 +2977,15 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 assignedVehiclePlate: formatCompanyVehiclePlate(foundVehicle),
             });
         } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
-            const saveMobile = isCarrierPlaceholderPhase
+            const saveMobile = isAmbientCarrierPhase
                 ? DAIRY_AMBIENT_PLACEHOLDER_MOBILE
                 : personalDriverDetails.mobile?.trim();
-            const savePlateParts = isCarrierPlaceholderPhase
+            const savePlateParts = isAmbientCarrierPhase
                 ? parseIranianPlateString(DAIRY_AMBIENT_PLACEHOLDER_PLATE)
                 : plateParts;
             const saveVehicleType = (announcement.vehicleType || personalVehicleDetails.type || '').trim();
 
-            if (isCarrierPlaceholderPhase) {
+            if (isAmbientCarrierPhase) {
                 if (!personalDriverDetails.name?.trim()) {
                     alert('نام باربری الزامی است.');
                     return;
@@ -2885,13 +3043,22 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             // Build plate from parts: 12ع345-67 (two digits, Persian letter, three digits, dash, two digits)
             const formattedPlate = formatIranianPlateString(savePlateParts);
             
-            // Validate plate format: must match Iranian plate format (12ع345-67)
-            if (!savePlateParts.part1 || savePlateParts.part1.length !== 2 || 
-                !savePlateParts.letter || 
-                !savePlateParts.part2 || savePlateParts.part2.length !== 3 || 
-                !savePlateParts.cityCode || savePlateParts.cityCode.length !== 2) {
-                alert('لطفاً تمام قسمت‌های پلاک خودرو را به درستی وارد کنید (دو رقم - حرف - سه رقم - دو رقم)');
-                return;
+            // Validate plate (فقط لبنیات-فروتلند فاز باربری: پلاک ۱۱ در پس‌زمینه)
+            if (!isAmbientCarrierPhase) {
+                if (
+                    !savePlateParts.part1 ||
+                    savePlateParts.part1.length !== 2 ||
+                    !savePlateParts.letter ||
+                    !savePlateParts.part2 ||
+                    savePlateParts.part2.length !== 3 ||
+                    !savePlateParts.cityCode ||
+                    savePlateParts.cityCode.length !== 2
+                ) {
+                    alert(
+                        'لطفاً تمام قسمت‌های پلاک خودرو را به درستی وارد کنید (دو رقم - حرف - سه رقم - دو رقم)'
+                    );
+                    return;
+                }
             }
             
             // محاسبه totalFreightCost برای personal user
@@ -2921,12 +3088,19 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 truckSmartId: !isDairyAmbientIsolated && personalFormMode === 'detailed' ? personalVehicleDetails.truckSmartId : undefined,
                 destinations,
                 totalFreightCost: personalTotalCost,
-                billOfLadingNumber: isCarrierPlaceholderPhase ? undefined : blNumber,
+                billOfLadingNumber: isAmbientCarrierPhase ? undefined : blNumber,
                 assignmentType: 'personal',
                 notes: notes,
                 assignedDriverName: personalDriverDetails.name.trim(),
                 assignedDriverContact: saveMobile,
                 assignedVehiclePlate: formattedPlate,
+                carrierName: isAmbientCarrierPhase
+                    ? personalDriverDetails.name.trim()
+                    : isAmbientIsolatedLine
+                      ? displayCarrierName !== '-'
+                          ? displayCarrierName
+                          : announcement.carrierName
+                      : undefined,
             });
         }
         onClose();
@@ -3141,15 +3315,34 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             </label>
                         </div>
                         )}
-                        {isCarrierPlaceholderPhase && (
+                        {isAmbientCarrierPhase && (
                             <p className="text-xs text-sky-800 bg-sky-50 border border-sky-200 rounded-md p-3">
-                                فقط نام باربری را وارد کنید. تماس و پلاک پیش‌فرض ثبت می‌شود؛ پس از اتمام تخصیص، در تب «در انتظار بارنامه» اطلاعات واقعی راننده را ثبت کنید.
+                                نام باربری را وارد کنید. تماس و پلاک پیش‌فرض (۱۱) ثبت می‌شود؛ پس از
+                                اتمام تخصیص در تب «در انتظار بارنامه» اطلاعات واقعی راننده را ثبت
+                                کنید.
+                            </p>
+                        )}
+                        {isDairyIsolatedLine && !isPendingBillOfLading(announcement) && (
+                            <p className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-3">
+                                نام راننده، تماس، پلاک و کرایه را وارد کنید. در پاستوریزه از باربری
+                                استفاده نمی‌شود.
                             </p>
                         )}
                         {isDairyAmbientIsolated && isPendingBillOfLading(announcement) && (
                             <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3">
                                 اطلاعات واقعی راننده، تماس، پلاک و بارنامه را وارد کنید. جستجو از بانک رانندگان انجام نمی‌شود.
                             </p>
+                        )}
+                        {isPendingBolEdit && isAmbientIsolatedLine && displayCarrierName !== '-' && (
+                            <div className="mb-2">
+                                <label className="text-xs block mb-0.5">نام باربری</label>
+                                <input
+                                    value={displayCarrierName}
+                                    readOnly
+                                    disabled
+                                    className="input-style bg-slate-100 text-slate-800"
+                                />
+                            </div>
                         )}
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
                              <legend className="font-semibold px-1 text-sm">۱. اطلاعات راننده و خودرو</legend>
@@ -3249,7 +3442,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             )}
                             <div className="flex flex-wrap items-end gap-x-4 gap-y-3 pt-2">
                                 <div className="w-fit max-w-full">
-                                    <label className="text-xs block mb-0.5">{isCarrierPlaceholderPhase ? 'نام باربری*' : 'نام و نام خانوادگی*'}</label>
+                                    <label className="text-xs block mb-0.5">{isAmbientCarrierPhase ? 'نام باربری*' : 'نام و نام خانوادگی*'}</label>
                                     <input
                                         value={personalDriverDetails.name || ''}
                                         onChange={(e) => setPersonalDriverDetails((s) => ({ ...s, name: e.target.value }))}
@@ -3263,8 +3456,8 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                         onChange={(e) => setPersonalDriverDetails((s) => ({ ...s, mobile: e.target.value }))}
                                         className="input-compact input-compact-w36"
                                         dir="ltr"
-                                        readOnly={isCarrierPlaceholderPhase}
-                                        disabled={isCarrierPlaceholderPhase}
+                                        readOnly={isAmbientCarrierPhase}
+                                        disabled={isAmbientCarrierPhase}
                                     />
                                 </div>
                                 {!isDairyAmbientIsolated && personalFormMode === 'detailed' && (
@@ -3402,7 +3595,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                     <IranianPlateInput
                                         value={plateParts}
                                         onChange={handlePlatePartsChange}
-                                        disabled={isCarrierPlaceholderPhase}
+                                        disabled={isAmbientCarrierPhase}
                                     />
                                 </div>
                             </div>
@@ -3503,7 +3696,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             </div>
                              <div className="text-right font-bold pt-2 border-t">کرایه کل: {typeof totalPersonalCost === 'number' ? totalPersonalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : String(totalPersonalCost)} ریال</div>
                         </fieldset>
-                        {!isCarrierPlaceholderPhase && (
+                        {!isAmbientCarrierPhase && (
                         <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
                         )}
                         <div><label className="text-sm">توضیحات</label><textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-style mt-1 min-h-[80px]" placeholder="توضیحات اختیاری..." /></div>

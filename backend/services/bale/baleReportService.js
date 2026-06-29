@@ -25,6 +25,7 @@ function formatReportAsText(rows, downloadUrl) {
       `${r.row}. ${r.destinations}`,
       `   مبدا: ${r.origin} | برند: ${r.brand}`,
       `   نماینده: ${r.representativeType} / ${r.representativeName}`,
+      `   محصولات: ${r.products || '-'} | نوع خودرو: ${r.vehicleType || '-'}`,
       `   خودرو: ${r.vehicleCode} | راننده: ${r.driverName} | تماس: ${r.driverContact}`,
       ''
     );
@@ -50,6 +51,8 @@ function normalizeRows(rows) {
     brand: String(row.brand ?? '-'),
     representativeType: String(row.representativeType ?? '-'),
     representativeName: String(row.representativeName ?? '-'),
+    products: String(row.products ?? ''),
+    vehicleType: String(row.vehicleType ?? '-'),
     vehicleCode: String(row.vehicleCode ?? '-'),
     driverName: String(row.driverName ?? '-'),
     driverContact: String(row.driverContact ?? '-'),

@@ -29,9 +29,9 @@ async function readApiError(res: Response): Promise<string> {
 
 const CAPTURE_FONT = "'Vazirmatn', 'Tahoma', sans-serif";
 const REPORT_TITLE = 'گزارش تخصیص شرکتی';
-const CAPTURE_TABLE_WIDTH = 1420;
-/** نسبت عرض ستون‌ها — مقاصد و نام نماینده پهن‌تر */
-const CAPTURE_COLUMN_UNITS = [6, 34, 16, 9, 11, 28, 9, 16, 12];
+const CAPTURE_TABLE_WIDTH = 1680;
+/** نسبت عرض ستون‌ها */
+const CAPTURE_COLUMN_UNITS = [5, 9, 26, 11, 7, 9, 18, 12, 7, 13, 11];
 const CAPTURE_COLUMN_TOTAL = CAPTURE_COLUMN_UNITS.reduce((sum, w) => sum + w, 0);
 const CAPTURE_COLUMN_WIDTHS = CAPTURE_COLUMN_UNITS.map(
     (w) => `${((w / CAPTURE_COLUMN_TOTAL) * 100).toFixed(4)}%`
@@ -72,13 +72,13 @@ const captureHeaderInnerStyle: React.CSSProperties = {
     justifyContent: 'center',
     flexWrap: 'wrap',
     gap: '0.3em',
-    minHeight: 52,
-    padding: '14px 8px',
+    minHeight: 58,
+    padding: '16px 8px',
     fontWeight: 700,
     textAlign: 'center',
     lineHeight: 1.55,
     fontFamily: CAPTURE_FONT,
-    fontSize: 13.5,
+    fontSize: 16.5,
     color: '#0f172a',
     boxSizing: 'border-box',
     width: '100%',
@@ -95,12 +95,12 @@ const captureCellInnerStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
-    padding: '12px 8px',
+    minHeight: 50,
+    padding: '14px 8px',
     textAlign: 'center',
     lineHeight: 1.55,
     fontFamily: CAPTURE_FONT,
-    fontSize: 13,
+    fontSize: 15.5,
     fontWeight: 500,
     color: '#0f172a',
     whiteSpace: 'pre-wrap',
@@ -113,8 +113,8 @@ const captureCellInnerStyle: React.CSSProperties = {
 const captureCellInnerMultilineStyle: React.CSSProperties = {
     ...captureCellInnerStyle,
     display: 'block',
-    padding: '10px 6px',
-    fontSize: 12.5,
+    padding: '12px 8px',
+    fontSize: 15,
     lineHeight: 1.65,
 };
 
@@ -129,7 +129,7 @@ const CaptureTitle: React.FC = () => (
             marginBottom: 18,
             direction: 'rtl',
             fontFamily: CAPTURE_FONT,
-            fontSize: 21,
+            fontSize: 26,
             fontWeight: 700,
             color: '#0f172a',
             lineHeight: 1.7,
@@ -280,13 +280,13 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
     const captureTableImage = async (): Promise<Blob> => {
         const el = captureRef.current;
         if (!el) throw new Error('جدول پیش‌نمایش یافت نشد.');
-        await document.fonts.load('700 21px Vazirmatn');
-        await document.fonts.load('700 13px Vazirmatn');
-        await document.fonts.load('500 13px Vazirmatn');
+        await document.fonts.load('700 26px Vazirmatn');
+        await document.fonts.load('700 16px Vazirmatn');
+        await document.fonts.load('500 15px Vazirmatn');
         await document.fonts.ready;
         await new Promise((resolve) => setTimeout(resolve, 80));
         const canvas = await html2canvas(el, {
-            scale: 1.5,
+            scale: 1.75,
             backgroundColor: '#ffffff',
             useCORS: true,
             logging: false,
@@ -540,7 +540,7 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
 
                     {/* پیش‌نمایش در UI */}
                     <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                        <div className="min-w-[720px] bg-white p-2">
+                        <div className="min-w-[960px] bg-white p-2">
                             <table className="w-full text-xs border-collapse text-center">
                                 <thead>
                                     <tr className="bg-slate-100">
@@ -568,11 +568,13 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                         rows.map((r) => (
                                             <tr key={r.row} className="even:bg-slate-50">
                                                 <td className="border border-slate-200 px-2 py-2">{r.row}</td>
+                                                <td className="border border-slate-200 px-2 py-2">{r.vehicleType}</td>
                                                 <td className="border border-slate-200 px-2 py-2 text-right">{r.destinations}</td>
                                                 <td className="border border-slate-200 px-2 py-2">{r.origin}</td>
                                                 <td className="border border-slate-200 px-2 py-2">{r.brand}</td>
                                                 <td className="border border-slate-200 px-2 py-2">{r.representativeType}</td>
                                                 <td className="border border-slate-200 px-2 py-2 text-right">{r.representativeName}</td>
+                                                <td className="border border-slate-200 px-2 py-2 text-right">{r.products}</td>
                                                 <td className="border border-slate-200 px-2 py-2 font-mono">{r.vehicleCode}</td>
                                                 <td className="border border-slate-200 px-2 py-2">{r.driverName}</td>
                                                 <td className="border border-slate-200 px-2 py-2 font-mono dir-ltr">{r.driverContact}</td>
@@ -607,7 +609,7 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                 style={{
                                     width: '100%',
                                     borderCollapse: 'collapse',
-                                    fontSize: 13,
+                                    fontSize: 15,
                                     tableLayout: 'fixed',
                                     color: '#0f172a',
                                     fontFamily: CAPTURE_FONT,
@@ -629,14 +631,16 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                     {rows.map((r) => (
                                         <tr key={r.row} style={{ background: r.row % 2 === 0 ? '#f8fafc' : '#fff' }}>
                                             <CaptureCell value={r.row} />
-                                            <CaptureCell value={r.destinations} multiline />
-                                            <CaptureCell value={r.origin} />
-                                            <CaptureCell value={r.brand} />
-                                            <CaptureCell value={r.representativeType} />
-                                            <CaptureCell value={r.representativeName} multiline />
-                                            <CaptureCell value={r.vehicleCode} />
-                                            <CaptureCell value={r.driverName} />
-                                            <CaptureCell value={r.driverContact} />
+                                                <CaptureCell value={r.vehicleType} />
+                                                <CaptureCell value={r.destinations} multiline />
+                                                <CaptureCell value={r.origin} />
+                                                <CaptureCell value={r.brand} />
+                                                <CaptureCell value={r.representativeType} />
+                                                <CaptureCell value={r.representativeName} multiline />
+                                                <CaptureCell value={r.products} multiline />
+                                                <CaptureCell value={r.vehicleCode} />
+                                                <CaptureCell value={r.driverName} />
+                                                <CaptureCell value={r.driverContact} />
                                         </tr>
                                     ))}
                                 </tbody>

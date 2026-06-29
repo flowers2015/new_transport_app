@@ -8,6 +8,7 @@ import {
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
+    getCarrierName,
     TOTAL_FREIGHT_HEADER,
     formatFreightAmountCell,
     formatRepresentativeType,
@@ -263,17 +264,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             { header: 'مقاصد', display: () => viewMode === 'compact', render: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، ') },
 
             // Assignment Info (for all views)
+            { header: 'باربری', display: (lt: any) => lt === FreightLineType.Dairy || lt === FreightLineType.Ambient, render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) },
             { header: 'نام راننده', display: () => true, render: (ann: FreightAnnouncement) => {
-                const result = ann.assignmentType === 'company' 
-                    ? getDriverName(ann.assignedDriverId, drivers, props.personalDrivers)
-                    : getPersonalDriverName(ann.assignedDriverId, props.personalDrivers);
+                const result = getAssignedDriverDisplayName(ann, drivers, props.personalDrivers);
                 // console.log('🔍 [Render] Driver name for', ann.id, ':', result);
                 return result;
             }},
             { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => {
-                const result = ann.assignmentType === 'company' 
-                    ? getDriverContact(ann.assignedDriverId, drivers, props.personalDrivers)
-                    : getPersonalDriverContact(ann.assignedDriverId, props.personalDrivers);
+                const result = getAssignedDriverContact(ann, drivers, props.personalDrivers);
                 return <span className="font-mono">{result}</span>;
             }},
             { header: 'کد خودرو', display: (lt: any) => lt === FreightLineType.IceCream || lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => (
@@ -824,8 +822,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
 
     const visibleColumns = useMemo(() => {
         const showVehicleCode = shouldShowVehicleCodeColumn(activeLine);
-        // Extra transport columns (for both modes, position differs)
+        const showCarrierColumn =
+            activeLine === FreightLineType.Dairy || activeLine === FreightLineType.Ambient;
         const extraCols = [
+            ...(showCarrierColumn
+                ? [{ header: 'باربری', render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) }]
+                : []),
             { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
             ...(showVehicleCode

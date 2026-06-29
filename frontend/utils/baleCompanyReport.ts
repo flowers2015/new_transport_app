@@ -19,11 +19,13 @@ import { getAssignedVehicleCode } from './transportLiveViewUtils';
 
 export const COMPANY_BALE_REPORT_HEADERS = [
     'ردیف',
+    'نوع خودرو',
     'مقاصد',
     'مبدا بارگیری',
     'برند',
     'نوع نماینده',
     'نام نماینده',
+    'محصولات',
     'کد خودرو',
     'نام راننده',
     'شماره تماس',
@@ -36,6 +38,8 @@ export type BaleCompanyReportRow = {
     brand: string;
     representativeType: string;
     representativeName: string;
+    products: string;
+    vehicleType: string;
     vehicleCode: string;
     driverName: string;
     driverContact: string;
@@ -46,6 +50,12 @@ const LINE_ORDER: FreightLineType[] = [
     FreightLineType.Dairy,
     FreightLineType.Ambient,
 ];
+
+function getProductsLabel(ann: FreightAnnouncement): string {
+    if (!matchesFreightLine(ann, FreightLineType.IceCream)) return '';
+    const products = ann.products || [];
+    return products.length > 0 ? products.join('، ') : '-';
+}
 
 function detectLine(ann: FreightAnnouncement): FreightLineType | null {
     for (const line of LINE_ORDER) {
@@ -117,6 +127,8 @@ export function buildCompanyBaleReportRows(
         brand: (ann.brand || '-').trim() || '-',
         representativeType: getRepresentativeTypesLabel(ann),
         representativeName: getRepresentativeNameLabel(ann),
+        products: getProductsLabel(ann),
+        vehicleType: (ann.vehicleType || '-').trim() || '-',
         vehicleCode: getAssignedVehicleCode(ann, resources.vehicles),
         driverName: getAssignedDriverDisplayName(ann, resources.drivers, resources.personalDrivers),
         driverContact: getAssignedDriverContact(ann, resources.drivers, resources.personalDrivers),
@@ -128,11 +140,13 @@ export function baleReportRowsToMatrix(rows: BaleCompanyReportRow[]): string[][]
         [...COMPANY_BALE_REPORT_HEADERS],
         ...rows.map((r) => [
             String(r.row),
+            r.vehicleType,
             r.destinations,
             r.origin,
             r.brand,
             r.representativeType,
             r.representativeName,
+            r.products,
             r.vehicleCode,
             r.driverName,
             r.driverContact,
