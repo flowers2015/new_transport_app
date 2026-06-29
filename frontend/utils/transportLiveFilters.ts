@@ -25,6 +25,14 @@ export function transportLiveFilterStorageKey(
     return `${STORAGE_PREFIX}:${userId}:${activeLine}:${viewMode}`;
 }
 
+export function freightHistoryFilterStorageKey(
+    userId: string,
+    activeLine: string,
+    viewMode: 'compact' | 'full'
+): string {
+    return `freight-history-filters-v1:${userId}:${activeLine}:${viewMode}`;
+}
+
 export function loadTransportLiveFilterPrefs(key: string): TransportLiveFilterPrefs {
     try {
         const raw = localStorage.getItem(key);

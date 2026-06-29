@@ -130,6 +130,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                         tonnage: d.tonnage,
                         unloadTime: d.unload_time || d.unloadTime,
                         freightCost: d.freight_cost ?? d.freightCost,
+                        deliveryDate: d.delivery_date || d.deliveryDate,
                     })) : [],
                     history: a.history || [],
                     // اطلاعات کارمند اعلام‌کننده

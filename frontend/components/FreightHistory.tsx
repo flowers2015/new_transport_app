@@ -1,5 +1,5 @@
 // This is a new file: components/TransportLive.tsx
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
 import {
@@ -14,7 +14,22 @@ import {
     formatLoadingType,
     localizeExcelValue,
     isFreightDestinationDetailHeader,
+    formatTotalTonnageFromDestinations,
+    matchesFreightLine,
+    isDairyOrAmbientLineType,
+    parseNumericField,
+    formatTonnageKg,
 } from '../utils/freightDisplay';
+import {
+    ColumnFiltersState,
+    SortDirection,
+    applyTransportLiveFilters,
+    applyTransportLiveSort,
+    countActiveFilters,
+    loadTransportLiveFilterPrefs,
+    saveTransportLiveFilterPrefs,
+    freightHistoryFilterStorageKey,
+} from '../utils/transportLiveFilters';
 import { getAssignedVehicleCode, shouldShowVehicleCodeColumn } from '../utils/transportLiveViewUtils';
 import { getFinanceRejectType, getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
 import { TruckIcon } from './icons/CarIcon';
@@ -111,9 +126,34 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     useEffect(() => {
         localStorage.setItem('freightHistoryViewMode', viewMode);
     }, [viewMode]);
+
+    const filterStorageKey = useMemo(
+        () => freightHistoryFilterStorageKey(currentUser.id, activeLine, viewMode),
+        [currentUser.id, activeLine, viewMode]
+    );
+    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>({});
+    const [quickSearch, setQuickSearch] = useState('');
+    const [sortColumn, setSortColumn] = useState<string | null>(null);
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+    useEffect(() => {
+        const prefs = loadTransportLiveFilterPrefs(filterStorageKey);
+        setColumnFilters(prefs.columnFilters);
+        setQuickSearch(prefs.quickSearch);
+        setSortColumn(prefs.sortColumn ?? null);
+        setSortDirection(prefs.sortDirection ?? 'asc');
+    }, [filterStorageKey]);
+
+    useEffect(() => {
+        saveTransportLiveFilterPrefs(filterStorageKey, {
+            columnFilters,
+            quickSearch,
+            sortColumn,
+            sortDirection,
+        });
+    }, [filterStorageKey, columnFilters, quickSearch, sortColumn, sortDirection]);
+
     const [isRulesOpen, setIsRulesOpen] = useState(false);
-    // فیلتر ستون‌ها - هر ستونی که در این Set باشد، نمایش داده می‌شود
-    const [visibleColumnHeaders, setVisibleColumnHeaders] = useState<Set<string>>(new Set());
     
     // Helper functions inside component to ensure proper re-rendering
     const getDriverName = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
@@ -284,19 +324,43 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     }, [announcements]);
 
     const filteredAnnouncements = useMemo(() => {
-        const filtered = liveAnnouncements.filter(a => a.lineType === activeLine);
-        return filtered;
+        return liveAnnouncements.filter((a) => matchesFreightLine(a, activeLine));
     }, [liveAnnouncements, activeLine]);
-    
-    // استفاده از props برای pagination (اگر موجود باشد) یا fallback به local state
-    const paginatedAnnouncements = filteredAnnouncements; // Backend pagination handles this
 
-    // Initialize visible columns on mount - همه ستون‌ها به صورت پیش‌فرض نمایش داده می‌شوند
-    useEffect(() => {
-        if (visibleColumnHeaders.size === 0) {
-            // ستون‌ها بعداً با استفاده از visibleColumns تنظیم می‌شوند
-        }
-    }, []);
+    const isDairyOrAmbientTab = isDairyOrAmbientLineType(activeLine);
+
+    const dairyAmbientFullBase = useMemo(
+        () => [
+            { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+            {
+                header: 'کارمند اعلام‌کننده',
+                render: (ann: any) => (
+                    <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
+                ),
+            },
+            { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType || '-' },
+            { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+            { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
+            {
+                header: 'کل تناژ (کیلوگرم)',
+                render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations),
+            },
+            {
+                header: 'ارزش بار (ریال)',
+                render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR'),
+            },
+            { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+            {
+                header: 'تاریخ اعلام بار',
+                render: (ann: FreightAnnouncement) => (
+                    <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span>
+                ),
+            },
+        ],
+        []
+    );
+
+    const DESTINATION_SUB_HEADERS = ['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)'] as const;
 
     // Helper function to extract text from React element
     const extractTextFromElement = (element: React.ReactElement | React.ReactNode): string => {
@@ -340,7 +404,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const generateExcelExport = (mode: 'compact' | 'full' = viewMode) => {
         const cols = resolveExportColumns(mode);
         
-        const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+        const isFullDairyAmbientMode = mode === 'full' && isDairyOrAmbientLineType(activeLine);
         
         // Get headers - دقیقاً مطابق با ترتیب cols
         const headers: string[] = [];
@@ -554,7 +618,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 
                 // Get headers and data
                 const cols = resolveExportColumns(mode);
-                const isFullDairyAmbientMode = mode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+                const isFullDairyAmbientMode = mode === 'full' && isDairyOrAmbientLineType(activeLine);
                 
                 const headers: string[] = [];
                 const seenHeaders = new Set<string>();
@@ -777,12 +841,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{getAssignedVehiclePlate(ann, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
+            { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
 
         // Ice Cream: mirror planner order, then extras
         if (activeLine === FreightLineType.IceCream) {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'نوع بارگیری', render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
                 { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
@@ -806,24 +872,30 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         if (activeLine === FreightLineType.Dairy && viewMode === 'compact') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                {
+                    header: 'کارمند اعلام‌کننده',
+                    render: (ann: any) => (
+                        <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
+                    ),
+                },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
                         {ann.destinations.map((d, i) => (
-                            <div key={d.id} className="flex items-center justify-center gap-2">
+                            <div key={d.id || i} className="flex items-center justify-center gap-2 flex-wrap">
                                 <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                                 <span className="font-semibold text-slate-800">{d.city}</span>
-                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
                             </div>
                         ))}
                     </div>
                 ) },
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
             ];
             return [...base, ...extraCols];
         }
@@ -832,66 +904,109 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         if (activeLine === FreightLineType.Ambient && viewMode === 'compact') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                {
+                    header: 'کارمند اعلام‌کننده',
+                    render: (ann: any) => (
+                        <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
+                    ),
+                },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
+                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
                         {ann.destinations.map((d, i) => (
-                            <div key={d.id} className="flex items-center justify-center gap-2">
+                            <div key={d.id || i} className="flex items-center justify-center gap-2 flex-wrap">
                                 <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                                 <span className="font-semibold text-slate-800">{d.city}</span>
-                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} کیلوگرم` : ' N/A '})</span>
                             </div>
                         ))}
                     </div>
                 ) },
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
             ];
             return [...base, ...extraCols];
         }
 
-        // Dairy full: common columns order then extras; destinations are rendered separately
-        if (activeLine === FreightLineType.Dairy && viewMode === 'full') {
-            const base = [
-                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
-                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-            ];
-            return [...base, ...extraCols];
-        }
-
-        // Ambient full: mirror Dairy full
-        if (activeLine === FreightLineType.Ambient && viewMode === 'full') {
-            const base = [
-                { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
-                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-            ];
-            return [...base, ...extraCols];
+        // Dairy full: همان ساختار پیگیری زنده — ستون‌های مشترک + ۴ بلوک مقصد
+        if (isDairyOrAmbientTab && viewMode === 'full') {
+            return [...dairyAmbientFullBase, ...extraCols];
         }
 
         // Default fallback
         const colsAll = columnsConfig(viewMode);
         const cols = colsAll.filter(c => c.display(activeLine)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [viewMode, activeLine, props]);
+    }, [viewMode, activeLine, props, dairyAmbientFullBase, isDairyOrAmbientTab]);
 
-    const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine);
+    const isFullDairyAmbient = viewMode === 'full' && isDairyOrAmbientTab;
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
+
+    const displayAnnouncements = useMemo(() => {
+        const filtered = applyTransportLiveFilters(filteredAnnouncements, {
+            columnFilters,
+            quickSearch,
+            columns: visibleColumns,
+        });
+        return applyTransportLiveSort(filtered, {
+            sortColumn,
+            sortDirection,
+            columns: visibleColumns,
+        });
+    }, [
+        filteredAnnouncements,
+        columnFilters,
+        quickSearch,
+        visibleColumns,
+        sortColumn,
+        sortDirection,
+    ]);
+
+    const handleSort = useCallback((header: string) => {
+        setSortColumn((prev) => {
+            if (prev === header) {
+                setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+                return header;
+            }
+            setSortDirection('asc');
+            return header;
+        });
+    }, []);
+
+    const renderSortableHeader = useCallback(
+        (header: string) => (
+            <button
+                type="button"
+                onClick={() => handleSort(header)}
+                className="inline-flex items-center justify-center gap-0.5 w-full hover:text-sky-700 focus:outline-none focus:text-sky-700"
+                title="مرتب‌سازی"
+            >
+                <span>{header}</span>
+                {sortColumn === header ? (
+                    <span className="text-sky-600 text-[10px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                ) : (
+                    <span className="text-slate-300 text-[10px]">⇅</span>
+                )}
+            </button>
+        ),
+        [handleSort, sortColumn, sortDirection]
+    );
+
+    const activeColumnFilterCount = useMemo(
+        () => countActiveFilters({ columnFilters, quickSearch }),
+        [columnFilters, quickSearch]
+    );
+
+    const clearColumnFilters = () => {
+        setColumnFilters({});
+        setQuickSearch('');
+        setSortColumn(null);
+        setSortDirection('asc');
+    };
 
   return (
     <div className="max-w-screen-2xl mx-auto space-y-4">
@@ -985,55 +1100,131 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         </div>
                     </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-center">
+                <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+                    <input
+                        type="search"
+                        value={quickSearch}
+                        onChange={(e) => setQuickSearch(e.target.value)}
+                        placeholder="جستجوی سریع در جدول..."
+                        className="px-2 py-1.5 text-xs border border-slate-300 rounded-md min-w-[200px] flex-1 max-w-md"
+                    />
+                    {activeColumnFilterCount > 0 && (
+                        <button
+                            type="button"
+                            onClick={clearColumnFilters}
+                            className="px-2 py-1 text-xs rounded-md border border-slate-300 hover:bg-slate-50"
+                        >
+                            پاک فیلتر ستون‌ها ({activeColumnFilterCount.toLocaleString('fa-IR')})
+                        </button>
+                    )}
+                    <span className="text-xs text-slate-500 mr-auto">
+                        {displayAnnouncements.length.toLocaleString('fa-IR')} / {filteredAnnouncements.length.toLocaleString('fa-IR')} ردیف
+                    </span>
+                </div>
+        <div className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg ${isFullDairyAmbient ? 'overflow-x-auto overscroll-x-contain' : 'overflow-x-hidden'}`} style={isFullDairyAmbient ? { WebkitOverflowScrolling: 'touch' } : undefined}>
+          <table className={`text-[10px] sm:text-xs text-center border-collapse [&_th]:px-1 [&_th]:py-1 [&_td]:px-1 [&_td]:py-1.5 ${
+              isFullDairyAmbient
+                  ? 'table-auto w-max min-w-[2800px]'
+                  : 'w-full table-fixed transport-live-fit-table'
+          }`}>
             <thead className="text-xs uppercase bg-gray-50">
                              {isFullDairyAmbient ? (
                                 <>
                                     <tr>
-                                        {commonCols.map(col => {
-                                            // فیلتر ستون‌ها
-                                            if (visibleColumnHeaders.size > 0 && !visibleColumnHeaders.has(col.header)) {
-                                                return null;
-                                            }
-                                            return <th key={col.header} rowSpan={2} className="p-2 text-center">
-                                                <span>{col.header}</span>
-                                            </th>;
-                                        })}
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد اول</th>
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد دوم</th>
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد سوم</th>
-                                        <th colSpan={5} className="p-2 text-center border-x">مقصد چهارم</th>
-                                        <th rowSpan={2} className="p-2 sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
+                                        {commonCols.map(col => (
+                                            <th key={col.header} rowSpan={2} className="p-2 text-center align-top">
+                                                <div className="mb-1">{renderSortableHeader(col.header)}</div>
+                                                <input
+                                                    type="search"
+                                                    value={columnFilters[col.header] || ''}
+                                                    onChange={(e) =>
+                                                        setColumnFilters((prev) => ({
+                                                            ...prev,
+                                                            [col.header]: e.target.value,
+                                                        }))
+                                                    }
+                                                    placeholder="فیلتر..."
+                                                    className="w-full min-w-[72px] max-w-[120px] px-1 py-0.5 text-[10px] border border-slate-300 rounded bg-white font-normal"
+                                                />
+                                            </th>
+                                        ))}
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
+                                        <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
                                     </tr>
                                     <tr>
                                         {[1, 2, 3, 4].map(i => (
                                             <React.Fragment key={i}>
-                                                <th className="p-2 text-center font-normal border">نماینده</th>
-                                                <th className="p-2 text-center font-normal border">مقصد</th>
-                                                <th className="p-2 text-center font-normal border">تناژ</th>
-                                                <th className="p-2 text-center font-normal border">ساعت تخلیه</th>
-                                                <th className="p-2 text-center font-normal border">کرایه</th>
+                                                {DESTINATION_SUB_HEADERS.map((sub) => {
+                                                    const key = `مقصد${i}-${sub}`;
+                                                    return (
+                                                        <th key={key} className="p-1 text-center font-normal border align-top">
+                                                            <div className="text-[10px] mb-0.5">{sub}</div>
+                                                            <input
+                                                                type="search"
+                                                                value={columnFilters[key] || ''}
+                                                                onChange={(e) =>
+                                                                    setColumnFilters((prev) => ({
+                                                                        ...prev,
+                                                                        [key]: e.target.value,
+                                                                    }))
+                                                                }
+                                                                placeholder="..."
+                                                                className="w-full min-w-[52px] px-1 py-0.5 text-[10px] border border-slate-300 rounded bg-white"
+                                                            />
+                                                        </th>
+                                                    );
+                                                })}
                                             </React.Fragment>
                                         ))}
                                     </tr>
                                 </>
                              ) : (
+                                <>
                                 <tr>
-                                    {visibleColumns.map(col => {
-                                        // فیلتر ستون‌ها: اگر visibleColumnHeaders خالی است، همه را نمایش بده
-                                        if (visibleColumnHeaders.size > 0 && !visibleColumnHeaders.has(col.header)) {
-                                            return null;
-                                        }
-                                        return <th key={col.header} className="p-2 text-center align-middle">
-                                            <span>{col.header}</span>
-                                        </th>;
-                                    })}
-              </tr>
+                                    {visibleColumns.map(col => (
+                                        <th key={col.header} className="p-1 text-center align-bottom whitespace-normal leading-tight font-semibold break-words">
+                                            {renderSortableHeader(col.header)}
+                                        </th>
+                                    ))}
+                                </tr>
+                                <tr className="bg-slate-100/80">
+                                    {visibleColumns.map(col => (
+                                        <th key={`filter-${col.header}`} className="p-1 font-normal">
+                                            <input
+                                                type="search"
+                                                value={columnFilters[col.header] || ''}
+                                                onChange={(e) =>
+                                                    setColumnFilters((prev) => ({
+                                                        ...prev,
+                                                        [col.header]: e.target.value,
+                                                    }))
+                                                }
+                                                placeholder="فیلتر..."
+                                                className="w-full min-w-0 px-1 py-0.5 text-[10px] border border-slate-300 rounded bg-white"
+                                            />
+                                        </th>
+                                    ))}
+                                </tr>
+                                </>
                              )}
             </thead>
             <tbody>
-                            {paginatedAnnouncements.map((ann, idx) => {
+                            {displayAnnouncements.length === 0 ? (
+                                <tr>
+                                    <td
+                                        colSpan={
+                                            isFullDairyAmbient
+                                                ? commonCols.length + 24
+                                                : Math.max(visibleColumns.length, 1)
+                                        }
+                                        className="p-8 text-center text-slate-500"
+                                    >
+                                        موردی یافت نشد.
+                                    </td>
+                                </tr>
+                            ) : displayAnnouncements.map((ann, idx) => {
                                 const rowColorClass = isFinanceRejectedAnn(ann as any)
                                     ? 'bg-red-50 hover:bg-red-100'
                                     : 'bg-teal-50 hover:bg-teal-100';
@@ -1042,14 +1233,23 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 <tr key={ann.id} className={`border-b ${rowColorClass}`}>
                                      {isFullDairyAmbient ? (
                                         <>
-                                            {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, props)}</td>)}
+                                            {commonCols.map(col => (
+                                                <td key={col.header} className="p-2 text-center whitespace-normal break-words">
+                                                    {col.render(ann, idx)}
+                                                </td>
+                                            ))}
                                             {[0, 1, 2, 3].map(i => {
                                                 const dest = ann.destinations[i];
                                                 return (
                                                     <React.Fragment key={i}>
-                                                        <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
-                                                        <td className="p-2 text-center border">{dest?.city || '-'}</td>
-                                                        <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
+                                                        <td className="p-2 text-center border whitespace-normal">{dest?.representativeName || '-'}</td>
+                                                        <td className="p-2 text-center border whitespace-normal">{dest?.city || '-'}</td>
+                                                        <td className="p-2 text-center border">
+                                                            {dest?.tonnage != null
+                                                                ? formatTonnageKg(parseNumericField(dest.tonnage))
+                                                                : '-'}
+                                                        </td>
+                                                        <td className="p-2 text-center border whitespace-normal">{dest?.deliveryDate || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
                                                         <td className="p-2 text-center border">{formatFreightAmountCell(dest?.freightCost)}</td>
                                                     </React.Fragment>
@@ -1057,13 +1257,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                             })}
                                         </>
                                     ) : (
-                                        visibleColumns.map(col => {
-                                            // فیلتر ستون‌ها: اگر visibleColumnHeaders خالی است، همه را نمایش بده، وگرنه فقط ستون‌های انتخاب شده
-                                            if (visibleColumnHeaders.size > 0 && !visibleColumnHeaders.has(col.header)) {
-                                                return null;
-                                            }
-                                            return <td key={col.header} className="p-2 text-center align-middle">{col.render(ann, idx, props)}</td>;
-                                        })
+                                        visibleColumns.map(col => (
+                                            <td key={col.header} className="p-1 text-center align-middle whitespace-normal break-words">
+                                                {col.render(ann, idx)}
+                                            </td>
+                                        ))
                                     )}
 
                 </tr>
@@ -1072,6 +1270,16 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             </tbody>
           </table>
         </div>
+        <style>{`
+                .transport-live-fit-table th,
+                .transport-live-fit-table td {
+                    white-space: normal;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
+                    line-height: 1.25;
+                    vertical-align: middle;
+                }
+            `}</style>
         
         {/* صفحه‌بندی */}
         {onPageChange && onItemsPerPageChange && (
