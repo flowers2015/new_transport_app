@@ -34,7 +34,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 body: JSON.stringify({ username, password }),
             });
 
-            const data = await response.json();
+            const contentType = response.headers.get('content-type') || '';
+            let data: Record<string, unknown> = {};
+            if (contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                if ([502, 503, 504].includes(response.status)) {
+                    setError(
+                        `سرور API در دسترس نیست (خطای ${response.status}). احتمالاً سرویس بک‌اند بعد از آپدیت اجرا نشده — با واحد IT تماس بگیرید یا چند دقیقه بعد دوباره تلاش کنید.`
+                    );
+                    return;
+                }
+                console.error('[Login] Non-JSON response:', text.slice(0, 200));
+                setError('پاسخ نامعتبر از سرور. سرویس بک‌اند احتمالاً متوقف است.');
+                return;
+            }
 
             if (!response.ok) {
                 // بررسی قفل بودن حساب
@@ -77,8 +92,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                  // For now, we'll assume the backend is updated to send both.
                  setError('پاسخ ورود نامعتبر از سرور.');
             }
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes('JSON') || msg.includes('Unexpected token')) {
+                setError('سرور API پاسخ نمی‌دهد (بک‌اند احتمالاً اجرا نشده). با واحد IT تماس بگیرید.');
+            } else {
+                setError(msg || 'خطا در ارتباط با سرور');
+            }
         }
     };
 

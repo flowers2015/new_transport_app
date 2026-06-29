@@ -191,6 +191,7 @@ deploy_run_optional_migrations() {
 
     local migrations=(
         "migrations/create_bale_tables.js"
+        "migrations/add_bale_report_recipients.js"
         "migrations/create_support_tickets_table.js"
         "migrations/add_finance_rejection_columns.js"
         "migrations/ensure_freight_status_enum_values.js"

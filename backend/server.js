@@ -225,6 +225,11 @@ createBaleTables().catch(err => {
   console.error('❌ [Server] خطا در ایجاد جداول بله:', err);
 });
 
+const addBaleReportRecipients = require('./migrations/add_bale_report_recipients');
+addBaleReportRecipients().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جدول bale_report_recipients:', err);
+});
+
 const addVehicleCodeColumn = require('./migrations/add_vehicle_code_column');
 addVehicleCodeColumn().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون vehicle_code:', err);
