@@ -43,13 +43,25 @@ export type BaleCompanyReportRow = {
     vehicleCode: string;
     driverName: string;
     driverContact: string;
+    /** پاستوریزه — رنگ زرد در تصویر/اکسل */
+    isDairy: boolean;
 };
 
+/** بستنی و لبنیات بالا؛ پاستوریزه انتهای جدول */
 const LINE_ORDER: FreightLineType[] = [
     FreightLineType.IceCream,
-    FreightLineType.Dairy,
     FreightLineType.Ambient,
+    FreightLineType.Dairy,
 ];
+
+/** ده چرخ → مینی تریلی → تریلی */
+function getVehicleTypeSortRank(vehicleType?: string | null): number {
+    const v = (vehicleType || '').trim();
+    if (v.includes('ده چرخ') || v.includes('دهچرخ')) return 0;
+    if (v.includes('مینی تریلی') || v.includes('مینیتریلی')) return 1;
+    if (v.includes('تریلی')) return 2;
+    return 99;
+}
 
 function getProductsLabel(ann: FreightAnnouncement): string {
     if (!matchesFreightLine(ann, FreightLineType.IceCream)) return '';
@@ -68,6 +80,35 @@ export function selectCompanyBaleReportAnnouncements(
     announcements: FreightAnnouncement[]
 ): FreightAnnouncement[] {
     return announcements.filter(isEligibleForCompanyBaleReport);
+}
+
+function sortByVehicleTypeThenLineRules(
+    items: FreightAnnouncement[],
+    line: FreightLineType
+): FreightAnnouncement[] {
+    const grouped = new Map<number, FreightAnnouncement[]>();
+    for (const ann of items) {
+        const rank = getVehicleTypeSortRank(ann.vehicleType);
+        if (!grouped.has(rank)) grouped.set(rank, []);
+        grouped.get(rank)!.push(ann);
+    }
+
+    const sorted: FreightAnnouncement[] = [];
+    for (const rank of [...grouped.keys()].sort((a, b) => a - b)) {
+        const batch = grouped.get(rank)!;
+        if (line === FreightLineType.IceCream) {
+            sorted.push(...sortByIceCreamDisplayOrder(batch));
+        } else {
+            sorted.push(
+                ...batch.sort(
+                    (a, b) =>
+                        new Date(b.createdAt as string | Date).getTime() -
+                        new Date(a.createdAt as string | Date).getTime()
+                )
+            );
+        }
+    }
+    return sorted;
 }
 
 export function sortCompanyBaleReportAnnouncements(
@@ -89,25 +130,9 @@ export function sortCompanyBaleReportAnnouncements(
     const sorted: FreightAnnouncement[] = [];
     for (const line of LINE_ORDER) {
         const batch = buckets.get(line) || [];
-        if (line === FreightLineType.IceCream) {
-            sorted.push(...sortByIceCreamDisplayOrder(batch));
-        } else {
-            sorted.push(
-                ...batch.sort(
-                    (a, b) =>
-                        new Date(b.createdAt as string | Date).getTime() -
-                        new Date(a.createdAt as string | Date).getTime()
-                )
-            );
-        }
+        sorted.push(...sortByVehicleTypeThenLineRules(batch, line));
     }
-    sorted.push(
-        ...other.sort(
-            (a, b) =>
-                new Date(b.createdAt as string | Date).getTime() -
-                new Date(a.createdAt as string | Date).getTime()
-        )
-    );
+    sorted.push(...sortByVehicleTypeThenLineRules(other, FreightLineType.IceCream));
     return sorted;
 }
 
@@ -132,6 +157,7 @@ export function buildCompanyBaleReportRows(
         vehicleCode: getAssignedVehicleCode(ann, resources.vehicles),
         driverName: getAssignedDriverDisplayName(ann, resources.drivers, resources.personalDrivers),
         driverContact: getAssignedDriverContact(ann, resources.drivers, resources.personalDrivers),
+        isDairy: matchesFreightLine(ann, FreightLineType.Dairy),
     }));
 }
 

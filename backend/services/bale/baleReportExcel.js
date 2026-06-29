@@ -16,6 +16,12 @@ const REPORT_HEADERS = [
 
 const COLUMN_WIDTHS = [6, 10, 26, 16, 9, 10, 20, 14, 9, 16, 14];
 
+const DAIRY_ROW_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFEF9C3' },
+};
+
 async function buildExcelBuffer(rows) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Transport App';
@@ -66,6 +72,9 @@ async function buildExcelBuffer(rows) {
         left: { style: 'thin' },
         right: { style: 'thin' },
       };
+      if (r.isDairy) {
+        cell.fill = DAIRY_ROW_FILL;
+      }
     });
   });
 

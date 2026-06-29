@@ -1,4 +1,5 @@
 const { isVeryFarAnnouncement, classifyRouteDistanceBucket } = require('./dispatchRouteRules');
+const { vehicleMatchesCategory } = require('./dispatchVehicleCategory');
 
 const CATEGORY_KEY_TO_LABEL = {
   trailer: 'تریلی',
@@ -11,15 +12,6 @@ function normalizeCategoryFilter(categoryParam) {
   const trimmed = categoryParam.trim();
   if (!trimmed) return null;
   return CATEGORY_KEY_TO_LABEL[trimmed] || trimmed;
-}
-
-function vehicleMatchesCategory(vehicleType, categoryLabel) {
-  if (!categoryLabel) return true;
-  if (!vehicleType) return false;
-  if (categoryLabel === 'تریلی' || categoryLabel === 'مینی تریلی') {
-    return vehicleType === 'تریلی' || vehicleType === 'مینی تریلی';
-  }
-  return vehicleType === categoryLabel;
 }
 
 function routeIsVeryFar(row) {

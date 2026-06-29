@@ -6,6 +6,12 @@ import {
 
 const COLUMN_WIDTHS = [6, 10, 26, 16, 9, 10, 20, 14, 9, 16, 14];
 
+const DAIRY_ROW_FILL: ExcelJS.Fill = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFEF9C3' },
+};
+
 export async function downloadCompanyBaleReportExcel(rows: BaleCompanyReportRow[], filename?: string) {
   const workbook = new ExcelJS.Workbook();
   workbook.views = [{ rightToLeft: true }];
@@ -54,6 +60,9 @@ export async function downloadCompanyBaleReportExcel(rows: BaleCompanyReportRow[
         left: { style: 'thin' },
         right: { style: 'thin' },
       };
+      if (r.isDairy) {
+        cell.fill = DAIRY_ROW_FILL;
+      }
     });
   });
 

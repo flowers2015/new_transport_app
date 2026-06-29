@@ -56,6 +56,7 @@ function normalizeRows(rows) {
     vehicleCode: String(row.vehicleCode ?? '-'),
     driverName: String(row.driverName ?? '-'),
     driverContact: String(row.driverContact ?? '-'),
+    isDairy: Boolean(row.isDairy),
   }));
 }
 

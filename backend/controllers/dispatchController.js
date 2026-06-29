@@ -17,6 +17,10 @@ const {
   lookupRoutesForDestinations,
   pickPrimaryRouteFromList,
 } = require('../services/dispatch/multiDestinationAssignments');
+const {
+  vehicleMatchesCategory,
+  isCompanyDispatchAssignable,
+} = require('../services/dispatch/dispatchVehicleCategory');
 const { formatJalali } = require('../utils/jalali');
 const {
   jalaliToGregorian,
@@ -1045,21 +1049,6 @@ async function resolveQueueEntryDisplayCategory(client, row) {
   return 'نامشخص';
 }
 
-const vehicleMatchesCategory = (vehicleType, categoryValue) => {
-  const presetKey = resolveCategoryKey(categoryValue);
-  if (!presetKey) return false;
-  const normalizedType = normalizeVehicleText(vehicleType);
-  if (!normalizedType) return false;
-
-  const detectedKey = detectVehicleCategoryKey(vehicleType);
-  if (detectedKey) {
-    return detectedKey === presetKey;
-  }
-
-  const keywords = categoryVehicleKeywordsNormalized[presetKey] || [];
-  return keywords.some(keyword => keyword && normalizedType.includes(keyword));
-};
-
 async function getStageCandidates(req, res) {
   const stage = req.query.stage || 'stage1';
   const forceStage2 = req.query.forceStage2 === 'true';
@@ -1125,8 +1114,9 @@ async function getStageCandidates(req, res) {
           fa.priority,
           fa.products
         FROM freight_announcements fa
-        WHERE fa.status IN ('PendingCompanyAssignment', 'PendingPersonalAssignment', 'Assigned')
-          AND (fa.assignment_type IS NULL OR fa.assignment_type = 'company')
+        WHERE fa.status IN ('PendingCompanyAssignment', 'Assigned')
+          AND (fa.assignment_type IS NULL OR fa.assignment_type IN ('company', 'شرکتی'))
+          AND fa.status != 'PendingPersonalAssignment'
           AND (fa.assigned_driver_id IS NULL)
       `
     );
@@ -1146,6 +1136,9 @@ async function getStageCandidates(req, res) {
 
     // برای هر اعلام بار، همه مقاصد را بگیریم
     for (const row of freightRows.rows) {
+      if (!isCompanyDispatchAssignable(row)) {
+        continue;
+      }
       // گرفتن همه مقاصد این اعلام بار
       const destRows = await pool.query(
         `SELECT id, city, representative_name, tonnage, freight_cost
@@ -1272,7 +1265,12 @@ async function getStageCandidates(req, res) {
     const stage2Forced = stage === 'stage2' && (forceStage2 || baleControlledStage2);
     const stage2Locked =
       stage === 'stage2' && pendingStage1Count > 0 && !forceStage2 && !baleControlledStage2;
-    const finalAnnouncements = stage2Locked ? [] : filteredAnnouncements;
+    let finalAnnouncements = stage2Locked ? [] : filteredAnnouncements;
+    if (categoryFilter) {
+      finalAnnouncements = finalAnnouncements.filter(ann =>
+        vehicleMatchesCategory(ann.vehicleType, categoryFilter)
+      );
+    }
 
     const sortByPosition = list =>
       [...list].sort((a, b) => (a.position || 0) - (b.position || 0));
@@ -1412,7 +1410,7 @@ async function assignFreight(req, res) {
     await client.query('BEGIN');
 
     const { rows: annRows } = await client.query(
-      `SELECT id, announcement_code, status, assignment_type, vehicle_type
+      `SELECT id, announcement_code, status, assignment_type, vehicle_type, line_type
        FROM freight_announcements
        WHERE id = $1 FOR UPDATE`,
       [freightAnnouncementId]
@@ -1427,6 +1425,13 @@ async function assignFreight(req, res) {
     if (announcement.status === 'Finalized') {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'اعلام بار قبلاً نهایی شده است.' });
+    }
+
+    if (!isCompanyDispatchAssignable(announcement)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'این بار به ترابری دیگر ارجاع شده و از تابلوی نوبت شرکت قابل تخصیص نیست.',
+      });
     }
 
     // کنترل تطابق نوع خودرو با اعلام بار
@@ -1612,6 +1617,15 @@ async function assignFreight(req, res) {
       queueEntryRow = queueEntryRows[0] || null;
       queueTypeFromEntry = queueEntryRow?.queue_type || null;
       vehicleCategoryFromEntry = queueEntryRow?.vehicle_category || null;
+    }
+
+    if (queueEntryRow?.vehicle_category && announcement.vehicle_type) {
+      if (!vehicleMatchesCategory(announcement.vehicle_type, queueEntryRow.vehicle_category)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          message: `این اعلام بار برای «${announcement.vehicle_type}» است اما نوبت در صف «${queueEntryRow.vehicle_category}» ثبت شده است.`,
+        });
+      }
     }
 
     const queuePosition = queueEntryRow?.position ?? null;

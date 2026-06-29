@@ -359,6 +359,13 @@ const vehicleMatchesCategory = (vehicleType?: string | null, categoryLabel?: str
     return keywords.some(keyword => keyword && normalizedType.includes(keyword));
 };
 
+function filterAnnouncementsForQueueCategory(
+    announcements: AnnouncementWithEligibility[],
+    categoryKey: string
+): AnnouncementWithEligibility[] {
+    return announcements.filter(ann => vehicleMatchesCategory(ann.vehicleType, categoryKey));
+}
+
 const normalizeRouteText = (value?: string | null): string =>
     value
         ? value
@@ -420,22 +427,19 @@ async function fetchFreeAnnouncementsForCategory(
         }
     };
 
-    for (const filterByCategory of [true, false]) {
-        for (const query of FREE_CANDIDATE_QUERIES) {
-            try {
-                const params = new URLSearchParams(query);
-                const res = await fetch(
-                    getApiUrl(`dispatch/assignments/candidates?${params}`),
-                    { headers }
-                );
-                if (!res.ok) continue;
-                const data = await res.json();
-                collectFromResponse(data.announcements || [], filterByCategory);
-            } catch {
-                /* try next */
-            }
+    for (const query of FREE_CANDIDATE_QUERIES) {
+        try {
+            const params = new URLSearchParams(query);
+            const res = await fetch(
+                getApiUrl(`dispatch/assignments/candidates?${params}`),
+                { headers }
+            );
+            if (!res.ok) continue;
+            const data = await res.json();
+            collectFromResponse(data.announcements || [], true);
+        } catch {
+            /* try next */
         }
-        if (seen.size > 0) break;
     }
 
     const list = [...seen.values()];
@@ -1361,10 +1365,19 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     throw new Error(errText);
                 }
                 const context = (await res.json()) as AssignContext;
+                const filteredAnnouncements = filterAnnouncementsForQueueCategory(
+                    context.announcements || [],
+                    categoryKey
+                );
+                const eligibleCount = filteredAnnouncements.filter(a => a.eligible).length;
                 setAssignDialog(prev => ({
                     ...prev,
                     loading: false,
-                    context,
+                    context: {
+                        ...context,
+                        announcements: filteredAnnouncements,
+                        eligibleCount,
+                    },
                     selectedAnnouncementId: '',
                 }));
             }

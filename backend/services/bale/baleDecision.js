@@ -3,6 +3,7 @@
  */
 
 const { isVeryFarAnnouncement } = require('../dispatch/dispatchRouteRules');
+const { vehicleMatchesCategory } = require('../dispatch/dispatchVehicleCategory');
 
 function driverHasVeryFarHistory(driverEntry) {
   if (driverEntry?.hasVeryFarHistory) return true;
@@ -21,13 +22,8 @@ function filterEligibleForDriver(announcements, driverEntry, stage, rejectedAnno
   return (announcements || []).filter(ann => {
     if (rejected.has(ann.id)) return false;
 
-    if (category && ann.vehicleType) {
-      const vt = ann.vehicleType;
-      if (category === 'تریلی' || category === 'مینی تریلی') {
-        if (vt !== 'تریلی' && vt !== 'مینی تریلی') return false;
-      } else if (category && vt !== category) {
-        return false;
-      }
+    if (category && ann.vehicleType && !vehicleMatchesCategory(ann.vehicleType, category)) {
+      return false;
     }
 
     if (stage === 'stage1') {

@@ -566,7 +566,10 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                         </tr>
                                     ) : (
                                         rows.map((r) => (
-                                            <tr key={r.row} className="even:bg-slate-50">
+                                            <tr
+                                                key={r.row}
+                                                className={r.isDairy ? 'bg-amber-50' : 'even:bg-slate-50'}
+                                            >
                                                 <td className="border border-slate-200 px-2 py-2">{r.row}</td>
                                                 <td className="border border-slate-200 px-2 py-2">{r.vehicleType}</td>
                                                 <td className="border border-slate-200 px-2 py-2 text-right">{r.destinations}</td>
@@ -628,9 +631,15 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {rows.map((r) => (
-                                        <tr key={r.row} style={{ background: r.row % 2 === 0 ? '#f8fafc' : '#fff' }}>
-                                            <CaptureCell value={r.row} />
+                                    {rows.map((r) => {
+                                        const rowBg = r.isDairy
+                                            ? '#fef9c3'
+                                            : r.row % 2 === 0
+                                              ? '#f8fafc'
+                                              : '#fff';
+                                        return (
+                                            <tr key={r.row} style={{ background: rowBg }}>
+                                                <CaptureCell value={r.row} />
                                                 <CaptureCell value={r.vehicleType} />
                                                 <CaptureCell value={r.destinations} multiline />
                                                 <CaptureCell value={r.origin} />
@@ -641,8 +650,9 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                                 <CaptureCell value={r.vehicleCode} />
                                                 <CaptureCell value={r.driverName} />
                                                 <CaptureCell value={r.driverContact} />
-                                        </tr>
-                                    ))}
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

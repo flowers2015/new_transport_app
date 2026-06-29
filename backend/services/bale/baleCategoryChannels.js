@@ -1,4 +1,5 @@
 const pool = require('../../db');
+const { vehicleMatchesCategory } = require('../dispatch/dispatchVehicleCategory');
 
 const DISPATCH_CATEGORIES = ['تریلی', 'مینی تریلی', 'ده چرخ'];
 
@@ -92,9 +93,7 @@ async function getCategoryQueueCounts() {
 
 function announcementMatchesCategory(vehicleType, category) {
   if (!category || !vehicleType) return true;
-  if (category === 'تریلی') return vehicleType === 'تریلی' || vehicleType === 'مینی تریلی';
-  if (category === 'مینی تریلی') return vehicleType === 'مینی تریلی' || vehicleType === 'تریلی';
-  return vehicleType === category;
+  return vehicleMatchesCategory(vehicleType, category);
 }
 
 module.exports = {
