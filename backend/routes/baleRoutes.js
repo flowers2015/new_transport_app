@@ -1,10 +1,17 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const { authenticateToken, authorizeRole } = require('../middleware/authMiddleware');
 const baleController = require('../controllers/baleController');
 
 const transportRoles = ['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin'];
 const adminRoles = ['admin'];
+const companyTransportRoles = baleController.companyTransportRoles;
+
+const reportImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 router.post('/webhook', baleController.webhook);
 
@@ -25,5 +32,16 @@ router.post('/sessions/manual-assign', authenticateToken, authorizeRole(transpor
 router.get('/sessions/:sessionId/logs', authenticateToken, authorizeRole(transportRoles), baleController.getSessionLogs);
 
 router.get('/preference-brief/:driverId', authenticateToken, authorizeRole(transportRoles), baleController.getPreferenceBrief);
+
+router.get('/report/recipients', authenticateToken, authorizeRole(companyTransportRoles), baleController.listReportRecipients);
+router.post('/report/recipients', authenticateToken, authorizeRole(companyTransportRoles), baleController.createReportRecipient);
+router.delete('/report/recipients/:id', authenticateToken, authorizeRole(companyTransportRoles), baleController.deleteReportRecipient);
+router.post(
+  '/report/send',
+  authenticateToken,
+  authorizeRole(companyTransportRoles),
+  reportImageUpload.single('image'),
+  baleController.sendCompanyReportToBale
+);
 
 module.exports = router;

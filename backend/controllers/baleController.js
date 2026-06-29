@@ -13,6 +13,14 @@ const {
   describeChannelBlocker,
   getCategoryQueueCounts,
 } = require('../services/bale/baleCategoryChannels');
+const { sendCompanyReport } = require('../services/bale/baleReportService');
+
+const companyTransportRoles = [
+  'transport_user',
+  'کاربر ترابری (شرکت)',
+  'کاربر ترابری شرکت',
+  'TransportationUser',
+];
 
 function mapSession(row) {
   if (!row) return null;
@@ -481,6 +489,119 @@ async function getPreferenceBrief(req, res) {
   }
 }
 
+function getUserId(req) {
+  return req.user?.userId || req.user?.id;
+}
+
+async function listReportRecipients(req, res) {
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: 'کاربر شناسایی نشد.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, label, chat_id, is_default, created_at, updated_at
+       FROM bale_report_recipients
+       WHERE user_id = $1
+       ORDER BY is_default DESC, label ASC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('❌ [bale] listReportRecipients:', error);
+    res.status(500).json({ message: 'خطا در بارگذاری مخاطبین' });
+  }
+}
+
+async function createReportRecipient(req, res) {
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: 'کاربر شناسایی نشد.' });
+  }
+  const { label, chatId, isDefault } = req.body || {};
+  if (!label || !String(label).trim()) {
+    return res.status(400).json({ message: 'نام مخاطب الزامی است.' });
+  }
+  const chat_id = Number(chatId);
+  if (!Number.isFinite(chat_id)) {
+    return res.status(400).json({ message: 'chat_id عددی معتبر وارد کنید.' });
+  }
+  try {
+    if (isDefault) {
+      await pool.query(
+        `UPDATE bale_report_recipients SET is_default = FALSE, updated_at = NOW() WHERE user_id = $1`,
+        [userId]
+      );
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO bale_report_recipients (user_id, label, chat_id, is_default)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, chat_id) DO UPDATE SET
+         label = EXCLUDED.label,
+         is_default = EXCLUDED.is_default,
+         updated_at = NOW()
+       RETURNING id, label, chat_id, is_default, created_at, updated_at`,
+      [userId, String(label).trim(), chat_id, Boolean(isDefault)]
+    );
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('❌ [bale] createReportRecipient:', error);
+    res.status(500).json({ message: 'خطا در ذخیره مخاطب' });
+  }
+}
+
+async function deleteReportRecipient(req, res) {
+  const userId = getUserId(req);
+  const id = Number(req.params.id);
+  if (!userId || !id) {
+    return res.status(400).json({ message: 'درخواست نامعتبر' });
+  }
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM bale_report_recipients WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    if (!rowCount) {
+      return res.status(404).json({ message: 'مخاطب یافت نشد.' });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('❌ [bale] deleteReportRecipient:', error);
+    res.status(500).json({ message: 'خطا در حذف مخاطب' });
+  }
+}
+
+async function sendCompanyReportToBale(req, res) {
+  let { chatId, format, rows, imageBase64 } = req.body || {};
+  if (typeof rows === 'string') {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      return res.status(400).json({ message: 'فرمت rows نامعتبر است.' });
+    }
+  }
+  const imageBuffer = req.file?.buffer;
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const inferredBase = host ? `${forwardedProto || req.protocol}://${host}` : '';
+  const publicBaseUrl = process.env.PUBLIC_API_BASE_URL || inferredBase;
+  try {
+    const result = await sendCompanyReport({
+      chatId: chatId ?? req.body?.chat_id,
+      format,
+      rows,
+      imageBase64,
+      imageBuffer,
+      imageMimeType: req.file?.mimetype,
+      publicBaseUrl,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('❌ [bale] sendCompanyReport:', error);
+    res.status(400).json({ message: error.message || 'خطا در ارسال به بله' });
+  }
+}
+
 module.exports = {
   webhook,
   getStatus,
@@ -498,4 +619,9 @@ module.exports = {
   manualAssign,
   getSessionLogs,
   getPreferenceBrief,
+  companyTransportRoles,
+  listReportRecipients,
+  createReportRecipient,
+  deleteReportRecipient,
+  sendCompanyReportToBale,
 };

@@ -361,6 +361,10 @@ export function isPersonalAssignmentType(assignmentType?: string | null): boolea
     return assignmentType === 'personal' || assignmentType === 'شخصی';
 }
 
+export function isCompanyAssignmentType(assignmentType?: string | null): boolean {
+    return assignmentType === 'company' || assignmentType === 'شرکتی';
+}
+
 export function hasDriverAndVehicleAssigned(ann: Pick<FreightAnnouncement, 'assignedDriverId' | 'assignedVehicleId'>): boolean {
     return Boolean(ann.assignedDriverId && ann.assignedVehicleId);
 }
@@ -382,6 +386,26 @@ export function isPendingBillOfLading(ann: FreightAnnouncement): boolean {
         hasDriverAndVehicleAssigned(ann) &&
         hasAwaitingBillOfLadingAfterFinalize(ann)
     );
+}
+
+/** تخصیص شرکتی انجام‌شده در پیگیری زنده — برای گزارش بله */
+export function isEligibleForCompanyBaleReport(ann: FreightAnnouncement): boolean {
+    if (isPendingBillOfLading(ann)) return false;
+    if (!isCompanyAssignmentType(ann.assignmentType)) return false;
+    return hasDriverAndVehicleAssigned(ann);
+}
+
+/** نوع نماینده — سطح اعلام یا تجمیع مقاصد */
+export function getRepresentativeTypesLabel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'destinations'> | null | undefined
+): string {
+    const fromAnn = formatRepresentativeType(ann?.representativeType);
+    if (fromAnn !== '-') return fromAnn;
+    const types = (ann?.destinations || [])
+        .map((d) => formatRepresentativeType((d as Destination).representativeType))
+        .filter((t) => t !== '-');
+    const unique = [...new Set(types)];
+    return unique.length > 0 ? unique.join('، ') : '-';
 }
 
 /** تماس/پلاک پیش‌فرض برای تخصیص شخصی لبنیات-فروتلند (فاز نام باربری) */

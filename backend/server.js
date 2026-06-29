@@ -89,7 +89,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 })); // Enable CORS for all routes
 
-app.use(express.json()); // [مهم] این خط باید جدا و تمیز باشد
+app.use(express.json({ limit: '4mb' })); // گزارش بله (تصویر base64) و payloadهای بزرگ‌تر
 
 // Set security headers (only in production, relaxed for development)
 app.use((req, res, next) => {
@@ -172,6 +172,7 @@ app.use('/api/v1/reports', reportsRoutes);
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
 app.use('/uploads/regulations', express.static(path.join(__dirname, 'uploads', 'regulations')));
+app.use('/uploads/bale-reports', express.static(path.join(__dirname, 'uploads', 'bale-reports')));
 
 // Health check endpoint
 app.get('/', (req, res) => {

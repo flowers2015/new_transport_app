@@ -137,7 +137,7 @@ const applyLastFreightChoices = (
         originCity1:
             lastChoices.originCity1 ||
             (lineType === FreightLineType.Dairy
-                ? 'کارخانه شهرلبنیات'
+                ? 'کارخانه شهر لبنیات'
                 : lineType === FreightLineType.Ambient
                   ? 'انبار مرکزی'
                   : ''),
@@ -1983,7 +1983,7 @@ const AnnouncementPanel: React.FC<{
                 setDestinations,
             });
         } else if (lineType === FreightLineType.Dairy) {
-            setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهرلبنیات', originCity2: '' });
+            setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهر لبنیات', originCity2: '' });
             setBrandState(initialBrandState);
         } else if (lineType === FreightLineType.Ambient) {
             setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
@@ -2183,7 +2183,7 @@ const AnnouncementPanel: React.FC<{
                     setDestinations,
                 });
             } else if (lineType === FreightLineType.Dairy) {
-                setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهرلبنیات', originCity2: '' });
+                setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهر لبنیات', originCity2: '' });
             } else if (lineType === FreightLineType.Ambient) {
                 setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
             }

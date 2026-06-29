@@ -22,6 +22,7 @@ import {
     TransportLiveTab,
     isPendingBillOfLadingTab,
     isPendingBillOfLading,
+    hasBillOfLadingNumber,
     matchesFreightLine,
     lineTypeFromAnnouncement,
     isDairyAmbientPersonalIsolatedAssignment,
@@ -65,6 +66,11 @@ import { PencilIcon } from './icons/PencilIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import BaleReportDialog from './BaleReportDialog';
+import {
+    buildCompanyBaleReportRows,
+    selectCompanyBaleReportAnnouncements,
+} from '../utils/baleCompanyReport';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
@@ -219,7 +225,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [hideReferred, setHideReferred] = useState(false);
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [baleReportOpen, setBaleReportOpen] = useState(false);
     const isTransportUser = isTransportRole(currentUser.role);
+    const isCompanyTransportUser =
+        currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
 
     const filterStorageKey = useMemo(
         () => transportLiveFilterStorageKey(currentUser.id, activeLine, viewMode),
@@ -677,6 +686,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         
         return filtered.sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
     }, [announcements, currentUser]);
+
+    const companyBaleReportRows = useMemo(() => {
+        const candidates = selectCompanyBaleReportAnnouncements(liveAnnouncements);
+        return buildCompanyBaleReportRows(candidates, { drivers, personalDrivers, vehicles });
+    }, [liveAnnouncements, drivers, personalDrivers, vehicles]);
 
     const tabCounts = useMemo(() => {
         const pendingBill = liveAnnouncements.filter(isPendingBillOfLading).length;
@@ -1817,6 +1831,21 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 به‌روزرسانی
                             </button>
                         )}
+                        {isCompanyTransportUser && (
+                            <button
+                                type="button"
+                                onClick={() => setBaleReportOpen(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-md text-xs hover:bg-teal-700 transition-colors shrink-0"
+                                title="ارسال گزارش تخصیص‌های شرکتی به بله"
+                            >
+                                ارسال به بله
+                                {companyBaleReportRows.length > 0 && (
+                                    <span className="bg-white/20 rounded px-1.5">
+                                        {companyBaleReportRows.length.toLocaleString('fa-IR')}
+                                    </span>
+                                )}
+                            </button>
+                        )}
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0">
                             <button
                                 key={PENDING_BILL_OF_LADING_TAB}
@@ -2177,15 +2206,32 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     iceCreamViewMode === 'my' &&
                                     activeLine === FreightLineType.IceCream &&
                                     checkIsAssignedToOtherTransport(ann, currentUser.role);
-                                const rowColorClass = referredRow
-                                    ? 'bg-slate-100/80 text-slate-500 hover:bg-slate-100'
-                                    : isAssigned
-                                      ? 'bg-green-50 hover:bg-green-100'
-                                      : 'bg-yellow-50 hover:bg-yellow-100';
+                                const pendingBillRow = isPendingBillOfLadingTab(activeLine);
+                                const bolRegistered = hasBillOfLadingNumber(ann);
+                                const rowColorClass = pendingBillRow
+                                    ? bolRegistered
+                                        ? 'bg-green-100 hover:bg-green-200'
+                                        : 'bg-red-50 hover:bg-red-100'
+                                    : referredRow
+                                      ? 'bg-slate-100/80 text-slate-500 hover:bg-slate-100'
+                                      : isAssigned
+                                        ? 'bg-green-50 hover:bg-green-100'
+                                        : 'bg-yellow-50 hover:bg-yellow-100';
+                                const rowStickyBg = selectedIds.has(ann.id)
+                                    ? '#f0f9ff'
+                                    : pendingBillRow
+                                      ? bolRegistered
+                                          ? '#dcfce7'
+                                          : '#fef2f2'
+                                      : referredRow
+                                        ? '#f1f5f9'
+                                        : isAssigned
+                                          ? '#f0fdf4'
+                                          : '#fefce8';
 
                                 return (
                                 <tr key={ann.id} className={`border-b ${selectedIds.has(ann.id) ? 'bg-sky-50' : rowColorClass}`}>
-                                    {canPerformActions && <td className="p-2 text-center align-middle sticky left-0 z-10 col-checkbox" style={{backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white'}}><input type="checkbox" checked={selectedIds.has(ann.id)} onChange={() => handleSelectRow(ann.id)}/></td>}
+                                    {canPerformActions && <td className="p-2 text-center align-middle sticky left-0 z-10 col-checkbox" style={{backgroundColor: rowStickyBg}}><input type="checkbox" checked={selectedIds.has(ann.id)} onChange={() => handleSelectRow(ann.id)}/></td>}
                                     
                                      {isFullDairyAmbient ? (
                                         <>
@@ -2219,7 +2265,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         ))
                                     )}
 
-                                    <td className="p-1 text-center align-middle sticky -left-px z-10 col-operations" style={{ backgroundColor: selectedIds.has(ann.id) ? '#f0f9ff' : 'white' }}>
+                                    <td className="p-1 text-center align-middle sticky -left-px z-10 col-operations" style={{ backgroundColor: rowStickyBg }}>
                                         <div className="flex gap-1 flex-wrap justify-center">
                                             {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                                             {canPerformActions && (ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه' || ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
@@ -2240,6 +2286,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
              {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog announcement={selectedAnnouncement} drivers={drivers} vehicles={vehicles} personalDrivers={personalDrivers} personalVehicles={personalVehicles} onUpdateAssignment={onUpdateAssignment} currentUser={currentUser} onChangeRequest={onChangeRequest} onChangeVehicleType={onChangeVehicleType} onOpenHistory={onOpenHistory} onOpenAssignmentDialog={onOpenAssignmentDialog} activeLine={activeLine} setActiveLine={setActiveLine} finalizePermissions={finalizePermissions} onClose={handleCloseDialog} />}
              {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
              {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
+             <BaleReportDialog
+                open={baleReportOpen}
+                onClose={() => setBaleReportOpen(false)}
+                rows={companyBaleReportRows}
+             />
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>

@@ -1,3 +1,9 @@
+const FormData = require('form-data');
+const fs = require('fs');
+const https = require('https');
+const os = require('os');
+const path = require('path');
+
 const BALE_API_BASE = 'https://tapi.bale.ai/bot';
 
 function getToken() {
@@ -104,9 +110,141 @@ async function getUpdates({ offset = 0, timeout = 30 } = {}) {
   });
 }
 
+function sanitizeFilename(name) {
+  return String(name || 'file')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'file';
+}
+
+function callBaleMultipart(method, form) {
+  const token = getToken();
+  if (!token) {
+    return Promise.reject(new Error('BALE_BOT_TOKEN تنظیم نشده است.'));
+  }
+  const url = new URL(`${BALE_API_BASE}${token}/${method}`);
+
+  return new Promise((resolve, reject) => {
+    form.getLength((lengthErr, length) => {
+      if (lengthErr) {
+        reject(lengthErr);
+        return;
+      }
+
+      const headers = {
+        ...form.getHeaders(),
+        'Content-Length': length,
+      };
+
+      const req = https.request(
+        {
+          method: 'POST',
+          hostname: url.hostname,
+          path: `${url.pathname}${url.search}`,
+          headers,
+        },
+        (res) => {
+          let raw = '';
+          res.on('data', (chunk) => {
+            raw += chunk;
+          });
+          res.on('end', () => {
+            let data = {};
+            try {
+              data = raw ? JSON.parse(raw) : {};
+            } catch {
+              reject(new Error(`Bale API ${method} failed: پاسخ نامعتبر از سرور`));
+              return;
+            }
+            if (res.statusCode >= 400 || data.ok === false) {
+              const detail = data.description || data.error || res.statusMessage;
+              reject(new Error(`Bale API ${method} failed: ${detail}`));
+              return;
+            }
+            resolve(data.result ?? data);
+          });
+        }
+      );
+
+      req.on('error', reject);
+      form.pipe(req);
+    });
+  });
+}
+
+async function withTempFile(buffer, filename, fn) {
+  const safeName = sanitizeFilename(filename);
+  const tmpPath = path.join(os.tmpdir(), `bale-upload-${Date.now()}-${safeName}`);
+  await fs.promises.writeFile(tmpPath, buffer);
+  try {
+    return await fn(tmpPath, safeName);
+  } finally {
+    await fs.promises.unlink(tmpPath).catch(() => {});
+  }
+}
+
+function buildUploadForm(chatId, fieldName, filePath, filename, options = {}) {
+  const normalizedChatId = Number(chatId);
+  const form = new FormData();
+  form.append('chat_id', Number.isFinite(normalizedChatId) ? normalizedChatId : chatId);
+  form.append(fieldName, fs.createReadStream(filePath), {
+    filename: sanitizeFilename(filename),
+    contentType: options.mimeType || 'application/octet-stream',
+  });
+  if (options.caption) {
+    form.append('caption', options.caption);
+  }
+  return form;
+}
+
+async function sendDocument(chatId, buffer, filename, options = {}) {
+  return withTempFile(buffer, filename, async (tmpPath, safeName) => {
+    const form = buildUploadForm(chatId, 'document', tmpPath, safeName, options);
+    return callBaleMultipart('sendDocument', form);
+  });
+}
+
+async function sendPhoto(chatId, buffer, filename, options = {}) {
+  const allowDocumentFallback = options.allowDocumentFallback !== false;
+  try {
+    return await withTempFile(buffer, filename, async (tmpPath, safeName) => {
+      const form = buildUploadForm(chatId, 'photo', tmpPath, safeName, options);
+      return callBaleMultipart('sendPhoto', form);
+    });
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (!allowDocumentFallback || !/upload file bytes|failed to upload/i.test(msg)) {
+      throw err;
+    }
+    console.warn('⚠️ [bale] sendPhoto failed, retrying as document:', msg);
+    return sendDocument(chatId, buffer, filename, options);
+  }
+}
+
+async function sendDocumentByUrl(chatId, fileUrl, caption) {
+  const normalizedChatId = Number(chatId);
+  return callBale('sendDocument', {
+    chat_id: Number.isFinite(normalizedChatId) ? normalizedChatId : chatId,
+    document: fileUrl,
+    caption: caption || undefined,
+  });
+}
+
+async function sendPhotoByUrl(chatId, fileUrl, caption) {
+  const normalizedChatId = Number(chatId);
+  return callBale('sendPhoto', {
+    chat_id: Number.isFinite(normalizedChatId) ? normalizedChatId : chatId,
+    photo: fileUrl,
+    caption: caption || undefined,
+  });
+}
+
 module.exports = {
   isConfigured,
   sendMessage,
+  sendDocument,
+  sendPhoto,
+  sendDocumentByUrl,
+  sendPhotoByUrl,
   editMessageText,
   editMessageReplyMarkup,
   answerCallbackQuery,

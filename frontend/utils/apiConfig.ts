@@ -63,13 +63,17 @@ export const getFileUrl = (filePath: string): string => {
  */
 export default API_BASE_URL;
 
-export const getAuthHeaders = (extra: HeadersInit = {}): HeadersInit => {
+export const getAuthHeaders = (extra: HeadersInit = {}, body?: BodyInit | null): HeadersInit => {
   const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
+  const headers: HeadersInit = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   };
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (!isFormData) {
+    return { 'Content-Type': 'application/json', ...headers };
+  }
+  return headers;
 };
 
 export const isAuthFailureStatus = (status: number): boolean =>
@@ -102,10 +106,11 @@ export const apiFetch = async (
   url: string,
   options?: RequestInit & { skipAuthRedirect?: boolean }
 ): Promise<Response> => {
-  const { skipAuthRedirect, headers: optionHeaders, ...rest } = options || {};
+  const { skipAuthRedirect, headers: optionHeaders, body, ...rest } = options || {};
   const response = await fetch(url, {
     ...rest,
-    headers: getAuthHeaders(optionHeaders as HeadersInit),
+    body,
+    headers: getAuthHeaders(optionHeaders as HeadersInit, body),
   });
   return handleAuthError(response, { redirect: !skipAuthRedirect });
 };
