@@ -84,6 +84,46 @@ export function getDestinationCitiesLabel(
     return cities.length > 0 ? cities.join('، ') : '-';
 }
 
+function resolveDestinationRepTypeLabel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
+    dest: Pick<Destination, 'representativeType' | 'representativeName'>
+): string {
+    const fromDest = formatRepresentativeType(dest.representativeType);
+    if (fromDest !== '-') return fromDest;
+
+    const fromAnn = formatRepresentativeType(ann.representativeType);
+    if (fromAnn !== '-') return fromAnn;
+
+    return '';
+}
+
+/** نوع نماینده هر مقصد — فقط از فیلد representativeType (نه حدس از نام) */
+export { resolveDestinationRepTypeLabel };
+
+/** ستون «مقاصد» فشرده پاستوریزه/لبنیات — خروجی اکسل بدون وابستگی به React */
+export function formatCompactDestinationsForExcel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'>
+): string {
+    const destinations = ann.destinations || [];
+    if (!destinations.length) return '-';
+
+    return destinations
+        .map((d) => {
+            const destRepType = resolveDestinationRepTypeLabel(ann, d);
+            const city = (d.city || '').trim() || '-';
+            const tonnage = d.tonnage ? formatTonnageKgFromRaw(d.tonnage) : '';
+            const deliveryDate = String((d as Destination & { deliveryDate?: string }).deliveryDate || '').trim();
+            const unloadTime = (d.unloadTime || '').trim();
+
+            let part = destRepType ? `(${destRepType}) ${city}` : city;
+            if (tonnage && tonnage !== '-') part += ` (${tonnage})`;
+            if (deliveryDate) part += ` ${deliveryDate}`;
+            if (unloadTime) part += ` ${unloadTime}`;
+            return part;
+        })
+        .join('، ');
+}
+
 /** نام نماینده/پخش — سطح اعلام بار (بستنی) یا تجمیع مقاصد (پاستوریزه/لبنیات) */
 export function getRepresentativeNameLabel(
     ann: Pick<FreightAnnouncement, 'representativeName' | 'destinations'> | null | undefined
@@ -626,12 +666,42 @@ export function formatPersianGroupedNumber(value: number, maxDecimals = 0): stri
     return toPersianDigits(combined);
 }
 
+/** نرمال‌سازی تناژ کیلوگرم — مطابق DECIMAL(10,2)، بدون خطای float برای اعداد صحیح */
+export function normalizeTonnageKg(value: unknown): number {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'string') {
+        const s = value.trim().replace(/٬/g, '').replace(/,/g, '');
+        if (/^\d+$/.test(s)) return parseInt(s, 10);
+        const decMatch = /^(\d+)\.(\d{1,2})$/.exec(s);
+        if (decMatch) {
+            const whole = parseInt(decMatch[1], 10);
+            const frac = parseInt(decMatch[2].padEnd(2, '0').slice(0, 2), 10);
+            return whole + frac / 100;
+        }
+    }
+    const n = parseNumericField(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    const rounded = Math.round(n * 100 + Number.EPSILON) / 100;
+    const asInt = Math.round(rounded);
+    if (Math.abs(rounded - asInt) < 1e-9) return asInt;
+    return rounded;
+}
+
+/** نمایش تناژ از مقدار خام API/فرم — همان عدد ثبت‌شده */
+export function formatTonnageKgFromRaw(value: unknown): string {
+    const n = normalizeTonnageKg(value);
+    if (n <= 0) return '-';
+    return formatTonnageKg(n);
+}
+
 /** جمع تناژ مقاصد (کیلوگرم) — بدون خطای اعشار شناور */
 export function sumDestinationTonnageKg(
     destinations: ReadonlyArray<Pick<Destination, 'tonnage'>> = []
 ): number {
-    const sum = destinations.reduce((acc, d) => acc + parseNumericField(d.tonnage), 0);
-    return Math.round(sum * 1000) / 1000;
+    return destinations.reduce((acc, d) => {
+        const t = normalizeTonnageKg(d.tonnage);
+        return Math.round((acc + t) * 100 + Number.EPSILON) / 100;
+    }, 0);
 }
 
 /** نمایش تناژ کیلوگرم — بدون ممیز اضافی وقتی عدد صحیح است */

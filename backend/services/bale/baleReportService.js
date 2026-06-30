@@ -167,11 +167,11 @@ async function sendCompanyReport({
     }
     const filename = `company-report-${Date.now()}.${ext}`;
 
+    // document: بدون فشرده‌سازی شدید sendPhoto — کیفیت زوم در گروه بهتر می‌ماند
     const sent = await tryMultipartSend(() =>
-      baleApi.sendPhoto(chatId, buffer, filename, {
+      baleApi.sendDocument(chatId, buffer, filename, {
         mimeType,
         caption,
-        allowDocumentFallback: false,
       })
     );
 

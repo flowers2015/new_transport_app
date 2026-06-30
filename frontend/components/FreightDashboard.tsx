@@ -512,7 +512,7 @@ const columnsConfig = (props: {
                             <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
                             {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
                             {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                            <span className="text-purple-600">{d.representativeType === 'distribution' ? 'پخش' : 'نماینده'}</span>
+                            <span className="text-purple-600">{formatRepresentativeType(d.representativeType)}</span>
                         </div>
                     ))}
                 </div>
@@ -534,7 +534,7 @@ const columnsConfig = (props: {
                             <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
                             {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
                             {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                            <span className="text-purple-600">{d.representativeType === 'distribution' ? 'پخش' : 'نماینده'}</span>
+                            <span className="text-purple-600">{formatRepresentativeType(d.representativeType)}</span>
                         </div>
                     ))}
                 </div>
@@ -1156,7 +1156,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                 <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
                                 {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
                                 {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                                <span className="text-purple-600">{d.representativeType === 'distribution' ? 'پخش' : 'نماینده'}</span>
+                                <span className="text-purple-600">{formatRepresentativeType(d.representativeType)}</span>
                             </div>
                         ))}
                     </div>

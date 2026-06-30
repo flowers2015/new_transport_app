@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FreightAnnouncement, Destination, FreightLineType } from '../types';
 import {
-    formatTonnageKg,
+    formatTonnageKgFromRaw,
     lineTypeFromAnnouncement,
     matchesFreightLine,
-    parseNumericField,
+    resolveDestinationRepTypeLabel,
     TransportLiveTab,
     isPendingBillOfLading,
 } from '../utils/freightDisplay';
@@ -21,36 +21,13 @@ type Props = {
     ) => Promise<boolean>;
 };
 
-const resolveDestinationRepType = (ann: FreightAnnouncement, dest: Destination): string => {
-    const repTypeValue = ann.representativeType;
-    if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') return 'پخش';
-    if (repTypeValue === 'representative' || repTypeValue === 'نماینده') return 'نماینده';
-
-    if (ann.representativeName) {
-        const repName = ann.representativeName.toLowerCase();
-        if (repName.includes('پخش') || repName.includes('distributor')) return 'پخش';
-        if (repName.includes('نماینده') || repName.includes('representative')) return 'نماینده';
-    }
-
-    const destRepType = (dest as { representativeType?: string }).representativeType;
-    if (destRepType === 'distributor' || destRepType === 'agent' || destRepType === 'پخش') return 'پخش';
-    if (destRepType === 'representative' || destRepType === 'نماینده') return 'نماینده';
-
-    if (dest.representativeName) {
-        const repName = dest.representativeName.toLowerCase();
-        if (repName.includes('پخش') || repName.includes('distributor')) return 'پخش';
-        if (repName.includes('نماینده') || repName.includes('representative')) return 'نماینده';
-    }
-    return '';
-};
-
 const formatTransferDestinationLine = (
     dest: Destination,
     index: number,
     ann: FreightAnnouncement
 ): string => {
-    const repType = resolveDestinationRepType(ann, dest);
-    const tonnage = dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : '';
+    const repType = resolveDestinationRepTypeLabel(ann, dest);
+    const tonnage = dest.tonnage ? formatTonnageKgFromRaw(dest.tonnage) : '';
     return `${index + 1}- ${repType ? `(${repType}) ` : ''}${dest.city}${tonnage ? ` (${tonnage})` : ''}`;
 };
 

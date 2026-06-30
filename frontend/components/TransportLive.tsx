@@ -38,6 +38,9 @@ import {
     formatPersianGroupedNumber,
     formatRepresentativeType,
     localizeExcelValue,
+    formatCompactDestinationsForExcel,
+    resolveDestinationRepTypeLabel,
+    formatTonnageKgFromRaw,
     sortByIceCreamDisplayOrder,
     isFreightDestinationDetailHeader,
 } from '../utils/freightDisplay';
@@ -92,6 +95,24 @@ const withReannounceBadge = (ann: FreightAnnouncement, content: React.ReactNode)
         {content}
     </div>
 );
+
+const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
+    ann.destinations.map((d, idx) => {
+        const destRepType = resolveDestinationRepTypeLabel(ann, d);
+        const tonnage = d.tonnage ? formatTonnageKgFromRaw(d.tonnage) : '';
+        const deliveryDate = (d as Destination & { deliveryDate?: string }).deliveryDate;
+        const unloadTime = d.unloadTime;
+        return (
+            <span key={d.id || idx} className="inline-block">
+                {destRepType ? `(${destRepType}) ` : ''}
+                <span className="font-bold text-blue-700">{d.city}</span>
+                {tonnage ? ` (${tonnage})` : ''}
+                {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
+                {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
+                {idx < ann.destinations.length - 1 && '، '}
+            </span>
+        );
+    });
 
 interface TransportLiveProps {
     announcements: FreightAnnouncement[];
@@ -473,61 +494,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }},
             
             // Destinations Summary (for all compact views)
-            { header: 'مقاصد', display: () => viewMode === 'compact', render: (ann: FreightAnnouncement) => {
-                // بررسی نوع نماینده - ابتدا از announcement
-                let repType = '';
-                const repTypeValue = ann.representativeType;
-                if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-                    repType = 'پخش';
-                } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-                    repType = 'نماینده';
-                }
-                
-                // اگر در announcement نبود، از representativeName در announcement استفاده کن
-                if (!repType && ann.representativeName) {
-                    const repName = ann.representativeName.toLowerCase();
-                    if (repName.includes('پخش') || repName.includes('distributor')) {
-                        repType = 'پخش';
-                    } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                        repType = 'نماینده';
-                    }
-                }
-                
-                return ann.destinations.map((d, idx) => {
-                    // اگر در announcement نبود، از destination بررسی کن
-                    let destRepType = repType;
-                    if (!destRepType && (d as any).representativeType) {
-                        const destRep = (d as any).representativeType;
-                        if (destRep === 'distributor' || destRep === 'agent' || destRep === 'پخش') {
-                            destRepType = 'پخش';
-                        } else if (destRep === 'representative' || destRep === 'نماینده') {
-                            destRepType = 'نماینده';
-                        }
-                    }
-                    // اگر هنوز پیدا نشد، از representativeName در destination استفاده کن
-                    if (!destRepType && d.representativeName) {
-                        const repName = d.representativeName.toLowerCase();
-                        if (repName.includes('پخش') || repName.includes('distributor')) {
-                            destRepType = 'پخش';
-                        } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                            destRepType = 'نماینده';
-                        }
-                    }
-                    const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
-                    const deliveryDate = (d as any).deliveryDate;
-                    const unloadTime = d.unloadTime;
-                    return (
-                        <span key={d.id} className="inline-block">
-                            {destRepType ? `(${destRepType}) ` : ''}
-                            <span className="font-bold text-blue-700">{d.city}</span>
-                            {tonnage ? ` (${tonnage})` : ''}
-                            {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
-                            {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
-                            {idx < ann.destinations.length - 1 && '، '}
-                        </span>
-                    );
-                });
-            }},
+            { header: 'مقاصد', display: () => viewMode === 'compact', render: (ann: FreightAnnouncement) =>
+                renderDairyAmbientDestinationChips(ann) },
 
             // Assignment Info (for all views)
             { header: 'باربری', display: () => activeLine === FreightLineType.Dairy || activeLine === FreightLineType.Ambient || isPendingBillOfLadingTab(activeLine), render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) },
@@ -966,62 +934,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
-                { header: 'مقاصد', render: (ann: FreightAnnouncement) => {
-                    // بررسی نوع نماینده - ابتدا از announcement
-                    let repType = '';
-                    const repTypeValue = ann.representativeType;
-                    if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-                        repType = 'پخش';
-                    } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-                        repType = 'نماینده';
-                    }
-                    
-                    // اگر در announcement نبود، از representativeName در announcement استفاده کن
-                    if (!repType && ann.representativeName) {
-                        const repName = ann.representativeName.toLowerCase();
-                        if (repName.includes('پخش') || repName.includes('distributor')) {
-                            repType = 'پخش';
-                        } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                            repType = 'نماینده';
-                        }
-                    }
-                    
-                    const destinationsContent = ann.destinations.map((d, idx) => {
-                        // اگر در announcement نبود، از destination بررسی کن
-                        let destRepType = repType;
-                        if (!destRepType && (d as any).representativeType) {
-                            const destRep = (d as any).representativeType;
-                            if (destRep === 'distributor' || destRep === 'agent' || destRep === 'پخش') {
-                                destRepType = 'پخش';
-                            } else if (destRep === 'representative' || destRep === 'نماینده') {
-                                destRepType = 'نماینده';
-                            }
-                        }
-                        // اگر هنوز پیدا نشد، از representativeName در destination استفاده کن
-                        if (!destRepType && d.representativeName) {
-                            const repName = d.representativeName.toLowerCase();
-                            if (repName.includes('پخش') || repName.includes('distributor')) {
-                                destRepType = 'پخش';
-                            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                                destRepType = 'نماینده';
-                            }
-                        }
-                        const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
-                        const deliveryDate = (d as any).deliveryDate;
-                        const unloadTime = d.unloadTime;
-                        return (
-                            <span key={d.id} className="inline-block">
-                                {destRepType ? `(${destRepType}) ` : ''}
-                                <span className="font-bold text-blue-700">{d.city}</span>
-                                {tonnage ? ` (${tonnage})` : ''}
-                                {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
-                                {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
-                                {idx < ann.destinations.length - 1 && '، '}
-                            </span>
-                        );
-                    });
-                    return withReannounceBadge(ann, destinationsContent);
-                } },
+                { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
+                    withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -1085,62 +999,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
-                { header: 'مقاصد', render: (ann: FreightAnnouncement) => {
-                    // بررسی نوع نماینده - ابتدا از announcement
-                    let repType = '';
-                    const repTypeValue = ann.representativeType;
-                    if (repTypeValue === 'distributor' || repTypeValue === 'agent' || repTypeValue === 'پخش') {
-                        repType = 'پخش';
-                    } else if (repTypeValue === 'representative' || repTypeValue === 'نماینده') {
-                        repType = 'نماینده';
-                    }
-                    
-                    // اگر در announcement نبود، از representativeName در announcement استفاده کن
-                    if (!repType && ann.representativeName) {
-                        const repName = ann.representativeName.toLowerCase();
-                        if (repName.includes('پخش') || repName.includes('distributor')) {
-                            repType = 'پخش';
-                        } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                            repType = 'نماینده';
-                        }
-                    }
-                    
-                    const destinationsContent = ann.destinations.map((d, idx) => {
-                        // اگر در announcement نبود، از destination بررسی کن
-                        let destRepType = repType;
-                        if (!destRepType && (d as any).representativeType) {
-                            const destRep = (d as any).representativeType;
-                            if (destRep === 'distributor' || destRep === 'agent' || destRep === 'پخش') {
-                                destRepType = 'پخش';
-                            } else if (destRep === 'representative' || destRep === 'نماینده') {
-                                destRepType = 'نماینده';
-                            }
-                        }
-                        // اگر هنوز پیدا نشد، از representativeName در destination استفاده کن
-                        if (!destRepType && d.representativeName) {
-                            const repName = d.representativeName.toLowerCase();
-                            if (repName.includes('پخش') || repName.includes('distributor')) {
-                                destRepType = 'پخش';
-                            } else if (repName.includes('نماینده') || repName.includes('representative')) {
-                                destRepType = 'نماینده';
-                            }
-                        }
-                        const tonnage = d.tonnage ? formatTonnageKg(parseNumericField(d.tonnage)) : '';
-                        const deliveryDate = (d as any).deliveryDate;
-                        const unloadTime = d.unloadTime;
-                        return (
-                            <span key={d.id} className="inline-block">
-                                {destRepType ? `(${destRepType}) ` : ''}
-                                <span className="font-bold text-blue-700">{d.city}</span>
-                                {tonnage ? ` (${tonnage})` : ''}
-                                {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
-                                {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
-                                {idx < ann.destinations.length - 1 && '، '}
-                            </span>
-                        );
-                    });
-                    return withReannounceBadge(ann, destinationsContent);
-                } },
+                { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
+                    withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -1466,6 +1326,17 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     // بررسی اینکه آیا این ستون عددی است (مثل تناژ، کرایه، ارزش بار)
                     const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                     const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
+
+                    if (col.header === 'مقاصد') {
+                        value = formatCompactDestinationsForExcel(ann);
+                        row.push(value);
+                        return;
+                    }
+                    if (col.header === 'مقصد') {
+                        value = getDestinationCitiesLabel(ann);
+                        row.push(value);
+                        return;
+                    }
                     
                     if (col.render) {
                         const rendered = col.render(ann, idx);
@@ -1723,6 +1594,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
                     const value = ann.cargoValue || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
+                }
+                if (header === 'مقاصد') {
+                    return formatCompactDestinationsForExcel(ann);
+                }
+                if (header === 'مقصد') {
+                    return getDestinationCitiesLabel(ann);
                 }
                 
                 const col = visibleCols.find((c: any) => c.header === header);

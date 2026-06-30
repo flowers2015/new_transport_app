@@ -30,6 +30,11 @@ async function readApiError(res: Response): Promise<string> {
 const CAPTURE_FONT = "'Vazirmatn', 'Tahoma', sans-serif";
 const REPORT_TITLE = 'گزارش تخصیص شرکتی';
 const CAPTURE_TABLE_WIDTH = 1680;
+/** رزولوشن خروجی — بالاتر از ۱ برای زوم در بله */
+const CAPTURE_IMAGE_SCALE = 3;
+const DAIRY_ROW_BG = '#fef9c3';
+const EVEN_ROW_BG = '#f8fafc';
+const ODD_ROW_BG = '#ffffff';
 /** نسبت عرض ستون‌ها */
 const CAPTURE_COLUMN_UNITS = [5, 9, 26, 11, 7, 9, 18, 12, 7, 13, 11];
 const CAPTURE_COLUMN_TOTAL = CAPTURE_COLUMN_UNITS.reduce((sum, w) => sum + w, 0);
@@ -155,12 +160,18 @@ const CaptureHeaderLabel: React.FC<{ label: string }> = ({ label }) => (
     </th>
 );
 
-const CaptureCell: React.FC<{ value: string | number; multiline?: boolean }> = ({
-    value,
-    multiline = false,
-}) => (
-    <td style={captureCellShellStyle}>
-        <div style={multiline ? captureCellInnerMultilineStyle : captureCellInnerStyle}>
+const CaptureCell: React.FC<{
+    value: string | number;
+    multiline?: boolean;
+    background?: string;
+}> = ({ value, multiline = false, background = ODD_ROW_BG }) => (
+    <td style={{ ...captureCellShellStyle, background }}>
+        <div
+            style={{
+                ...(multiline ? captureCellInnerMultilineStyle : captureCellInnerStyle),
+                background,
+            }}
+        >
             {multiline ? textForHtml2CanvasMultiline(value) : textForHtml2Canvas(value)}
         </div>
     </td>
@@ -286,7 +297,7 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
         await document.fonts.ready;
         await new Promise((resolve) => setTimeout(resolve, 80));
         const canvas = await html2canvas(el, {
-            scale: 1.75,
+            scale: CAPTURE_IMAGE_SCALE,
             backgroundColor: '#ffffff',
             useCORS: true,
             logging: false,
@@ -294,12 +305,19 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
             height: el.scrollHeight,
             windowWidth: el.scrollWidth,
             windowHeight: el.scrollHeight,
+            onclone: (doc) => {
+                const root = doc.querySelector('[data-capture-root]') as HTMLElement | null;
+                if (root) {
+                    root.style.opacity = '1';
+                    root.style.visibility = 'visible';
+                }
+            },
         });
         const blob = await new Promise<Blob>((resolve, reject) => {
             canvas.toBlob(
                 (b) => (b ? resolve(b) : reject(new Error('ساخت تصویر ناموفق بود.'))),
-                'image/jpeg',
-                0.82
+                'image/png',
+                1
             );
         });
         return blob;
@@ -326,7 +344,7 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                 form.append('chatId', String(chatId));
                 form.append('format', format);
                 form.append('rows', JSON.stringify(rows));
-                form.append('image', imageBlob, 'company-report.jpg');
+                form.append('image', imageBlob, 'company-report.png');
                 res = await apiFetch(getApiUrl('bale/report/send'), {
                     method: 'POST',
                     body: form,
@@ -568,7 +586,12 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                         rows.map((r) => (
                                             <tr
                                                 key={r.row}
-                                                className={r.isDairy ? 'bg-amber-50' : 'even:bg-slate-50'}
+                                                style={
+                                                    r.isDairy
+                                                        ? { backgroundColor: DAIRY_ROW_BG }
+                                                        : undefined
+                                                }
+                                                className={r.isDairy ? undefined : 'even:bg-slate-50'}
                                             >
                                                 <td className="border border-slate-200 px-2 py-2">{r.row}</td>
                                                 <td className="border border-slate-200 px-2 py-2">{r.vehicleType}</td>
@@ -593,7 +616,13 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                     <div
                         aria-hidden
                         className="fixed pointer-events-none"
-                        style={{ left: 0, top: 0, opacity: 0, zIndex: -1, overflow: 'hidden' }}
+                        style={{
+                            left: -12000,
+                            top: 0,
+                            zIndex: -1,
+                            overflow: 'visible',
+                            visibility: 'hidden',
+                        }}
                     >
                         <div
                             ref={captureRef}
@@ -633,23 +662,23 @@ const BaleReportDialog: React.FC<Props> = ({ open, onClose, rows }) => {
                                 <tbody>
                                     {rows.map((r) => {
                                         const rowBg = r.isDairy
-                                            ? '#fef9c3'
+                                            ? DAIRY_ROW_BG
                                             : r.row % 2 === 0
-                                              ? '#f8fafc'
-                                              : '#fff';
+                                              ? EVEN_ROW_BG
+                                              : ODD_ROW_BG;
                                         return (
                                             <tr key={r.row} style={{ background: rowBg }}>
-                                                <CaptureCell value={r.row} />
-                                                <CaptureCell value={r.vehicleType} />
-                                                <CaptureCell value={r.destinations} multiline />
-                                                <CaptureCell value={r.origin} />
-                                                <CaptureCell value={r.brand} />
-                                                <CaptureCell value={r.representativeType} />
-                                                <CaptureCell value={r.representativeName} multiline />
-                                                <CaptureCell value={r.products} multiline />
-                                                <CaptureCell value={r.vehicleCode} />
-                                                <CaptureCell value={r.driverName} />
-                                                <CaptureCell value={r.driverContact} />
+                                                <CaptureCell value={r.row} background={rowBg} />
+                                                <CaptureCell value={r.vehicleType} background={rowBg} />
+                                                <CaptureCell value={r.destinations} multiline background={rowBg} />
+                                                <CaptureCell value={r.origin} background={rowBg} />
+                                                <CaptureCell value={r.brand} background={rowBg} />
+                                                <CaptureCell value={r.representativeType} background={rowBg} />
+                                                <CaptureCell value={r.representativeName} multiline background={rowBg} />
+                                                <CaptureCell value={r.products} multiline background={rowBg} />
+                                                <CaptureCell value={r.vehicleCode} background={rowBg} />
+                                                <CaptureCell value={r.driverName} background={rowBg} />
+                                                <CaptureCell value={r.driverContact} background={rowBg} />
                                             </tr>
                                         );
                                     })}

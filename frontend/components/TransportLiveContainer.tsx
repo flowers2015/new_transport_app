@@ -17,7 +17,7 @@ import {
     isPendingBillOfLadingTab,
     isPersonalAssignmentType,
     hasBillOfLadingNumber,
-    parseNumericField,
+    normalizeTonnageKg,
     PENDING_BILL_OF_LADING_TAB,
 } from '../utils/freightDisplay';
 
@@ -243,7 +243,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             id: d.id,
                             city: d.city,
                             representativeName: d.representative_name || d.representativeName,
-                            tonnage: d.tonnage != null && d.tonnage !== '' ? parseNumericField(d.tonnage) : undefined,
+                            tonnage: d.tonnage != null && d.tonnage !== '' ? normalizeTonnageKg(d.tonnage) : undefined,
                             unloadTime: d.unload_time || d.unloadTime,
                             freightCost: d.freight_cost ?? d.freightCost,
                             deliveryDate: d.delivery_date || d.deliveryDate,
@@ -547,7 +547,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                         id: d.id,
                                         city: d.city,
                                         representativeName: d.representativeName || d.representative_name,
-                                        tonnage: d.tonnage != null && d.tonnage !== '' ? parseNumericField(d.tonnage) : undefined,
+                                        tonnage: d.tonnage != null && d.tonnage !== '' ? normalizeTonnageKg(d.tonnage) : undefined,
                                         unloadTime: d.unloadTime || d.unload_time,
                                         freightCost: d.freightCost ?? d.freight_cost,
                                         deliveryDate: d.deliveryDate || d.delivery_date,
