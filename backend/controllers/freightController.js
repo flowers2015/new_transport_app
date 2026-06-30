@@ -303,6 +303,22 @@ async function getFreightAnnouncements(req, res) {
         console.warn('⚠️ [getFreightAnnouncements] Branch finance user but no branch city found');
       }
     }
+
+    const isCarrierUser = userRole === 'carrier_user';
+    if (isCarrierUser && userId) {
+      try {
+        const carrierRow = await pool.query('SELECT carrier_id FROM users WHERE id = $1', [userId]);
+        const carrierId = carrierRow.rows[0]?.carrier_id;
+        if (!carrierId) {
+          return res.json({ announcements: [], total: 0 });
+        }
+        userFilter += ` AND fa.handoff_carrier_id = '${carrierId}' AND fa.handoff_status = 'with_carrier'`;
+        console.log(`🚚 [getFreightAnnouncements] Carrier filter for carrier_id=${carrierId}`);
+      } catch (carrierFilterErr) {
+        console.error('❌ [getFreightAnnouncements] Carrier filter error:', carrierFilterErr);
+        return res.json({ announcements: [], total: 0 });
+      }
+    }
     
     // بررسی اینکه کدام ستون name در جدول users وجود دارد
     const columnCheck = await pool.query(`
@@ -1775,7 +1791,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
     
     // Check if announcement exists
     const { rows } = await client.query(
-      'SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code, line_type, awaiting_bill_of_lading_at, carrier_name FROM freight_announcements WHERE id = $1',
+      `SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code,
+              line_type, awaiting_bill_of_lading_at, carrier_name, handoff_carrier_id, handoff_status,
+              total_freight_cost, freight_cost_locked_at
+       FROM freight_announcements WHERE id = $1`,
       [announcementId]
     );
     if (rows.length === 0) {
@@ -1792,8 +1811,36 @@ async function assignPersonalDriverAndVehicle(req, res) {
       line_type: lineType,
       awaiting_bill_of_lading_at: awaitingBillOfLadingAt,
       carrier_name: existingCarrierName,
+      handoff_carrier_id: handoffCarrierId,
+      handoff_status: handoffStatus,
+      total_freight_cost: lockedFreightCost,
     } = rows[0];
-    const dairyAmbientIsolated = isDairyOrAmbientLineType(lineType);
+
+    const userRole = req.user?.role || '';
+    const isCarrierUser = userRole === 'carrier_user';
+
+    if (isCarrierUser) {
+      const actorCarrierId = await (async () => {
+        const uid = req.user?.userId || req.user?.id;
+        if (!uid) return null;
+        const cr = await client.query('SELECT carrier_id FROM users WHERE id = $1', [uid]);
+        return cr.rows[0]?.carrier_id || null;
+      })();
+      if (!actorCarrierId || handoffCarrierId !== actorCarrierId || handoffStatus !== 'with_carrier') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'این بار به شما ارجاع نشده است.' });
+      }
+      if (!lockedFreightCost || Number(lockedFreightCost) <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'کرایه از ترابری شخصی ثبت نشده است.' });
+      }
+      if (!billOfLadingNumber || !String(billOfLadingNumber).trim()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'شماره بارنامه الزامی است.' });
+      }
+    }
+
+    const dairyAmbientIsolated = isDairyOrAmbientLineType(lineType) && !isCarrierUser;
     const isCarrierOnlySave =
       dairyAmbientIsolated &&
       isDairyAmbientPlaceholderPayload(driverContact, vehiclePlate) &&
@@ -1983,8 +2030,9 @@ async function assignPersonalDriverAndVehicle(req, res) {
     }
     
     // Update freight announcement
+    const effectiveFreightCost = isCarrierUser ? lockedFreightCost : (totalFreightCost || null);
     const updateFields = ['status = $1', 'assigned_driver_id = $2', 'assigned_vehicle_id = $3', 'bill_of_lading_number = $4', 'total_freight_cost = $5', 'updated_at = NOW()'];
-    const updateValues = ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, totalFreightCost || null];
+    const updateValues = ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, effectiveFreightCost];
     // awaiting_bill_of_lading_at فقط با «اتمام تخصیص» موفق پاک می‌شود — ثبت بارنامه ردیف را از تب pending خارج نمی‌کند
     let paramIndex = 6;
     
@@ -2250,6 +2298,11 @@ async function assignVehicleAndDriverInternal(req, res) {
     userId,
     body: req.body
   });
+
+  if (userRole === 'carrier_user') {
+    req.body.assignmentType = 'personal';
+    return await assignPersonalDriverAndVehicle(req, res);
+  }
 
   // Check if this is personal assignment
   if (assignmentType === 'personal') {
@@ -3220,6 +3273,16 @@ async function getFreightHistory(req, res) {
       }
     }
     
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('full_name', 'name')
+    `);
+    const hasFullName = columnCheck.rows.some((r) => r.column_name === 'full_name');
+    const hasName = columnCheck.rows.some((r) => r.column_name === 'name');
+    const nameColumn = hasFullName ? 'full_name' : hasName ? 'name' : 'username';
+
     let query = `
       SELECT 
         fa.*,
@@ -3227,6 +3290,12 @@ async function getFreightHistory(req, res) {
         fa.bill_of_lading_number,
         fa.assigned_driver_name,
         fa.carrier_name,
+        u_creator.id as creator_user_id,
+        COALESCE(
+          NULLIF(TRIM(u_creator.${nameColumn}), ''),
+          NULLIF(TRIM(creator_hist.user_name), '')
+        ) as creator_full_name,
+        u_creator.username as creator_username,
         COALESCE(fa.assigned_driver_name, d.name, pd.name) as resolved_driver_name,
         COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
         COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
@@ -3239,6 +3308,14 @@ async function getFreightHistory(req, res) {
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
       FROM freight_announcements fa
+      LEFT JOIN users u_creator ON fa.created_by_user_id = u_creator.id
+      LEFT JOIN LATERAL (
+        SELECT user_name
+        FROM freight_announcement_history
+        WHERE freight_announcement_id = fa.id AND action = 'CREATED'
+        ORDER BY created_at ASC
+        LIMIT 1
+      ) creator_hist ON true
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id

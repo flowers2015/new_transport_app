@@ -48,6 +48,7 @@ export enum View {
     AllowanceRegulation = 'allowance-regulation',
     MonthlyCommissionCalculation = 'monthly-commission-calculation',
     UserManagement = 'user-management',
+    CarrierManagement = 'carrier-management',
     FreightManagement = 'freight-management',
     AdminResourceManagement = 'admin-resource-management',
     CityManagement = 'city-management',
@@ -73,6 +74,7 @@ export enum UserRole {
     PlanningManager = 'مدیر برنامه‌ریزی',
     TransportationUser = 'کاربر ترابری (شرکت)',
     Transportation_Personal_Vehicle_User = 'کاربر ترابری (خودرو شخصی)',
+    CarrierUser = 'کاربر باربری',
     CentralFinance = 'مالی مرکزی',
     TransportationFinance = 'مالی ترابری',
     Viewer = 'بیننده',
@@ -248,6 +250,7 @@ export interface User {
     role: UserRole;
     employeeId?: string;
     branchCity?: string;
+    carrierId?: string;
 }
 
 export interface Branch {
@@ -676,6 +679,11 @@ export interface FreightAnnouncement {
     assignedVehiclePlate?: string;
     /** نام باربری (تخصیص شخصی لبنیات/فروتلند) */
     carrierName?: string;
+    /** وضعیت واگذاری به باربری */
+    handoffStatus?: 'with_carrier' | 'returned' | 'carrier_done' | null;
+    handoffCarrierId?: string;
+    handoffCarrierName?: string;
+    freightCostLockedAt?: string | Date;
     assignmentFinalizedAt?: string | Date;
     /** پس از اتمام تخصیص بدون بارنامه — نمایش در تب «در انتظار بارنامه» */
     awaitingBillOfLadingAt?: string | Date;

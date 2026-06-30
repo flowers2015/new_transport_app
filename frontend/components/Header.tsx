@@ -104,7 +104,8 @@ const Header: React.FC<HeaderProps> = ({
       // Planning Section - برنامه ریزی (اولین برای PlanningEmployee)
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
       // Freight Management Section - اعلام بار
-      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
+      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
+      { view: View.CarrierManagement, label: 'تعریف باربری', roles: [UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
       // داشبورد برای PlanningEmployee (بعد از تاریخچه اعلام بار)
       { view: View.Dashboard, label: 'داشبورد', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
@@ -152,6 +153,7 @@ const Header: React.FC<HeaderProps> = ({
     // آیتم‌های منوی ادمین - جداگانه
     const adminItems = [
       { view: View.UserManagement, label: 'مدیریت کاربران', icon: '👥' },
+      { view: View.CarrierManagement, label: 'تعریف باربری', icon: '🚛' },
       { view: View.FreightManagement, label: 'مدیریت اعلام بار', icon: '📦' },
       { view: View.AdminResourceManagement, label: 'مدیریت منابع', icon: '🚛' },
       { view: View.CityManagement, label: 'مدیریت شهرها', icon: '🏙️' },

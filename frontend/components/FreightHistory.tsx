@@ -12,7 +12,6 @@ import {
     TOTAL_FREIGHT_HEADER,
     formatFreightAmountCell,
     formatRepresentativeType,
-    formatLoadingType,
     localizeExcelValue,
     isFreightDestinationDetailHeader,
     formatTotalTonnageFromDestinations,
@@ -292,7 +291,6 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
             
             // Ice Cream (فشرده و کامل)
-            { header: 'نوع بارگیری', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
             { header: 'نوع نماینده', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
             { header: 'کارتن', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
             { header: 'پالت', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
@@ -852,7 +850,6 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'نوع بارگیری', render: (ann: FreightAnnouncement) => formatLoadingType(ann.loadingType, ann) },
                 { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
                 { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getRepresentativeNameLabel(ann) },

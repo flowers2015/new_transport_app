@@ -68,6 +68,14 @@ const rolePermissions = {
     description: 'کاربر ترابری (خودرو شخصی)'
   },
 
+  // کاربر باربری
+  carrier_user: {
+    menus: [
+      'freight_tracking',
+    ],
+    description: 'کاربر باربری'
+  },
+
   // مالی شعب
   finance: {
     menus: [

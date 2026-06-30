@@ -38,6 +38,12 @@ const {
   changeVehicleType,
   updateIceCreamDisplayOrder,
 } = require('../controllers/freightController');
+const {
+  referToCarrier,
+  cancelCarrierReferral,
+  carrierReturnToPersonal,
+  carrierCompleteHandoff,
+} = require('../controllers/carrierHandoffController');
 
 const { getPerformanceIndex, getPersonalPerformanceIndex } = require('../controllers/performanceIndexController');
 
@@ -195,7 +201,7 @@ router.post(
 router.put(
   '/:id/assignment',
   authenticateToken,
-  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin']),
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner_manager', 'admin', 'carrier_user']),
   assignVehicleAndDriver
 );
 
@@ -281,6 +287,35 @@ router.put(
   authenticateToken,
   authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
   changeVehicleType
+);
+
+// ارجاع به باربری (لبنیات-فروتلند)
+router.post(
+  '/:id/carrier-refer',
+  authenticateToken,
+  authorizeRole(['personal_transport_user', 'کاربر ترابری (خودرو شخصی)', 'admin']),
+  referToCarrier
+);
+
+router.post(
+  '/:id/carrier-cancel-refer',
+  authenticateToken,
+  authorizeRole(['personal_transport_user', 'کاربر ترابری (خودرو شخصی)', 'admin']),
+  cancelCarrierReferral
+);
+
+router.post(
+  '/:id/carrier-return',
+  authenticateToken,
+  authorizeRole(['carrier_user']),
+  carrierReturnToPersonal
+);
+
+router.post(
+  '/:id/carrier-complete',
+  authenticateToken,
+  authorizeRole(['carrier_user']),
+  carrierCompleteHandoff
 );
 
 // Delete an announcement (allowed for planner/manager/admin when not finalized)

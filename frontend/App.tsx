@@ -58,7 +58,7 @@ const FreightPlanningContainer = React.lazy(() => import('./components/FreightPl
 const TransportFinanceContainer = React.lazy(() => import('./components/TransportFinanceContainer'));
 const AuditTrailView = React.lazy(() => import('./components/AuditTrailView'));
 const CustomerManagement = React.lazy(() => import('./components/CustomerManagement'));
-const UserManagement = React.lazy(() => import('./components/UserManagement'));
+const CarrierManagement = React.lazy(() => import('./components/CarrierManagement'));
 const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
 const AdminResourceManagement = React.lazy(() => import('./components/AdminResourceManagement'));
 const CityManagement = React.lazy(() => import('./components/CityManagement'));
@@ -76,6 +76,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
         case UserRole.TransportationUser:
         case UserRole.Transportation_Personal_Vehicle_User:
             return View.TransportLive; // پیگیری اعلام بار زنده
+        case UserRole.CarrierUser:
+            return View.TransportLive;
         case UserRole.BranchFinance:
             return View.FreightFinance; // مالی حمل
         case UserRole.CentralFinance:
@@ -138,6 +140,7 @@ const App: React.FC = () => {
             case 'allocation': return UserRole.VehicleAllocationExpert;
             case 'insurance': return UserRole.InsuranceExpert;
             case 'viewer': return UserRole.Viewer;
+            case 'carrier_user': return UserRole.CarrierUser;
             default: return null;
         }
     };
@@ -164,6 +167,7 @@ const App: React.FC = () => {
             role: mappedRole,
             employeeId: raw.employeeId || undefined,
             branchCity: raw.branchCity || undefined,
+            carrierId: raw.carrierId || undefined,
         };
     };
 
@@ -700,6 +704,9 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.UserManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <UserManagement currentUser={currentUser} />;
+            case View.CarrierManagement:
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <CarrierManagement currentUser={currentUser} />;
             case View.FreightManagement:
                 console.log('[App] Render view:', View.FreightManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;

@@ -27,11 +27,19 @@ import {
     lineTypeFromAnnouncement,
     isDairyAmbientPersonalIsolatedAssignment,
     isDairyOrAmbientLineType,
+    hasRealPersonalDriverAssignment,
+    hasDriverAndVehicleAssigned,
     getCarrierName,
     getPendingBillAgeDays,
+    isWithCarrierHandoff,
+    isReturnedFromCarrier,
+    isCarrierDoneHandoff,
+    buildFreightReferSummary,
     DAIRY_AMBIENT_PLACEHOLDER_MOBILE,
     DAIRY_AMBIENT_PLACEHOLDER_PLATE,
     parseNumericField,
+    sanitizeNumericInputString,
+    formatNumericInputDisplay,
     formatTonnageKg,
     formatTotalTonnageFromDestinations,
     sumDestinationTonnageKg,
@@ -141,6 +149,20 @@ interface TransportLiveProps {
     finalizePermissions?: Record<string, boolean>;
     onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => Promise<boolean>;
     onForward: (announcementId: string | string[]) => void | Promise<void>;
+    onReferToCarrier?: (
+        announcementId: string,
+        carrierId: string,
+        totalFreightCost: number
+    ) => Promise<{ ok: boolean; message?: string } | void> | void;
+    onReferToCarrierBulk?: (
+        carrierId: string,
+        items: { announcementId: string; totalFreightCost: number }[]
+    ) => void | Promise<void>;
+    onCancelCarrierRefer?: (announcementId: string) => void | Promise<void>;
+    onCarrierReturn?: (announcementId: string, reason?: string) => void | Promise<void>;
+    onCarrierComplete?: (announcementId: string) => void | Promise<void>;
+    onCarrierCompleteBulk?: (announcementIds: string[]) => void | Promise<void>;
+    carriers?: Array<{ id: string; name: string; active?: boolean; hasLoginUser?: boolean }>;
     onCancel: (announcementId: string) => void;
     onChangeRequest: (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => void;
     onChangeVehicleType: (announcementId: string, vehicleType: string) => Promise<boolean>;
@@ -232,7 +254,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onTransferDestination, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, finalizePermissions = {} } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, finalizePermissions = {} } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -290,6 +312,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [editingVehicleTypeId, setEditingVehicleTypeId] = useState<string | null>(null);
     
     const [dialog, setDialog] = useState<'assign' | 'transfer' | 'change' | 'vehicle-type' | null>(null);
+    const [referDialogAnns, setReferDialogAnns] = useState<FreightAnnouncement[] | null>(null);
     
     // Helper functions memoized with useCallback for performance
     const getDriverName = useCallback((id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
@@ -361,7 +384,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return allowedRoles.includes(currentUser.role);
     }, [currentUser.role]);
 
-    const canPerformActions = useMemo(() => hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]), [hasAccess]);
+    const isCarrierUser = currentUser.role === UserRole.CarrierUser;
+    const isPersonalTransportUser = currentUser.role === UserRole.Transportation_Personal_Vehicle_User;
+    const isAmbientPersonalReferTab =
+        isPersonalTransportUser &&
+        (activeLine === FreightLineType.Ambient || activeLine === 'لبنیات-فروتلند' || activeLine === 'Ambient');
+
+    const canPerformActions = useMemo(() => isCarrierUser || hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]), [hasAccess, isCarrierUser]);
 
     // Helper function to check if user can edit announcement - memoized
     const canEditAnnouncement = useCallback((ann: FreightAnnouncement): { canEdit: boolean; canTakeAction: boolean; isAssignedByOther: boolean } => {
@@ -1238,9 +1267,22 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             alert('حداقل یک ردیف را انتخاب کنید.');
             return;
         }
-        const eligible = displayAnnouncements.filter(
-            (a) => selectedIds.has(a.id) && canTransportForward(a, currentUser.role)
-        );
+
+        const isCarrierBulk =
+            isAmbientPersonalReferTab && onReferToCarrier && (onReferToCarrierBulk || onReferToCarrier);
+
+        const eligible = displayAnnouncements.filter((a) => {
+            if (!selectedIds.has(a.id)) return false;
+            if (isCarrierBulk) {
+                return (
+                    canTransportForward(a, currentUser.role) &&
+                    !isWithCarrierHandoff(a) &&
+                    !a.assignedDriverId
+                );
+            }
+            return canTransportForward(a, currentUser.role);
+        });
+
         if (eligible.length === 0) {
             alert('هیچ‌کدام از ردیف‌های انتخاب‌شده واجد شرایط ارجاع نیستند.');
             return;
@@ -1251,9 +1293,62 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 ? `${eligible.length} بار ارجاع شود؟ (${skipped} مورد واجد شرایط نبود)`
                 : `${eligible.length} بار ارجاع شود؟`;
         if (!confirm(msg)) return;
+
+        if (isCarrierBulk) {
+            setReferDialogAnns(eligible);
+            setSelectedIds(new Set());
+            return;
+        }
+
         await onForward(eligible.map((a) => a.id));
         setSelectedIds(new Set());
-    }, [selectedIds, displayAnnouncements, currentUser.role, onForward]);
+    }, [
+        selectedIds,
+        displayAnnouncements,
+        currentUser.role,
+        onForward,
+        isAmbientPersonalReferTab,
+        onReferToCarrier,
+        onReferToCarrierBulk,
+    ]);
+
+    const handleBulkCarrierComplete = useCallback(async () => {
+        if (!onCarrierComplete && !onCarrierCompleteBulk) return;
+        if (selectedIds.size === 0) {
+            alert('حداقل یک ردیف را انتخاب کنید.');
+            return;
+        }
+
+        const eligible = displayAnnouncements.filter(
+            (a) =>
+                selectedIds.has(a.id) &&
+                isWithCarrierHandoff(a) &&
+                a.status === FreightAnnouncementStatus.Assigned &&
+                hasDriverAndVehicleAssigned(a)
+        );
+
+        if (eligible.length === 0) {
+            alert('هیچ‌کدام از ردیف‌های انتخاب‌شده واجد شرایط اتمام نیستند (باید تخصیص‌شده باشند).');
+            return;
+        }
+
+        const skipped = selectedIds.size - eligible.length;
+        const msg =
+            skipped > 0
+                ? `${eligible.length.toLocaleString('fa-IR')} بار اتمام شود؟ (${skipped.toLocaleString('fa-IR')} مورد واجد شرایط نبود)`
+                : `${eligible.length.toLocaleString('fa-IR')} بار اتمام و برگشت به ترابری شخصی شود؟`;
+        if (!confirm(msg)) return;
+
+        const ids = eligible.map((a) => a.id);
+        if (onCarrierCompleteBulk) {
+            await onCarrierCompleteBulk(ids);
+        } else if (onCarrierComplete) {
+            for (const id of ids) {
+                await onCarrierComplete(id);
+            }
+        }
+        setSelectedIds(new Set());
+    }, [selectedIds, displayAnnouncements, onCarrierComplete, onCarrierCompleteBulk]);
 
     const isFullDairyAmbient =
         viewMode === 'full' &&
@@ -1806,6 +1901,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             </button>
                         )}
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0">
+                            {!isCarrierUser && (
                             <button
                                 key={PENDING_BILL_OF_LADING_TAB}
                                 onClick={() => setActiveLine(PENDING_BILL_OF_LADING_TAB)}
@@ -1813,7 +1909,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             >
                                 در انتظار بارنامه ({tabCounts.pendingBill.toLocaleString('fa-IR')})
                             </button>
-                            {Object.values(FreightLineType).map(lt => (
+                            )}
+                            {(isCarrierUser ? [FreightLineType.Ambient] : Object.values(FreightLineType)).map(lt => (
                                 <button
                                     key={lt}
                                     onClick={() => setActiveLine(lt)}
@@ -1864,13 +1961,22 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
-                        {canPerformActions && selectedIds.size > 0 && (
+                        {canPerformActions && !isCarrierUser && selectedIds.size > 0 && (
                             <button
                                 onClick={() => void handleBulkForward()}
                                 className="flex items-center gap-1 px-3 py-1 bg-purple-600 text-white rounded-md text-xs hover:bg-purple-700"
-                                title="ارجاع گروهی ردیف‌های انتخاب‌شده"
+                                title={isAmbientPersonalReferTab ? 'ارجاع گروهی به باربری / ترابری شرکت' : 'ارجاع گروهی ردیف‌های انتخاب‌شده'}
                             >
                                 ارجاع ({selectedIds.size})
+                            </button>
+                        )}
+                        {canPerformActions && isCarrierUser && selectedIds.size > 0 && (onCarrierComplete || onCarrierCompleteBulk) && (
+                            <button
+                                onClick={() => void handleBulkCarrierComplete()}
+                                className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                title="اتمام گروهی واگذاری و برگشت به ترابری شخصی"
+                            >
+                                اتمام ({selectedIds.size})
                             </button>
                         )}
                         {canPerformActions && filteredAnnouncements.length > 0 && canFinalizeCurrentTab && (
@@ -2159,6 +2265,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     canTakeAction = !isAnnLeftover;
                                 }
 
+                                const isHandoffAtCarrier = isWithCarrierHandoff(ann);
+
                                 // بررسی اینکه آیا بار به ترابری دیگر ارجاع شده است
                                 // این باید برای همه status‌ها کار کند (PendingPersonalAssignment, PendingCompanyAssignment, Assigned, InTransit)
                                 const isAssignedToOtherTransport = 
@@ -2198,6 +2306,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     canForward = canTakeAction && isPendingStatus;
                                 }
 
+                                if (
+                                    currentUser.role === UserRole.Transportation_Personal_Vehicle_User &&
+                                    isHandoffAtCarrier
+                                ) {
+                                    canTakeAction = false;
+                                    canForward = false;
+                                }
+
                                 const isAssigned = ann.status === FreightAnnouncementStatus.Assigned || ann.status === 'Assigned';
                                 const referredRow =
                                     isTransportUser &&
@@ -2206,10 +2322,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     checkIsAssignedToOtherTransport(ann, currentUser.role);
                                 const pendingBillRow = isPendingBillOfLadingTab(activeLine);
                                 const bolRegistered = hasBillOfLadingNumber(ann);
+                                const returnedFromCarrier = isReturnedFromCarrier(ann);
                                 const rowColorClass = pendingBillRow
                                     ? bolRegistered
                                         ? 'bg-green-100 hover:bg-green-200'
                                         : 'bg-red-50 hover:bg-red-100'
+                                    : isHandoffAtCarrier && currentUser.role === UserRole.Transportation_Personal_Vehicle_User
+                                      ? 'bg-purple-50/90 text-slate-600 hover:bg-purple-100'
+                                      : returnedFromCarrier
+                                        ? 'bg-orange-50 hover:bg-orange-100'
                                     : referredRow
                                       ? 'bg-slate-100/80 text-slate-500 hover:bg-slate-100'
                                       : isAssigned
@@ -2221,6 +2342,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                       ? bolRegistered
                                           ? '#dcfce7'
                                           : '#fef2f2'
+                                      : isHandoffAtCarrier && currentUser.role === UserRole.Transportation_Personal_Vehicle_User
+                                        ? '#faf5ff'
+                                        : returnedFromCarrier
+                                          ? '#fff7ed'
                                       : referredRow
                                         ? '#f1f5f9'
                                         : isAssigned
@@ -2265,12 +2390,67 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
                                     <td className="p-1 text-center align-middle sticky -left-px z-10 col-operations" style={{ backgroundColor: rowStickyBg }}>
                                         <div className="flex gap-1 flex-wrap justify-center">
-                                            {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
+                                            {currentUser.role === UserRole.Transportation_Personal_Vehicle_User && isHandoffAtCarrier && (
+                                                <div className="w-full text-[10px] text-purple-800 leading-tight mb-1 px-1">
+                                                    <div>نزد باربری: {ann.carrierName || '—'}</div>
+                                                    {(ann.assignedDriverName || ann.assignedVehiclePlate) && (
+                                                        <div className="text-slate-600">
+                                                            {[ann.assignedDriverName, ann.assignedVehiclePlate].filter(Boolean).join(' | ')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {canPerformActions && !isCarrierUser && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                                             {canPerformActions && (ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه' || ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
-                                            {canPerformActions && <button disabled={!canForward} onClick={() => onForward(ann.id)} title="ارجاع به ترابری دیگر" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed`}>ارجاع</button>}
+                                            {canPerformActions && !isCarrierUser && <button disabled={!canForward} onClick={() => {
+                                                const isAmbientPersonal =
+                                                    isPersonalTransportUser &&
+                                                    (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند');
+                                                if (isAmbientPersonal && onReferToCarrier) {
+                                                    setReferDialogAnns([ann]);
+                                                } else {
+                                                    onForward(ann.id);
+                                                }
+                                            }} title="ارجاع" className={`px-3 py-1 bg-purple-500 text-white rounded-md text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed`}>ارجاع</button>}
+                                            {isCarrierUser && isWithCarrierHandoff(ann) && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleOpenDialog('assign', ann)}
+                                                        className="px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700"
+                                                    >
+                                                        {ann.status === FreightAnnouncementStatus.Assigned ? 'ویرایش' : 'تخصیص'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const reason = window.prompt('دلیل برگشت (اختیاری):') || '';
+                                                            onCarrierReturn?.(ann.id, reason);
+                                                        }}
+                                                        className="px-3 py-1 bg-amber-600 text-white rounded-md text-xs hover:bg-amber-700"
+                                                    >
+                                                        برگشت
+                                                    </button>
+                                                    {ann.status === FreightAnnouncementStatus.Assigned && (
+                                                        <button
+                                                            onClick={() => onCarrierComplete?.(ann.id)}
+                                                            className="px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                                        >
+                                                            اتمام
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
                                             {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو تخصیص (راننده و خودرو پاک می‌شود)" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
-                                            {canPerformActions && <button disabled={isAssignedToOtherTransport} onClick={() => handleOpenDialog('change', ann)} title="درخواست تغییر/تقسیم" className={`px-3 py-1 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 ${disabledClasses}`}>درخواست تغییر</button>}
-                                            {onOpenHistory && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
+                                            {canPerformActions && !isCarrierUser && <button disabled={isAssignedToOtherTransport} onClick={() => handleOpenDialog('change', ann)} title="درخواست تغییر/تقسیم" className={`px-3 py-1 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 ${disabledClasses}`}>درخواست تغییر</button>}
+                                            {isPersonalTransportUser && isHandoffAtCarrier && !ann.assignedDriverId && onCancelCarrierRefer && (
+                                                <button
+                                                    onClick={() => onCancelCarrierRefer(ann.id)}
+                                                    className="px-2 py-1 bg-amber-500 text-white rounded-md text-xs hover:bg-amber-600"
+                                                    title="لغو ارجاع به باربری"
+                                                >
+                                                    لغو ارجاع
+                                                </button>
+                                            )}
+                                            {onOpenHistory && !isCarrierUser && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -2284,6 +2464,44 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
              {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog announcement={selectedAnnouncement} drivers={drivers} vehicles={vehicles} personalDrivers={personalDrivers} personalVehicles={personalVehicles} onUpdateAssignment={onUpdateAssignment} currentUser={currentUser} onChangeRequest={onChangeRequest} onChangeVehicleType={onChangeVehicleType} onOpenHistory={onOpenHistory} onOpenAssignmentDialog={onOpenAssignmentDialog} activeLine={activeLine} setActiveLine={setActiveLine} finalizePermissions={finalizePermissions} onClose={handleCloseDialog} />}
              {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
              {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
+             {referDialogAnns && referDialogAnns.length > 0 && onReferToCarrier && (
+                <CarrierReferDialog
+                    announcements={referDialogAnns}
+                    carriers={carriers}
+                    onClose={() => setReferDialogAnns(null)}
+                    onRefer={async (carrierId, items) => {
+                        if (items.length === 1) {
+                            const result = await onReferToCarrier(
+                                items[0].announcementId,
+                                carrierId,
+                                items[0].totalFreightCost
+                            );
+                            if (result && 'ok' in result) {
+                                alert(
+                                    result.ok
+                                        ? result.message || 'ارجاع به باربری انجام شد.'
+                                        : result.message || 'خطا در ارجاع به باربری'
+                                );
+                            }
+                        } else if (onReferToCarrierBulk) {
+                            await onReferToCarrierBulk(carrierId, items);
+                        } else {
+                            for (const item of items) {
+                                await onReferToCarrier(item.announcementId, carrierId, item.totalFreightCost);
+                            }
+                        }
+                        setReferDialogAnns(null);
+                    }}
+                    onReferToCompany={
+                        referDialogAnns.length === 1
+                            ? () => {
+                                  onForward(referDialogAnns[0].id);
+                                  setReferDialogAnns(null);
+                              }
+                            : undefined
+                    }
+                />
+             )}
              <BaleReportDialog
                 open={baleReportOpen}
                 onClose={() => setBaleReportOpen(false)}
@@ -2358,14 +2576,20 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         announcement.lineType === 'IceCream' ||
         announcement.lineType === 'بستنی';
 
-    const isDairyAmbientIsolated = isDairyAmbientPersonalIsolatedAssignment(announcement);
+    const isCarrierAssignmentUser = currentUser.role === UserRole.CarrierUser;
+
+    const isDairyAmbientIsolated = isCarrierAssignmentUser
+        ? false
+        : isDairyAmbientPersonalIsolatedAssignment(announcement);
     const isAmbientIsolatedLine =
         isDairyAmbientIsolated && matchesFreightLine(announcement, FreightLineType.Ambient);
     const isDairyIsolatedLine =
         isDairyAmbientIsolated && matchesFreightLine(announcement, FreightLineType.Dairy);
-    /** فقط لبنیات-فروتلند: فاز نام باربری با تماس/پلاک پیش‌فرض ۱۱ */
+    /** فقط لبنیات-فروتلند: فاز نام باربری با تماس/پلاک پیش‌فرض ۱۱ — قبل از هر تخصیص واقعی */
     const isAmbientCarrierPhase =
-        isAmbientIsolatedLine && !isPendingBillOfLading(announcement);
+        isAmbientIsolatedLine &&
+        !isPendingBillOfLading(announcement) &&
+        !hasRealPersonalDriverAssignment(announcement);
     const isPendingBolEdit = isDairyAmbientIsolated && isPendingBillOfLading(announcement);
     const displayCarrierName = getCarrierName(announcement, personalDrivers);
 
@@ -2451,7 +2675,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         plate: formatIranianPlateString(platePartsForForm),
                         truckSmartId: '',
                     });
-                } else if (isAmbientIsolatedLine) {
+                } else if (isAmbientIsolatedLine && !hasRealPersonalDriverAssignment(announcement)) {
                     const carrierLabel = getCarrierName(announcement, personalDrivers);
                     const placeholderPlateParts = parseIranianPlateString(DAIRY_AMBIENT_PLACEHOLDER_PLATE);
                     setPersonalDriverDetails({
@@ -2466,6 +2690,11 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         truckSmartId: '',
                     });
                 } else {
+                    const driverNameFromPd =
+                        announcement.assignedDriverId
+                            ? personalDrivers.find((d) => d.id === announcement.assignedDriverId)?.name?.trim() || ''
+                            : '';
+                    const driverNameForForm = annName || driverNameFromPd;
                     const hadRealContact =
                         Boolean(annContact) && annContact !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
                     const hadRealPlate =
@@ -2480,7 +2709,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                               cityCode: '',
                           };
                     setPersonalDriverDetails({
-                        name: annName,
+                        name: driverNameForForm,
                         mobile: hadRealContact ? annContact : '',
                         driverSmartId: '',
                     });
@@ -2546,35 +2775,48 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             const existingTotalCost = destsCopy.reduce((sum: number, d: any) => sum + (Number(d.freightCost) || 0), 0);
             const totalTonnage = sumDestinationTonnageKg(destsCopy);
             
-            if (existingTotalCost > 0) {
-                // اگر کرایه قبلاً ثبت شده، از آن استفاده کن و حالت خودکار را فعال کن
-                // فرمت با کاما (مثل فیلد ارزش بار)
-                const formatted = existingTotalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            if (isCarrierAssignmentUser) {
+                const locked = parseNumericField(announcement.totalFreightCost);
+                if (locked > 0) {
+                    const formatted = formatNumericInputDisplay(String(Math.round(locked)));
+                    setAutoTotalCost(formatted);
+                    setCostMode('auto');
+                } else if (announcement.freightCostLockedAt) {
+                    setCostMode('auto');
+                    setAutoTotalCost('');
+                } else {
+                    setCostMode('auto');
+                    setAutoTotalCost('');
+                }
+            } else if (existingTotalCost > 0) {
+                const formatted = formatNumericInputDisplay(String(Math.round(existingTotalCost)));
                 setAutoTotalCost(formatted);
                 setCostMode('auto');
-                // کرایه‌های مقاصد قبلاً در destsCopy هستند، نیازی به محاسبه مجدد نیست
             } else {
-                // اگر کرایه ثبت نشده، هیچ مقدار پیش‌فرضی تنظیم نکن
-                // کاربر باید خودش کرایه را وارد کند
-                setCostMode('manual');
-                setAutoTotalCost('');
-                // همه کرایه‌ها را صفر کن
-                const updatedDests = destsCopy.map((dest: any) => ({...dest, freightCost: 0}));
-                setDestinations(updatedDests);
+                const fromAnnouncementTotal = parseNumericField(announcement.totalFreightCost);
+                if (fromAnnouncementTotal > 0) {
+                    setAutoTotalCost(
+                        formatNumericInputDisplay(String(Math.round(fromAnnouncementTotal)))
+                    );
+                    setCostMode('auto');
+                } else {
+                    setCostMode('manual');
+                    setAutoTotalCost('');
+                    const updatedDests = destsCopy.map((dest: any) => ({ ...dest, freightCost: 0 }));
+                    setDestinations(updatedDests);
+                }
             }
         } else if (announcement.assignmentType !== 'personal') {
             // برای تخصیص شرکت، حالت دستی را فعال کن
             setCostMode('manual');
             setAutoTotalCost('');
         }
-    }, [announcement.id, drivers, vehicles, personalVehicles]);
+    }, [announcement.id, announcement.totalFreightCost, announcement.freightCostLockedAt, drivers, vehicles, personalVehicles]);
     
     // محاسبه خودکار کرایه هر مقصد بر اساس کرایه کل و تناژ (در حالت auto)
     useEffect(() => {
         if(costMode === 'auto' && destinations.length > 0 && autoTotalCost) {
-            // تبدیل autoTotalCost از string با کاما به number
-            const cleanedCost = autoTotalCost.replace(/,/g, '');
-            const totalCost = cleanedCost ? Number(cleanedCost) : 0;
+            const totalCost = parseNumericField(autoTotalCost);
             if(totalCost > 0) {
                 const totalTonnage = sumDestinationTonnageKg(destinations);
                 if(totalTonnage > 0) {
@@ -2623,11 +2865,9 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     useEffect(() => {
         if(costMode === 'manual' && destinations.length > 0) {
             if(manualTotalCost > 0) {
-                // فرمت با کاما (مثل فیلد کرایه کل)
-                const formatted = manualTotalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                // فقط اگر مقدار تغییر کرده باشد، به‌روزرسانی کن (برای جلوگیری از حلقه)
-                const currentFormatted = autoTotalCost.replace(/,/g, '');
-                if(currentFormatted !== manualTotalCost.toString()) {
+                const formatted = formatNumericInputDisplay(String(Math.round(manualTotalCost)));
+                const currentFormatted = String(parseNumericField(autoTotalCost));
+                if(currentFormatted !== String(manualTotalCost)) {
                     setAutoTotalCost(formatted);
                 }
             } else {
@@ -2853,7 +3093,14 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 assignedDriverContact: foundCompanyDriver.mobile,
                 assignedVehiclePlate: formatCompanyVehiclePlate(foundVehicle),
             });
-        } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
+        } else if (
+            currentUser.role === UserRole.Transportation_Personal_Vehicle_User ||
+            currentUser.role === UserRole.CarrierUser
+        ) {
+            if (isCarrierAssignmentUser && !blNumber.trim()) {
+                alert('شماره بارنامه الزامی است.');
+                return;
+            }
             const saveMobile = isAmbientCarrierPhase
                 ? DAIRY_AMBIENT_PLACEHOLDER_MOBILE
                 : personalDriverDetails.mobile?.trim();
@@ -2940,15 +3187,19 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             
             // محاسبه totalFreightCost برای personal user
             let personalTotalCost = 0;
-            if (costMode === 'auto' && autoTotalCost) {
-                // تبدیل string به number - حذف کاماها (مثل فیلد ارزش بار)
-                const cleanedCost = autoTotalCost.replace(/,/g, '');
-                personalTotalCost = cleanedCost ? Number(cleanedCost) : 0;
+            if (isCarrierAssignmentUser) {
+                personalTotalCost = parseNumericField(announcement.totalFreightCost);
+            } else if (costMode === 'auto' && autoTotalCost) {
+                personalTotalCost = parseNumericField(autoTotalCost);
             } else {
                 personalTotalCost = totalPersonalCost;
             }
-            
-            if (personalTotalCost <= 0) {
+
+            if (isCarrierAssignmentUser && personalTotalCost <= 0) {
+                alert('کرایه از ترابری شخصی ثبت نشده است. امکان تخصیص نیست.');
+                return;
+            }
+            if (!isCarrierAssignmentUser && personalTotalCost <= 0) {
                 alert('لطفاً کرایه را وارد کنید.');
                 return;
             }
@@ -2984,7 +3235,9 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     };
 
     const isCompanyUser = currentUser.role === UserRole.TransportationUser;
-    const isPersonalUser = currentUser.role === UserRole.Transportation_Personal_Vehicle_User;
+    const isPersonalUser =
+        currentUser.role === UserRole.Transportation_Personal_Vehicle_User ||
+        currentUser.role === UserRole.CarrierUser;
     
     const [isRulesDialogOpen, setIsRulesDialogOpen] = useState(false);
 
@@ -3479,10 +3732,21 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         </fieldset>
                         <fieldset className="p-3 border rounded-lg bg-slate-50 space-y-2">
                             <legend className="font-semibold px-1 text-sm">۲. تخصیص کرایه</legend>
+                            {isCarrierAssignmentUser && parseNumericField(announcement.totalFreightCost) > 0 && (
+                                <p className="text-sm text-purple-800 bg-purple-50 border border-purple-200 rounded-md px-3 py-2">
+                                    کرایه قفل‌شده از ترابری شخصی:{' '}
+                                    <strong dir="ltr">{formatPersianGroupedNumber(parseNumericField(announcement.totalFreightCost))}</strong>{' '}
+                                    ریال
+                                </p>
+                            )}
+                            {!isCarrierAssignmentUser && (
                             <div className="flex items-center gap-4"><label><input type="radio" value="manual" checked={costMode==='manual'} onChange={e=>setCostMode(e.target.value as any)}/> دستی</label><label><input type="radio" value="auto" checked={costMode==='auto'} onChange={e=>setCostMode(e.target.value as any)}/> خودکار</label></div>
+                            )}
                             {costMode === 'auto' && <div className="flex items-center gap-2"><label className="text-sm">کرایه کل (ریال):</label><input 
                                 type="text" 
                                 value={autoTotalCost || ''}
+                                disabled={isCarrierAssignmentUser}
+                                readOnly={isCarrierAssignmentUser}
                                 onChange={e => {
                                     // فقط اعداد و کاما را بپذیر (مثل فیلد ارزش بار)
                                     let value = e.target.value.replace(/[^\d,]/g, '');
@@ -3566,7 +3830,9 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                             }} 
                                             className="input-style" 
                                             autoComplete="off" 
-                                            dir="ltr" 
+                                            dir="ltr"
+                                            readOnly={isCarrierAssignmentUser}
+                                            disabled={isCarrierAssignmentUser}
                                         /><span className="text-xs">ریال</span></div>
                                     </div>
                                 ))}
@@ -3712,6 +3978,134 @@ const ChangeRequestDialog: React.FC<{ announcement: FreightAnnouncement, onClose
                 <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-sm">انصراف</button>
                     <button onClick={handleSubmit} className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">ثبت درخواست</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const CarrierReferDialog: React.FC<{
+    announcements: FreightAnnouncement[];
+    carriers: Array<{ id: string; name: string; hasLoginUser?: boolean }>;
+    onClose: () => void;
+    onRefer: (
+        carrierId: string,
+        items: { announcementId: string; totalFreightCost: number }[]
+    ) => void | Promise<void>;
+    onReferToCompany?: () => void;
+}> = ({ announcements, carriers, onClose, onRefer, onReferToCompany }) => {
+    const isBulk = announcements.length > 1;
+    const [carrierId, setCarrierId] = useState('');
+    const [rowCosts, setRowCosts] = useState<Record<string, string>>(() => {
+        const init: Record<string, string> = {};
+        announcements.forEach((ann) => {
+            const existing = parseNumericField(ann.totalFreightCost);
+            init[ann.id] =
+                existing > 0 ? formatNumericInputDisplay(String(Math.round(existing))) : '';
+        });
+        return init;
+    });
+
+    const handleRowCostChange = (annId: string, raw: string) => {
+        const digits = sanitizeNumericInputString(raw);
+        setRowCosts((prev) => ({
+            ...prev,
+            [annId]: digits ? formatNumericInputDisplay(digits) : '',
+        }));
+    };
+
+    const handleSubmit = async () => {
+        if (!carrierId) {
+            alert('باربری را انتخاب کنید.');
+            return;
+        }
+        const items: { announcementId: string; totalFreightCost: number }[] = [];
+        for (const ann of announcements) {
+            const cost = parseNumericField(rowCosts[ann.id] || '');
+            if (!Number.isFinite(cost) || cost <= 0) {
+                alert(`کرایه معتبر برای بار ${ann.announcementCode} وارد کنید.`);
+                return;
+            }
+            items.push({ announcementId: ann.id, totalFreightCost: cost });
+        }
+        await onRefer(carrierId, items);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div
+                className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-5 border-b shrink-0">
+                    <h3 className="text-lg font-bold">
+                        {isBulk
+                            ? `ارجاع گروهی به باربری (${announcements.length.toLocaleString('fa-IR')} بار)`
+                            : 'ارجاع به باربری'}
+                    </h3>
+                </div>
+                <div className="p-5 overflow-y-auto flex-1 space-y-3">
+                    {announcements.map((ann) => (
+                        <div
+                            key={ann.id}
+                            className="grid grid-cols-1 sm:grid-cols-[1fr_9rem] gap-2 items-start border border-slate-200 rounded-lg p-3 bg-slate-50"
+                        >
+                            <div>
+                                <p className="text-xs text-slate-500 mb-1">کد: {ann.announcementCode}</p>
+                                <p className="text-sm font-medium text-slate-800 leading-relaxed">
+                                    {buildFreightReferSummary(ann)}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="text-xs block mb-1">کرایه کل (ریال) *</label>
+                                <input
+                                    className="input-style w-full"
+                                    value={rowCosts[ann.id] || ''}
+                                    onChange={(e) => handleRowCostChange(ann.id, e.target.value)}
+                                    placeholder="مثلاً 20000000"
+                                    inputMode="numeric"
+                                    dir="ltr"
+                                    autoComplete="off"
+                                />
+                            </div>
+                        </div>
+                    ))}
+                    <div>
+                        <label className="text-sm block mb-1">باربری *</label>
+                        <select
+                            className="input-style w-full"
+                            value={carrierId}
+                            onChange={(e) => setCarrierId(e.target.value)}
+                        >
+                            <option value="">— انتخاب باربری —</option>
+                            {carriers.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name}
+                                    {c.hasLoginUser === false ? ' (بدون کاربر ورود)' : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                <div className="p-5 border-t shrink-0 flex flex-col gap-2">
+                    <button
+                        onClick={handleSubmit}
+                        className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700"
+                    >
+                        {isBulk ? 'تأیید و ارجاع گروهی' : 'ارجاع به باربری'}
+                    </button>
+                    {!isBulk && onReferToCompany && (
+                        <button
+                            onClick={onReferToCompany}
+                            className="w-full py-2 bg-slate-500 text-white rounded-lg text-sm hover:bg-slate-600"
+                        >
+                            ارجاع به ترابری شرکت
+                        </button>
+                    )}
+                    <button onClick={onClose} className="w-full py-2 bg-slate-200 rounded-lg text-sm">
+                        انصراف
+                    </button>
                 </div>
             </div>
         </div>

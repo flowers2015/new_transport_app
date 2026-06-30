@@ -12,17 +12,19 @@ export function formatRepresentativeType(value?: string | null): string {
     return String(value);
 }
 
-/** نوع بارگیری بستنی — تک مبدا / دو مبدا */
+/** نوع بارگیری بستنی — تک مبدا / دو مبدا (فقط از فیلد loading_type یا مبدا با « و ») */
 export function formatLoadingType(
     value?: string | null,
-    ann?: Pick<FreightAnnouncement, 'destinations' | 'originCity'>
+    ann?: Pick<FreightAnnouncement, 'originCity'>
 ): string {
-    if (value === 'double') return 'دو مبدا بارگیری';
-    if (value === 'single') return 'تک مبدا';
-    if (ann) {
-        if ((ann.destinations?.length ?? 0) >= 2) return 'دو مبدا بارگیری';
-        if (ann.originCity?.includes(' و ')) return 'دو مبدا بارگیری';
-    }
+    const raw = String(value || '').trim();
+    const v = raw.toLowerCase();
+    if (v === 'double' || raw.includes('دو مبدا')) return 'دو مبدا بارگیری';
+    if (v === 'single' || raw.includes('تک مبدا')) return 'تک مبدا';
+
+    const origin = (ann?.originCity || '').trim();
+    if (origin.includes(' و ')) return 'دو مبدا بارگیری';
+
     return 'تک مبدا';
 }
 
@@ -207,11 +209,13 @@ export function isPendingAssignmentStatus(status?: string | null): boolean {
     );
 }
 
-/** پاک‌سازی فیلدهای تخصیص پس از لغو یا بازگشت به صف */
+/** پاک‌سازی فیلدهای تخصیص پس از لغو یا بازگشت به صف — کرایه/باربری ارجاع‌شده حفظ می‌شود */
 export function clearAssignmentFromAnnouncement(
     ann: FreightAnnouncement,
     overrides: Partial<FreightAnnouncement> = {}
 ): FreightAnnouncement {
+    const handoffFreightLocked =
+        isWithCarrierHandoff(ann) || Boolean(ann.freightCostLockedAt);
     return {
         ...ann,
         ...overrides,
@@ -220,12 +224,14 @@ export function clearAssignmentFromAnnouncement(
         assignedDriverName: undefined,
         assignedDriverContact: undefined,
         assignedVehiclePlate: undefined,
-        carrierName: undefined,
+        carrierName: handoffFreightLocked ? ann.carrierName : undefined,
         billOfLadingNumber: undefined,
-        totalFreightCost: undefined,
+        totalFreightCost: handoffFreightLocked ? ann.totalFreightCost : undefined,
         awaitingBillOfLadingAt: undefined,
         assignmentFinalizedAt: undefined,
-        destinations: (ann.destinations || []).map((d) => ({ ...d, freightCost: undefined })),
+        destinations: handoffFreightLocked
+            ? ann.destinations || []
+            : (ann.destinations || []).map((d) => ({ ...d, freightCost: undefined })),
     };
 }
 
@@ -261,7 +267,12 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
 
     const rawFreight = a.total_freight_cost ?? a.totalFreightCost;
     const totalFreightCost =
-        rawFreight === null || rawFreight === undefined ? undefined : (rawFreight as number);
+        rawFreight === null || rawFreight === undefined
+            ? undefined
+            : (() => {
+                  const n = Number(rawFreight);
+                  return Number.isFinite(n) && n > 0 ? n : undefined;
+              })();
 
     return {
         assignmentType: (a.assignment_type || a.assignmentType || a.detected_assignment_type) as
@@ -278,6 +289,18 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
         assignedDriverContact: driverContact,
         assignedVehiclePlate,
         carrierName: readOptionalAssignmentText(a.carrier_name ?? a.carrierName),
+        handoffStatus: (a.handoff_status ?? a.handoffStatus) as
+            | 'with_carrier'
+            | 'returned'
+            | 'carrier_done'
+            | null
+            | undefined,
+        handoffCarrierId: readOptionalAssignmentId(a.handoff_carrier_id ?? a.handoffCarrierId),
+        handoffCarrierName: readOptionalAssignmentText(a.handoff_carrier_name ?? a.handoffCarrierName),
+        freightCostLockedAt:
+            a.freight_cost_locked_at === null || a.freightCostLockedAt === null
+                ? undefined
+                : ((a.freight_cost_locked_at ?? a.freightCostLockedAt) as string | Date | undefined),
         billOfLadingNumber: readOptionalAssignmentText(
             a.bill_of_lading_number ?? a.billOfLadingNumber
         ),
@@ -308,12 +331,15 @@ export function mergeAssignmentDisplayFields(
         !incoming.assignedDriverId &&
         !incoming.assignedVehicleId;
 
+    const handoffFreightLocked =
+        isWithCarrierHandoff(incoming) || Boolean(incoming.freightCostLockedAt);
+
     const previousHasAssignment = Boolean(
         previous.assignedDriverId || previous.assignedVehicleId
     );
 
-    // فقط وقتی قبلاً هم تخصیص نداشته، از روی refresh خالی پاک کن
-    if (incomingPendingWithoutAssignment && !previousHasAssignment) {
+    // فقط وقتی قبلاً هم تخصیص نداشته، از روی refresh خالی پاک کن — نه برای بار ارجاع‌شده به باربری
+    if (incomingPendingWithoutAssignment && !previousHasAssignment && !handoffFreightLocked) {
         return clearAssignmentFromAnnouncement(incoming);
     }
 
@@ -340,6 +366,10 @@ export function mergeAssignmentDisplayFields(
                 incoming.billOfLadingNumber
             ),
             totalFreightCost: previous.totalFreightCost ?? incoming.totalFreightCost,
+            handoffStatus: incoming.handoffStatus ?? previous.handoffStatus,
+            handoffCarrierId: incoming.handoffCarrierId ?? previous.handoffCarrierId,
+            handoffCarrierName: incoming.handoffCarrierName ?? previous.handoffCarrierName,
+            freightCostLockedAt: incoming.freightCostLockedAt ?? previous.freightCostLockedAt,
             destinations:
                 incoming.destinations?.length > 0 ? incoming.destinations : previous.destinations,
         };
@@ -364,6 +394,10 @@ export function mergeAssignmentDisplayFields(
         carrierName: pickNonEmptyText(incoming.carrierName, previous.carrierName),
         billOfLadingNumber: pickNonEmptyText(incoming.billOfLadingNumber, previous.billOfLadingNumber),
         totalFreightCost: incoming.totalFreightCost ?? previous.totalFreightCost,
+        handoffStatus: incoming.handoffStatus ?? previous.handoffStatus,
+        handoffCarrierId: incoming.handoffCarrierId ?? previous.handoffCarrierId,
+        handoffCarrierName: incoming.handoffCarrierName ?? previous.handoffCarrierName,
+        freightCostLockedAt: incoming.freightCostLockedAt ?? previous.freightCostLockedAt,
     };
 }
 
@@ -485,6 +519,44 @@ export function isDairyAmbientPlaceholderAssignment(
     return contact === DAIRY_AMBIENT_PLACEHOLDER_MOBILE && plate.includes('11ع111');
 }
 
+/** تخصیص واقعی راننده (نه فاز نام باربری با ۱۱) — شامل تخصیص باربری پس از اتمام */
+export function hasRealPersonalDriverAssignment(
+    ann: Pick<
+        FreightAnnouncement,
+        | 'lineType'
+        | 'assignmentType'
+        | 'handoffStatus'
+        | 'assignedDriverId'
+        | 'assignedDriverName'
+        | 'assignedDriverContact'
+        | 'assignedVehiclePlate'
+        | 'billOfLadingNumber'
+        | 'status'
+    >
+): boolean {
+    if (!isDairyAmbientPersonalIsolatedAssignment(ann)) {
+        return Boolean(ann.assignedDriverId);
+    }
+    if (isDairyAmbientPlaceholderAssignment(ann)) return false;
+    if (hasBillOfLadingNumber(ann)) return true;
+
+    const contact = (ann.assignedDriverContact || '').replace(/\D/g, '');
+    const plate = (ann.assignedVehiclePlate || '').replace(/\s/g, '');
+    const hadRealContact = Boolean(contact) && contact !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
+    const hadRealPlate = Boolean(plate) && !/11ع111/i.test(plate);
+    if (hadRealContact || hadRealPlate) return true;
+
+    if (isCarrierDoneHandoff(ann) || isReturnedFromCarrier(ann)) {
+        return hasDriverAndVehicleAssigned(ann);
+    }
+
+    if (hasDriverAndVehicleAssigned(ann) && (ann.assignedDriverName || '').trim()) {
+        return true;
+    }
+
+    return false;
+}
+
 export function getCarrierName(
     ann: Pick<FreightAnnouncement, 'carrierName' | 'assignedDriverName' | 'assignedDriverId' | 'lineType' | 'assignmentType' | 'assignedDriverContact' | 'assignedVehiclePlate'>,
     personalDrivers: Array<Pick<PersonalDriver, 'id' | 'name'>> = []
@@ -531,6 +603,42 @@ export function isDairyAmbientPersonalIsolatedAssignment(
     ann: Pick<FreightAnnouncement, 'lineType' | 'assignmentType'>
 ): boolean {
     return isPersonalAssignmentType(ann.assignmentType) && isDairyOrAmbientLineType(ann.lineType);
+}
+
+export function isWithCarrierHandoff(
+    ann: Pick<FreightAnnouncement, 'handoffStatus'>
+): boolean {
+    return ann.handoffStatus === 'with_carrier';
+}
+
+export function isReturnedFromCarrier(
+    ann: Pick<FreightAnnouncement, 'handoffStatus'>
+): boolean {
+    return ann.handoffStatus === 'returned';
+}
+
+export function isCarrierDoneHandoff(
+    ann: Pick<FreightAnnouncement, 'handoffStatus'>
+): boolean {
+    return ann.handoffStatus === 'carrier_done';
+}
+
+/** ردیف‌های نزد باربری از کارتابل ترابری شخصی پنهان می‌شوند */
+export function shouldHideFromPersonalQueue(
+    ann: Pick<FreightAnnouncement, 'handoffStatus'>
+): boolean {
+    return isWithCarrierHandoff(ann);
+}
+
+/** خلاصه قابل‌خواندن برای دیالوگ ارجاع به باربری */
+export function buildFreightReferSummary(ann: FreightAnnouncement): string {
+    const vehicle = (ann.vehicleType || 'خودرو').trim();
+    const destCities =
+        ann.destinations?.map((d) => d.city).filter(Boolean).join('، ') || 'بدون مقصد';
+    const tonnage = sumDestinationTonnageKg(ann.destinations || []);
+    const tonnagePart = tonnage > 0 ? `${formatTonnageKg(tonnage)} بارگیری` : '';
+    const originPart = ann.originCity ? `از ${ann.originCity}` : '';
+    return [vehicle, destCities, tonnagePart, originPart].filter(Boolean).join(' — ');
 }
 
 export function matchesFreightLine(ann: FreightAnnouncement, line: FreightLineType): boolean {
@@ -620,6 +728,29 @@ function toPersianDigits(value: string): string {
     return value.replace(/\d/g, (d) => PERSIAN_DIGITS[parseInt(d, 10)]);
 }
 
+/** نرمال ورودی عددی حین تایپ — فقط رقم (فارسی/عربی → انگلیسی) */
+export function sanitizeNumericInputString(raw: string): string {
+    if (!raw) return '';
+    let s = String(raw).trim();
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    persianDigits.forEach((p, i) => {
+        s = s.split(p).join(String(i));
+    });
+    arabicDigits.forEach((p, i) => {
+        s = s.split(p).join(String(i));
+    });
+    return s.replace(/[^\d]/g, '');
+}
+
+/** نمایش ورودی عددی با جداکننده هزارگان فارسی (برای فیلدهای تایپ) */
+export function formatNumericInputDisplay(digits: string): string {
+    if (!digits) return '';
+    const n = Number(digits);
+    if (!Number.isFinite(n) || n < 0) return '';
+    return formatPersianGroupedNumber(Math.round(n));
+}
+
 /** پارس امن عدد (فارسی/انگلیسی، جداکننده هزارگان) */
 export function parseNumericField(value: unknown): number {
     if (value === null || value === undefined || value === '') return 0;
@@ -633,7 +764,7 @@ export function parseNumericField(value: unknown): number {
     arabicDigits.forEach((p, i) => {
         s = s.split(p).join(String(i));
     });
-    s = s.replace(/٬/g, '').replace(/\s/g, '');
+    s = s.replace(/٬/g, '').replace(/،/g, '').replace(/\s/g, '');
 
     // فرمت اروپایی: 12.000 یا 12.000,50 (هزارگان با نقطه)
     if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {

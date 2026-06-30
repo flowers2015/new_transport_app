@@ -159,6 +159,7 @@ app.use('/api/v1/driver-calculations', driverCalculationRoutes);
 app.use('/api/v1/allowance-regulations', allowanceRegulationRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/admin', userManagementRoutes);
+app.use('/api/v1/carriers', require('./routes/carrierRoutes'));
 app.use('/api/v1/vehicle-specs', vehicleSpecsRoutes);
 app.use('/api/v1/financial', financialPeriodRoutes);
 app.use('/api/v1/finalize-permissions', finalizePermissionRoutes);
@@ -233,6 +234,11 @@ addBaleReportRecipients().catch(err => {
 const addCarrierNameColumn = require('./migrations/add_carrier_name_column');
 addCarrierNameColumn().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون carrier_name:', err);
+});
+
+const addCarrierHandoff = require('./migrations/add_carrier_handoff');
+addCarrierHandoff().catch(err => {
+  console.error('❌ [Server] خطا در راه‌اندازی schema باربری:', err);
 });
 
 const addVehicleCodeColumn = require('./migrations/add_vehicle_code_column');

@@ -124,6 +124,9 @@ async function login(req, res) {
       role: user.role,
       employeeId: user.branch_id || user.branch_city || null, 
     };
+    if (user.carrier_id) {
+      payload.carrierId = user.carrier_id;
+    }
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }); // 7 روز اعتبار
 
@@ -141,7 +144,8 @@ async function login(req, res) {
         employeeId: user.branch_id || user.branch_city || null,
         fullName: (user.full_name || user.name || null),
         email: user.email || null,
-        branchCity: branchCityValue
+        branchCity: branchCityValue,
+        carrierId: user.carrier_id || null,
       },
       mustChangePassword: isViewer ? false : mustChangePassword,
       passwordExpired: isViewer ? false : passwordExpired,

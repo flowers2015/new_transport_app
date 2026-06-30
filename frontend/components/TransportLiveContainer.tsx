@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import TransportLive from './TransportLive';
-import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
+import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType, UserRole } from '../types';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { getApiUrl } from '../utils/apiConfig';
 import { cachedFetch } from '../utils/apiCache';
@@ -19,6 +19,10 @@ import {
     hasBillOfLadingNumber,
     normalizeTonnageKg,
     PENDING_BILL_OF_LADING_TAB,
+    isWithCarrierHandoff,
+    isReturnedFromCarrier,
+    buildFreightReferSummary,
+    formatPersianGroupedNumber,
 } from '../utils/freightDisplay';
 
 const dedupeAnnouncementsById = (items: FreightAnnouncement[]): FreightAnnouncement[] => {
@@ -47,7 +51,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeLine, setActiveLine] = useState<TransportLiveTab>(FreightLineType.IceCream);
+    const [activeLine, setActiveLine] = useState<TransportLiveTab>(
+        currentUser?.role === UserRole.CarrierUser ? FreightLineType.Ambient : FreightLineType.IceCream
+    );
+    const [carriers, setCarriers] = useState<Array<{ id: string; name: string; active: boolean; hasLoginUser?: boolean }>>([]);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
     const [sseConnected, setSseConnected] = useState(false);
 
@@ -254,6 +261,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         assignmentFinalizedAt: a.assignment_finalized_at || a.assignmentFinalizedAt,
                         awaitingBillOfLadingAt: a.awaiting_bill_of_lading_at || a.awaitingBillOfLadingAt,
                         carrierName: a.carrier_name || a.carrierName,
+                        handoffStatus: a.handoff_status || a.handoffStatus || null,
+                        handoffCarrierId: a.handoff_carrier_id || a.handoffCarrierId,
+                        handoffCarrierName: a.handoff_carrier_name || a.handoffCarrierName,
+                        freightCostLockedAt: a.freight_cost_locked_at || a.freightCostLockedAt,
                         // اطلاعات کارمند اعلام‌کننده
                         creator_full_name: a.creator_full_name || a.creatorFullName,
                         creator_username: a.creator_username || a.creatorUsername,
@@ -375,10 +386,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             ann.assignmentType === 'شخصی' ||
             ann.status === FreightAnnouncementStatus.PendingPersonalAssignment
         );
-        const isPersonalUser = currentUser?.role === 'Transportation_Personal_Vehicle_User' || 
+        const isPersonalUser = currentUser?.role === UserRole.Transportation_Personal_Vehicle_User || 
             currentUser?.role === 'کاربر ترابری (خودرو شخصی)';
+        const isCarrierUser = currentUser?.role === UserRole.CarrierUser;
         
-        if (hasPersonalAssignment || isPersonalUser) {
+        if (hasPersonalAssignment || isPersonalUser || isCarrierUser) {
             setNeedsPersonalResources(true);
         }
     }, [announcements, currentUser]);
@@ -1140,6 +1152,146 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
+    const onReferToCarrier = async (announcementId: string, carrierId: string, totalFreightCost: number) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/carrier-refer`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ carrierId, totalFreightCost }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'خطا در ارجاع به باربری');
+            const carrierName =
+                carriers.find((c) => c.id === carrierId)?.name || data.carrierName || undefined;
+            setAnnouncements((prev) =>
+                prev.map((ann) =>
+                    ann.id === announcementId
+                        ? {
+                              ...ann,
+                              handoffStatus: 'with_carrier' as const,
+                              handoffCarrierId: carrierId,
+                              handoffCarrierName: carrierName,
+                              totalFreightCost,
+                              freightCostLockedAt: new Date().toISOString(),
+                              carrierName: carrierName ?? ann.carrierName,
+                          }
+                        : ann
+                )
+            );
+            await fetchData(true, needsPersonalResourcesRef.current, true);
+            return { ok: true, message: data.message };
+        } catch (e: any) {
+            return { ok: false, message: e?.message || 'خطا در ارجاع به باربری' };
+        }
+    };
+
+    const onReferToCarrierBulk = async (
+        carrierId: string,
+        items: { announcementId: string; totalFreightCost: number }[]
+    ) => {
+        let successCount = 0;
+        let lastError: string | null = null;
+        for (const item of items) {
+            const result = await onReferToCarrier(item.announcementId, carrierId, item.totalFreightCost);
+            if (result?.ok) successCount += 1;
+            else lastError = result?.message || 'خطا';
+        }
+        if (successCount === 0) {
+            alert(lastError || 'خطا در ارجاع گروهی به باربری');
+            return;
+        }
+        if (successCount < items.length) {
+            alert(
+                `${successCount.toLocaleString('fa-IR')} مورد ارجاع شد؛ ${(items.length - successCount).toLocaleString('fa-IR')} مورد ناموفق بود.`
+            );
+        } else {
+            alert(`${successCount.toLocaleString('fa-IR')} بار با موفقیت به باربری ارجاع شد.`);
+        }
+        await fetchData(true, needsPersonalResourcesRef.current, true);
+    };
+
+    const onCancelCarrierRefer = async (announcementId: string) => {
+        if (!window.confirm('ارجاع به باربری لغو شود؟')) return;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/carrier-cancel-refer`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'خطا');
+            await fetchData(true, needsPersonalResourcesRef.current, true);
+        } catch (e: any) {
+            alert(e?.message || 'خطا در لغو ارجاع');
+        }
+    };
+
+    const onCarrierReturn = async (announcementId: string, reason?: string) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/carrier-return`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ reason: reason || '' }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'خطا در برگشت');
+            alert(data.message || 'بار به ترابری شخصی برگشت.');
+            await fetchData(true, true, true);
+        } catch (e: any) {
+            alert(e?.message || 'خطا در برگشت');
+        }
+    };
+
+    const onCarrierComplete = async (announcementId: string, skipConfirm = false) => {
+        if (!skipConfirm && !window.confirm('اتمام واگذاری و برگشت بار به ترابری شخصی؟')) return false;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/carrier-complete`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'خطا در اتمام');
+            return { ok: true, message: data.message };
+        } catch (e: any) {
+            return { ok: false, message: e?.message || 'خطا در اتمام واگذاری' };
+        }
+    };
+
+    const onCarrierCompleteHandler = async (announcementId: string) => {
+        const result = await onCarrierComplete(announcementId, false);
+        if (result?.ok) {
+            alert(result.message || 'واگذاری اتمام یافت.');
+            await fetchData(true, true, true);
+        } else if (result) {
+            alert(result.message || 'خطا در اتمام واگذاری');
+        }
+    };
+
+    const onCarrierCompleteBulk = async (announcementIds: string[]) => {
+        let successCount = 0;
+        let lastError: string | null = null;
+        for (const id of announcementIds) {
+            const result = await onCarrierComplete(id, true);
+            if (result?.ok) successCount += 1;
+            else lastError = result?.message || 'خطا';
+        }
+        if (successCount === 0) {
+            alert(lastError || 'خطا در اتمام گروهی');
+            return;
+        }
+        if (successCount < announcementIds.length) {
+            alert(
+                `${successCount.toLocaleString('fa-IR')} مورد اتمام شد؛ ${(announcementIds.length - successCount).toLocaleString('fa-IR')} مورد ناموفق بود.`
+            );
+        } else {
+            alert(`${successCount.toLocaleString('fa-IR')} بار با موفقیت اتمام یافت و به ترابری شخصی برگشت.`);
+        }
+        await fetchData(true, true, true);
+    };
+
     const onCancel = async (announcementId: string) => {
         const ann = announcements.find((a) => a.id === announcementId);
         const code = ann?.announcementCode || announcementId;
@@ -1167,10 +1319,6 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         );
 
         try {
-            console.log('❌ [TransportLive] Cancel Request:', {
-                announcementId,
-                timestamp: new Date().toISOString()
-            });
             const token = localStorage.getItem('token');
             const res = await fetch(getApiUrl(`freight-announcements/${encodeURIComponent(announcementId)}/cancel`), {
                 method: 'POST',
@@ -1187,10 +1335,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             }
             if (!res.ok) {
                 setAnnouncements(originalAnnouncements);
-                console.error('❌ [TransportLive] Cancel API error:', payload);
                 throw new Error(payload.message || 'خطا در لغو تخصیص');
             }
-            console.log('✅ [TransportLive] Cancelled:', payload);
 
             const resolvedStatus =
                 payload.newStatus === 'PendingPersonalAssignment'
@@ -1325,6 +1471,25 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         setHistoryDialog(null);
     }, []);
 
+    useEffect(() => {
+        if (currentUser.role !== UserRole.Transportation_Personal_Vehicle_User) return;
+        const loadCarriers = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch(getApiUrl('carriers?line=Ambient&activeOnly=true'), {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setCarriers(data.carriers || []);
+                }
+            } catch {
+                /* ignore */
+            }
+        };
+        loadCarriers();
+    }, [currentUser.role]);
+
     // Early returns بعد از همه hooks
     if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
     if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
@@ -1341,6 +1506,13 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onFinalize={onFinalize}
                 onTransferDestination={onTransferDestination}
                 onForward={onForward}
+                onReferToCarrier={onReferToCarrier}
+                onReferToCarrierBulk={onReferToCarrierBulk}
+                onCancelCarrierRefer={onCancelCarrierRefer}
+                onCarrierReturn={onCarrierReturn}
+                onCarrierComplete={onCarrierCompleteHandler}
+                onCarrierCompleteBulk={onCarrierCompleteBulk}
+                carriers={carriers}
                 onCancel={onCancel}
                 onChangeRequest={onChangeRequest}
                 onChangeVehicleType={onChangeVehicleType}

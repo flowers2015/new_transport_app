@@ -125,6 +125,17 @@ const ActionIcon: React.FC<{ action: string }> = ({ action }) => {
           </svg>
         </div>
       );
+    case 'REFERRED_TO_CARRIER':
+    case 'CARRIER_REFERRAL_CANCELLED':
+    case 'RETURNED_FROM_CARRIER':
+    case 'CARRIER_HANDOFF_DONE':
+      return (
+        <div className="bg-purple-100 p-2 rounded-full">
+          <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+        </div>
+      );
     default:
       return (
         <div className="bg-gray-100 p-2 rounded-full">
@@ -212,7 +223,11 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
         representativeType: 'نوع نماینده',
         representative_type: 'نوع نماینده',
         request_type: 'نوع درخواست',
-        target_queue: 'صف مقصد'
+        target_queue: 'صف مقصد',
+        handoff_carrier_id: 'باربری ارجاع‌شده',
+        باربری: 'باربری',
+        handoff_status: 'وضعیت واگذاری',
+        freight_cost_locked_at: 'زمان قفل کرایه',
       };
       
       const label = fieldLabels[key] || key;
