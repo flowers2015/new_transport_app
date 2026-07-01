@@ -429,6 +429,53 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
         return { canEdit, canTakeAction, isAssignedByOther };
     }, [currentUser.role, canPerformActions]);
+
+    const isDairyOrAmbientLine = useCallback((ann: FreightAnnouncement) => (
+        ann.lineType === FreightLineType.Dairy || ann.lineType === FreightLineType.Ambient ||
+        ann.lineType === 'پاستوریزه' || ann.lineType === 'لبنیات-فروتلند' ||
+        ann.lineType === 'Dairy' || ann.lineType === 'Ambient'
+    ), []);
+
+    const renderVehicleTypeCell = useCallback((ann: FreightAnnouncement) => {
+        if (isCarrierUser) {
+            return <span>{ann.vehicleType || '-'}</span>;
+        }
+        if (!isDairyOrAmbientLine(ann)) {
+            return <span>{ann.vehicleType || '-'}</span>;
+        }
+        const isEditing = editingVehicleTypeId === ann.id;
+        if (isEditing) {
+            return (
+                <select
+                    value={ann.vehicleType || ''}
+                    onChange={(e) => {
+                        if (e.target.value && e.target.value !== ann.vehicleType) {
+                            onChangeVehicleType(ann.id, e.target.value);
+                            setEditingVehicleTypeId(null);
+                        }
+                    }}
+                    onBlur={() => setEditingVehicleTypeId(null)}
+                    autoFocus
+                    className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
+                    autoComplete="off"
+                >
+                    <option value="">-- انتخاب --</option>
+                    {VEHICLE_TYPES.map(vt => (
+                        <option key={vt} value={vt}>{vt}</option>
+                    ))}
+                </select>
+            );
+        }
+        return (
+            <div
+                onClick={() => setEditingVehicleTypeId(ann.id)}
+                className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
+                title="کلیک برای تغییر نوع خودرو"
+            >
+                {ann.vehicleType || '-'}
+            </div>
+        );
+    }, [isCarrierUser, isDairyOrAmbientLine, editingVehicleTypeId, onChangeVehicleType]);
     
     // Memoize columnsConfig to prevent unnecessary recalculations
     const columnsConfig = useCallback((viewMode: 'compact' | 'full') => {
@@ -442,85 +489,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span>{formatJalali(ann.loadingDate)}</span> },
             { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
             { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
-            { header: 'نوع خودرو', display: () => true, render: (ann: FreightAnnouncement) => {
-                // برای پاستوریزه (Dairy) و لبنیات (Ambient) قابل ویرایش است
-                const isDairyOrAmbient = ann.lineType === FreightLineType.Dairy || ann.lineType === FreightLineType.Ambient || 
-                                        ann.lineType === 'پاستوریزه' || ann.lineType === 'لبنیات-فروتلند' ||
-                                        ann.lineType === 'Dairy' || ann.lineType === 'Ambient';
-                const { canEdit, canTakeAction, isAssignedByOther } = canEditAnnouncement(ann);
-                const isEditing = editingVehicleTypeId === ann.id;
-                
-                console.log('🔍 [VehicleType Column] Render check:', {
-                    announcementId: ann.id,
-                    lineType: ann.lineType,
-                    isDairyOrAmbient,
-                    canEdit,
-                    canTakeAction,
-                    isAssignedByOther,
-                    canPerformActions,
-                    isEditing,
-                    vehicleType: ann.vehicleType,
-                    assignmentType: ann.assignmentType,
-                    currentUserRole: currentUser.role
-                });
-                
-                // برای پاستوریزه و لبنیات، سلول قابل کلیک است
-                // برای تغییر نوع خودرو، فقط نیاز به isDairyOrAmbient داریم، نه canEdit
-                if (isDairyOrAmbient) {
-                    if (isEditing) {
-                        return (
-                            <select
-                                value={ann.vehicleType || ''}
-                                onChange={(e) => {
-                                    if (e.target.value && e.target.value !== ann.vehicleType) {
-                                        onChangeVehicleType(ann.id, e.target.value);
-                                        setEditingVehicleTypeId(null);
-                                    }
-                                }}
-                                onBlur={() => setEditingVehicleTypeId(null)}
-                                autoFocus
-                                className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                                autoComplete="off"
-                            >
-                                <option value="">-- انتخاب --</option>
-                                {VEHICLE_TYPES.map(vt => (
-                                    <option key={vt} value={vt}>{vt}</option>
-                                ))}
-                            </select>
-                        );
-                    } else {
-                        return (
-                            <div
-                                onClick={() => {
-                                    console.log('🖱️ [VehicleType Column] Clicked on cell:', ann.id, ann.vehicleType);
-                                    setEditingVehicleTypeId(ann.id);
-                                }}
-                                className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
-                                title="کلیک برای تغییر نوع خودرو"
-                            >
-                                {ann.vehicleType || '-'}
-                            </div>
-                        );
-                    }
-                }
-                console.log('⚠️ [VehicleType Column] Not editable:', {
-                    announcementId: ann.id,
-                    isDairyOrAmbient,
-                    canEdit,
-                    canTakeAction,
-                    isAssignedByOther,
-                    canPerformActions,
-                    reason: !isDairyOrAmbient ? 'Not Dairy/Ambient' : !canEdit ? 'Cannot edit' : 'Unknown',
-                    breakdown: {
-                        isDairyOrAmbient,
-                        canPerformActions,
-                        canTakeAction,
-                        isAssignedByOther,
-                        finalCanEdit: canEdit
-                    }
-                });
-                return <span>{ann.vehicleType || '-'}</span>;
-            }},
+            { header: 'نوع خودرو', display: () => true, render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
             
             // Destinations Summary (for all compact views)
             { header: 'مقاصد', display: () => viewMode === 'compact', render: (ann: FreightAnnouncement) =>
@@ -572,7 +541,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         ];
 
         return columns;
-    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, activeLine, onChangeVehicleType, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props]);
+    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, activeLine, onChangeVehicleType, renderVehicleTypeCell, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props]);
     
     const [selectedAnnouncement, setSelectedAnnouncement] = useState<FreightAnnouncement | null>(null);
 
@@ -913,53 +882,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => {
-                    const isDairyOrAmbient = ann.lineType === FreightLineType.Dairy || ann.lineType === FreightLineType.Ambient || 
-                                            ann.lineType === 'پاستوریزه' || ann.lineType === 'لبنیات-فروتلند' ||
-                                            ann.lineType === 'Dairy' || ann.lineType === 'Ambient';
-                    const { canEdit, canTakeAction, isAssignedByOther } = canEditAnnouncement(ann);
-                    const isEditing = editingVehicleTypeId === ann.id;
-                    
-                    // برای تغییر نوع خودرو، فقط نیاز به isDairyOrAmbient داریم، نه canEdit
-                    if (isDairyOrAmbient) {
-                        if (isEditing) {
-                            return (
-                        <select
-                            value={ann.vehicleType || ''}
-                            onChange={(e) => {
-                                        if (e.target.value && e.target.value !== ann.vehicleType) {
-                                    onChangeVehicleType(ann.id, e.target.value);
-                                            setEditingVehicleTypeId(null);
-                                }
-                            }}
-                                    onBlur={() => setEditingVehicleTypeId(null)}
-                                    autoFocus
-                                    className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                            autoComplete="off"
-                        >
-                                    <option value="">-- انتخاب --</option>
-                            {VEHICLE_TYPES.map(vt => (
-                                <option key={vt} value={vt}>{vt}</option>
-                            ))}
-                        </select>
-                            );
-                        } else {
-                            return (
-                                <div
-                                    onClick={() => {
-                                        console.log('🖱️ [VehicleType Column - Compact] Clicked on cell:', ann.id, ann.vehicleType);
-                                        setEditingVehicleTypeId(ann.id);
-                                    }}
-                                    className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
-                                    title="کلیک برای تغییر نوع خودرو"
-                                >
-                                    {ann.vehicleType || '-'}
-                                </div>
-                            );
-                        }
-                    }
-                    return <span>{ann.vehicleType || '-'}</span>;
-                }},
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
@@ -978,53 +901,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => {
-                    const isDairyOrAmbient = ann.lineType === FreightLineType.Dairy || ann.lineType === FreightLineType.Ambient || 
-                                            ann.lineType === 'پاستوریزه' || ann.lineType === 'لبنیات-فروتلند' ||
-                                            ann.lineType === 'Dairy' || ann.lineType === 'Ambient';
-                    const { canEdit, canTakeAction, isAssignedByOther } = canEditAnnouncement(ann);
-                    const isEditing = editingVehicleTypeId === ann.id;
-                    
-                    // برای تغییر نوع خودرو، فقط نیاز به isDairyOrAmbient داریم، نه canEdit
-                    if (isDairyOrAmbient) {
-                        if (isEditing) {
-                            return (
-                        <select
-                            value={ann.vehicleType || ''}
-                            onChange={(e) => {
-                                        if (e.target.value && e.target.value !== ann.vehicleType) {
-                                    onChangeVehicleType(ann.id, e.target.value);
-                                            setEditingVehicleTypeId(null);
-                                }
-                            }}
-                                    onBlur={() => setEditingVehicleTypeId(null)}
-                                    autoFocus
-                                    className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                            autoComplete="off"
-                        >
-                                    <option value="">-- انتخاب --</option>
-                            {VEHICLE_TYPES.map(vt => (
-                                <option key={vt} value={vt}>{vt}</option>
-                            ))}
-                        </select>
-                            );
-                        } else {
-                            return (
-                                <div
-                                    onClick={() => {
-                                        console.log('🖱️ [VehicleType Column - Compact] Clicked on cell:', ann.id, ann.vehicleType);
-                                        setEditingVehicleTypeId(ann.id);
-                                    }}
-                                    className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
-                                    title="کلیک برای تغییر نوع خودرو"
-                                >
-                                    {ann.vehicleType || '-'}
-                                </div>
-                            );
-                        }
-                    }
-                    return <span>{ann.vehicleType || '-'}</span>;
-                }},
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
@@ -1043,53 +920,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => {
-                    const isDairyOrAmbient = ann.lineType === FreightLineType.Dairy || ann.lineType === FreightLineType.Ambient || 
-                                            ann.lineType === 'پاستوریزه' || ann.lineType === 'لبنیات-فروتلند' ||
-                                            ann.lineType === 'Dairy' || ann.lineType === 'Ambient';
-                    const { canEdit, canTakeAction, isAssignedByOther } = canEditAnnouncement(ann);
-                    const isEditing = editingVehicleTypeId === ann.id;
-                    
-                    // برای تغییر نوع خودرو، فقط نیاز به isDairyOrAmbient داریم، نه canEdit
-                    if (isDairyOrAmbient) {
-                        if (isEditing) {
-                            return (
-                        <select
-                            value={ann.vehicleType || ''}
-                            onChange={(e) => {
-                                        if (e.target.value && e.target.value !== ann.vehicleType) {
-                                    onChangeVehicleType(ann.id, e.target.value);
-                                            setEditingVehicleTypeId(null);
-                                }
-                            }}
-                                    onBlur={() => setEditingVehicleTypeId(null)}
-                                    autoFocus
-                                    className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                            autoComplete="off"
-                        >
-                                    <option value="">-- انتخاب --</option>
-                            {VEHICLE_TYPES.map(vt => (
-                                <option key={vt} value={vt}>{vt}</option>
-                            ))}
-                        </select>
-                            );
-                        } else {
-                            return (
-                                <div
-                                    onClick={() => {
-                                        console.log('🖱️ [VehicleType Column - Compact] Clicked on cell:', ann.id, ann.vehicleType);
-                                        setEditingVehicleTypeId(ann.id);
-                                    }}
-                                    className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
-                                    title="کلیک برای تغییر نوع خودرو"
-                                >
-                                    {ann.vehicleType || '-'}
-                                </div>
-                            );
-                        }
-                    }
-                    return <span>{ann.vehicleType || '-'}</span>;
-                }},
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
@@ -1106,53 +937,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => {
-                    const isDairyOrAmbient = ann.lineType === FreightLineType.Dairy || ann.lineType === FreightLineType.Ambient || 
-                                            ann.lineType === 'پاستوریزه' || ann.lineType === 'لبنیات-فروتلند' ||
-                                            ann.lineType === 'Dairy' || ann.lineType === 'Ambient';
-                    const { canEdit, canTakeAction, isAssignedByOther } = canEditAnnouncement(ann);
-                    const isEditing = editingVehicleTypeId === ann.id;
-                    
-                    // برای تغییر نوع خودرو، فقط نیاز به isDairyOrAmbient داریم، نه canEdit
-                    if (isDairyOrAmbient) {
-                        if (isEditing) {
-                            return (
-                        <select
-                            value={ann.vehicleType || ''}
-                            onChange={(e) => {
-                                        if (e.target.value && e.target.value !== ann.vehicleType) {
-                                    onChangeVehicleType(ann.id, e.target.value);
-                                            setEditingVehicleTypeId(null);
-                                }
-                            }}
-                                    onBlur={() => setEditingVehicleTypeId(null)}
-                                    autoFocus
-                                    className="px-2 py-1 text-sm border border-sky-500 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 cursor-pointer"
-                            autoComplete="off"
-                        >
-                                    <option value="">-- انتخاب --</option>
-                            {VEHICLE_TYPES.map(vt => (
-                                <option key={vt} value={vt}>{vt}</option>
-                            ))}
-                        </select>
-                            );
-                        } else {
-                            return (
-                                <div
-                                    onClick={() => {
-                                        console.log('🖱️ [VehicleType Column - Compact] Clicked on cell:', ann.id, ann.vehicleType);
-                                        setEditingVehicleTypeId(ann.id);
-                                    }}
-                                    className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
-                                    title="کلیک برای تغییر نوع خودرو"
-                                >
-                                    {ann.vehicleType || '-'}
-                                </div>
-                            );
-                        }
-                    }
-                    return <span>{ann.vehicleType || '-'}</span>;
-                }},
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
@@ -1168,7 +953,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         const colsAll = columnsConfig(viewMode);
         const cols = colsAll.filter(c => c.display(lineForColumns)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [viewMode, activeLine, props, columnsConfig, editingVehicleTypeId, props.drivers, props.personalDrivers, props.vehicles, props.personalVehicles]);
+    }, [viewMode, activeLine, props, columnsConfig, renderVehicleTypeCell, editingVehicleTypeId, props.drivers, props.personalDrivers, props.vehicles, props.personalVehicles]);
 
     const displayAnnouncements = useMemo(() => {
         const ordered = applyTransportLiveDisplayOrder(filteredAnnouncements, {
@@ -3107,7 +2892,9 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             const savePlateParts = isAmbientCarrierPhase
                 ? parseIranianPlateString(DAIRY_AMBIENT_PLACEHOLDER_PLATE)
                 : plateParts;
-            const saveVehicleType = (announcement.vehicleType || personalVehicleDetails.type || '').trim();
+            const saveVehicleType = isCarrierAssignmentUser
+                ? (announcement.vehicleType || '').trim()
+                : (announcement.vehicleType || personalVehicleDetails.type || '').trim();
 
             if (isAmbientCarrierPhase) {
                 if (!personalDriverDetails.name?.trim()) {
@@ -3716,8 +3503,8 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                         className="input-compact input-compact-w28"
                                         autoComplete="off"
                                         placeholder={announcement.vehicleType || ''}
-                                        readOnly={isDairyAmbientIsolated}
-                                        disabled={isDairyAmbientIsolated}
+                                        readOnly={isDairyAmbientIsolated || isCarrierAssignmentUser}
+                                        disabled={isDairyAmbientIsolated || isCarrierAssignmentUser}
                                     />
                                 </div>
                                 <div className="w-fit max-w-full">

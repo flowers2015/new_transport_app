@@ -1792,7 +1792,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     // Check if announcement exists
     const { rows } = await client.query(
       `SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code,
-              line_type, awaiting_bill_of_lading_at, carrier_name, handoff_carrier_id, handoff_status,
+              line_type, vehicle_type, awaiting_bill_of_lading_at, carrier_name, handoff_carrier_id, handoff_status,
               total_freight_cost, freight_cost_locked_at
        FROM freight_announcements WHERE id = $1`,
       [announcementId]
@@ -1809,6 +1809,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
       status: oldStatus,
       announcement_code: code,
       line_type: lineType,
+      vehicle_type: announcementVehicleType,
       awaiting_bill_of_lading_at: awaitingBillOfLadingAt,
       carrier_name: existingCarrierName,
       handoff_carrier_id: handoffCarrierId,
@@ -1818,6 +1819,9 @@ async function assignPersonalDriverAndVehicle(req, res) {
 
     const userRole = req.user?.role || '';
     const isCarrierUser = userRole === 'carrier_user';
+    const effectiveVehicleType = isCarrierUser
+      ? String(announcementVehicleType || '').trim() || String(vehicleType || '').trim()
+      : String(vehicleType || '').trim();
 
     if (isCarrierUser) {
       const actorCarrierId = await (async () => {
@@ -2004,7 +2008,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
       // Update vehicle info
       await client.query(
         'UPDATE personal_vehicles SET vehicle_type = $1, plate_part1 = $2, plate_letter = $3, plate_part2 = $4, plate_city_code = $5, updated_at = NOW() WHERE id = $6',
-        [vehicleType, platePart1, plateLetter, platePart2, plateCityCode, personalVehicleId]
+        [effectiveVehicleType, platePart1, plateLetter, platePart2, plateCityCode, personalVehicleId]
       );
     } else {
       // Create new personal vehicle
@@ -2012,7 +2016,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
       personalVehicleId = crypto.randomUUID();
       await client.query(
         'INSERT INTO personal_vehicles (id, truck_smart_id, plate_part1, plate_letter, plate_part2, plate_city_code, vehicle_type) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [personalVehicleId, effectiveTruckSmartId, platePart1, plateLetter, platePart2, plateCityCode, vehicleType]
+        [personalVehicleId, effectiveTruckSmartId, platePart1, plateLetter, platePart2, plateCityCode, effectiveVehicleType]
       );
     }
     
@@ -8599,7 +8603,10 @@ async function getVehicleTypes(req, res) {
 async function changeVehicleType(req, res) {
   const { id: announcementId } = req.params;
   const { vehicleType } = req.body || {};
-  const { id: userId, name, username } = req.user || {};
+  const { id: userId, name, username, role } = req.user || {};
+  if (role === 'carrier_user') {
+    return res.status(403).json({ message: 'کاربر باربری مجاز به تغییر نوع خودرو نیست.' });
+  }
   const userName = username 
     ? (name ? `${username} - ${name}` : username)
     : (name || 'کاربر');
