@@ -28,7 +28,12 @@ async function loadAnnouncementContext(announcementId) {
        fa.vehicle_plate,
        pd.name AS personal_driver_name,
        pd.mobile AS personal_driver_mobile,
-       pv.vehicle_type AS personal_vehicle_type
+       pv.vehicle_type AS personal_vehicle_type,
+       (
+         SELECT COALESCE(SUM(fd.tonnage), 0)
+         FROM freight_destinations fd
+         WHERE fd.freight_announcement_id = fa.id
+       ) AS total_tonnage_kg
      FROM freight_announcements fa
      LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
      LEFT JOIN personal_vehicles pv ON fa.assigned_vehicle_id = pv.id
@@ -48,26 +53,6 @@ async function loadAnnouncementContext(announcementId) {
   return ann;
 }
 
-function mapSnapshotToAnn(snapshot) {
-  if (!snapshot) return null;
-  return {
-    announcement_code: snapshot.announcement_code,
-    line_type: snapshot.line_type,
-    vehicle_type: snapshot.vehicle_type,
-    brand: snapshot.brand,
-    origin_city: snapshot.origin_city,
-    cargo_value: snapshot.cargo_value,
-    total_freight_cost: snapshot.total_freight_cost,
-    carrier_name: snapshot.carrier_name,
-    assigned_driver_name: snapshot.assigned_driver_name,
-    bill_of_lading_number: snapshot.bill_of_lading_number,
-    vehicle_plate: snapshot.vehicle_plate,
-    personal_driver_name: snapshot.personal_driver_name,
-    personal_driver_mobile: snapshot.personal_driver_mobile,
-    destination_cities: snapshot.destination_cities,
-  };
-}
-
 function getVehicleType(ann) {
   return dash(ann.vehicle_type || ann.personal_vehicle_type);
 }
@@ -76,67 +61,52 @@ function getCarrierName(ann) {
   return dash(ann.carrier_name || ann.assigned_driver_name || ann.personal_driver_name);
 }
 
-function getDriverName(ann) {
-  return dash(ann.assigned_driver_name || ann.personal_driver_name);
+function formatTonnage(ann) {
+  const kg = Number(ann.total_tonnage_kg);
+  if (!Number.isFinite(kg) || kg <= 0) return '—';
+  return `${kg.toLocaleString('en-US')} کیلوگرم`;
 }
 
-function getDriverContact(ann) {
-  return dash(ann.personal_driver_mobile);
-}
-
-function buildCommonLines(ann) {
+function buildFreightLines(ann) {
   return [
     `خودرو: ${getVehicleType(ann)}`,
     `مقصد: ${dash(ann.destination_cities)}`,
     `برند: ${dash(ann.brand)}`,
     `بارگیری از: ${dash(ann.origin_city)}`,
+    `وزن بار: ${formatTonnage(ann)}`,
     `ارزش بار: ${formatRial(ann.cargo_value)}`,
     `کرایه: ${formatRial(ann.total_freight_cost)}`,
+    `باربری: ${getCarrierName(ann)}`,
   ];
 }
 
-function buildPersonalAssignMessage(ann) {
-  const lines = [
-    '✅ تخصیص — ترابری شخصی (لبنیات-فروتلند)',
-    '',
-    ...buildCommonLines(ann),
-    `باربری: ${getCarrierName(ann)}`,
-  ];
-  return lines.join('\n');
-}
-
-function buildCarrierAssignMessage(ann) {
-  const lines = [
-    '✅ تخصیص — باربری (لبنیات-فروتلند)',
-    '',
-    ...buildCommonLines(ann),
-    `باربری: ${getCarrierName(ann)}`,
-    `راننده: ${getDriverName(ann)}`,
-    `تماس: ${getDriverContact(ann)}`,
+function buildCarrierDriverLines(ann) {
+  return [
+    `راننده: ${dash(ann.assigned_driver_name || ann.personal_driver_name)}`,
+    `تماس: ${dash(ann.personal_driver_mobile)}`,
     `بارنامه: ${dash(ann.bill_of_lading_number)}`,
     `پلاک: ${dash(ann.vehicle_plate)}`,
   ];
+}
+
+function buildMessage(headline, ann, { includeDriver = false } = {}) {
+  const lines = [headline, '', ...buildFreightLines(ann)];
+  if (includeDriver) {
+    lines.push(...buildCarrierDriverLines(ann));
+  }
   return lines.join('\n');
 }
 
-function buildCancelMessage(ann) {
-  const lines = [
-    '❌ لغو تخصیص — لبنیات-فروتلند',
-    '',
-    ...buildCommonLines(ann),
-    `باربری: ${getCarrierName(ann)}`,
-  ];
-  const driverName = getDriverName(ann);
-  const driverContact = getDriverContact(ann);
-  const bol = dash(ann.bill_of_lading_number);
-  const plate = dash(ann.vehicle_plate);
-  if (driverName !== '—' || driverContact !== '—' || bol !== '—' || plate !== '—') {
-    lines.push(`راننده: ${driverName}`);
-    lines.push(`تماس: ${driverContact}`);
-    lines.push(`بارنامه: ${bol}`);
-    lines.push(`پلاک: ${plate}`);
-  }
-  return lines.join('\n');
+function buildVehicleAssignedMessage(ann) {
+  return buildMessage('خودرو تخصیص داده شد', ann);
+}
+
+function buildCarrierChangedMessage(ann) {
+  return buildMessage('اصلاحیه: باربری عوض شد', ann);
+}
+
+function buildCarrierAssignmentCorrectionMessage(ann) {
+  return buildMessage('اصلاحیه: خودرو تخصیص داده شد', ann, { includeDriver: true });
 }
 
 async function sendAmbientMessage(text) {
@@ -158,8 +128,8 @@ async function notifyAssignmentAfterCommit(announcementId, { isCarrierUser, isRe
     if (!ann || !isFrotlandAmbientLineType(ann.line_type)) return;
 
     const text = isCarrierUser
-      ? buildCarrierAssignMessage(ann)
-      : buildPersonalAssignMessage(ann);
+      ? buildCarrierAssignmentCorrectionMessage(ann)
+      : buildVehicleAssignedMessage(ann);
     const result = await sendAmbientMessage(text);
     if (result.sent) {
       console.log(`✅ [bale-ambient] assignment notify sent for ${announcementId}`);
@@ -169,37 +139,92 @@ async function notifyAssignmentAfterCommit(announcementId, { isCarrierUser, isRe
   }
 }
 
-async function notifyCancelAfterCommit(announcementId, snapshot) {
+async function notifyReferToCarrierAfterCommit(announcementId, { carrierChanged = false } = {}) {
   try {
-    const ann = mapSnapshotToAnn(snapshot) || await loadAnnouncementContext(announcementId);
+    const ann = await loadAnnouncementContext(announcementId);
     if (!ann || !isFrotlandAmbientLineType(ann.line_type)) return;
-    if (!snapshot?.had_assignment) return;
 
-    const text = buildCancelMessage(ann);
+    const text = carrierChanged
+      ? buildCarrierChangedMessage(ann)
+      : buildVehicleAssignedMessage(ann);
     const result = await sendAmbientMessage(text);
     if (result.sent) {
-      console.log(`✅ [bale-ambient] cancel notify sent for ${announcementId}`);
+      console.log(`✅ [bale-ambient] carrier refer notify sent for ${announcementId}`);
     }
   } catch (err) {
-    console.error('⚠️ [bale-ambient] cancel notify failed (non-blocking):', err.message);
+    console.error('⚠️ [bale-ambient] carrier refer notify failed (non-blocking):', err.message);
   }
 }
 
-async function sendTestAmbientMessage() {
+async function sendTestAmbientMessage(chatIdOverride) {
+  const baleApiRef = require('./baleApi');
+  if (!baleApiRef.isConfigured()) {
+    return { skipped: true, reason: 'bot_not_configured' };
+  }
+
+  let bot = null;
+  try {
+    bot = await baleApiRef.getMe();
+  } catch (err) {
+    return {
+      skipped: true,
+      reason: 'bot_token_invalid',
+      error: err.message,
+    };
+  }
+
+  const settings = await getAmbientNotifySettings();
+  const chatId = baleApiRef.normalizeChatId(chatIdOverride ?? settings.chatId);
+  if (!chatId) {
+    return { skipped: true, reason: 'no_chat_id' };
+  }
+
   const text = [
-    '🔔 تست اعلان تخصیص لبنیات-فروتلند',
+    'خودرو تخصیص داده شد',
     '',
-    'اگر این پیام را می‌بینید، ربات به گروه دسترسی دارد و تنظیمات chat_id درست است.',
+    '(پیام تست — اگر این را می‌بینید ربات و chat_id درست است)',
   ].join('\n');
-  return sendAmbientMessage(text);
+
+  try {
+    await baleApiRef.sendMessage(chatId, text);
+    return { sent: true, chatId, bot };
+  } catch (err) {
+    const hint = buildSendFailureHint(err.message, chatId);
+    const wrapped = new Error(hint ? `${err.message}\n${hint}` : err.message);
+    wrapped.cause = err;
+    throw wrapped;
+  }
+}
+
+function buildSendFailureHint(message, chatId) {
+  const msg = String(message || '');
+  if (/internal server error/i.test(msg)) {
+    return [
+      'راهنمای عیب‌یابی:',
+      '۱) همان BALE_BOT_TOKEN لوکال را روی سرور گذاشته‌اید؟ (pm2 restart transport-backend --update-env)',
+      '۲) ربات عضو همان گروه فروتلند روی سرور است؟',
+      `۳) chat_id را دقیق از فوروارد پیام به همان ربات بگیرید (فعلی: ${chatId}).`,
+      '۴) برای بعضی گروه‌ها chat_id منفی است (مثلاً -100...).',
+    ].join('\n');
+  }
+  if (/chat not found|group chat was upgraded|peer id invalid/i.test(msg)) {
+    return 'chat_id اشتباه است — یک پیام از گروه را به ربات فوروارد کنید و عدد دقیق را وارد کنید.';
+  }
+  if (/bot was kicked|not enough rights|have no rights/i.test(msg)) {
+    return 'ربات عضو گروه نیست یا اجازه ارسال پیام ندارد.';
+  }
+  if (/unauthorized|token/i.test(msg)) {
+    return 'توکن ربات روی سرور نامعتبر است — BALE_BOT_TOKEN را در .env سرور بررسی کنید.';
+  }
+  return null;
 }
 
 module.exports = {
   notifyAssignmentAfterCommit,
-  notifyCancelAfterCommit,
+  notifyReferToCarrierAfterCommit,
   sendTestAmbientMessage,
-  buildPersonalAssignMessage,
-  buildCarrierAssignMessage,
-  buildCancelMessage,
+  buildVehicleAssignedMessage,
+  buildCarrierChangedMessage,
+  buildCarrierAssignmentCorrectionMessage,
   loadAnnouncementContext,
 };

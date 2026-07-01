@@ -4,10 +4,12 @@ import { User } from '../types';
 
 type AmbientNotifySettings = {
   enabled: boolean;
-  chatId: number | null;
+  chatId: string | number | null;
   updatedBy: string | null;
   updatedAt: string | null;
   botConfigured?: boolean;
+  bot?: { username?: string; first_name?: string } | null;
+  botError?: string | null;
 };
 
 async function readApiError(res: Response): Promise<string> {
@@ -56,12 +58,12 @@ const AmbientBaleNotifySettings: React.FC<Props> = ({ currentUser }) => {
     setMessage(null);
     setError(null);
     const trimmed = chatIdInput.trim();
-    const parsedChatId = trimmed === '' ? null : Number(trimmed);
-    if (trimmed !== '' && !Number.isFinite(parsedChatId)) {
-      setError('شناسه گروه (chat_id) باید عدد باشد.');
+    if (trimmed !== '' && !/^-?\d+$/.test(trimmed)) {
+      setError('شناسه گروه (chat_id) باید عدد باشد (مثبت یا منفی).');
       setSaving(false);
       return;
     }
+    const parsedChatId = trimmed === '' ? null : trimmed;
     try {
       const res = await apiFetch(getApiUrl('bale/settings/ambient-notify'), {
         method: 'PUT',
@@ -86,13 +88,27 @@ const AmbientBaleNotifySettings: React.FC<Props> = ({ currentUser }) => {
     setTesting(true);
     setMessage(null);
     setError(null);
+    const trimmed = chatIdInput.trim();
+    if (!trimmed) {
+      setError('ابتدا chat_id گروه را وارد کنید.');
+      setTesting(false);
+      return;
+    }
+    if (!/^-?\d+$/.test(trimmed)) {
+      setError('chat_id باید عدد باشد (مثبت یا منفی).');
+      setTesting(false);
+      return;
+    }
     try {
       const res = await apiFetch(getApiUrl('bale/settings/ambient-notify/test'), {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: trimmed }),
       });
       if (!res.ok) throw new Error(await readApiError(res));
-      const data = (await res.json()) as { message?: string };
-      setMessage(data.message || 'پیام تست ارسال شد.');
+      const data = (await res.json()) as { message?: string; bot?: { username?: string } };
+      const botLabel = data.bot?.username ? ` (@${data.bot.username})` : '';
+      setMessage((data.message || 'پیام تست ارسال شد.') + botLabel);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در ارسال تست');
     } finally {
@@ -109,25 +125,44 @@ const AmbientBaleNotifySettings: React.FC<Props> = ({ currentUser }) => {
   }
 
   const botOk = settings?.botConfigured === true;
+  const botVerified = Boolean(settings?.bot?.username);
+  const botLabel = settings?.bot?.username
+    ? `@${settings.bot.username}`
+    : settings?.bot?.first_name || null;
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6" dir="rtl">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">اعلان بله — لبنیات فروتلند</h1>
         <p className="text-sm text-slate-600 mt-2">
-          پس از تخصیص یا لغو تخصیص در خط لبنیات-فروتلند، پیام جدید در گروه بله ارسال می‌شود.
-          ارجاع به باربری (قبل از راننده) پیام ندارد.
+          پس از ارجاع یا تخصیص شخصی: «خودرو تخصیص داده شد». پس از تخصیص باربری: «اصلاحیه: خودرو تخصیص داده شد».
+          تغییر باربری: «اصلاحیه: باربری عوض شد». لغو ارجاع و لغو تخصیص: بدون پیام.
         </p>
       </div>
 
       <div
         className={`rounded-lg border p-4 text-sm ${
-          botOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'
+          botVerified
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            : botOk
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-amber-200 bg-amber-50 text-amber-900'
         }`}
       >
-        {botOk
-          ? 'ربات بله روی سرور پیکربندی شده است (BALE_BOT_TOKEN).'
-          : 'توکن ربات بله روی سرور تنظیم نشده — تا زمان تنظیم BALE_BOT_TOKEN هیچ پیامی ارسال نمی‌شود.'}
+        {!botOk && 'توکن ربات بله روی سرور تنظیم نشده — BALE_BOT_TOKEN را در .env سرور قرار دهید.'}
+        {botOk && botVerified && (
+          <>
+            ربات روی سرور فعال است: <span dir="ltr" className="font-mono">{botLabel}</span>
+          </>
+        )}
+        {botOk && !botVerified && (
+          <>
+            توکن در env هست ولی getMe ناموفق بود — احتمالاً توکن اشتباه یا فاصله/خط اضافه در .env سرور.
+            {settings?.botError ? (
+              <span dir="ltr" className="block mt-1 text-xs font-mono">{settings.botError}</span>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
@@ -155,8 +190,8 @@ const AmbientBaleNotifySettings: React.FC<Props> = ({ currentUser }) => {
             dir="ltr"
           />
           <p className="text-xs text-slate-500 mt-2">
-            همان chat_id گروه فروتلند — با فوروارد پیام به بازو یا از تنظیمات گروه در بله به‌دست می‌آید.
-            ربات باید عضو گروه باشد.
+            chat_id را از فوروارد پیام گروه به <strong>همان ربات سرور</strong> بگیرید (نه لزوماً ربات لوکال).
+            اغلب با <span dir="ltr" className="font-mono">-100...</span> شروع می‌شود. ربات باید عضو گروه باشد.
           </p>
         </div>
 
@@ -179,24 +214,24 @@ const AmbientBaleNotifySettings: React.FC<Props> = ({ currentUser }) => {
           <button
             type="button"
             onClick={handleTest}
-            disabled={testing || !enabled || !chatIdInput.trim()}
+            disabled={testing || !chatIdInput.trim()}
             className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
           >
             {testing ? 'در حال ارسال...' : 'ارسال پیام تست'}
           </button>
         </div>
 
-        {message && <p className="text-sm text-emerald-700">{message}</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {message && <p className="text-sm text-emerald-700 whitespace-pre-wrap">{message}</p>}
+        {error && <p className="text-sm text-red-600 whitespace-pre-wrap">{error}</p>}
       </div>
 
       <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
         <p className="font-medium text-slate-800">قالب پیام‌ها</p>
         <ul className="list-disc list-inside space-y-1">
-          <li>ترابری شخصی: خودرو، مقصد، برند، مبدا بارگیری، ارزش بار، کرایه، نام باربری</li>
-          <li>تخصیص باربری: همان موارد + راننده، تماس، بارنامه، پلاک</li>
-          <li>لغو تخصیص: پیام جدید با برچسب لغو</li>
-          <li>ویرایش تخصیص: بدون پیام</li>
+          <li>ارجاع یا تخصیص شخصی: خودرو تخصیص داده شد + اطلاعات بار</li>
+          <li>تغییر باربری: اصلاحیه: باربری عوض شد</li>
+          <li>تخصیص توسط باربری: اصلاحیه: خودرو تخصیص داده شد + راننده و پلاک</li>
+          <li>لغو ارجاع / لغو تخصیص شخصی: بدون پیام</li>
         </ul>
       </div>
 

@@ -611,10 +611,22 @@ async function sendCompanyReportToBale(req, res) {
 
 async function getAmbientNotifySettingsHandler(req, res) {
   try {
+    const baleApi = require('../services/bale/baleApi');
     const settings = await getAmbientNotifySettings();
+    let bot = null;
+    let botError = null;
+    if (baleApi.isConfigured()) {
+      try {
+        bot = await baleApi.getMe();
+      } catch (e) {
+        botError = e.message;
+      }
+    }
     res.json({
       ...settings,
-      botConfigured: require('../services/bale/baleApi').isConfigured(),
+      botConfigured: baleApi.isConfigured(),
+      bot,
+      botError,
     });
   } catch (error) {
     console.error('❌ [bale] getAmbientNotifySettings:', error);
@@ -644,9 +656,12 @@ async function updateAmbientNotifySettingsHandler(req, res) {
     const parsedChatId =
       chatId === null || chatId === undefined || chatId === ''
         ? null
-        : Number(chatId);
-    if (chatId !== null && chatId !== undefined && chatId !== '' && !Number.isFinite(parsedChatId)) {
+        : String(chatId).trim() || null;
+    if (chatId !== null && chatId !== undefined && chatId !== '' && !parsedChatId) {
       return res.status(400).json({ message: 'شناسه گروه (chat_id) نامعتبر است.' });
+    }
+    if (parsedChatId && !/^-?\d+$/.test(parsedChatId)) {
+      return res.status(400).json({ message: 'شناسه گروه (chat_id) باید عدد باشد.' });
     }
     const settings = await setAmbientNotifySettings({
       enabled: enabled === undefined ? undefined : enabled === true,
@@ -664,16 +679,28 @@ async function updateAmbientNotifySettingsHandler(req, res) {
 }
 
 async function testAmbientNotifyHandler(req, res) {
+  const overrideChatId = req.body?.chatId ?? req.body?.chat_id;
   try {
-    const result = await sendTestAmbientMessage();
+    const result = await sendTestAmbientMessage(overrideChatId);
     if (result.skipped) {
-      const reason =
-        result.reason === 'bot_not_configured'
-          ? 'توکن ربات بله (BALE_BOT_TOKEN) روی سرور تنظیم نشده است.'
-          : 'اعلان غیرفعال است یا chat_id گروه ثبت نشده است.';
-      return res.status(400).json({ message: reason });
+      if (result.reason === 'bot_not_configured') {
+        return res.status(400).json({ message: 'توکن ربات بله (BALE_BOT_TOKEN) روی سرور تنظیم نشده است.' });
+      }
+      if (result.reason === 'bot_token_invalid') {
+        return res.status(400).json({
+          message: `توکن ربات روی سرور نامعتبر است: ${result.error || 'getMe ناموفق'}`,
+        });
+      }
+      if (result.reason === 'no_chat_id') {
+        return res.status(400).json({ message: 'chat_id گروه را وارد و ذخیره کنید.' });
+      }
+      return res.status(400).json({ message: 'ارسال تست ممکن نیست.' });
     }
-    res.json({ message: 'پیام تست به گروه ارسال شد.', chatId: result.chatId });
+    res.json({
+      message: 'پیام تست به گروه ارسال شد.',
+      chatId: result.chatId,
+      bot: result.bot,
+    });
   } catch (error) {
     console.error('❌ [bale] testAmbientNotify:', error);
     res.status(400).json({ message: error.message || 'خطا در ارسال پیام تست' });

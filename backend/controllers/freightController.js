@@ -7427,6 +7427,11 @@ async function cancelAssignment(req, res) {
        ORDER BY created_at ASC`,
       [announcementId]
     );
+    const tonnageSnapshot = await client.query(
+      `SELECT COALESCE(SUM(tonnage), 0) AS total_tonnage_kg
+       FROM freight_destinations WHERE freight_announcement_id = $1`,
+      [announcementId]
+    );
     const baleCancelSnapshot = {
       had_assignment: Boolean(oldDriverId),
       announcement_code: ann.announcement_code,
@@ -7438,11 +7443,8 @@ async function cancelAssignment(req, res) {
       total_freight_cost: ann.total_freight_cost,
       carrier_name: ann.carrier_name,
       assigned_driver_name: ann.assigned_driver_name,
-      bill_of_lading_number: ann.bill_of_lading_number,
-      vehicle_plate: ann.vehicle_plate,
-      personal_driver_name: ann.personal_driver_name,
-      personal_driver_mobile: ann.personal_driver_mobile,
       destination_cities: destSnapshotRows.rows.map((r) => r.city).filter(Boolean).join('، ') || '—',
+      total_tonnage_kg: tonnageSnapshot.rows[0]?.total_tonnage_kg ?? 0,
     };
 
     const { restoreDriversFromCancelledAssignment } = require('./dispatchController');
@@ -7567,13 +7569,6 @@ async function cancelAssignment(req, res) {
     } catch (realtimeError) {
       console.warn('⚠️ [freight] cancel realtime notify skipped:', realtimeError.message);
     }
-
-    setImmediate(() => {
-      const { notifyCancelAfterCommit } = require('../services/bale/baleAmbientAssignmentNotify');
-      notifyCancelAfterCommit(announcementId, baleCancelSnapshot).catch((err) => {
-        console.warn('⚠️ [freight] Bale cancel notify error:', err.message);
-      });
-    });
 
     return res.status(200).json({
       message,

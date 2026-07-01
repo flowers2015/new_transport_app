@@ -73,7 +73,8 @@ async function referToCarrier(req, res) {
 
     const annRes = await client.query(
       `SELECT id, status, assignment_type, line_type, handoff_status, handoff_carrier_id,
-              assigned_driver_id, assigned_vehicle_id, announcement_code
+              assigned_driver_id, assigned_vehicle_id, announcement_code, vehicle_type, brand,
+              origin_city, cargo_value, total_freight_cost, carrier_name
        FROM freight_announcements WHERE id = $1 FOR UPDATE`,
       [announcementId]
     );
@@ -91,9 +92,15 @@ async function referToCarrier(req, res) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'این بار در صف شخصی نیست.' });
     }
-    if (ann.handoff_status === 'with_carrier') {
+
+    const carrierChanged =
+      ann.handoff_status === 'with_carrier' &&
+      ann.handoff_carrier_id &&
+      String(ann.handoff_carrier_id) !== String(carrierId);
+
+    if (ann.handoff_status === 'with_carrier' && !carrierChanged) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'این بار در حال حاضر نزد باربری است.' });
+      return res.status(400).json({ message: 'این بار در حال حاضر نزد همین باربری است.' });
     }
     if (ann.assigned_driver_id || ann.assigned_vehicle_id) {
       await client.query('ROLLBACK');
@@ -128,19 +135,28 @@ async function referToCarrier(req, res) {
       announcementId,
       userId,
       userName,
-      action: 'REFERRED_TO_CARRIER',
+      action: carrierChanged ? 'CARRIER_REFERRAL_CHANGED' : 'REFERRED_TO_CARRIER',
       oldStatus: ann.status,
       newStatus: ann.status,
       fieldChanges: {
-        باربری: { old: null, new: carrier.name },
-        total_freight_cost: { old: null, new: cost },
+        باربری: { old: ann.carrier_name || null, new: carrier.name },
+        total_freight_cost: { old: ann.total_freight_cost || null, new: cost },
       },
-      description: `ارجاع به باربری «${carrier.name}» با کرایه ${cost}`,
+      description: carrierChanged
+        ? `تغییر باربری به «${carrier.name}» با کرایه ${cost}`
+        : `ارجاع به باربری «${carrier.name}» با کرایه ${cost}`,
       ipAddress: req.ip,
       client,
     });
 
     await client.query('COMMIT');
+
+    setImmediate(() => {
+      const { notifyReferToCarrierAfterCommit } = require('../services/bale/baleAmbientAssignmentNotify');
+      notifyReferToCarrierAfterCommit(announcementId, { carrierChanged }).catch((err) => {
+        console.error('⚠️ [referToCarrier] Bale notify error:', err.message);
+      });
+    });
 
     notifyUpdate(
       announcementId,

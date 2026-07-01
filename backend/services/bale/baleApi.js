@@ -7,11 +7,32 @@ const path = require('path');
 const BALE_API_BASE = 'https://tapi.bale.ai/bot';
 
 function getToken() {
-  return process.env.BALE_BOT_TOKEN || '';
+  return String(process.env.BALE_BOT_TOKEN || '').trim();
 }
 
 function isConfigured() {
   return Boolean(getToken());
+}
+
+function formatBaleError(method, response, data) {
+  const code = data?.error_code != null ? ` (${data.error_code})` : '';
+  const detail =
+    data?.description ||
+    data?.error ||
+    (typeof data === 'string' ? data : null) ||
+    response?.statusText ||
+    'خطای نامشخص';
+  return `Bale API ${method} failed${code}: ${detail}`;
+}
+
+function buildJsonBody(payload) {
+  const body = {};
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      body[key] = value;
+    }
+  });
+  return body;
 }
 
 async function callBale(method, body = {}) {
@@ -20,28 +41,59 @@ async function callBale(method, body = {}) {
     throw new Error('BALE_BOT_TOKEN تنظیم نشده است.');
   }
   const url = `${BALE_API_BASE}${token}/${method}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json().catch(() => ({}));
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (networkErr) {
+    console.error(`❌ [bale] ${method} network error:`, networkErr.message);
+    throw new Error(
+      `اتصال به سرور بله برقرار نشد. دسترسی خروجی سرور به tapi.bale.ai را بررسی کنید. (${networkErr.message})`
+    );
+  }
+
+  const rawText = await response.text().catch(() => '');
+  let data = {};
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = { description: rawText.slice(0, 300) };
+    }
+  }
+
   if (!response.ok || data.ok === false) {
-    const detail = data.description || data.error || response.statusText;
-    throw new Error(`Bale API ${method} failed: ${detail}`);
+    const message = formatBaleError(method, response, data);
+    console.error(`❌ [bale] ${method}:`, {
+      status: response.status,
+      statusText: response.statusText,
+      body: data,
+    });
+    throw new Error(message);
   }
   return data.result ?? data;
 }
 
+function normalizeChatId(chatId) {
+  const raw = String(chatId ?? '').trim();
+  return raw || null;
+}
+
 async function sendMessage(chatId, text, options = {}) {
-  const normalizedChatId = Number(chatId);
-  return callBale('sendMessage', {
-    chat_id: Number.isFinite(normalizedChatId) ? normalizedChatId : chatId,
-    text,
-    parse_mode: options.parseMode || undefined,
-    reply_markup: options.replyMarkup || undefined,
-    disable_web_page_preview: true,
-  });
+  const normalizedChatId = normalizeChatId(chatId);
+  if (!normalizedChatId) {
+    throw new Error('chat_id مقصد مشخص نشده است.');
+  }
+  return callBale('sendMessage', buildJsonBody({
+    chat_id: normalizedChatId,
+    text: String(text || ''),
+    parse_mode: options.parseMode,
+    reply_markup: options.replyMarkup,
+    disable_web_page_preview: options.disableWebPagePreview === true ? true : undefined,
+  }));
 }
 
 async function editMessageText(chatId, messageId, text, options = {}) {
@@ -240,6 +292,7 @@ async function sendPhotoByUrl(chatId, fileUrl, caption) {
 
 module.exports = {
   isConfigured,
+  normalizeChatId,
   sendMessage,
   sendDocument,
   sendPhoto,

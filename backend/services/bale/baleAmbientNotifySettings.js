@@ -17,12 +17,13 @@ function isFrotlandAmbientLineType(lineType) {
 
 function normalizeSettings(raw = {}) {
   const chatIdRaw = raw.chatId ?? raw.chat_id;
-  const parsedChatId = chatIdRaw === null || chatIdRaw === undefined || chatIdRaw === ''
-    ? null
-    : Number(chatIdRaw);
+  const chatIdStr =
+    chatIdRaw === null || chatIdRaw === undefined || chatIdRaw === ''
+      ? null
+      : String(chatIdRaw).trim() || null;
   return {
     enabled: raw.enabled === true,
-    chatId: Number.isFinite(parsedChatId) ? parsedChatId : null,
+    chatId: chatIdStr,
     updatedBy: raw.updatedBy || raw.updated_by || null,
     updatedAt: raw.updatedAt || raw.updated_at || null,
   };

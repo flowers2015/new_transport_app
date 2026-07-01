@@ -2096,7 +2096,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     isHandoffAtCarrier
                                 ) {
                                     canTakeAction = false;
-                                    canForward = false;
+                                    const isAmbientPersonalLine =
+                                        ann.lineType === FreightLineType.Ambient ||
+                                        ann.lineType === 'Ambient' ||
+                                        ann.lineType === 'لبنیات-فروتلند';
+                                    const canSwitchCarrierRefer =
+                                        isAmbientPersonalLine &&
+                                        !ann.assignedDriverId &&
+                                        !ann.assignedVehicleId &&
+                                        Boolean(onReferToCarrier);
+                                    canForward = canSwitchCarrierRefer;
                                 }
 
                                 const isAssigned = ann.status === FreightAnnouncementStatus.Assigned || ann.status === 'Assigned';
