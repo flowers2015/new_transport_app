@@ -74,9 +74,8 @@ const AmbientBaleNotifySettings: React.FC<Props> = ({ currentUser }) => {
         }),
       });
       if (!res.ok) throw new Error(await readApiError(res));
-      const data = (await res.json()) as AmbientNotifySettings;
-      setSettings(data);
       setMessage('تنظیمات ذخیره شد.');
+      await loadSettings();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در ذخیره');
     } finally {

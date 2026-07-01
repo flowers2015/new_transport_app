@@ -7,7 +7,14 @@ const path = require('path');
 const BALE_API_BASE = 'https://tapi.bale.ai/bot';
 
 function getToken() {
-  return String(process.env.BALE_BOT_TOKEN || '').trim();
+  let token = String(process.env.BALE_BOT_TOKEN || '').trim();
+  if (
+    (token.startsWith('"') && token.endsWith('"')) ||
+    (token.startsWith("'") && token.endsWith("'"))
+  ) {
+    token = token.slice(1, -1).trim();
+  }
+  return token;
 }
 
 function isConfigured() {

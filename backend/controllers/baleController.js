@@ -609,24 +609,30 @@ async function sendCompanyReportToBale(req, res) {
   }
 }
 
+async function resolveBaleBotStatus() {
+  const configured = baleApi.isConfigured();
+  if (!configured) {
+    return { botConfigured: false, bot: null, botError: null };
+  }
+  try {
+    const bot = await baleApi.getMe();
+    return { botConfigured: true, bot, botError: null };
+  } catch (error) {
+    return {
+      botConfigured: true,
+      bot: null,
+      botError: error.message || 'getMe ناموفق',
+    };
+  }
+}
+
 async function getAmbientNotifySettingsHandler(req, res) {
   try {
-    const baleApi = require('../services/bale/baleApi');
     const settings = await getAmbientNotifySettings();
-    let bot = null;
-    let botError = null;
-    if (baleApi.isConfigured()) {
-      try {
-        bot = await baleApi.getMe();
-      } catch (e) {
-        botError = e.message;
-      }
-    }
+    const botStatus = await resolveBaleBotStatus();
     res.json({
       ...settings,
-      botConfigured: baleApi.isConfigured(),
-      bot,
-      botError,
+      ...botStatus,
     });
   } catch (error) {
     console.error('❌ [bale] getAmbientNotifySettings:', error);
@@ -668,9 +674,10 @@ async function updateAmbientNotifySettingsHandler(req, res) {
       chatId: chatId === undefined ? undefined : parsedChatId,
       updatedBy,
     });
+    const botStatus = await resolveBaleBotStatus();
     res.json({
       ...settings,
-      botConfigured: require('../services/bale/baleApi').isConfigured(),
+      ...botStatus,
     });
   } catch (error) {
     console.error('❌ [bale] updateAmbientNotifySettings:', error);
