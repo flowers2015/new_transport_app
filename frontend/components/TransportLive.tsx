@@ -275,6 +275,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [pendingSubLine, setPendingSubLine] = useState<FreightLineType>(FreightLineType.Dairy);
     const [pendingDayOffset, setPendingDayOffset] = useState(0);
     const prevActiveLineRef = useRef<TransportLiveTab | null>(null);
+    const pendingSubLineUserPickedRef = useRef(false);
     const isTransportUser = isTransportRole(currentUser.role);
     const isCompanyTransportUser =
         currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
@@ -715,16 +716,28 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [pendingForSubLine]);
 
     useEffect(() => {
-        const wasPending = prevActiveLineRef.current != null && isPendingBillOfLadingTab(prevActiveLineRef.current);
-        const isPending = isPendingBillOfLadingTab(activeLine);
+        const prev = prevActiveLineRef.current;
         prevActiveLineRef.current = activeLine;
 
-        if (!isPending || wasPending) return;
+        const enteredPending =
+            isPendingBillOfLadingTab(activeLine) &&
+            (prev == null || !isPendingBillOfLadingTab(prev));
 
-        const firstLineWithData = Object.values(FreightLineType).find((line) => pendingLineCounts[line] > 0);
+        if (!enteredPending) return;
+
+        pendingSubLineUserPickedRef.current = false;
+        const firstLineWithData = Object.values(FreightLineType).find(
+            (line) => pendingBolAnnouncements.filter((a) => matchesFreightLine(a, line)).length > 0
+        );
         setPendingSubLine(firstLineWithData ?? FreightLineType.Dairy);
         setPendingDayOffset(0);
-    }, [activeLine, pendingLineCounts]);
+    }, [activeLine, pendingBolAnnouncements]);
+
+    const handlePendingSubLineClick = useCallback((line: FreightLineType) => {
+        pendingSubLineUserPickedRef.current = true;
+        setPendingSubLine(line);
+        setPendingDayOffset(0);
+    }, []);
 
     useEffect(() => {
         if (!isPendingBillOfLadingTab(activeLine)) return;
@@ -1719,10 +1732,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         <button
                                             key={`pending-line-${line}`}
                                             type="button"
-                                            onClick={() => {
-                                                setPendingSubLine(line);
-                                                setPendingDayOffset(0);
-                                            }}
+                                            onClick={() => handlePendingSubLineClick(line)}
                                             className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${
                                                 pendingSubLine === line
                                                     ? 'bg-amber-600 text-white shadow'
@@ -1996,7 +2006,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         className="p-8 text-center text-slate-500"
                                     >
                                         {filteredAnnouncements.length === 0
-                                            ? 'موردی یافت نشد.'
+                                            ? isPendingBillOfLadingTab(activeLine)
+                                                ? `موردی برای «${pendingSubLine}» در انتظار بارنامه نیست.`
+                                                : 'موردی یافت نشد.'
                                             : 'هیچ ردیفی با فیلترهای فعلی مطابقت ندارد.'}
                                     </td>
                                 </tr>
