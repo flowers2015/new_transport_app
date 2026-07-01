@@ -22,15 +22,21 @@ router.get('/sse', authenticateSSE, (req, res) => {
   }
 
   // تنظیمات SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // برای NGINX
+
+  // شروع stream قبل از addSSEClient تا nginx/proxy بلافاصله connection را نگه دارد
+  res.write(': connected\n\n');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
 
   // اضافه کردن client به service
   realtimeService.addSSEClient(userId, res);
 
-  // ارسال heartbeat هر 30 ثانیه برای نگه داشتن connection
+  // ارسال heartbeat هر 25 ثانیه (کمتر از proxy_read_timeout پیش‌فرض nginx)
   const heartbeatInterval = setInterval(() => {
     try {
       res.write(': heartbeat\n\n');
@@ -38,12 +44,11 @@ router.get('/sse', authenticateSSE, (req, res) => {
       clearInterval(heartbeatInterval);
       realtimeService.removeSSEClient(userId, res);
     }
-  }, 30000);
+  }, 25000);
 
-  // Cleanup وقتی connection بسته می‌شود
+  // Cleanup وقتی connection بسته می‌شود (حذف client در realtimeService.addSSEClient انجام می‌شود)
   res.on('close', () => {
     clearInterval(heartbeatInterval);
-    realtimeService.removeSSEClient(userId, res);
   });
 });
 

@@ -59,8 +59,11 @@ const app = express();
 app.use(compression({
   level: 6, // سطح فشرده‌سازی (1-9، 6 بهینه است)
   filter: (req, res) => {
-    // فقط JSON و text را فشرده کن
     if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // SSE با compression و chunked encoding پشت nginx قطع می‌شود
+    if (req.path && String(req.path).includes('/realtime/sse')) {
       return false;
     }
     return compression.filter(req, res);

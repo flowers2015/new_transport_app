@@ -51,18 +51,6 @@ export interface UseRealtimeUpdatesOptions {
 
 /**
  * Hook برای اتصال به Real-Time Updates
- * 
- * @example
- * ```tsx
- * useRealtimeUpdates({
- *   onMessage: (message) => {
- *     if (message.type === 'announcement_update') {
- *       // به‌روزرسانی اعلام بار
- *       refreshAnnouncements();
- *     }
- *   }
- * });
- * ```
  */
 export const useRealtimeUpdates = ({
   onMessage,
@@ -74,10 +62,41 @@ export const useRealtimeUpdates = ({
 }: UseRealtimeUpdatesOptions = {}) => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
-  const reconnectDelay = 3000; // 3 seconds
+  const reconnectDelay = 3000;
+
+  const onMessageRef = useRef(onMessage);
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+    onConnectRef.current = onConnect;
+    onDisconnectRef.current = onDisconnect;
+    onErrorRef.current = onError;
+  });
+
+  const clearReconnectTimeout = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleReconnect = useCallback((connectFn: () => void) => {
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      onErrorRef.current?.(new Error('Max reconnect attempts reached'));
+      return;
+    }
+    reconnectAttemptsRef.current += 1;
+    const delay = reconnectDelay * Math.pow(2, reconnectAttemptsRef.current - 1);
+    reconnectTimeoutRef.current = setTimeout(() => {
+      connectFn();
+    }, delay);
+  }, []);
 
   const connectSSE = useCallback(() => {
     if (!enabled) {
@@ -90,12 +109,11 @@ export const useRealtimeUpdates = ({
     }
 
     try {
-      // بستن connection قبلی اگر وجود دارد
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
 
-      // EventSource نمی‌تواند header ارسال کند، پس token را در query parameter می‌فرستیم
       const url = `${getApiUrl('realtime/sse')}?token=${encodeURIComponent(token)}`;
       const eventSource = new EventSource(url, {
         withCredentials: true
@@ -103,67 +121,48 @@ export const useRealtimeUpdates = ({
 
       eventSource.onopen = () => {
         reconnectAttemptsRef.current = 0;
-        onConnect?.();
+        onConnectRef.current?.();
       };
 
       eventSource.onmessage = (event) => {
         try {
           const message: RealtimeMessage = JSON.parse(event.data);
-          onMessage?.(message);
-        } catch (error) {
-          // Silent error handling
+          onMessageRef.current?.(message);
+        } catch {
+          // ignore heartbeat / malformed payloads
         }
       };
 
-      eventSource.onerror = (error) => {
-        console.error('❌ [useRealtimeUpdates] SSE error:', error);
-        
-        // اگر connection بسته شد، reconnect کن
+      eventSource.onerror = () => {
         if (eventSource.readyState === EventSource.CLOSED) {
-          eventSourceRef.current = null;
-          onDisconnect?.();
-          
-          // Reconnect با exponential backoff
-          if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-            reconnectAttemptsRef.current++;
-            const delay = reconnectDelay * Math.pow(2, reconnectAttemptsRef.current - 1);
-            console.log(`🔄 [useRealtimeUpdates] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
-            
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connectSSE();
-            }, delay);
-          } else {
-            console.error('❌ [useRealtimeUpdates] Max reconnect attempts reached');
-            onError?.(new Error('Max reconnect attempts reached'));
+          if (eventSourceRef.current === eventSource) {
+            eventSourceRef.current = null;
           }
-        } else {
-          onError?.(new Error('SSE connection error'));
+          onDisconnectRef.current?.();
+          scheduleReconnect(connectSSE);
         }
       };
 
       eventSourceRef.current = eventSource;
     } catch (error) {
-      console.error('❌ [useRealtimeUpdates] Error creating SSE connection:', error);
-      onError?.(error as Error);
+      onErrorRef.current?.(error as Error);
     }
-  }, [enabled, onMessage, onConnect, onDisconnect, onError]);
+  }, [enabled, scheduleReconnect]);
 
   const connectWebSocket = useCallback(() => {
     if (!enabled) return;
 
     const token = localStorage.getItem('token');
     if (!token) {
-      console.warn('⚠️ [useRealtimeUpdates] No token found, skipping WebSocket connection');
       return;
     }
 
     try {
-      // بستن connection قبلی اگر وجود دارد
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
 
-      // ساخت WebSocket URL
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
       const wsUrl = `${protocol}//${host}/api/v1/realtime/ws?token=${token}`;
@@ -171,56 +170,39 @@ export const useRealtimeUpdates = ({
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('✅ [useRealtimeUpdates] WebSocket connected');
         reconnectAttemptsRef.current = 0;
-        onConnect?.();
+        onConnectRef.current?.();
       };
 
       ws.onmessage = (event) => {
         try {
           const message: RealtimeMessage = JSON.parse(event.data);
-          console.log('📨 [useRealtimeUpdates] Received message:', message);
-          onMessage?.(message);
-        } catch (error) {
-          console.error('❌ [useRealtimeUpdates] Error parsing message:', error);
+          onMessageRef.current?.(message);
+        } catch {
+          // ignore malformed payloads
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('❌ [useRealtimeUpdates] WebSocket error:', error);
-        onError?.(new Error('WebSocket connection error'));
+      ws.onerror = () => {
+        onErrorRef.current?.(new Error('WebSocket connection error'));
       };
 
       ws.onclose = () => {
-        console.log('❌ [useRealtimeUpdates] WebSocket closed');
-        wsRef.current = null;
-        onDisconnect?.();
-        
-        // Reconnect با exponential backoff
-        if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-          reconnectAttemptsRef.current++;
-          const delay = reconnectDelay * Math.pow(2, reconnectAttemptsRef.current - 1);
-          console.log(`🔄 [useRealtimeUpdates] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connectWebSocket();
-          }, delay);
-        } else {
-          console.error('❌ [useRealtimeUpdates] Max reconnect attempts reached');
-          onError?.(new Error('Max reconnect attempts reached'));
+        if (wsRef.current === ws) {
+          wsRef.current = null;
         }
+        onDisconnectRef.current?.();
+        scheduleReconnect(connectWebSocket);
       };
 
       wsRef.current = ws;
     } catch (error) {
-      console.error('❌ [useRealtimeUpdates] Error creating WebSocket connection:', error);
-      onError?.(error as Error);
+      onErrorRef.current?.(error as Error);
     }
-  }, [enabled, onMessage, onConnect, onDisconnect, onError]);
+  }, [enabled, scheduleReconnect]);
 
   useEffect(() => {
     if (!enabled) {
-      // بستن connections اگر disabled است
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -229,22 +211,18 @@ export const useRealtimeUpdates = ({
         wsRef.current.close();
         wsRef.current = null;
       }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
+      clearReconnectTimeout();
       return;
     }
 
-    // اتصال به SSE یا WebSocket
     if (useWebSocket) {
       connectWebSocket();
     } else {
       connectSSE();
     }
 
-    // Cleanup
     return () => {
+      clearReconnectTimeout();
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -253,29 +231,22 @@ export const useRealtimeUpdates = ({
         wsRef.current.close();
         wsRef.current = null;
       }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
     };
-  }, [enabled, useWebSocket, connectSSE, connectWebSocket]);
+  }, [enabled, useWebSocket, connectSSE, connectWebSocket, clearReconnectTimeout]);
 
-  // Reconnect وقتی صفحه visible می‌شود
   useEffect(() => {
     if (!enabled) return;
 
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // اگر connection بسته شده، reconnect کن
-        if (useWebSocket) {
-          if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-            connectWebSocket();
-          }
-        } else {
-          if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
-            connectSSE();
-          }
+      if (document.hidden) return;
+      if (useWebSocket) {
+        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+          reconnectAttemptsRef.current = 0;
+          connectWebSocket();
         }
+      } else if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
+        reconnectAttemptsRef.current = 0;
+        connectSSE();
       }
     };
 
@@ -285,4 +256,3 @@ export const useRealtimeUpdates = ({
     };
   }, [enabled, useWebSocket, connectSSE, connectWebSocket]);
 };
-
