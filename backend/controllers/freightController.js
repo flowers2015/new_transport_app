@@ -2147,6 +2147,16 @@ async function assignPersonalDriverAndVehicle(req, res) {
       console.error('❌ [assignPersonalDriverAndVehicle] Error sending realtime notification:', realtimeError);
     }
 
+    setImmediate(() => {
+      const { notifyAssignmentAfterCommit } = require('../services/bale/baleAmbientAssignmentNotify');
+      notifyAssignmentAfterCommit(announcementId, {
+        isCarrierUser,
+        isReassignment,
+      }).catch((err) => {
+        console.error('⚠️ [assignPersonalDriverAndVehicle] Bale notify error:', err.message);
+      });
+    });
+
     res.json({
       message: 'Assignment successful.',
       announcement: {
@@ -7386,10 +7396,15 @@ async function cancelAssignment(req, res) {
 
     // قفل رکورد اعلام بار
     const { rows } = await client.query(
-      `SELECT id, announcement_code, status, assignment_type, assigned_driver_id, assigned_vehicle_id, total_freight_cost
-       FROM freight_announcements
-       WHERE id = $1
-       FOR UPDATE`,
+      `SELECT fa.id, fa.announcement_code, fa.status, fa.assignment_type,
+              fa.assigned_driver_id, fa.assigned_vehicle_id, fa.total_freight_cost,
+              fa.line_type, fa.vehicle_type, fa.brand, fa.origin_city, fa.cargo_value,
+              fa.carrier_name, fa.assigned_driver_name, fa.bill_of_lading_number, fa.vehicle_plate,
+              pd.name AS personal_driver_name, pd.mobile AS personal_driver_mobile
+       FROM freight_announcements fa
+       LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
+       WHERE fa.id = $1
+       FOR UPDATE OF fa`,
       [announcementId]
     );
     if (rows.length === 0) {
@@ -7401,6 +7416,30 @@ async function cancelAssignment(req, res) {
     const oldDriverId = ann.assigned_driver_id || null;
     const oldVehicleId = ann.assigned_vehicle_id || null;
     const oldTotalFreightCost = ann.total_freight_cost || null;
+
+    const destSnapshotRows = await client.query(
+      `SELECT city FROM freight_destinations
+       WHERE freight_announcement_id = $1
+       ORDER BY created_at ASC`,
+      [announcementId]
+    );
+    const baleCancelSnapshot = {
+      had_assignment: Boolean(oldDriverId),
+      announcement_code: ann.announcement_code,
+      line_type: ann.line_type,
+      vehicle_type: ann.vehicle_type,
+      brand: ann.brand,
+      origin_city: ann.origin_city,
+      cargo_value: ann.cargo_value,
+      total_freight_cost: ann.total_freight_cost,
+      carrier_name: ann.carrier_name,
+      assigned_driver_name: ann.assigned_driver_name,
+      bill_of_lading_number: ann.bill_of_lading_number,
+      vehicle_plate: ann.vehicle_plate,
+      personal_driver_name: ann.personal_driver_name,
+      personal_driver_mobile: ann.personal_driver_mobile,
+      destination_cities: destSnapshotRows.rows.map((r) => r.city).filter(Boolean).join('، ') || '—',
+    };
 
     const { restoreDriversFromCancelledAssignment } = require('./dispatchController');
     const queueRestoreResults = await restoreDriversFromCancelledAssignment(
@@ -7524,6 +7563,13 @@ async function cancelAssignment(req, res) {
     } catch (realtimeError) {
       console.warn('⚠️ [freight] cancel realtime notify skipped:', realtimeError.message);
     }
+
+    setImmediate(() => {
+      const { notifyCancelAfterCommit } = require('../services/bale/baleAmbientAssignmentNotify');
+      notifyCancelAfterCommit(announcementId, baleCancelSnapshot).catch((err) => {
+        console.warn('⚠️ [freight] Bale cancel notify error:', err.message);
+      });
+    });
 
     return res.status(200).json({
       message,

@@ -44,4 +44,23 @@ router.post(
   baleController.sendCompanyReportToBale
 );
 
+router.get(
+  '/settings/ambient-notify',
+  authenticateToken,
+  authorizeRole(baleController.ambientNotifyRoles),
+  baleController.getAmbientNotifySettingsHandler
+);
+router.put(
+  '/settings/ambient-notify',
+  authenticateToken,
+  authorizeRole(baleController.ambientNotifyRoles),
+  baleController.updateAmbientNotifySettingsHandler
+);
+router.post(
+  '/settings/ambient-notify/test',
+  authenticateToken,
+  authorizeRole(baleController.ambientNotifyRoles),
+  baleController.testAmbientNotifyHandler
+);
+
 module.exports = router;

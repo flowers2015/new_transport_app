@@ -14,6 +14,13 @@ const {
   getCategoryQueueCounts,
 } = require('../services/bale/baleCategoryChannels');
 const { sendCompanyReport } = require('../services/bale/baleReportService');
+const {
+  getAmbientNotifySettings,
+  setAmbientNotifySettings,
+} = require('../services/bale/baleAmbientNotifySettings');
+const { sendTestAmbientMessage } = require('../services/bale/baleAmbientAssignmentNotify');
+
+const ambientNotifyRoles = ['personal_transport_user', 'admin'];
 
 const companyTransportRoles = [
   'transport_user',
@@ -602,11 +609,86 @@ async function sendCompanyReportToBale(req, res) {
   }
 }
 
+async function getAmbientNotifySettingsHandler(req, res) {
+  try {
+    const settings = await getAmbientNotifySettings();
+    res.json({
+      ...settings,
+      botConfigured: require('../services/bale/baleApi').isConfigured(),
+    });
+  } catch (error) {
+    console.error('❌ [bale] getAmbientNotifySettings:', error);
+    res.status(500).json({ message: 'خطا در خواندن تنظیمات اعلان فروتلند' });
+  }
+}
+
+async function updateAmbientNotifySettingsHandler(req, res) {
+  const { enabled, chatId } = req.body || {};
+  const userId = req.user?.userId || req.user?.id;
+  let updatedBy = req.user?.username || null;
+  if (userId) {
+    try {
+      const userRow = await pool.query(
+        `SELECT username, COALESCE(full_name, name) AS display_name FROM users WHERE id = $1`,
+        [userId]
+      );
+      if (userRow.rows[0]) {
+        const { username, display_name: displayName } = userRow.rows[0];
+        updatedBy = displayName ? `${username} - ${displayName}` : username;
+      }
+    } catch {
+      // keep username from token
+    }
+  }
+  try {
+    const parsedChatId =
+      chatId === null || chatId === undefined || chatId === ''
+        ? null
+        : Number(chatId);
+    if (chatId !== null && chatId !== undefined && chatId !== '' && !Number.isFinite(parsedChatId)) {
+      return res.status(400).json({ message: 'شناسه گروه (chat_id) نامعتبر است.' });
+    }
+    const settings = await setAmbientNotifySettings({
+      enabled: enabled === undefined ? undefined : enabled === true,
+      chatId: chatId === undefined ? undefined : parsedChatId,
+      updatedBy,
+    });
+    res.json({
+      ...settings,
+      botConfigured: require('../services/bale/baleApi').isConfigured(),
+    });
+  } catch (error) {
+    console.error('❌ [bale] updateAmbientNotifySettings:', error);
+    res.status(500).json({ message: 'خطا در ذخیره تنظیمات اعلان فروتلند' });
+  }
+}
+
+async function testAmbientNotifyHandler(req, res) {
+  try {
+    const result = await sendTestAmbientMessage();
+    if (result.skipped) {
+      const reason =
+        result.reason === 'bot_not_configured'
+          ? 'توکن ربات بله (BALE_BOT_TOKEN) روی سرور تنظیم نشده است.'
+          : 'اعلان غیرفعال است یا chat_id گروه ثبت نشده است.';
+      return res.status(400).json({ message: reason });
+    }
+    res.json({ message: 'پیام تست به گروه ارسال شد.', chatId: result.chatId });
+  } catch (error) {
+    console.error('❌ [bale] testAmbientNotify:', error);
+    res.status(400).json({ message: error.message || 'خطا در ارسال پیام تست' });
+  }
+}
+
 module.exports = {
   webhook,
   getStatus,
   updateRuntimeSettings,
   updateChannel,
+  ambientNotifyRoles,
+  getAmbientNotifySettingsHandler,
+  updateAmbientNotifySettingsHandler,
+  testAmbientNotifyHandler,
   listDriverOutreach,
   upsertDriverOutreach,
   seedTestDrivers,
