@@ -57,6 +57,7 @@ const CentralFinanceContainer = React.lazy(() => import('./components/CentralFin
 const FreightPlanningContainer = React.lazy(() => import('./components/FreightPlanningContainer'));
 const TransportFinanceContainer = React.lazy(() => import('./components/TransportFinanceContainer'));
 const AuditTrailView = React.lazy(() => import('./components/AuditTrailView'));
+const UserManagement = React.lazy(() => import('./components/UserManagement'));
 const CustomerManagement = React.lazy(() => import('./components/CustomerManagement'));
 const CarrierManagement = React.lazy(() => import('./components/CarrierManagement'));
 const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
