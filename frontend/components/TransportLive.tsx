@@ -274,6 +274,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [baleReportOpen, setBaleReportOpen] = useState(false);
     const [pendingSubLine, setPendingSubLine] = useState<FreightLineType>(FreightLineType.Dairy);
     const [pendingDayOffset, setPendingDayOffset] = useState(0);
+    const prevActiveLineRef = useRef<TransportLiveTab | null>(null);
     const isTransportUser = isTransportRole(currentUser.role);
     const isCompanyTransportUser =
         currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
@@ -714,12 +715,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [pendingForSubLine]);
 
     useEffect(() => {
-        if (!isPendingBillOfLadingTab(activeLine)) return;
+        const wasPending = prevActiveLineRef.current != null && isPendingBillOfLadingTab(prevActiveLineRef.current);
+        const isPending = isPendingBillOfLadingTab(activeLine);
+        prevActiveLineRef.current = activeLine;
+
+        if (!isPending || wasPending) return;
+
         const firstLineWithData = Object.values(FreightLineType).find((line) => pendingLineCounts[line] > 0);
-        if (firstLineWithData && pendingLineCounts[pendingSubLine] === 0) {
-            setPendingSubLine(firstLineWithData);
-        }
-    }, [activeLine, pendingLineCounts, pendingSubLine]);
+        setPendingSubLine(firstLineWithData ?? FreightLineType.Dairy);
+        setPendingDayOffset(0);
+    }, [activeLine, pendingLineCounts]);
 
     useEffect(() => {
         if (!isPendingBillOfLadingTab(activeLine)) return;
@@ -733,7 +738,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         let list: FreightAnnouncement[];
         if (isPendingBillOfLadingTab(activeLine)) {
             list = pendingBolAnnouncements.filter((a) => matchesFreightLine(a, pendingSubLine));
-            list = list.filter((a) => getPendingBillAgeDays(a) === pendingDayOffset);
+            if (pendingDayTabs.length > 0) {
+                list = list.filter((a) => getPendingBillAgeDays(a) === pendingDayOffset);
+            }
         } else {
             list = liveAnnouncements.filter(
                 (a) => matchesFreightLine(a, activeLine as FreightLineType) && !isPendingBillOfLading(a)
@@ -743,7 +750,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             list = sortByIceCreamDisplayOrder(list);
         }
         return list;
-    }, [liveAnnouncements, activeLine, pendingBolAnnouncements, pendingSubLine, pendingDayOffset]);
+    }, [liveAnnouncements, activeLine, pendingBolAnnouncements, pendingSubLine, pendingDayOffset, pendingDayTabs]);
 
     const canFinalizeCurrentTab = useMemo(() => {
         if (currentUser.role === 'ادمین' || currentUser.role === 'Admin') return true;
@@ -1712,7 +1719,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         <button
                                             key={`pending-line-${line}`}
                                             type="button"
-                                            onClick={() => setPendingSubLine(line)}
+                                            onClick={() => {
+                                                setPendingSubLine(line);
+                                                setPendingDayOffset(0);
+                                            }}
                                             className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${
                                                 pendingSubLine === line
                                                     ? 'bg-amber-600 text-white shadow'
