@@ -171,6 +171,10 @@ interface TransportLiveProps {
     currentUser: User;
     activeLine: TransportLiveTab;
     setActiveLine: (line: TransportLiveTab) => void;
+    pendingSubLine: FreightLineType;
+    setPendingSubLine: (line: FreightLineType) => void;
+    pendingDayOffset: number;
+    setPendingDayOffset: (day: number) => void;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
@@ -254,7 +258,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, finalizePermissions = {} } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {} } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -272,10 +276,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [baleReportOpen, setBaleReportOpen] = useState(false);
-    const [pendingSubLine, setPendingSubLine] = useState<FreightLineType>(FreightLineType.Dairy);
-    const [pendingDayOffset, setPendingDayOffset] = useState(0);
-    const prevActiveLineRef = useRef<TransportLiveTab | null>(null);
-    const pendingSubLineUserPickedRef = useRef(false);
     const isTransportUser = isTransportRole(currentUser.role);
     const isCompanyTransportUser =
         currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
@@ -715,29 +715,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return Array.from(days).sort((a, b) => a - b);
     }, [pendingForSubLine]);
 
-    useEffect(() => {
-        const prev = prevActiveLineRef.current;
-        prevActiveLineRef.current = activeLine;
-
-        const enteredPending =
-            isPendingBillOfLadingTab(activeLine) &&
-            (prev == null || !isPendingBillOfLadingTab(prev));
-
-        if (!enteredPending) return;
-
-        pendingSubLineUserPickedRef.current = false;
-        const firstLineWithData = Object.values(FreightLineType).find(
-            (line) => pendingBolAnnouncements.filter((a) => matchesFreightLine(a, line)).length > 0
-        );
-        setPendingSubLine(firstLineWithData ?? FreightLineType.Dairy);
-        setPendingDayOffset(0);
-    }, [activeLine, pendingBolAnnouncements]);
-
-    const handlePendingSubLineClick = useCallback((line: FreightLineType) => {
-        pendingSubLineUserPickedRef.current = true;
-        setPendingSubLine(line);
-        setPendingDayOffset(0);
-    }, []);
+    const handlePendingSubLineClick = useCallback(
+        (line: FreightLineType) => {
+            setPendingSubLine(line);
+        },
+        [setPendingSubLine]
+    );
 
     useEffect(() => {
         if (!isPendingBillOfLadingTab(activeLine)) return;
@@ -1732,6 +1715,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         <button
                                             key={`pending-line-${line}`}
                                             type="button"
+                                            aria-pressed={pendingSubLine === line}
                                             onClick={() => handlePendingSubLineClick(line)}
                                             className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${
                                                 pendingSubLine === line

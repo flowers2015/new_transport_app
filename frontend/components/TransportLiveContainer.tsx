@@ -23,6 +23,8 @@ import {
     isReturnedFromCarrier,
     buildFreightReferSummary,
     formatPersianGroupedNumber,
+    matchesFreightLine,
+    isPendingBillOfLading,
 } from '../utils/freightDisplay';
 
 const dedupeAnnouncementsById = (items: FreightAnnouncement[]): FreightAnnouncement[] => {
@@ -50,10 +52,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const [personalDrivers, setPersonalDrivers] = useState<PersonalDriver[]>([]);
     const [personalVehicles, setPersonalVehicles] = useState<PersonalVehicle[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeLine, setActiveLine] = useState<TransportLiveTab>(
         currentUser?.role === UserRole.CarrierUser ? FreightLineType.Ambient : FreightLineType.IceCream
     );
+    const [pendingSubLine, setPendingSubLine] = useState<FreightLineType>(FreightLineType.Dairy);
+    const [pendingDayOffset, setPendingDayOffset] = useState(0);
+    const pendingSubLineUserPickedRef = useRef(false);
+    const prevActiveLineRef = useRef<TransportLiveTab | null>(null);
     const [carriers, setCarriers] = useState<Array<{ id: string; name: string; active: boolean; hasLoginUser?: boolean }>>([]);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
     const [sseConnected, setSseConnected] = useState(false);
@@ -105,7 +113,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     const fetchData = useCallback(async (silent: boolean = false, includePersonal: boolean = false, forceRefresh: boolean = false) => {
             if (!silent) {
-                setLoading(true);
+                if (hasLoadedOnce) {
+                    setRefreshing(true);
+                } else {
+                    setLoading(true);
+                }
                 setError(null);
             }
             try {
@@ -335,6 +347,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 // نمایش سریع جدول — قبل از لود personal (برای اکثر کاربران ترابری)
                 if (!silent) {
                     setLoading(false);
+                    setRefreshing(false);
+                    setHasLoadedOnce(true);
                 }
 
                 if (shouldLoadPersonal) {
@@ -351,9 +365,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             } finally {
                 if (!silent) {
                     setLoading(false);
+                    setRefreshing(false);
+                    setHasLoadedOnce(true);
                 }
             }
-        }, [currentUser]);
+        }, [currentUser, hasLoadedOnce]);
 
     // State برای track کردن اینکه آیا personal resources نیاز است یا نه
     const [needsPersonalResources, setNeedsPersonalResources] = useState(false);
@@ -461,6 +477,31 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             checkAllPermissions();
         }
     }, [checkFinalizePermission, currentUser]);
+
+    useEffect(() => {
+        const prev = prevActiveLineRef.current;
+        prevActiveLineRef.current = activeLine;
+
+        const enteredPending =
+            isPendingBillOfLadingTab(activeLine) &&
+            (prev == null || !isPendingBillOfLadingTab(prev));
+
+        if (!enteredPending) return;
+
+        pendingSubLineUserPickedRef.current = false;
+        const pending = announcements.filter(isPendingBillOfLading);
+        const firstLineWithData = Object.values(FreightLineType).find(
+            (line) => pending.filter((a) => matchesFreightLine(a, line)).length > 0
+        );
+        setPendingSubLine(firstLineWithData ?? FreightLineType.Dairy);
+        setPendingDayOffset(0);
+    }, [activeLine, announcements]);
+
+    const handlePendingSubLineChange = useCallback((line: FreightLineType) => {
+        pendingSubLineUserPickedRef.current = true;
+        setPendingSubLine(line);
+        setPendingDayOffset(0);
+    }, []);
 
     // اتصال به Real-Time Updates (SSE)
     useRealtimeUpdates({
@@ -1491,11 +1532,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     }, [currentUser.role]);
 
     // Early returns بعد از همه hooks
-    if (loading) return <div className="text-center p-8">در حال بارگذاری...</div>;
-    if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
+    if (loading && !hasLoadedOnce) return <div className="text-center p-8">در حال بارگذاری...</div>;
+    if (error && !hasLoadedOnce) return <div className="text-center p-8 text-red-500">{error}</div>;
 
     return (
         <>
+            {refreshing && (
+                <div className="fixed inset-x-0 top-0 z-50 flex justify-center pointer-events-none">
+                    <div className="mt-2 px-4 py-2 rounded-lg bg-sky-700 text-white text-sm shadow-lg">
+                        در حال به‌روزرسانی...
+                    </div>
+                </div>
+            )}
             <TransportLive
                 announcements={announcements}
                 vehicles={vehicles}
@@ -1518,10 +1566,14 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onChangeVehicleType={onChangeVehicleType}
                 onOpenHistory={onOpenHistory}
                 onOpenAssignmentDialog={onOpenAssignmentDialog}
-                onRefresh={() => fetchData(false, needsPersonalResources, true)}
+                onRefresh={() => fetchData(true, needsPersonalResources, true)}
                 currentUser={currentUser}
                 activeLine={activeLine}
                 setActiveLine={setActiveLine}
+                pendingSubLine={pendingSubLine}
+                setPendingSubLine={handlePendingSubLineChange}
+                pendingDayOffset={pendingDayOffset}
+                setPendingDayOffset={setPendingDayOffset}
                 finalizePermissions={finalizePermissions}
             />
             {historyDialog && (
