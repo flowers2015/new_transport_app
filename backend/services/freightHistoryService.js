@@ -260,6 +260,8 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       assigned_vehicle_id: 'خودرو',
       totalFreightCost: 'کرایه کل',
       total_freight_cost: 'کرایه کل',
+      tariff_freight_cost: 'کرایه تعرفه',
+      tariffFreightCost: 'کرایه تعرفه',
       billOfLadingNumber: 'شماره بارنامه',
       bill_of_lading_number: 'شماره بارنامه',
       assignmentType: 'صف تخصیص',

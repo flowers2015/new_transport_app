@@ -1,7 +1,20 @@
 // This is a new file: components/TransportLive.tsx
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
-import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, formatPlateNumber, splitJalaliDateTime } from '../utils/jalali';
+
+const renderAnnouncementDateTimeCell = (createdAt: Date | string | null | undefined) => {
+    const parts = splitJalaliDateTime(createdAt);
+    if (!parts) {
+        return <span className="text-xs">{formatJalaliDateTime(createdAt)}</span>;
+    }
+    return (
+        <div className="flex flex-col items-center justify-center leading-tight gap-0.5 min-w-[4.75rem] py-0.5">
+            <span className="text-xs whitespace-nowrap">{parts.date}</span>
+            <span className="text-[10px] text-slate-500 tabular-nums whitespace-nowrap">{parts.time}</span>
+        </div>
+    );
+};
 import {
     getDestinationCitiesLabel,
     getRepresentativeNameLabel,
@@ -19,6 +32,10 @@ import {
     isDairyOrAmbientLineType,
     parseNumericField,
     formatTonnageKg,
+    buildTariffFreightColumns,
+    isPersonalTransportViewerRole,
+    TARIFF_FREIGHT_HEADER,
+    TARIFF_DIFF_HEADER,
 } from '../utils/freightDisplay';
 import {
     ColumnFiltersState,
@@ -130,6 +147,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const filterStorageKey = useMemo(
         () => freightHistoryFilterStorageKey(currentUser.id, activeLine, viewMode),
         [currentUser.id, activeLine, viewMode]
+    );
+    const isPersonalTransportUser = isPersonalTransportViewerRole(currentUser.role);
+    const personalTariffColumns = useMemo(
+        () => (isPersonalTransportUser ? buildTariffFreightColumns() : []),
+        [isPersonalTransportUser]
     );
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>({});
     const [quickSearch, setQuickSearch] = useState('');
@@ -254,7 +276,6 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             },
             // { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             { header: 'کارمند اعلام‌کننده', display: () => true, render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
-            { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
             { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
             { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
             { header: 'نوع خودرو', display: () => true, render: (ann: FreightAnnouncement) => ann.vehicleType },
@@ -289,13 +310,13 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 return result;
             }},
             { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
+            ...personalTariffColumns.map((col) => ({ ...col, display: () => true })),
             
             // Ice Cream (فشرده و کامل)
             { header: 'نوع نماینده', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
             { header: 'کارتن', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
             { header: 'پالت', align: 'center', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
             { header: 'محصولات', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
-            { header: 'توضیحات', display: () => true, render: (ann: FreightAnnouncement) => ann.notes || '-' },
             
             // Full View Specific - Dairy/Ambient
             { header: 'ساعت حضور', display: (lt: any) => viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(lt), render: (ann: FreightAnnouncement) => ann.platformArrivalTime },
@@ -348,9 +369,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
             {
                 header: 'تاریخ اعلام بار',
-                render: (ann: FreightAnnouncement) => (
-                    <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span>
-                ),
+                render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
             },
         ],
         []
@@ -435,13 +454,22 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             // Helper to get value for a column header - دقیقاً مطابق با ترتیب headers
             const getValueForHeader = (header: string): any => {
                 // بررسی اینکه آیا این ستون عددی است
-                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
+                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'کرایه تعرفه', 'اختلاف کرایه', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                 const isNumericColumn = numericHeaders.some(h => header.includes(h));
                 
                 // Handle special columns directly - اولویت با اینهاست
                 if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                     const value = ann.totalFreightCost || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
+                }
+                if (header === TARIFF_FREIGHT_HEADER || header.includes('کرایه تعرفه')) {
+                    return ann.tariffFreightCost || 0;
+                }
+                if (header === TARIFF_DIFF_HEADER || header.includes('اختلاف کرایه')) {
+                    const reg = Number(ann.totalFreightCost) || 0;
+                    const tar = Number(ann.tariffFreightCost) || 0;
+                    if (reg <= 0 && tar <= 0) return '';
+                    return reg - tar;
                 }
                 if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
                     const value = ann.cargoValue || 0;
@@ -650,11 +678,20 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 });
 
                 const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
-                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
+                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'کرایه تعرفه', 'اختلاف کرایه', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                     const isNumericColumn = numericHeaders.some((h) => header.includes(h));
 
                     if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                         return ann.totalFreightCost || 0;
+                    }
+                    if (header === TARIFF_FREIGHT_HEADER || header.includes('کرایه تعرفه')) {
+                        return ann.tariffFreightCost || 0;
+                    }
+                    if (header === TARIFF_DIFF_HEADER || header.includes('اختلاف کرایه')) {
+                        const reg = Number(ann.totalFreightCost) || 0;
+                        const tar = Number(ann.tariffFreightCost) || 0;
+                        if (reg <= 0 && tar <= 0) return '';
+                        return reg - tar;
                     }
                     if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
                         return ann.cargoValue || 0;
@@ -841,6 +878,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono whitespace-nowrap">{getAssignedVehiclePlate(ann, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => ann.billOfLadingNumber || '-' },
             { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatFreightAmountCell(ann.totalFreightCost) },
+            ...personalTariffColumns,
             { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
 
@@ -860,9 +898,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'پالت', render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
-                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
-                { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
             ];
             return [...base, ...extraCols];
         }
@@ -893,8 +929,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
             ];
             return [...base, ...extraCols];
         }
@@ -925,8 +960,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalali(ann.loadingDate)}</span> },
+                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
             ];
             return [...base, ...extraCols];
         }
@@ -940,7 +974,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         const colsAll = columnsConfig(viewMode);
         const cols = colsAll.filter(c => c.display(activeLine)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [viewMode, activeLine, props, dairyAmbientFullBase, isDairyOrAmbientTab]);
+    }, [viewMode, activeLine, props, dairyAmbientFullBase, isDairyOrAmbientTab, personalTariffColumns]);
 
     const isFullDairyAmbient = viewMode === 'full' && isDairyOrAmbientTab;
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);

@@ -220,6 +220,14 @@ function numericSortValue(header: string, ann: FreightAnnouncement): number | nu
         case 'کرایه کل (ریال)':
         case 'کرایه کل':
             return ann.totalFreightCost != null ? Number(ann.totalFreightCost) : null;
+        case 'کرایه تعرفه (ریال)':
+            return ann.tariffFreightCost != null ? Number(ann.tariffFreightCost) : null;
+        case 'اختلاف کرایه (ریال)': {
+            const reg = Number(ann.totalFreightCost) || 0;
+            const tar = Number(ann.tariffFreightCost) || 0;
+            if (reg <= 0 && tar <= 0) return null;
+            return reg - tar;
+        }
         case 'کل تناژ (کیلوگرم)':
             return ann.destinations?.reduce((sum, d) => {
                 const t = d.tonnage != null && d.tonnage !== '' ? Number(d.tonnage) : 0;

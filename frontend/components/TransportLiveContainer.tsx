@@ -334,11 +334,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 });
 
                 setAnnouncements((prev) => {
-                    const next = silent
-                        ? filteredAnnouncements.map((ann) =>
-                              mergeAssignmentDisplayFields(ann, prev.find((p) => p.id === ann.id))
-                          )
-                        : filteredAnnouncements;
+                    const next = filteredAnnouncements.map((ann) =>
+                        mergeAssignmentDisplayFields(ann, prev.find((p) => p.id === ann.id))
+                    );
                     return dedupeAnnouncementsById(next);
                 });
                 setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
@@ -729,6 +727,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             assignedDriverContact: assignment.assignedDriverContact,
             assignedVehiclePlate: assignment.assignedVehiclePlate,
             totalFreightCost: assignment.totalFreightCost,
+            tariffFreightCost: assignment.tariffFreightCost,
             billOfLadingNumber: assignment.billOfLadingNumber,
             carrierName: assignment.carrierName,
             notes: assignment.notes
@@ -809,6 +808,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
             // forceRefresh تا کش قدیمی تخصیص را پاک نکند
             fetchDataRef.current(true, shouldIncludePersonal, true);
+
+            if (assignment.assignmentType === 'company') {
+                window.dispatchEvent(new CustomEvent('dispatch-board:update'));
+            }
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             // در صورت خطا، rollback انجام شده است
@@ -1252,8 +1255,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         await fetchData(true, needsPersonalResourcesRef.current, true);
     };
 
-    const onCancelCarrierRefer = async (announcementId: string) => {
-        if (!window.confirm('ارجاع به باربری لغو شود؟')) return;
+    const onCancelCarrierRefer = async (announcementId: string, options?: { skipConfirm?: boolean }) => {
+        if (!options?.skipConfirm && !window.confirm('ارجاع به باربری لغو شود؟')) return;
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/carrier-cancel-refer`), {
@@ -1262,9 +1265,25 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'خطا');
+            setAnnouncements((prev) =>
+                prev.map((ann) =>
+                    ann.id === announcementId
+                        ? {
+                              ...ann,
+                              handoffStatus: null,
+                              handoffCarrierId: undefined,
+                              handoffCarrierName: undefined,
+                              freightCostLockedAt: undefined,
+                              carrierName: undefined,
+                              totalFreightCost: undefined,
+                          }
+                        : ann
+                )
+            );
             await fetchData(true, needsPersonalResourcesRef.current, true);
         } catch (e: any) {
             alert(e?.message || 'خطا در لغو ارجاع');
+            throw e;
         }
     };
 

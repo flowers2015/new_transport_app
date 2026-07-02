@@ -14,42 +14,49 @@ export const formatJalali = (date: Date | string | null | undefined): string => 
     return '-';
 };
 
-export const formatJalaliDateTime = (date: Date | string | null | undefined): string => {
-    if (!date) return '-';
-    
-    // اگر date یک string است (ISO string از backend)، آن را به Date تبدیل کن
+function coerceToDate(date: Date | string | null | undefined): Date | null {
+    if (!date) return null;
+    if (date instanceof Date) {
+        return isNaN(date.getTime()) ? null : date;
+    }
     if (typeof date === 'string') {
+        if (!date.includes('T') && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/.test(date)) {
+            return null;
+        }
         try {
             const dateObj = new Date(date);
-            if (isNaN(dateObj.getTime())) {
-                // اگر تبدیل به Date ناموفق بود، سعی کن به عنوان string شمسی در نظر بگیر
-                // اگر فرمت ISO است (مثلاً "2024-01-01T12:00:00.000Z")، دوباره تلاش کن
-                if (date.includes('T')) {
-                    const dateObj2 = new Date(date);
-                    if (!isNaN(dateObj2.getTime())) {
-                        date = dateObj2;
-                    } else {
-                        return date; // اگر نمی‌توان تبدیل کرد، همان string را برگردان
-                    }
-                } else {
-                    return date; // اگر string شمسی است، همان را برگردان
-                }
-            } else {
-                date = dateObj;
-            }
-        } catch (e) {
-            return date; // در صورت خطا، همان string را برگردان
+            return isNaN(dateObj.getTime()) ? null : dateObj;
+        } catch {
+            return null;
         }
     }
-    
-    // حالا date باید Date object باشد
-    if (!(date instanceof Date)) return '-';
-    
-    const [jy, jm, jd] = gregorianToJalali(date.getFullYear(), date.getMonth() + 1, date.getDate());
-    const hh = pad2(date.getHours());
-    const mm = pad2(date.getMinutes());
-    return `${jy}/${pad2(jm)}/${pad2(jd)} ${hh}:${mm}`;
+    return null;
 }
+
+export const formatJalaliDateTime = (date: Date | string | null | undefined): string => {
+    if (!date) return '-';
+    const dateObj = coerceToDate(date);
+    if (!dateObj) {
+        return typeof date === 'string' ? date : '-';
+    }
+    const [jy, jm, jd] = gregorianToJalali(dateObj.getFullYear(), dateObj.getMonth() + 1, dateObj.getDate());
+    const hh = pad2(dateObj.getHours());
+    const mm = pad2(dateObj.getMinutes());
+    return `${jy}/${pad2(jm)}/${pad2(jd)} ${hh}:${mm}`;
+};
+
+/** تاریخ و ساعت جدا — برای جلوگیری از تداخل در سلول‌های جدول */
+export const splitJalaliDateTime = (
+    date: Date | string | null | undefined
+): { date: string; time: string } | null => {
+    const dateObj = coerceToDate(date);
+    if (!dateObj) return null;
+    const [jy, jm, jd] = gregorianToJalali(dateObj.getFullYear(), dateObj.getMonth() + 1, dateObj.getDate());
+    return {
+        date: `${jy}/${pad2(jm)}/${pad2(jd)}`,
+        time: `${pad2(dateObj.getHours())}:${pad2(dateObj.getMinutes())}`,
+    };
+};
 
 export const formatPlateNumber = (plate?: PlateNumber): string => {
     if (!plate) return '';

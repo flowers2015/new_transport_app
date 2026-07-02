@@ -244,6 +244,11 @@ addCarrierHandoff().catch(err => {
   console.error('❌ [Server] خطا در راه‌اندازی schema باربری:', err);
 });
 
+const addTariffFreightCost = require('./migrations/add_tariff_freight_cost');
+addTariffFreightCost().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون tariff_freight_cost:', err);
+});
+
 const addVehicleCodeColumn = require('./migrations/add_vehicle_code_column');
 addVehicleCodeColumn().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون vehicle_code:', err);

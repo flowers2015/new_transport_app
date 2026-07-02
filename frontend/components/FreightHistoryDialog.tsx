@@ -202,6 +202,8 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
         notes: 'توضیحات',
         totalFreightCost: 'کرایه کل',
         total_freight_cost: 'کرایه کل',
+        tariffFreightCost: 'کرایه تعرفه',
+        tariff_freight_cost: 'کرایه تعرفه',
         assignedDriverId: 'راننده',
         assigned_driver_id: 'راننده',
         assignedVehicleId: 'خودرو',
@@ -315,6 +317,10 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
       
       // نمایش تغییرات کرایه کل با فرمت مناسب
       if (key === 'total_freight_cost' || key === 'totalFreightCost') {
+        oldValue = oldValue ? Number(oldValue).toLocaleString('fa-IR') : '-';
+        newValue = newValue ? Number(newValue).toLocaleString('fa-IR') : '-';
+      }
+      if (key === 'tariff_freight_cost' || key === 'tariffFreightCost') {
         oldValue = oldValue ? Number(oldValue).toLocaleString('fa-IR') : '-';
         newValue = newValue ? Number(newValue).toLocaleString('fa-IR') : '-';
       }

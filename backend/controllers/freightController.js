@@ -1696,6 +1696,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     destinations,
     totalFreightCost,
     billOfLadingNumber,
+    tariffFreightCost,
     notes,
     assignmentFormMode,
   } = req.body;
@@ -1793,7 +1794,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
     const { rows } = await client.query(
       `SELECT assignment_type, assigned_driver_id, assigned_vehicle_id, status, announcement_code,
               line_type, vehicle_type, awaiting_bill_of_lading_at, carrier_name, handoff_carrier_id, handoff_status,
-              total_freight_cost, freight_cost_locked_at
+              total_freight_cost, freight_cost_locked_at, tariff_freight_cost
        FROM freight_announcements WHERE id = $1`,
       [announcementId]
     );
@@ -1815,6 +1816,7 @@ async function assignPersonalDriverAndVehicle(req, res) {
       handoff_carrier_id: handoffCarrierId,
       handoff_status: handoffStatus,
       total_freight_cost: lockedFreightCost,
+      tariff_freight_cost: existingTariffFreightCost,
     } = rows[0];
 
     const userRole = req.user?.role || '';
@@ -1842,6 +1844,11 @@ async function assignPersonalDriverAndVehicle(req, res) {
         await client.query('ROLLBACK');
         return res.status(400).json({ message: 'شماره بارنامه الزامی است.' });
       }
+      const tariffNum = Number(tariffFreightCost);
+      if (!Number.isFinite(tariffNum) || tariffNum <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'کرایه تعرفه الزامی است.' });
+      }
     }
 
     const dairyAmbientIsolated = isDairyOrAmbientLineType(lineType) && !isCarrierUser;
@@ -1867,6 +1874,16 @@ async function assignPersonalDriverAndVehicle(req, res) {
       }
     }
     
+    if (!isCarrierUser && awaitingBillOfLadingAt) {
+      const tariffNum = Number(tariffFreightCost);
+      if (!Number.isFinite(tariffNum) || tariffNum <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          message: 'برای تکمیل در تب «در انتظار بارنامه»، کرایه تعرفه الزامی است.',
+        });
+      }
+    }
+
     // Check if this is personal assignment
     if (assignmentType !== 'personal') {
       await client.query('ROLLBACK');
@@ -2037,8 +2054,15 @@ async function assignPersonalDriverAndVehicle(req, res) {
     const effectiveFreightCost = isCarrierUser ? lockedFreightCost : (totalFreightCost || null);
     const updateFields = ['status = $1', 'assigned_driver_id = $2', 'assigned_vehicle_id = $3', 'bill_of_lading_number = $4', 'total_freight_cost = $5', 'updated_at = NOW()'];
     const updateValues = ['Assigned', personalDriverId, personalVehicleId, billOfLadingNumber || null, effectiveFreightCost];
+    if (tariffFreightCost !== undefined && tariffFreightCost !== null && String(tariffFreightCost).trim() !== '') {
+      const tariffNum = Number(tariffFreightCost);
+      if (Number.isFinite(tariffNum) && tariffNum > 0) {
+        updateFields.push(`tariff_freight_cost = $${updateValues.length + 1}`);
+        updateValues.push(tariffNum);
+      }
+    }
     // awaiting_bill_of_lading_at فقط با «اتمام تخصیص» موفق پاک می‌شود — ثبت بارنامه ردیف را از تب pending خارج نمی‌کند
-    let paramIndex = 6;
+    let paramIndex = updateValues.length + 1;
     
     if (notes !== undefined) {
       const notesColumn = await client.query(
@@ -2095,6 +2119,15 @@ async function assignPersonalDriverAndVehicle(req, res) {
     const destinationList = destRows.rows.map(d => d.city).join('، ');
     const destinationLabel = destinationList || 'بدون مقصد';
     
+    let oldAssignmentWasPlaceholder = false;
+    if (oldDriverId) {
+      const oldPdRow = await client.query('SELECT mobile FROM personal_drivers WHERE id = $1', [oldDriverId]);
+      if (oldPdRow.rows[0]) {
+        oldAssignmentWasPlaceholder =
+          String(oldPdRow.rows[0].mobile || '').replace(/\D/g, '') === DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
+      }
+    }
+    const isRealDriverAssignment = !isDairyAmbientPlaceholderPayload(driverContact, vehiclePlate);
     const isReassignment = oldDriverId || oldVehicleId;
     const action = isReassignment ? 'REASSIGNED' : 'ASSIGNED';
     const description = isReassignment 
@@ -2108,8 +2141,15 @@ async function assignPersonalDriverAndVehicle(req, res) {
     if (oldVehicleId !== personalVehicleId) {
       fieldChanges.assignedVehicleId = { old: oldVehicleId, new: personalVehicleId };
     }
-    
-    console.log('🔍 [assignPersonalDriverAndVehicle] Logging history with userName:', userName);
+    if (tariffFreightCost !== undefined && tariffFreightCost !== null && String(tariffFreightCost).trim() !== '') {
+      const tariffNum = Number(tariffFreightCost);
+      if (Number.isFinite(tariffNum) && tariffNum > 0) {
+        fieldChanges.tariffFreightCost = {
+          old: existingTariffFreightCost ?? null,
+          new: tariffNum,
+        };
+      }
+    }
     
     console.log('🔍 [assignPersonalDriverAndVehicle] Logging history with userName:', userName);
     
@@ -2144,6 +2184,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
           vehicle_plate: notifyPlate,
           bill_of_lading_number: billOfLadingNumber || null,
           total_freight_cost: totalFreightCost || null,
+          tariff_freight_cost:
+            tariffFreightCost !== undefined && tariffFreightCost !== null && String(tariffFreightCost).trim() !== ''
+              ? Number(tariffFreightCost)
+              : undefined,
         },
         userId
       );
@@ -2156,6 +2200,9 @@ async function assignPersonalDriverAndVehicle(req, res) {
       notifyAssignmentAfterCommit(announcementId, {
         isCarrierUser,
         isReassignment,
+        isCarrierOnlySave,
+        isRealDriverAssignment,
+        oldAssignmentWasPlaceholder,
       }).catch((err) => {
         console.error('⚠️ [assignPersonalDriverAndVehicle] Bale notify error:', err.message);
       });
@@ -2175,6 +2222,10 @@ async function assignPersonalDriverAndVehicle(req, res) {
         vehicle_plate: notifyPlate,
         bill_of_lading_number: billOfLadingNumber || null,
         total_freight_cost: totalFreightCost || null,
+        tariff_freight_cost:
+          tariffFreightCost !== undefined && tariffFreightCost !== null && String(tariffFreightCost).trim() !== ''
+            ? Number(tariffFreightCost)
+            : null,
       },
     });
   } catch (error) {
@@ -2617,6 +2668,13 @@ async function assignVehicleAndDriverInternal(req, res) {
           );
           console.log(`✅ [assignVehicleAndDriver] Cancelled ${cancelResult.rowCount} previous dispatch_assignments for reassignment ${announcementId}`);
         }
+
+        const { clearPriorBoardAssignments } = require('../services/dispatch/dispatchBoard');
+        await clearPriorBoardAssignments(client, {
+          vehicleId,
+          driverId,
+          excludeFreightAnnouncementId: announcementId,
+        });
         
         // گرفتن همه مقاصد
         const allDestRows = await client.query(
@@ -2802,10 +2860,7 @@ async function assignVehicleAndDriverInternal(req, res) {
         }
       } catch (dispatchError) {
         console.error('❌ [assignVehicleAndDriver] Error creating dispatch_assignments:', dispatchError);
-        // خطا را log می‌کنیم اما assignment را rollback نمی‌کنیم
-        // اگر dispatch_assignments ایجاد نشود، در تابلو نمایش داده نمی‌شود
-        // اما assignment در freight_announcements ثبت شده است
-        // کاربر می‌تواند بعداً از طریق ثبت نوبت این کار را انجام دهد
+        throw dispatchError;
       }
     } else {
       console.log(`ℹ️ [assignVehicleAndDriver] Assignment type is not 'company' (${assignmentType}), skipping dispatch_assignments creation`);
@@ -3594,7 +3649,9 @@ async function finalizeAssignments(req, res) {
     
     for (const annId of announcementIds) {
       const annResult = await client.query(
-        'SELECT id, announcement_code, assigned_vehicle_id, assigned_driver_id, line_type, status, assignment_type, bill_of_lading_number FROM freight_announcements WHERE id = $1',
+        `SELECT id, announcement_code, assigned_vehicle_id, assigned_driver_id, line_type, status,
+                assignment_type, bill_of_lading_number, tariff_freight_cost
+         FROM freight_announcements WHERE id = $1`,
         [annId]
       );
       
@@ -3678,8 +3735,13 @@ async function finalizeAssignments(req, res) {
       // اگر اصلاً تخصیص انجام نشده باشد باید طبق روال قدیم به برنامه‌ریزی برگردد.
       if (hasAssignment && assignmentType === 'personal') {
         const billOfLadingNumber = ann.bill_of_lading_number;
-        if (!billOfLadingNumber || billOfLadingNumber.trim() === '') {
-          console.log(`⚠️ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) missing bill_of_lading_number - SKIPPING finalization`);
+        const missingBol = !billOfLadingNumber || String(billOfLadingNumber).trim() === '';
+        const missingTariff =
+          ann.tariff_freight_cost == null || Number(ann.tariff_freight_cost) <= 0;
+        if (missingBol || missingTariff) {
+          console.log(
+            `⚠️ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) missing pending fields (BOL=${missingBol}, tariff=${missingTariff}) - SKIPPING finalization`
+          );
           console.log(`   Vehicle ID: ${ann.assigned_vehicle_id}, Driver ID: ${ann.assigned_driver_id}, Line Type: ${ann.line_type}`);
           missingBillOfLadingIds.push(annId);
           try {
@@ -3698,7 +3760,9 @@ async function finalizeAssignments(req, res) {
           }
           continue; // این اعلام بار را finalize نکن
         } else {
-          console.log(`✅ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) has bill_of_lading_number: ${billOfLadingNumber}`);
+          console.log(
+            `✅ [finalizeAssignments] Personal assignment ${annId} (${ann.announcement_code || 'N/A'}) has bill_of_lading_number and tariff_freight_cost`
+          );
         }
       } else if (assignmentType === 'company') {
         console.log(`✅ [finalizeAssignments] Company assignment ${annId} (${ann.announcement_code || 'N/A'}) - no bill of lading check needed`);
@@ -3942,7 +4006,7 @@ async function finalizeAssignments(req, res) {
               lineType,
               error: 'missing_bill_of_lading',
               awaitingBillOfLadingAt: new Date().toISOString(),
-              message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`
+              message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه یا کرایه تعرفه است. لطفاً هر دو را ثبت کنید.`
             },
             currentUserId
           );
@@ -3956,7 +4020,7 @@ async function finalizeAssignments(req, res) {
         return res.status(200).json({
           success: true,
           partial: true,
-          message: `${finalizedIds.length} اعلام بار نهایی شد. ${missingBillOfLadingIds.length} اعلام بار شخصی بدون شماره بارنامه به «در انتظار بارنامه» منتقل شد.`,
+          message: `${finalizedIds.length} اعلام بار نهایی شد. ${missingBillOfLadingIds.length} اعلام بار شخصی بدون بارنامه یا کرایه تعرفه به «در انتظار بارنامه» منتقل شد.`,
           finalizedCount: finalizedIds.length,
           finalizedIds: finalizedIds,
           missingBillOfLadingCount: missingBillOfLadingIds.length,
@@ -3965,7 +4029,7 @@ async function finalizeAssignments(req, res) {
       } else {
         // اگر هیچ کدام finalize نشدند
         return res.status(400).json({ 
-          message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه است. لطفاً شماره بارنامه را ثبت کنید.`,
+          message: `تعداد ${missingBillOfLadingIds.length} اعلام بار بدون شماره بارنامه یا کرایه تعرفه است. لطفاً هر دو را ثبت کنید.`,
           missingBillOfLadingCount: missingBillOfLadingIds.length,
           missingBillOfLadingIds: missingBillOfLadingIds
         });
@@ -7329,6 +7393,8 @@ module.exports = {
 async function cancelAssignment(req, res) {
   const { id: announcementId } = req.params;
   const userId = req.user?.userId || req.user?.id;
+  const userRole = req.user?.role || '';
+  const isCarrierUser = userRole === 'carrier_user';
   
   // ساخت userName به فرمت "username - name - role"
   // ابتدا باید name رو از دیتابیس بخونیم چون در JWT token نیست
@@ -7404,6 +7470,7 @@ async function cancelAssignment(req, res) {
               fa.assigned_driver_id, fa.assigned_vehicle_id, fa.total_freight_cost,
               fa.line_type, fa.vehicle_type, fa.brand, fa.origin_city, fa.cargo_value,
               fa.carrier_name, fa.assigned_driver_name, fa.bill_of_lading_number, fa.vehicle_plate,
+              fa.handoff_carrier_id, fa.handoff_status, fa.tariff_freight_cost,
               pd.name AS personal_driver_name, pd.mobile AS personal_driver_mobile
        FROM freight_announcements fa
        LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
@@ -7420,6 +7487,98 @@ async function cancelAssignment(req, res) {
     const oldDriverId = ann.assigned_driver_id || null;
     const oldVehicleId = ann.assigned_vehicle_id || null;
     const oldTotalFreightCost = ann.total_freight_cost || null;
+    const oldTariffFreightCost = ann.tariff_freight_cost || null;
+
+    if (isCarrierUser) {
+      const { getUserCarrierId } = require('./carrierController');
+      const carrierId = await getUserCarrierId(userId);
+      if (!carrierId || ann.handoff_carrier_id !== carrierId || ann.handoff_status !== 'with_carrier') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'این بار به شما ارجاع نشده است.' });
+      }
+      if (!oldDriverId && !oldVehicleId) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'تخصیصی برای لغو وجود ندارد.' });
+      }
+
+      const newStatus = 'PendingPersonalAssignment';
+      await client.query(
+        `UPDATE freight_announcements
+           SET assigned_driver_id = NULL,
+               assigned_vehicle_id = NULL,
+               assigned_driver_name = NULL,
+               assigned_driver_employee_id = NULL,
+               assigned_vehicle_model = NULL,
+               assigned_vehicle_brand = NULL,
+               vehicle_plate = NULL,
+               bill_of_lading_number = NULL,
+               tariff_freight_cost = NULL,
+               assignment_finalized_at = NULL,
+               awaiting_bill_of_lading_at = NULL,
+               status = $1,
+               updated_at = NOW()
+         WHERE id = $2`,
+        [newStatus, announcementId]
+      );
+
+      const destRowsCarrier = await client.query(
+        'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 1',
+        [announcementId]
+      );
+      const cityCarrier = destRowsCarrier.rows[0]?.city || 'بدون مقصد';
+
+      await logFreightHistory({
+        announcementId,
+        userId: userId || null,
+        userName,
+        action: 'CARRIER_ASSIGNMENT_CANCELLED',
+        oldStatus,
+        newStatus,
+        fieldChanges: {
+          assigned_driver_id: { old: oldDriverId, new: null },
+          assigned_vehicle_id: { old: oldVehicleId, new: null },
+          bill_of_lading_number: { old: ann.bill_of_lading_number || null, new: null },
+          tariff_freight_cost: { old: oldTariffFreightCost, new: null },
+          status: { old: oldStatus, new: newStatus },
+        },
+        description: `لغو تخصیص باربری برای بار به مقصد ${cityCarrier}`,
+        ipAddress: req.ip,
+        client,
+      });
+
+      await client.query('COMMIT');
+
+      try {
+        const realtimeService = require('../services/realtimeService');
+        realtimeService.notifyAnnouncementUpdate(
+          announcementId,
+          'cancelled',
+          {
+            id: announcementId,
+            status: newStatus,
+            assigned_driver_id: null,
+            assigned_vehicle_id: null,
+            assigned_driver_name: null,
+            assigned_driver_contact: null,
+            vehicle_plate: null,
+            bill_of_lading_number: null,
+            tariff_freight_cost: null,
+            handoff_status: ann.handoff_status,
+            handoff_carrier_id: ann.handoff_carrier_id,
+            total_freight_cost: ann.total_freight_cost,
+            carrier_name: ann.carrier_name,
+          },
+          userId
+        );
+      } catch (realtimeError) {
+        console.warn('⚠️ [freight] carrier cancel realtime notify skipped:', realtimeError.message);
+      }
+
+      return res.status(200).json({
+        message: 'تخصیص باربری با موفقیت لغو شد. بار همچنان نزد باربری است.',
+        newStatus,
+      });
+    }
 
     const destSnapshotRows = await client.query(
       `SELECT city FROM freight_destinations
@@ -7475,6 +7634,7 @@ async function cancelAssignment(req, res) {
              vehicle_plate = NULL,
              bill_of_lading_number = NULL,
              total_freight_cost = NULL,
+             tariff_freight_cost = NULL,
              assignment_finalized_at = NULL,
              awaiting_bill_of_lading_at = NULL,
              status = $1,

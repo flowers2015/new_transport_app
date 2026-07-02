@@ -674,6 +674,8 @@ export interface FreightAnnouncement {
     assignedDriverId?: string;
     assignedVehicleId?: string;
     totalFreightCost?: number;
+    /** کرایه تعرفه — فقط ترابری شخصی / باربری ثبت می‌کنند */
+    tariffFreightCost?: number;
     billOfLadingNumber?: string;
     assignedDriverName?: string;
     assignedDriverContact?: string;

@@ -6,6 +6,10 @@ const {
   isFrotlandAmbientLineType,
 } = require('./baleAmbientNotifySettings');
 
+const REFER_ACTIONS = ['REFERRED_TO_CARRIER', 'CARRIER_REFERRAL_CHANGED', 'CARRIER_REFERRAL_CANCELLED'];
+const ASSIGN_ACTIONS = ['ASSIGNED', 'REASSIGNED'];
+const RESET_ACTIONS = ['CANCELLED', 'CARRIER_REFERRAL_CANCELLED'];
+
 function dash(value) {
   const s = String(value ?? '').trim();
   return s || '—';
@@ -51,6 +55,47 @@ async function loadAnnouncementContext(announcementId) {
   );
   ann.destination_cities = destRes.rows.map((r) => r.city).filter(Boolean).join('، ') || '—';
   return ann;
+}
+
+async function loadRecentHistoryActions(announcementId, limit = 30) {
+  const { rows } = await pool.query(
+    `SELECT action, created_at
+     FROM freight_announcement_history
+     WHERE freight_announcement_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [announcementId, limit]
+  );
+  return rows.map((r) => r.action);
+}
+
+/** ارجاع مجدد پس از لغو ارجاع یا تغییر باربری */
+async function isRepeatCarrierReferral(announcementId) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS cnt
+     FROM freight_announcement_history
+     WHERE freight_announcement_id = $1
+       AND action = ANY($2::text[])`,
+    [announcementId, REFER_ACTIONS]
+  );
+  return (rows[0]?.cnt || 0) > 1;
+}
+
+/** تخصیص پس از لغو تخصیص یا لغو ارجاع — پیام اصلاحیه */
+async function shouldUseAssignmentCorrectionMessage(announcementId) {
+  const actions = await loadRecentHistoryActions(announcementId);
+  if (actions.length === 0) return false;
+  // اولین رکورد همان assign فعلی است
+  const prior = actions.slice(1);
+  return prior.some((a) => RESET_ACTIONS.includes(a));
+}
+
+/** ویرایش مجدد بدون لغو — بدون پیام */
+function isEditWithoutReset(actions) {
+  if (actions.length < 2) return false;
+  const current = actions[0];
+  const prior = actions[1];
+  return ASSIGN_ACTIONS.includes(current) && ASSIGN_ACTIONS.includes(prior);
 }
 
 function getVehicleType(ann) {
@@ -121,18 +166,64 @@ async function sendAmbientMessage(text) {
   return { sent: true, chatId: settings.chatId };
 }
 
-async function notifyAssignmentAfterCommit(announcementId, { isCarrierUser, isReassignment }) {
-  if (isReassignment) return;
+/**
+ * اعلان گروه بله — لبنیات-فروتلند
+ *
+ * پیام می‌رود:
+ * - ثبت نام باربری در دیالوگ تخصیص (فاز placeholder): «خودرو تخصیص داده شد»
+ * - ارجاع اول به باربری: «خودرو تخصیص داده شد»
+ * - ارجاع مجدد / تغییر باربری: «اصلاحیه: باربری عوض شد»
+ * - تخصیص واقعی راننده توسط ترابری شخصی: «خودرو تخصیص داده شد»
+ * - تخصیص پس از لغو تخصیص یا لغو ارجاع: «اصلاحیه: خودرو تخصیص داده شد»
+ *
+ * پیام نمی‌رود:
+ * - عملیات سمت کاربر باربری
+ * - ویرایش مجدد بدون لغو قبلی
+ */
+async function notifyAssignmentAfterCommit(
+  announcementId,
+  {
+    isCarrierUser,
+    isReassignment,
+    isCarrierOnlySave,
+    isRealDriverAssignment = true,
+    oldAssignmentWasPlaceholder = false,
+  } = {}
+) {
+  if (isCarrierUser) {
+    return;
+  }
+
+  const shouldNotify =
+    isCarrierOnlySave || (isRealDriverAssignment && (!isReassignment || oldAssignmentWasPlaceholder));
+  if (!shouldNotify) {
+    return;
+  }
+
   try {
     const ann = await loadAnnouncementContext(announcementId);
     if (!ann || !isFrotlandAmbientLineType(ann.line_type)) return;
 
-    const text = isCarrierUser
-      ? buildCarrierAssignmentCorrectionMessage(ann)
-      : buildVehicleAssignedMessage(ann);
+    const actions = await loadRecentHistoryActions(announcementId);
+    if (!isCarrierOnlySave && isEditWithoutReset(actions)) {
+      console.log(`ℹ️ [bale-ambient] assignment notify skipped (edit without reset) for ${announcementId}`);
+      return;
+    }
+
+    let text;
+    if (isCarrierOnlySave) {
+      text = buildVehicleAssignedMessage(ann);
+    } else if (await shouldUseAssignmentCorrectionMessage(announcementId)) {
+      text = buildCarrierAssignmentCorrectionMessage(ann);
+    } else {
+      text = buildVehicleAssignedMessage(ann);
+    }
+
     const result = await sendAmbientMessage(text);
     if (result.sent) {
-      console.log(`✅ [bale-ambient] assignment notify sent for ${announcementId}`);
+      console.log(`✅ [bale-ambient] personal assignment notify sent for ${announcementId}`);
+    } else if (result.skipped) {
+      console.log(`ℹ️ [bale-ambient] personal assignment notify skipped (${result.reason}) for ${announcementId}`);
     }
   } catch (err) {
     console.error('⚠️ [bale-ambient] assignment notify failed (non-blocking):', err.message);
@@ -142,14 +233,22 @@ async function notifyAssignmentAfterCommit(announcementId, { isCarrierUser, isRe
 async function notifyReferToCarrierAfterCommit(announcementId, { carrierChanged = false } = {}) {
   try {
     const ann = await loadAnnouncementContext(announcementId);
-    if (!ann || !isFrotlandAmbientLineType(ann.line_type)) return;
+    if (!ann || !isFrotlandAmbientLineType(ann.line_type)) {
+      console.log(
+        `ℹ️ [bale-ambient] refer notify skipped (line_type=${ann?.line_type || 'n/a'}) for ${announcementId}`
+      );
+      return;
+    }
 
-    const text = carrierChanged
-      ? buildCarrierChangedMessage(ann)
-      : buildVehicleAssignedMessage(ann);
+    const repeatRefer = carrierChanged || (await isRepeatCarrierReferral(announcementId));
+    const text = repeatRefer ? buildCarrierChangedMessage(ann) : buildVehicleAssignedMessage(ann);
     const result = await sendAmbientMessage(text);
     if (result.sent) {
-      console.log(`✅ [bale-ambient] carrier refer notify sent for ${announcementId}`);
+      console.log(
+        `✅ [bale-ambient] carrier refer notify sent for ${announcementId} (${repeatRefer ? 'correction' : 'first'})`
+      );
+    } else if (result.skipped) {
+      console.log(`ℹ️ [bale-ambient] carrier refer notify skipped (${result.reason}) for ${announcementId}`);
     }
   } catch (err) {
     console.error('⚠️ [bale-ambient] carrier refer notify failed (non-blocking):', err.message);

@@ -21,6 +21,7 @@ const {
   vehicleMatchesCategory,
   isCompanyDispatchAssignable,
 } = require('../services/dispatch/dispatchVehicleCategory');
+const { clearPriorBoardAssignments } = require('../services/dispatch/dispatchBoard');
 const { formatJalali } = require('../utils/jalali');
 const {
   jalaliToGregorian,
@@ -1676,6 +1677,12 @@ async function assignFreight(req, res) {
     const finalVehicleCategory = resolveDispatchQueueCategoryLabel({
       queueCategory: vehicleCategoryFromEntry,
       announcementVehicleType: announcement.vehicle_type,
+    });
+
+    await clearPriorBoardAssignments(client, {
+      vehicleId,
+      driverId,
+      excludeFreightAnnouncementId: freightAnnouncementId,
     });
     
     // برای هر مقصد یک dispatch_assignments — route و km همان مقصد (نه دورترین)

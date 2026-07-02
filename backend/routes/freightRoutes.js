@@ -209,6 +209,7 @@ router.put(
 const transportCancelRoles = [
   'transport_user',
   'personal_transport_user',
+  'carrier_user',
   'کاربر ترابری (شرکت)',
   'کاربر ترابری شرکت',
   'کاربر ترابری (خودرو شخصی)',
@@ -293,14 +294,30 @@ router.put(
 router.post(
   '/:id/carrier-refer',
   authenticateToken,
-  authorizeRole(['personal_transport_user', 'کاربر ترابری (خودرو شخصی)', 'admin']),
+  authorizeRole([
+    'personal_transport_user',
+    'کاربر ترابری (خودرو شخصی)',
+    'کاربر ترابری شخصی',
+    'کاربر ترابری (شخصی)',
+    'Transportation_Personal_Vehicle_User',
+    'admin',
+    'ادمین',
+  ]),
   referToCarrier
 );
 
 router.post(
   '/:id/carrier-cancel-refer',
   authenticateToken,
-  authorizeRole(['personal_transport_user', 'کاربر ترابری (خودرو شخصی)', 'admin']),
+  authorizeRole([
+    'personal_transport_user',
+    'کاربر ترابری (خودرو شخصی)',
+    'کاربر ترابری شخصی',
+    'کاربر ترابری (شخصی)',
+    'Transportation_Personal_Vehicle_User',
+    'admin',
+    'ادمین',
+  ]),
   cancelCarrierReferral
 );
 

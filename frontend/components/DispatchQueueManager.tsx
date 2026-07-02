@@ -1288,6 +1288,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 ...createRow({ key: row.categoryKey, label: row.categoryLabel }, row.queueType),
                 id: rowId,
             }));
+            window.dispatchEvent(new CustomEvent('dispatch-board:update'));
             // فراخوانی fetchQueue با delay کوتاه برای اطمینان از به‌روزرسانی
             setTimeout(() => {
                 fetchQueue().catch(err => {
@@ -1309,6 +1310,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             });
             if (!res.ok) throw new Error(await res.text());
             fetchQueue();
+            window.dispatchEvent(new CustomEvent('dispatch-board:update'));
         } catch (error) {
             alert('حذف نوبت انجام نشد.');
         }

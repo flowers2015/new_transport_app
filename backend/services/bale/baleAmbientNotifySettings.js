@@ -9,10 +9,13 @@ const DEFAULT_SETTINGS = {
   updatedAt: null,
 };
 
-const FROTland_AMBIENT_LINE_TYPES = new Set(['Ambient', 'لبنیات-فروتلند']);
+const FROTland_AMBIENT_LINE_TYPES = new Set(['Ambient', 'لبنیات-فروتلند', 'لبنیات فروتلند']);
 
 function isFrotlandAmbientLineType(lineType) {
-  return FROTland_AMBIENT_LINE_TYPES.has(String(lineType || '').trim());
+  const lt = String(lineType || '').trim();
+  if (FROTland_AMBIENT_LINE_TYPES.has(lt)) return true;
+  if (lt.toLowerCase() === 'ambient') return true;
+  return false;
 }
 
 function normalizeSettings(raw = {}) {

@@ -2,7 +2,13 @@ const pool = require('../db');
 const { logFreightHistory } = require('../services/freightHistoryService');
 const { getUserCarrierId } = require('./carrierController');
 
-const PERSONAL_ROLES = ['personal_transport_user', 'کاربر ترابری (خودرو شخصی)'];
+const PERSONAL_ROLES = [
+  'personal_transport_user',
+  'کاربر ترابری (خودرو شخصی)',
+  'کاربر ترابری شخصی',
+  'کاربر ترابری (شخصی)',
+  'Transportation_Personal_Vehicle_User',
+];
 const CARRIER_ROLE = 'carrier_user';
 
 function isDairyOrAmbientLineType(lineType) {

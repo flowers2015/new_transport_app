@@ -274,6 +274,15 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
                   return Number.isFinite(n) && n > 0 ? n : undefined;
               })();
 
+    const rawTariff = a.tariff_freight_cost ?? a.tariffFreightCost;
+    const tariffFreightCost =
+        rawTariff === null || rawTariff === undefined
+            ? undefined
+            : (() => {
+                  const n = Number(rawTariff);
+                  return Number.isFinite(n) && n > 0 ? n : undefined;
+              })();
+
     return {
         assignmentType: (a.assignment_type || a.assignmentType || a.detected_assignment_type) as
             | 'company'
@@ -305,6 +314,7 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
             a.bill_of_lading_number ?? a.billOfLadingNumber
         ),
         totalFreightCost,
+        tariffFreightCost,
         awaitingBillOfLadingAt:
             a.awaiting_bill_of_lading_at === null || a.awaitingBillOfLadingAt === null
                 ? undefined
@@ -366,6 +376,7 @@ export function mergeAssignmentDisplayFields(
                 incoming.billOfLadingNumber
             ),
             totalFreightCost: previous.totalFreightCost ?? incoming.totalFreightCost,
+            tariffFreightCost: previous.tariffFreightCost ?? incoming.tariffFreightCost,
             handoffStatus: incoming.handoffStatus ?? previous.handoffStatus,
             handoffCarrierId: incoming.handoffCarrierId ?? previous.handoffCarrierId,
             handoffCarrierName: incoming.handoffCarrierName ?? previous.handoffCarrierName,
@@ -394,6 +405,7 @@ export function mergeAssignmentDisplayFields(
         carrierName: pickNonEmptyText(incoming.carrierName, previous.carrierName),
         billOfLadingNumber: pickNonEmptyText(incoming.billOfLadingNumber, previous.billOfLadingNumber),
         totalFreightCost: incoming.totalFreightCost ?? previous.totalFreightCost,
+        tariffFreightCost: incoming.tariffFreightCost ?? previous.tariffFreightCost,
         handoffStatus: incoming.handoffStatus ?? previous.handoffStatus,
         handoffCarrierId: incoming.handoffCarrierId ?? previous.handoffCarrierId,
         handoffCarrierName: incoming.handoffCarrierName ?? previous.handoffCarrierName,
@@ -609,6 +621,27 @@ export function isWithCarrierHandoff(
     ann: Pick<FreightAnnouncement, 'handoffStatus'>
 ): boolean {
     return ann.handoffStatus === 'with_carrier';
+}
+
+/** لغو ارجاع به باربری — قبل از تخصیص واقعی راننده/خودرو */
+export function canPersonalCancelCarrierRefer(
+    ann: Pick<
+        FreightAnnouncement,
+        | 'handoffStatus'
+        | 'assignedDriverId'
+        | 'assignedVehicleId'
+        | 'lineType'
+        | 'assignmentType'
+        | 'assignedDriverContact'
+        | 'assignedVehiclePlate'
+        | 'assignedDriverName'
+        | 'billOfLadingNumber'
+        | 'status'
+    >
+): boolean {
+    if (!isWithCarrierHandoff(ann)) return false;
+    if (!hasDriverAndVehicleAssigned(ann)) return true;
+    return !hasRealPersonalDriverAssignment(ann);
 }
 
 export function isReturnedFromCarrier(
@@ -853,6 +886,60 @@ export function formatTotalTonnageFromDestinations(
 
 /** هدر ستون کرایه — واحد «ریال» فقط در عنوان */
 export const TOTAL_FREIGHT_HEADER = 'کرایه کل (ریال)';
+export const TARIFF_FREIGHT_HEADER = 'کرایه تعرفه (ریال)';
+export const TARIFF_DIFF_HEADER = 'اختلاف کرایه (ریال)';
+
+export function isPersonalTransportViewerRole(role: string): boolean {
+    return (
+        role === 'personal_transport_user' ||
+        role === 'Transportation_Personal_Vehicle_User' ||
+        role === 'کاربر ترابری (خودرو شخصی)' ||
+        role === 'کاربر ترابری شخصی' ||
+        role === 'کاربر ترابری (شخصی)'
+    );
+}
+
+export function parseFreightMoney(value: unknown): number {
+    const n = parseNumericField(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+export function computeFreightTariffDiff(
+    registered?: number | string | null,
+    tariff?: number | string | null
+): number | null {
+    const reg = parseFreightMoney(registered);
+    const tar = parseFreightMoney(tariff);
+    if (reg <= 0 && tar <= 0) return null;
+    return reg - tar;
+}
+
+export function formatFreightTariffDiffCell(
+    ann: Pick<FreightAnnouncement, 'totalFreightCost' | 'tariffFreightCost'>
+): string {
+    const diff = computeFreightTariffDiff(ann.totalFreightCost, ann.tariffFreightCost);
+    if (diff === null) return '-';
+    const abs = Math.abs(Math.round(diff)).toLocaleString('fa-IR');
+    if (diff > 0) return `+${abs}`;
+    if (diff < 0) return `-${abs}`;
+    return '0';
+}
+
+export function buildTariffFreightColumns(): Array<{
+    header: string;
+    render: (ann: FreightAnnouncement) => string;
+}> {
+    return [
+        {
+            header: TARIFF_FREIGHT_HEADER,
+            render: (ann) => formatFreightAmountCell(ann.tariffFreightCost),
+        },
+        {
+            header: TARIFF_DIFF_HEADER,
+            render: (ann) => formatFreightTariffDiffCell(ann),
+        },
+    ];
+}
 
 /** مقدار مبلغ در سلول جدول — همان فرمت `toLocaleString('fa-IR')` مثل ستون ارزش بار */
 export function formatFreightAmountCell(amount?: number | string | null): string {

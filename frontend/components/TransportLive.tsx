@@ -51,6 +51,9 @@ import {
     formatTonnageKgFromRaw,
     sortByIceCreamDisplayOrder,
     isFreightDestinationDetailHeader,
+    buildTariffFreightColumns,
+    canPersonalCancelCarrierRefer,
+    isPersonalTransportViewerRole,
 } from '../utils/freightDisplay';
 import {
     shouldShowVehicleCodeColumn,
@@ -134,6 +137,7 @@ interface TransportLiveProps {
         vehicleId?: string; 
         billOfLadingNumber?: string;
         totalFreightCost?: number;
+        tariffFreightCost?: number;
         // Personal driver info
         nationalId?: string;
         driverName?: string;
@@ -158,7 +162,7 @@ interface TransportLiveProps {
         carrierId: string,
         items: { announcementId: string; totalFreightCost: number }[]
     ) => void | Promise<void>;
-    onCancelCarrierRefer?: (announcementId: string) => void | Promise<void>;
+    onCancelCarrierRefer?: (announcementId: string, options?: { skipConfirm?: boolean }) => void | Promise<void>;
     onCarrierReturn?: (announcementId: string, reason?: string) => void | Promise<void>;
     onCarrierComplete?: (announcementId: string) => void | Promise<void>;
     onCarrierCompleteBulk?: (announcementIds: string[]) => void | Promise<void>;
@@ -387,7 +391,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [currentUser.role]);
 
     const isCarrierUser = currentUser.role === UserRole.CarrierUser;
-    const isPersonalTransportUser = currentUser.role === UserRole.Transportation_Personal_Vehicle_User;
+    const isPersonalTransportUser = isPersonalTransportViewerRole(currentUser.role);
+    const personalTariffColumns = useMemo(
+        () => (isPersonalTransportUser ? buildTariffFreightColumns() : []),
+        [isPersonalTransportUser]
+    );
     const isAmbientPersonalReferTab =
         isPersonalTransportUser &&
         (activeLine === FreightLineType.Ambient || activeLine === 'لبنیات-فروتلند' || activeLine === 'Ambient');
@@ -519,6 +527,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 return result;
             }},
             { header: TOTAL_FREIGHT_HEADER, display: () => true, render: (ann: FreightAnnouncement) => formatTotalFreightCost(ann.totalFreightCost) },
+            ...personalTariffColumns.map((col) => ({ ...col, display: () => true })),
             
             // Ice Cream (فشرده و کامل)
             { header: 'نوع نماینده', display: (lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
@@ -616,7 +625,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 
                 return false;
             }
-            if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
+            if (isPersonalTransportViewerRole(currentUser.role)) {
                 // ترابری شخصی: بر اساس قانون ارجاع خودکار
                 // پاستوریزه و لبنیات: ابتدا به ترابری شخصی، در صورت عدم پوشش به ترابری شرکت
                 // بستنی: ابتدا به ترابری شرکت، در صورت عدم پوشش به ترابری شخصی
@@ -826,6 +835,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'پلاک خودرو', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedVehiclePlate(ann, props.vehicles, props.personalVehicles)}</span> },
             { header: 'شماره بارنامه', render: (ann: FreightAnnouncement) => (ann.billOfLadingNumber || '').trim() || '-' },
             { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatTotalFreightCost(ann.totalFreightCost) },
+            ...personalTariffColumns,
             { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
 
@@ -836,6 +846,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 {
                     header: 'مقاصد',
                     render: (ann: FreightAnnouncement) => (
@@ -956,7 +967,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         const colsAll = columnsConfig(viewMode);
         const cols = colsAll.filter(c => c.display(lineForColumns)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [viewMode, activeLine, props, columnsConfig, renderVehicleTypeCell, editingVehicleTypeId, props.drivers, props.personalDrivers, props.vehicles, props.personalVehicles]);
+    }, [viewMode, activeLine, props, columnsConfig, renderVehicleTypeCell, editingVehicleTypeId, props.drivers, props.personalDrivers, props.vehicles, props.personalVehicles, personalTariffColumns]);
 
     const displayAnnouncements = useMemo(() => {
         const ordered = applyTransportLiveDisplayOrder(filteredAnnouncements, {
@@ -1137,6 +1148,49 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
         setSelectedIds(new Set());
     }, [selectedIds, displayAnnouncements, onCarrierComplete, onCarrierCompleteBulk]);
+
+    const handleBulkCancelCarrierRefer = useCallback(async () => {
+        if (!onCancelCarrierRefer) return;
+        if (selectedIds.size === 0) {
+            alert('حداقل یک ردیف را انتخاب کنید.');
+            return;
+        }
+
+        const eligible = displayAnnouncements.filter(
+            (a) =>
+                selectedIds.has(a.id) &&
+                isAmbientPersonalReferTab &&
+                canPersonalCancelCarrierRefer(a)
+        );
+
+        if (eligible.length === 0) {
+            alert('هیچ‌کدام از ردیف‌های انتخاب‌شده واجد شرایط لغو ارجاع نیستند.');
+            return;
+        }
+
+        const skipped = selectedIds.size - eligible.length;
+        const msg =
+            skipped > 0
+                ? `ارجاع ${eligible.length} بار لغو شود؟ (${skipped} مورد واجد شرایط نبود)`
+                : `ارجاع ${eligible.length} بار به باربری لغو شود؟`;
+        if (!confirm(msg)) return;
+
+        let successCount = 0;
+        for (const ann of eligible) {
+            try {
+                await onCancelCarrierRefer(ann.id, { skipConfirm: true });
+                successCount += 1;
+            } catch {
+                /* alert shown in handler */
+            }
+        }
+        setSelectedIds(new Set());
+        if (successCount === eligible.length) {
+            alert(`${successCount.toLocaleString('fa-IR')} ارجاع لغو شد.`);
+        } else if (successCount > 0) {
+            alert(`${successCount.toLocaleString('fa-IR')} مورد لغو شد؛ بقیه ناموفق بودند.`);
+        }
+    }, [selectedIds, displayAnnouncements, onCancelCarrierRefer, isAmbientPersonalReferTab]);
 
     const isFullDairyAmbient =
         viewMode === 'full' &&
@@ -1474,6 +1528,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     const numValue = Number(strValue);
                     return isNaN(numValue) ? 0 : numValue;
                 }
+                if (header.includes('کرایه تعرفه')) {
+                    return ann.tariffFreightCost || 0;
+                }
+                if (header.includes('اختلاف کرایه')) {
+                    const reg = Number(ann.totalFreightCost) || 0;
+                    const tar = Number(ann.tariffFreightCost) || 0;
+                    if (reg <= 0 && tar <= 0) return '';
+                    return reg - tar;
+                }
                 if (header === 'ارزش بار' || header === 'ارزش بار (ریال)') {
                     const value = ann.cargoValue || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
@@ -1759,6 +1822,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 ارجاع ({selectedIds.size})
                             </button>
                         )}
+                        {isPersonalTransportUser && isAmbientPersonalReferTab && selectedIds.size > 0 && onCancelCarrierRefer && (
+                            <button
+                                onClick={() => void handleBulkCancelCarrierRefer()}
+                                className="flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-md text-xs hover:bg-amber-600"
+                                title="لغو ارجاع گروهی به باربری"
+                            >
+                                لغو ارجاع ({selectedIds.size})
+                            </button>
+                        )}
                         {canPerformActions && isCarrierUser && selectedIds.size > 0 && (onCarrierComplete || onCarrierCompleteBulk) && (
                             <button
                                 onClick={() => void handleBulkCarrierComplete()}
@@ -2041,7 +2113,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         // در غیر این صورت (assignmentType = 'personal') فقط مشاهده می‌شود، عملیات غیرفعال است
                                         canTakeAction = !isAnnLeftover && isCompanyAssigned;
                                     }
-                                } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
+                                } else if (isPersonalTransportUser) {
                                     // ترابری شخصی
                                     if ((ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه') || (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند')) {
                                         // پاستوریزه/لبنیات: فعال است اگر assignmentType = 'personal' باشد (در صف شخصی)
@@ -2062,7 +2134,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 // این باید برای همه status‌ها کار کند (PendingPersonalAssignment, PendingCompanyAssignment, Assigned, InTransit)
                                 const isAssignedToOtherTransport = 
                                     (currentUser.role === UserRole.TransportationUser && isPersonalAssigned) ||
-                                    (currentUser.role === UserRole.Transportation_Personal_Vehicle_User && isCompanyAssigned);
+                                    (isPersonalTransportUser && isCompanyAssigned);
                                 
                                 // برای backward compatibility
                                 const isAssignedByOther = isAssignedToOtherTransport;
@@ -2087,7 +2159,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     // - برای بستنی: اگر در صف شرکت باشد (canTakeAction فعال) و Pending باشد، می‌تواند ارجاع دهد
                                     // - برای پاستوریزه/لبنیات: اگر در صف شرکت باشد (ارجاع شده از شخصی) و Pending باشد، می‌تواند ارجاع دهد
                                     canForward = canTakeAction && isPendingStatus;
-                                } else if (currentUser.role === UserRole.Transportation_Personal_Vehicle_User) {
+                                } else if (isPersonalTransportUser) {
                                     // ترابری شخصی:
                                     // - برای پاستوریزه/لبنیات: اگر در صف شخصی باشد (canTakeAction فعال) و Pending باشد، می‌تواند ارجاع دهد
                                     // - برای بستنی: اگر در صف شخصی باشد (ارجاع شده از شرکت) و Pending باشد، می‌تواند ارجاع دهد
@@ -2098,7 +2170,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 }
 
                                 if (
-                                    currentUser.role === UserRole.Transportation_Personal_Vehicle_User &&
+                                    isPersonalTransportUser &&
                                     isHandoffAtCarrier
                                 ) {
                                     canTakeAction = false;
@@ -2127,7 +2199,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     ? bolRegistered
                                         ? 'bg-green-100 hover:bg-green-200'
                                         : 'bg-red-50 hover:bg-red-100'
-                                    : isHandoffAtCarrier && currentUser.role === UserRole.Transportation_Personal_Vehicle_User
+                                    : isHandoffAtCarrier && isPersonalTransportUser
                                       ? 'bg-purple-50/90 text-slate-600 hover:bg-purple-100'
                                       : returnedFromCarrier
                                         ? 'bg-orange-50 hover:bg-orange-100'
@@ -2142,7 +2214,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                       ? bolRegistered
                                           ? '#dcfce7'
                                           : '#fef2f2'
-                                      : isHandoffAtCarrier && currentUser.role === UserRole.Transportation_Personal_Vehicle_User
+                                      : isHandoffAtCarrier && isPersonalTransportUser
                                         ? '#faf5ff'
                                         : returnedFromCarrier
                                           ? '#fff7ed'
@@ -2190,7 +2262,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
                                     <td className="p-1 text-center align-middle sticky -left-px z-10 col-operations" style={{ backgroundColor: rowStickyBg }}>
                                         <div className="flex gap-1 flex-wrap justify-center">
-                                            {currentUser.role === UserRole.Transportation_Personal_Vehicle_User && isHandoffAtCarrier && (
+                                            {isPersonalTransportUser && isHandoffAtCarrier && (
                                                 <div className="w-full text-[10px] text-purple-800 leading-tight mb-1 px-1">
                                                     <div>نزد باربری: {ann.carrierName || '—'}</div>
                                                     {(ann.assignedDriverName || ann.assignedVehiclePlate) && (
@@ -2241,7 +2313,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                             )}
                                             {canPerformActions && ann.status !== FreightAnnouncementStatus.Cancelled && ann.status !== FreightAnnouncementStatus.Finalized && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => onCancel(ann.id)} title="لغو تخصیص (راننده و خودرو پاک می‌شود)" className={`px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600 ${disabledClasses}`}>لغو</button>}
                                             {canPerformActions && !isCarrierUser && <button disabled={isAssignedToOtherTransport} onClick={() => handleOpenDialog('change', ann)} title="درخواست تغییر/تقسیم" className={`px-3 py-1 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700 ${disabledClasses}`}>درخواست تغییر</button>}
-                                            {isPersonalTransportUser && isHandoffAtCarrier && !ann.assignedDriverId && onCancelCarrierRefer && (
+                                            {isPersonalTransportUser &&
+                                                isAmbientPersonalReferTab &&
+                                                canPersonalCancelCarrierRefer(ann) &&
+                                                onCancelCarrierRefer && (
                                                 <button
                                                     onClick={() => onCancelCarrierRefer(ann.id)}
                                                     className="px-2 py-1 bg-amber-500 text-white rounded-md text-xs hover:bg-amber-600"
@@ -2377,6 +2452,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         announcement.lineType === 'بستنی';
 
     const isCarrierAssignmentUser = currentUser.role === UserRole.CarrierUser;
+    const isPersonalAssignmentUser = currentUser.role === UserRole.Transportation_Personal_Vehicle_User;
+    const isTariffFreightRequired =
+        isCarrierAssignmentUser ||
+        (isPersonalAssignmentUser && isPendingBillOfLading(announcement));
 
     const isDairyAmbientIsolated = isCarrierAssignmentUser
         ? false
@@ -2417,6 +2496,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     
     // --- Common State ---
     const [blNumber, setBlNumber] = useState(announcement.billOfLadingNumber || '');
+    const [tariffFreightInput, setTariffFreightInput] = useState(() => {
+        const n = parseNumericField(announcement.tariffFreightCost);
+        return n > 0 ? formatPersianGroupedNumber(n) : '';
+    });
     const [notes, setNotes] = useState(announcement.notes || '');
     const lastHydratedAnnouncementIdRef = useRef<string | null>(null);
 
@@ -2452,20 +2535,31 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 const vehicleType = announcement.vehicleType || '';
 
                 if (pendingBol) {
+                    const driverFromPd = announcement.assignedDriverId
+                        ? personalDrivers.find((d) => d.id === announcement.assignedDriverId)
+                        : undefined;
+                    const driverNameFromPd = driverFromPd?.name?.trim() || '';
+                    const contactFromPd = driverFromPd?.mobile?.trim() || '';
                     const hadRealContact =
                         Boolean(annContact) && annContact !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
-                    const plateForForm =
-                        resolvedPlate ||
-                        (isAmbientIsolatedLine ? DAIRY_AMBIENT_PLACEHOLDER_PLATE : '');
                     const hadRealPlate =
                         Boolean(resolvedPlate) &&
                         resolvedPlate !== DAIRY_AMBIENT_PLACEHOLDER_PLATE;
-                    const editingRealDriver = hadRealContact || hadRealPlate;
-                    const driverNameForForm = editingRealDriver ? annName : '';
+                    const driverNameForForm = annName || driverNameFromPd;
+                    const contactForForm = hadRealContact
+                        ? annContact
+                        : contactFromPd && contactFromPd !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE
+                          ? contactFromPd
+                          : '';
+                    const plateForForm = hadRealPlate
+                        ? resolvedPlate
+                        : isAmbientIsolatedLine
+                          ? DAIRY_AMBIENT_PLACEHOLDER_PLATE
+                          : '';
 
                     setPersonalDriverDetails({
                         name: driverNameForForm,
-                        mobile: hadRealContact ? annContact : '',
+                        mobile: contactForForm,
                         driverSmartId: '',
                     });
                     const platePartsForForm = parseIranianPlateString(plateForForm);
@@ -2558,6 +2652,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         const destsCopy = JSON.parse(JSON.stringify(announcement.destinations)); // Deep copy
         setDestinations(destsCopy);
         setBlNumber(announcement.billOfLadingNumber || '');
+        {
+            const tariffN = parseNumericField(announcement.tariffFreightCost);
+            setTariffFreightInput(tariffN > 0 ? formatPersianGroupedNumber(tariffN) : '');
+        }
         setNotes(announcement.notes || '');
         
         // مقداردهی اولیه displayFreightCosts با فرمت (کاما مثل فیلد کرایه کل)
@@ -2901,17 +2999,27 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 alert('شماره بارنامه الزامی است.');
                 return;
             }
-            const saveMobile = isAmbientCarrierPhase
+            const formattedPlatePreview = formatIranianPlateString(plateParts);
+            const userProvidedRealContact =
+                Boolean(personalDriverDetails.mobile?.trim()) &&
+                personalDriverDetails.mobile.trim() !== DAIRY_AMBIENT_PLACEHOLDER_MOBILE;
+            const userProvidedRealPlate =
+                Boolean(formattedPlatePreview) &&
+                !formattedPlatePreview.includes('11ع111');
+            const isSavingCarrierNameOnly =
+                isAmbientCarrierPhase && !userProvidedRealContact && !userProvidedRealPlate;
+
+            const saveMobile = isSavingCarrierNameOnly
                 ? DAIRY_AMBIENT_PLACEHOLDER_MOBILE
                 : personalDriverDetails.mobile?.trim();
-            const savePlateParts = isAmbientCarrierPhase
+            const savePlateParts = isSavingCarrierNameOnly
                 ? parseIranianPlateString(DAIRY_AMBIENT_PLACEHOLDER_PLATE)
                 : plateParts;
             const saveVehicleType = isCarrierAssignmentUser
                 ? (announcement.vehicleType || '').trim()
                 : (announcement.vehicleType || personalVehicleDetails.type || '').trim();
 
-            if (isAmbientCarrierPhase) {
+            if (isSavingCarrierNameOnly) {
                 if (!personalDriverDetails.name?.trim()) {
                     alert('نام باربری الزامی است.');
                     return;
@@ -2970,7 +3078,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             const formattedPlate = formatIranianPlateString(savePlateParts);
             
             // Validate plate (فقط لبنیات-فروتلند فاز باربری: پلاک ۱۱ در پس‌زمینه)
-            if (!isAmbientCarrierPhase) {
+            if (!isSavingCarrierNameOnly) {
                 if (
                     !savePlateParts.part1 ||
                     savePlateParts.part1.length !== 2 ||
@@ -3005,6 +3113,13 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 alert('لطفاً کرایه را وارد کنید.');
                 return;
             }
+
+            const tariffAmount = parseNumericField(tariffFreightInput);
+            if (isTariffFreightRequired && tariffAmount <= 0) {
+                alert('کرایه تعرفه الزامی است.');
+                return;
+            }
+
             onUpdateAssignment(announcement.id, {
                 driverId: isDairyAmbientIsolated ? undefined : foundPersonalDriver?.id,
                 vehicleId: isDairyAmbientIsolated ? undefined : foundPersonalVehicle?.id,
@@ -3018,13 +3133,14 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 truckSmartId: !isDairyAmbientIsolated && personalFormMode === 'detailed' ? personalVehicleDetails.truckSmartId : undefined,
                 destinations,
                 totalFreightCost: personalTotalCost,
-                billOfLadingNumber: isAmbientCarrierPhase ? undefined : blNumber,
+                tariffFreightCost: tariffAmount > 0 ? tariffAmount : undefined,
+                billOfLadingNumber: isSavingCarrierNameOnly ? undefined : blNumber,
                 assignmentType: 'personal',
                 notes: notes,
                 assignedDriverName: personalDriverDetails.name.trim(),
                 assignedDriverContact: saveMobile,
                 assignedVehiclePlate: formattedPlate,
-                carrierName: isAmbientCarrierPhase
+                carrierName: isSavingCarrierNameOnly
                     ? personalDriverDetails.name.trim()
                     : isAmbientIsolatedLine
                       ? displayCarrierName !== '-'
@@ -3643,6 +3759,32 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                         </fieldset>
                         {!isAmbientCarrierPhase && (
                         <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
+                        )}
+                        {(isCarrierAssignmentUser || isPersonalAssignmentUser) && (
+                        <div>
+                            <label className="text-sm">
+                                کرایه تعرفه (ریال){isTariffFreightRequired ? '*' : ''}
+                            </label>
+                            <input
+                                type="text"
+                                value={tariffFreightInput}
+                                onChange={(e) => {
+                                    let value = e.target.value.replace(/[^\d,]/g, '');
+                                    const numValue = value.replace(/,/g, '');
+                                    if (numValue === '') {
+                                        setTariffFreightInput('');
+                                        return;
+                                    }
+                                    if (/^\d+$/.test(numValue)) {
+                                        setTariffFreightInput(numValue.replace(/\B(?=(\d{3})+(?!\d))/g, ','));
+                                    }
+                                }}
+                                className="input-style mt-1"
+                                dir="ltr"
+                                autoComplete="off"
+                                placeholder="مثلاً ۵۰,۰۰۰,۰۰۰"
+                            />
+                        </div>
                         )}
                         <div><label className="text-sm">توضیحات</label><textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-style mt-1 min-h-[80px]" placeholder="توضیحات اختیاری..." /></div>
                     </div>
