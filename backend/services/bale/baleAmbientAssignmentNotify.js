@@ -1,6 +1,7 @@
 const pool = require('../../db');
 const baleApi = require('./baleApi');
 const { formatRial } = require('./baleFormat');
+const { timestampToJalaliDate } = require('../../utils/jalali');
 const {
   getAmbientNotifySettings,
   isFrotlandAmbientLineType,
@@ -9,10 +10,42 @@ const {
 const REFER_ACTIONS = ['REFERRED_TO_CARRIER', 'CARRIER_REFERRAL_CHANGED', 'CARRIER_REFERRAL_CANCELLED'];
 const ASSIGN_ACTIONS = ['ASSIGNED', 'REASSIGNED'];
 const RESET_ACTIONS = ['CANCELLED', 'CARRIER_REFERRAL_CANCELLED'];
+const DAILY_COUNTER_KEY = 'ambient_daily_notify_counter';
 
 function dash(value) {
   const s = String(value ?? '').trim();
   return s || '—';
+}
+
+function formatRepresentativeType(value) {
+  if (!value) return '—';
+  const v = String(value).trim().toLowerCase();
+  if (v === 'distributor' || v === 'distribution' || v === 'پخش') return 'پخش';
+  if (v === 'depot' || v === 'دپو') return 'دپو';
+  if (v === 'agent' || v === 'representative' || v === 'نماینده') return 'نماینده';
+  const raw = String(value).trim();
+  if (raw === 'پخش' || raw === 'نماینده' || raw === 'دپو') return raw;
+  return raw;
+}
+
+function getRepresentativeTypesLabel(ann) {
+  const fromAnn = formatRepresentativeType(ann.representative_type);
+  if (fromAnn !== '—') return fromAnn;
+  const types = (ann.destinations || [])
+    .map((d) => formatRepresentativeType(d.representative_type))
+    .filter((t) => t !== '—');
+  const unique = [...new Set(types)];
+  return unique.length > 0 ? unique.join('، ') : '—';
+}
+
+function getRepresentativeNameLabel(ann) {
+  const fromAnn = (ann.representative_name || '').trim();
+  if (fromAnn) return fromAnn;
+  const names = (ann.destinations || [])
+    .map((d) => (d.representative_name || '').trim())
+    .filter(Boolean);
+  const unique = [...new Set(names)];
+  return unique.length > 0 ? unique.join('، ') : '—';
 }
 
 async function loadAnnouncementContext(announcementId) {
@@ -30,6 +63,9 @@ async function loadAnnouncementContext(announcementId) {
        fa.assigned_driver_name,
        fa.bill_of_lading_number,
        fa.vehicle_plate,
+       fa.representative_type,
+       fa.representative_name,
+       fa.bale_ambient_notify_seq,
        pd.name AS personal_driver_name,
        pd.mobile AS personal_driver_mobile,
        pv.vehicle_type AS personal_vehicle_type,
@@ -48,11 +84,13 @@ async function loadAnnouncementContext(announcementId) {
 
   const ann = rows[0];
   const destRes = await pool.query(
-    `SELECT city FROM freight_destinations
+    `SELECT city, representative_name, representative_type
+     FROM freight_destinations
      WHERE freight_announcement_id = $1
      ORDER BY created_at ASC`,
     [announcementId]
   );
+  ann.destinations = destRes.rows;
   ann.destination_cities = destRes.rows.map((r) => r.city).filter(Boolean).join('، ') || '—';
   return ann;
 }
@@ -85,7 +123,6 @@ async function isRepeatCarrierReferral(announcementId) {
 async function shouldUseAssignmentCorrectionMessage(announcementId) {
   const actions = await loadRecentHistoryActions(announcementId);
   if (actions.length === 0) return false;
-  // اولین رکورد همان assign فعلی است
   const prior = actions.slice(1);
   return prior.some((a) => RESET_ACTIONS.includes(a));
 }
@@ -115,6 +152,8 @@ function formatTonnage(ann) {
 function buildFreightLines(ann) {
   return [
     `خودرو: ${getVehicleType(ann)}`,
+    `نوع نماینده: ${getRepresentativeTypesLabel(ann)}`,
+    `نام نماینده: ${getRepresentativeNameLabel(ann)}`,
     `مقصد: ${dash(ann.destination_cities)}`,
     `برند: ${dash(ann.brand)}`,
     `بارگیری از: ${dash(ann.origin_city)}`,
@@ -134,24 +173,97 @@ function buildCarrierDriverLines(ann) {
   ];
 }
 
-function buildMessage(headline, ann, { includeDriver = false } = {}) {
-  const lines = [headline, '', ...buildFreightLines(ann)];
+function formatHeadline(headline, seq) {
+  if (seq != null && Number(seq) > 0) {
+    return `${headline} (${seq})`;
+  }
+  return headline;
+}
+
+function buildMessage(headline, ann, { includeDriver = false, seq = null } = {}) {
+  const lines = [formatHeadline(headline, seq), '', ...buildFreightLines(ann)];
   if (includeDriver) {
     lines.push(...buildCarrierDriverLines(ann));
   }
   return lines.join('\n');
 }
 
-function buildVehicleAssignedMessage(ann) {
-  return buildMessage('خودرو تخصیص داده شد', ann);
+async function nextDailySequence(client) {
+  const jalaliToday = timestampToJalaliDate(new Date());
+  await client.query(
+    `INSERT INTO bale_settings (key, value, updated_at)
+     VALUES ($1, '{"date":null,"count":0}'::jsonb, NOW())
+     ON CONFLICT (key) DO NOTHING`,
+    [DAILY_COUNTER_KEY]
+  );
+  const { rows } = await client.query(
+    `SELECT value FROM bale_settings WHERE key = $1 FOR UPDATE`,
+    [DAILY_COUNTER_KEY]
+  );
+  let state = rows[0]?.value || { date: null, count: 0 };
+  if (state.date !== jalaliToday) {
+    state = { date: jalaliToday, count: 0 };
+  }
+  state.count = Number(state.count || 0) + 1;
+  await client.query(
+    `INSERT INTO bale_settings (key, value, updated_at)
+     VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [DAILY_COUNTER_KEY, JSON.stringify(state)]
+  );
+  return state.count;
 }
 
-function buildCarrierChangedMessage(ann) {
-  return buildMessage('اصلاحیه: باربری عوض شد', ann);
+/**
+ * شمارنده روزانه شمسی — فقط برای پیام جدید افزایش می‌یابد.
+ * پیام اصلاحیه همان شمارنده قبلی همان اعلام بار را نگه می‌دارد.
+ */
+async function resolveNotifySequence(announcementId, isCorrection) {
+  const { rows } = await pool.query(
+    `SELECT bale_ambient_notify_seq FROM freight_announcements WHERE id = $1`,
+    [announcementId]
+  );
+  const existing = rows[0]?.bale_ambient_notify_seq;
+  if (existing != null && Number(existing) > 0) {
+    return Number(existing);
+  }
+  if (isCorrection) {
+    return null;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const seq = await nextDailySequence(client);
+    await client.query(
+      `UPDATE freight_announcements
+       SET bale_ambient_notify_seq = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [seq, announcementId]
+    );
+    await client.query('COMMIT');
+    return seq;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
-function buildCarrierAssignmentCorrectionMessage(ann) {
-  return buildMessage('اصلاحیه: خودرو تخصیص داده شد', ann, { includeDriver: true });
+async function buildVehicleAssignedMessage(ann, announcementId) {
+  const seq = await resolveNotifySequence(announcementId, false);
+  return buildMessage('خودرو تخصیص داده شد', ann, { seq });
+}
+
+async function buildCarrierChangedMessage(ann, announcementId) {
+  const seq = await resolveNotifySequence(announcementId, true);
+  return buildMessage('اصلاحیه: باربری عوض شد', ann, { seq });
+}
+
+async function buildCarrierAssignmentCorrectionMessage(ann, announcementId) {
+  const seq = await resolveNotifySequence(announcementId, true);
+  return buildMessage('اصلاحیه: خودرو تخصیص داده شد', ann, { includeDriver: true, seq });
 }
 
 async function sendAmbientMessage(text) {
@@ -168,17 +280,6 @@ async function sendAmbientMessage(text) {
 
 /**
  * اعلان گروه بله — لبنیات-فروتلند
- *
- * پیام می‌رود:
- * - ثبت نام باربری در دیالوگ تخصیص (فاز placeholder): «خودرو تخصیص داده شد»
- * - ارجاع اول به باربری: «خودرو تخصیص داده شد»
- * - ارجاع مجدد / تغییر باربری: «اصلاحیه: باربری عوض شد»
- * - تخصیص واقعی راننده توسط ترابری شخصی: «خودرو تخصیص داده شد»
- * - تخصیص پس از لغو تخصیص یا لغو ارجاع: «اصلاحیه: خودرو تخصیص داده شد»
- *
- * پیام نمی‌رود:
- * - عملیات سمت کاربر باربری
- * - ویرایش مجدد بدون لغو قبلی
  */
 async function notifyAssignmentAfterCommit(
   announcementId,
@@ -212,11 +313,11 @@ async function notifyAssignmentAfterCommit(
 
     let text;
     if (isCarrierOnlySave) {
-      text = buildVehicleAssignedMessage(ann);
+      text = await buildVehicleAssignedMessage(ann, announcementId);
     } else if (await shouldUseAssignmentCorrectionMessage(announcementId)) {
-      text = buildCarrierAssignmentCorrectionMessage(ann);
+      text = await buildCarrierAssignmentCorrectionMessage(ann, announcementId);
     } else {
-      text = buildVehicleAssignedMessage(ann);
+      text = await buildVehicleAssignedMessage(ann, announcementId);
     }
 
     const result = await sendAmbientMessage(text);
@@ -241,7 +342,9 @@ async function notifyReferToCarrierAfterCommit(announcementId, { carrierChanged 
     }
 
     const repeatRefer = carrierChanged || (await isRepeatCarrierReferral(announcementId));
-    const text = repeatRefer ? buildCarrierChangedMessage(ann) : buildVehicleAssignedMessage(ann);
+    const text = repeatRefer
+      ? await buildCarrierChangedMessage(ann, announcementId)
+      : await buildVehicleAssignedMessage(ann, announcementId);
     const result = await sendAmbientMessage(text);
     if (result.sent) {
       console.log(
@@ -279,7 +382,12 @@ async function sendTestAmbientMessage(chatIdOverride) {
   }
 
   const text = [
-    'خودرو تخصیص داده شد',
+    'خودرو تخصیص داده شد (تست)',
+    '',
+    'خودرو: تریلی',
+    'نوع نماینده: نماینده',
+    'نام نماینده: —',
+    'مقصد: تهران',
     '',
     '(پیام تست — اگر این را می‌بینید ربات و chat_id درست است)',
   ].join('\n');
@@ -326,4 +434,8 @@ module.exports = {
   buildCarrierChangedMessage,
   buildCarrierAssignmentCorrectionMessage,
   loadAnnouncementContext,
+  formatRepresentativeType,
+  getRepresentativeTypesLabel,
+  getRepresentativeNameLabel,
+  resolveNotifySequence,
 };

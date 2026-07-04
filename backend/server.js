@@ -249,6 +249,11 @@ addTariffFreightCost().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون tariff_freight_cost:', err);
 });
 
+const addBaleAmbientNotifySeq = require('./migrations/add_bale_ambient_notify_seq');
+addBaleAmbientNotifySeq().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن ستون bale_ambient_notify_seq:', err);
+});
+
 const addVehicleCodeColumn = require('./migrations/add_vehicle_code_column');
 addVehicleCodeColumn().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن ستون vehicle_code:', err);
