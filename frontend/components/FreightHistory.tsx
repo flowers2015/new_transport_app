@@ -17,7 +17,7 @@ const renderAnnouncementDateTimeCell = (createdAt: Date | string | null | undefi
 };
 import {
     getDestinationCitiesLabel,
-    getRepresentativeNameLabel,
+    getAnnouncementRepDisplayLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
@@ -25,6 +25,7 @@ import {
     TOTAL_FREIGHT_HEADER,
     formatFreightAmountCell,
     formatRepresentativeType,
+    resolveDestinationRepTypeLabel,
     localizeExcelValue,
     isFreightDestinationDetailHeader,
     formatTotalTonnageFromDestinations,
@@ -561,7 +562,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
-                        const repType = formatRepresentativeType((dest as any).representativeType);
+                        const repType = resolveDestinationRepTypeLabel(ann, dest);
                         const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
@@ -755,25 +756,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     for (let i = 0; i < 4; i++) {
                         const dest = ann.destinations[i];
                         if (dest) {
-                            // منطق تشخیص نوع نماینده - بهبود یافته
-                            let repType = '';
-                            const repTypeValue = (dest as any).representativeType;
-                            const repName = (dest.representativeName || '').toString().trim();
-                            
-                            repType = formatRepresentativeType(repTypeValue);
-                            if (repType === '-' && repName) {
-                                // اگر representativeType نبود، از representativeName استفاده کن
-                                const repNameLower = repName.toLowerCase();
-                                if (repNameLower.includes('پخش') || repNameLower === 'پخش') {
-                                    repType = 'پخش';
-                                } else if (repNameLower.includes('نماینده') || repNameLower === 'نماینده') {
-                                    repType = 'نماینده';
-                                } else if (repName && repName.trim() !== '') {
-                                    // اگر نام وجود دارد اما پخش یا نماینده نیست، همان نام را نمایش بده
-                                    repType = repName;
-                                }
-                            }
-                            
+                            const repType = resolveDestinationRepTypeLabel(ann, dest);
                             const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                             const deliveryDate = (dest as any).deliveryDate || '';
                             const unloadTime = dest.unloadTime || '';
@@ -890,7 +873,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) => <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span> },
-                { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getRepresentativeNameLabel(ann) },
+                { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getAnnouncementRepDisplayLabel(ann) },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
@@ -1284,7 +1267,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                                 const dest = ann.destinations[i];
                                                 return (
                                                     <React.Fragment key={i}>
-                                                        <td className="p-2 text-center border whitespace-normal">{dest?.representativeName || '-'}</td>
+                                                        <td className="p-2 text-center border whitespace-normal">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
                                                         <td className="p-2 text-center border whitespace-normal">{dest?.city || '-'}</td>
                                                         <td className="p-2 text-center border">
                                                             {dest?.tonnage != null

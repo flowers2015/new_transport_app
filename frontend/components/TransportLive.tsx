@@ -11,7 +11,7 @@ import IranianPlateInput, {
 import DestinationTransferDialog from './DestinationTransferDialog';
 import {
     getDestinationCitiesLabel,
-    getRepresentativeNameLabel,
+    getAnnouncementRepDisplayLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
@@ -877,7 +877,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         ann,
                         <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span>
                     ) },
-                { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getRepresentativeNameLabel(ann) },
+                { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getAnnouncementRepDisplayLabel(ann) },
                 { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
@@ -1338,7 +1338,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
-                        const repType = formatRepresentativeType((dest as any).representativeType);
+                        const repType = resolveDestinationRepTypeLabel(ann, dest);
                         const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
@@ -1613,26 +1613,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     for (let i = 0; i < 4; i++) {
                         const dest = ann.destinations[i];
                         if (dest) {
-                            // منطق تشخیص نوع نماینده - بهبود یافته
-                            let repType = '';
-                            const repTypeValue = (dest as any).representativeType;
-                            const repName = (dest.representativeName || '').toString().trim();
-                            
-                            // اول از representativeType بررسی کن
-                            repType = formatRepresentativeType(repTypeValue);
-                            if (repType === '-' && repName) {
-                                // اگر representativeType نبود، از representativeName استفاده کن
-                                const repNameLower = repName.toLowerCase();
-                                if (repNameLower.includes('پخش') || repNameLower === 'پخش') {
-                                    repType = 'پخش';
-                                } else if (repNameLower.includes('نماینده') || repNameLower === 'نماینده') {
-                                    repType = 'نماینده';
-                                } else if (repName && repName.trim() !== '') {
-                                    // اگر نام وجود دارد اما پخش یا نماینده نیست، همان نام را نمایش بده
-                                    repType = repName;
-                                }
-                            }
-                            
+                            const repType = resolveDestinationRepTypeLabel(ann, dest);
                             const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
                             const deliveryDate = (dest as any).deliveryDate || '';
                             const unloadTime = dest.unloadTime || '';
@@ -2239,7 +2220,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 const dest = ann.destinations[i];
                                                 return (
                                                     <React.Fragment key={i}>
-                                                        <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
+                                                        <td className="p-2 text-center border">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.city || '-'}</td>
                                                         <td className="p-2 text-center border">{dest?.tonnage != null ? formatTonnageKg(parseNumericField(dest.tonnage)) : '-'}</td>
                                                         <td className="p-2 text-center border">{(dest as any)?.deliveryDate || '-'}</td>

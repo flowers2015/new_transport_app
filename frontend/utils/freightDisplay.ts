@@ -149,6 +149,25 @@ export function formatCompactDestinationsForExcel(
         .join('، ');
 }
 
+/** نمایش نوع/نام نماینده در سطح اعلام (بستنی) — agent: نام، پخش/دپو: همان برچسب */
+export function getAnnouncementRepDisplayLabel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'> | null | undefined
+): string {
+    if (!ann) return '-';
+    const rawType = ann.representativeType;
+    if (isAgentRepresentativeType(rawType)) {
+        const name = (ann.representativeName || '').trim();
+        if (name) return name;
+        const fromDests = (ann.destinations || [])
+            .map((d) => (d.representativeName || '').trim())
+            .filter(Boolean);
+        const unique = [...new Set(fromDests)];
+        return unique.length > 0 ? unique.join('، ') : '-';
+    }
+    const typeLabel = formatRepresentativeType(rawType);
+    return typeLabel !== '-' ? typeLabel : '-';
+}
+
 /** نام نماینده/پخش — سطح اعلام بار (بستنی) یا تجمیع مقاصد (پاستوریزه/لبنیات) */
 export function getRepresentativeNameLabel(
     ann: Pick<FreightAnnouncement, 'representativeName' | 'destinations'> | null | undefined
