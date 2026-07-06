@@ -105,7 +105,6 @@ type LastFreightChoices = {
     brandType?: string;
     brand1?: string;
     brand2?: string;
-    vehicleType?: string;
     representativeType?: 'agent' | 'distributor';
 };
 
@@ -148,9 +147,6 @@ const applyLastFreightChoices = (
         brand1: lastChoices.brand1 || 'میهن',
         brand2: lastChoices.brand2 || '',
     });
-    if (lastChoices.vehicleType) {
-        setters.setCommonState(s => ({ ...s, vehicleType: lastChoices.vehicleType || '' }));
-    }
     if (lastChoices.representativeType) {
         setters.setDestinations(prev =>
             prev.map((d, i) =>
@@ -1992,6 +1988,7 @@ const AnnouncementPanel: React.FC<{
             setLoadingLocationState(initialLoadingLocationState);
             setBrandState(initialBrandState);
         }
+        setCommonState((s) => ({ ...s, vehicleType: '' }));
     };
 
     useEffect(() => {
@@ -2187,6 +2184,7 @@ const AnnouncementPanel: React.FC<{
             } else if (lineType === FreightLineType.Ambient) {
                 setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
             }
+            setCommonState((s) => ({ ...s, vehicleType: '' }));
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
 
@@ -2439,7 +2437,6 @@ const AnnouncementPanel: React.FC<{
                     brandType: brandState.brandType,
                     brand1: brandState.brand1,
                     brand2: brandState.brand2 || '',
-                    vehicleType: commonState.vehicleType,
                     representativeType:
                         lineType === FreightLineType.IceCream
                             ? (destinations[0]?.representativeType as 'agent' | 'distributor' | 'depot') || 'agent'
@@ -2678,6 +2675,7 @@ const AnnouncementPanel: React.FC<{
                                 {loadingLocationState.loadingType === 'single' ? (
                                     <RequiredField label="مبدا بارگیری*">
                                         <CityAutocomplete
+                                            cityOnlyLabels
                                             value={loadingLocationState.originCity1}
                                             onChange={(city) => {
                                                 onRouteQueryChange(city);
@@ -2694,6 +2692,7 @@ const AnnouncementPanel: React.FC<{
                                     <>
                                         <RequiredField label="مبدا بارگیری اول*">
                                             <CityAutocomplete
+                                                cityOnlyLabels
                                                 value={loadingLocationState.originCity1}
                                                 onChange={(city) => {
                                                     onRouteQueryChange(city);
@@ -2708,6 +2707,7 @@ const AnnouncementPanel: React.FC<{
                                         </RequiredField>
                                         <RequiredField label="مبدا بارگیری دوم*">
                                             <CityAutocomplete
+                                                cityOnlyLabels
                                                 value={loadingLocationState.originCity2}
                                                 onChange={(city) => {
                                                     onRouteQueryChange(city);
@@ -2841,6 +2841,7 @@ const AnnouncementPanel: React.FC<{
                                         <div className="grid grid-cols-2 gap-2">
                                             <RequiredField label="شهر مقصد*">
                                                 <CityAutocomplete
+                                                    cityOnlyLabels
                                                     value={dest.city || ''}
                                                     onChange={(city) =>
                                                         dest.id && handleDestinationCitySelect(dest.id, city)
@@ -2982,6 +2983,7 @@ const AnnouncementPanel: React.FC<{
                                 {loadingLocationState.loadingType === 'single' ? (
                                     <RequiredField label="مبدا بارگیری*">
                                         <CityAutocomplete
+                                            cityOnlyLabels
                                             value={loadingLocationState.originCity1}
                                             onChange={(city) => {
                                                 onRouteQueryChange(city);
@@ -2998,6 +3000,7 @@ const AnnouncementPanel: React.FC<{
                                     <>
                                         <RequiredField label="مبدا بارگیری اول*">
                                             <CityAutocomplete
+                                                cityOnlyLabels
                                                 value={loadingLocationState.originCity1}
                                                 onChange={(city) => {
                                                     onRouteQueryChange(city);
@@ -3012,6 +3015,7 @@ const AnnouncementPanel: React.FC<{
                                         </RequiredField>
                                         <RequiredField label="مبدا بارگیری دوم*">
                                             <CityAutocomplete
+                                                cityOnlyLabels
                                                 value={loadingLocationState.originCity2}
                                                 onChange={(city) => {
                                                     onRouteQueryChange(city);
@@ -3117,6 +3121,7 @@ const AnnouncementPanel: React.FC<{
                                         <div className="grid grid-cols-2 gap-2">
                                             <RequiredField label="شهر مقصد*">
                                                 <CityAutocomplete
+                                                    cityOnlyLabels
                                                     value={dest.city || ''}
                                                     onChange={(city) =>
                                                         dest.id && handleDestinationCitySelect(dest.id, city)
@@ -3206,7 +3211,7 @@ const AnnouncementPanel: React.FC<{
                             key={`${route.id}-${route.city}-${route.province}`}
                             value={route.city}
                         >
-                            {route.city}{route.province ? ` - ${route.province}` : ''}{route.roundTripKm ? ` (${route.roundTripKm} کیلومتر رفت و برگشت)` : ''}
+                            {route.city}
                         </option>
                     ))}
                 </datalist>

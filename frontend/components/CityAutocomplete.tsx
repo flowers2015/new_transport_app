@@ -15,6 +15,8 @@ interface CityAutocompleteProps {
     onValidityChange?: (valid: boolean) => void;
     /** پیشنهادها با position:fixed روی body رندر می‌شوند (برای دیالوگ/اسکرول) */
     inModal?: boolean;
+    /** فقط نام شهر — بدون مسافت/دسته مسیر (مثلاً فرم اعلام بار برنامه‌ریزی) */
+    cityOnlyLabels?: boolean;
 }
 
 interface CityOption {
@@ -27,7 +29,8 @@ interface CityOption {
     routeCategory?: string | null;
 }
 
-export function formatCityRouteLabel(suggestion: CityOption): string {
+export function formatCityRouteLabel(suggestion: CityOption, cityOnly = false): string {
+    if (cityOnly) return suggestion.city;
     const distance =
         suggestion.distanceCategory?.trim() ||
         suggestion.routeCategory?.trim() ||
@@ -53,6 +56,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
     onValidityChange,
     onRouteSelect,
     inModal = false,
+    cityOnlyLabels = false,
 }) => {
     const safeValue = value ?? '';
     const [query, setQuery] = useState(safeValue);
@@ -264,8 +268,10 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleSuggestionClick(suggestion)}
                 >
-                    <div className="font-medium text-gray-900 text-sm">{formatCityRouteLabel(suggestion)}</div>
-                    {suggestion.province && (
+                    <div className="font-medium text-gray-900 text-sm">
+                        {formatCityRouteLabel(suggestion, cityOnlyLabels)}
+                    </div>
+                    {!cityOnlyLabels && suggestion.province && (
                         <div className="text-xs text-gray-600">{suggestion.province}</div>
                     )}
                 </div>
