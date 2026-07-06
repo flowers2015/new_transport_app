@@ -77,6 +77,8 @@ interface FreightHistoryProps {
     setFilterBillOfLading: (billOfLading: string) => void;
     filterDriverName: string;
     setFilterDriverName: (driverName: string) => void;
+    filterCreatorName: string;
+    setFilterCreatorName: (creatorName: string) => void;
     onSearch: () => void;
     onClearFilters: () => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
@@ -124,7 +126,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -154,14 +156,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         [isPersonalTransportUser]
     );
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>({});
-    const [quickSearch, setQuickSearch] = useState('');
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
     useEffect(() => {
         const prefs = loadTransportLiveFilterPrefs(filterStorageKey);
         setColumnFilters(prefs.columnFilters);
-        setQuickSearch(prefs.quickSearch);
         setSortColumn(prefs.sortColumn ?? null);
         setSortDirection(prefs.sortDirection ?? 'asc');
     }, [filterStorageKey]);
@@ -169,11 +169,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     useEffect(() => {
         saveTransportLiveFilterPrefs(filterStorageKey, {
             columnFilters,
-            quickSearch,
+            quickSearch: '',
             sortColumn,
             sortDirection,
         });
-    }, [filterStorageKey, columnFilters, quickSearch, sortColumn, sortDirection]);
+    }, [filterStorageKey, columnFilters, sortColumn, sortDirection]);
 
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     
@@ -982,7 +982,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const displayAnnouncements = useMemo(() => {
         const filtered = applyTransportLiveFilters(filteredAnnouncements, {
             columnFilters,
-            quickSearch,
+            quickSearch: '',
             columns: visibleColumns,
         });
         return applyTransportLiveSort(filtered, {
@@ -993,7 +993,6 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     }, [
         filteredAnnouncements,
         columnFilters,
-        quickSearch,
         visibleColumns,
         sortColumn,
         sortDirection,
@@ -1030,13 +1029,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     );
 
     const activeColumnFilterCount = useMemo(
-        () => countActiveFilters({ columnFilters, quickSearch }),
-        [columnFilters, quickSearch]
+        () => countActiveFilters({ columnFilters, quickSearch: '' }),
+        [columnFilters]
     );
 
     const clearColumnFilters = () => {
         setColumnFilters({});
-        setQuickSearch('');
         setSortColumn(null);
         setSortDirection('asc');
     };
@@ -1047,9 +1045,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                     <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />تاریخچه اعلام بار</h2>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-                        {/* فیلتر تاریخ شمسی بارگیری */}
+                        {/* فیلتر تاریخ اعلام بار */}
                         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
-                            <label className="text-xs whitespace-nowrap">تاریخ شمسی بارگیری:</label>
+                            <label className="text-xs whitespace-nowrap">تاریخ اعلام بار:</label>
           <input
             type="text"
                                 placeholder="1404-05-01" 
@@ -1116,6 +1114,24 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 autoComplete="off"
           />
         </div>
+                        {/* فیلتر کارمند اعلام‌کننده */}
+                        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+                            <label className="text-xs whitespace-nowrap">کارمند اعلام‌کننده:</label>
+          <input
+                                type="text" 
+                                placeholder="جستجوی کارمند..." 
+                                value={filterCreatorName}
+                                onChange={e => setFilterCreatorName(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs rounded border w-28"
+                                autoComplete="off"
+          />
+        </div>
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
@@ -1134,13 +1150,6 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     </div>
         </div>
                 <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
-                    <input
-                        type="search"
-                        value={quickSearch}
-                        onChange={(e) => setQuickSearch(e.target.value)}
-                        placeholder="جستجوی سریع در جدول..."
-                        className="px-2 py-1.5 text-xs border border-slate-300 rounded-md min-w-[200px] flex-1 max-w-md"
-                    />
                     {activeColumnFilterCount > 0 && (
                         <button
                             type="button"

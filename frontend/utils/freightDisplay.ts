@@ -86,21 +86,44 @@ export function getDestinationCitiesLabel(
     return cities.length > 0 ? cities.join('، ') : '-';
 }
 
+function isAgentRepresentativeType(value?: string | null): boolean {
+    if (!value) return false;
+    const v = String(value).trim().toLowerCase();
+    return v === 'agent' || v === 'representative' || v === 'نماینده';
+}
+
+function resolveDestinationRepTypeRaw(
+    ann: Pick<FreightAnnouncement, 'representativeType'>,
+    dest: Pick<Destination, 'representativeType'>
+): string | null | undefined {
+    return dest.representativeType || ann.representativeType;
+}
+
+function resolveDestinationRepDisplayLabel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
+    dest: Pick<Destination, 'representativeType' | 'representativeName'>
+): string {
+    const rawType = resolveDestinationRepTypeRaw(ann, dest);
+    const typeLabel = formatRepresentativeType(rawType);
+
+    if (isAgentRepresentativeType(rawType)) {
+        const name = (dest.representativeName || ann.representativeName || '').trim();
+        return name || '-';
+    }
+
+    if (typeLabel !== '-') return typeLabel;
+    return '';
+}
+
 function resolveDestinationRepTypeLabel(
     ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
     dest: Pick<Destination, 'representativeType' | 'representativeName'>
 ): string {
-    const fromDest = formatRepresentativeType(dest.representativeType);
-    if (fromDest !== '-') return fromDest;
-
-    const fromAnn = formatRepresentativeType(ann.representativeType);
-    if (fromAnn !== '-') return fromAnn;
-
-    return '';
+    return resolveDestinationRepDisplayLabel(ann, dest);
 }
 
-/** نوع نماینده هر مقصد — فقط از فیلد representativeType (نه حدس از نام) */
-export { resolveDestinationRepTypeLabel };
+/** برچسب مقصد فشرده — برای نماینده نام نماینده، برای پخش/دپو همان نوع */
+export { resolveDestinationRepTypeLabel, resolveDestinationRepDisplayLabel };
 
 /** ستون «مقاصد» فشرده پاستوریزه/لبنیات — خروجی اکسل بدون وابستگی به React */
 export function formatCompactDestinationsForExcel(
@@ -111,7 +134,7 @@ export function formatCompactDestinationsForExcel(
 
     return destinations
         .map((d) => {
-            const destRepType = resolveDestinationRepTypeLabel(ann, d);
+            const destRepType = resolveDestinationRepDisplayLabel(ann, d);
             const city = (d.city || '').trim() || '-';
             const tonnage = d.tonnage ? formatTonnageKgFromRaw(d.tonnage) : '';
             const deliveryDate = String((d as Destination & { deliveryDate?: string }).deliveryDate || '').trim();

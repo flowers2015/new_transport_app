@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getRepresentativeNameLabel, localizeExcelValue, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -22,6 +22,20 @@ const BRANDS = ['میهن', 'پاندا', 'برنارد', 'میلکوم', 'پا�
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 const PRIORITIES = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
 const ICE_CREAM_PRODUCTS = ['کره', 'کترینگ', 'پنیر پیتزا', 'خامه قنادی'];
+const ALL_FREIGHT_LINE_TYPES = Object.values(FreightLineType);
+
+const isPlanningPlannerRole = (user?: User): boolean => {
+    if (!user) return false;
+    return (
+        user.role === UserRole.PlanningEmployee ||
+        user.role === UserRole.PlanningManager ||
+        user.role === 'planner' ||
+        user.role === 'planner_manager' ||
+        user.role === 'کارمند برنامه‌ریزی' ||
+        user.role === 'مدیر برنامه‌ریزی'
+    );
+};
+
 const RequiredField: React.FC<{
     label: string;
     children: React.ReactNode;
@@ -131,16 +145,18 @@ const applyLastFreightChoices = (
     }
 ) => {
     if (!lastChoices) return;
+    const iceCreamLine = lineType === FreightLineType.IceCream;
     setters.setLoadingLocationState({
         loadingType: (lastChoices.loadingType as 'single' | 'double') || 'single',
-        originCity1:
-            lastChoices.originCity1 ||
-            (lineType === FreightLineType.Dairy
-                ? 'کارخانه شهر لبنیات'
-                : lineType === FreightLineType.Ambient
-                  ? 'انبار مرکزی'
-                  : ''),
-        originCity2: lastChoices.originCity2 || '',
+        originCity1: iceCreamLine
+            ? ''
+            : lastChoices.originCity1 ||
+              (lineType === FreightLineType.Dairy
+                  ? 'کارخانه شهر لبنیات'
+                  : lineType === FreightLineType.Ambient
+                    ? 'انبار مرکزی'
+                    : ''),
+        originCity2: iceCreamLine ? '' : lastChoices.originCity2 || '',
     });
     setters.setBrandState({
         brandType: (lastChoices.brandType as 'single' | 'double') || 'single',
@@ -155,6 +171,38 @@ const applyLastFreightChoices = (
         );
     }
 };
+
+const PLANNER_PRESET_ORIGINS = ['کارخانه شهر لبنیات', 'انبار مرکزی'] as const;
+
+const isPlannerPresetOrigin = (city?: string | null): boolean =>
+    !!city?.trim() && PLANNER_PRESET_ORIGINS.includes(city.trim() as (typeof PLANNER_PRESET_ORIGINS)[number]);
+
+const isOriginCity1Accepted = (city: string, validFromPicker: boolean): boolean => {
+    const trimmed = city.trim();
+    if (!trimmed) return false;
+    if (isPlannerPresetOrigin(trimmed)) return true;
+    return validFromPicker;
+};
+
+const resolvePlannerOriginCity1 = (
+    lineType: FreightLineType,
+    lastChoices?: LastFreightChoices | null
+): string => {
+    if (lastChoices?.originCity1?.trim()) return lastChoices.originCity1.trim();
+    if (lineType === FreightLineType.Dairy) return 'کارخانه شهر لبنیات';
+    if (lineType === FreightLineType.Ambient) return 'انبار مرکزی';
+    return '';
+};
+
+/** مبدا نهایی برای ثبت — اگر خالی باشد پیش‌فرض خط اعمال می‌شود */
+const getEffectiveOriginCity1 = (lineType: FreightLineType, raw: string): string => {
+    const trimmed = raw.trim();
+    if (trimmed) return trimmed;
+    return resolvePlannerOriginCity1(lineType, null);
+};
+
+const isDairyAmbientLine = (lineType: FreightLineType) =>
+    lineType === FreightLineType.Dairy || lineType === FreightLineType.Ambient;
 
 const splitCombinedField = (value: string): [string, string] => {
     if (!value || !value.includes(' و ')) {
@@ -508,7 +556,7 @@ const columnsConfig = (props: {
                             <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
                             {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
                             {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                            <span className="text-purple-600">{formatRepresentativeType(d.representativeType)}</span>
+                            <span className="text-purple-600">{resolveDestinationRepTypeLabel(ann, d)}</span>
                         </div>
                     ))}
                 </div>
@@ -530,7 +578,7 @@ const columnsConfig = (props: {
                             <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
                             {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
                             {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                            <span className="text-purple-600">{formatRepresentativeType(d.representativeType)}</span>
+                            <span className="text-purple-600">{resolveDestinationRepTypeLabel(ann, d)}</span>
                         </div>
                     ))}
                 </div>
@@ -800,6 +848,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelData, setPanelData] = useState<FreightAnnouncement | null>(null); // null for new, object for edit
+    const [panelLineType, setPanelLineType] = useState<FreightLineType>(FreightLineType.IceCream);
 
     const [rejectInfo, setRejectInfo] = useState<{ id: string; reason: string } | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -821,13 +870,20 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     // مجوزهای کاربر
     const [userPermissions, setUserPermissions] = useState<{ lineType: string; permissionType: 'approval' | 'create' }[]>([]);
     const [allowedLineTypes, setAllowedLineTypes] = useState<FreightLineType[]>([]);
+    const [linePermissionsReady, setLinePermissionsReady] = useState(false);
     
     // دریافت مجوزهای کاربر
     useEffect(() => {
         const fetchUserPermissions = async () => {
-            if (!currentUser || currentUser.role === UserRole.Admin) {
-                // Admin همه مجوزها را دارد
-                setAllowedLineTypes([FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+            if (!currentUser) {
+                setAllowedLineTypes(ALL_FREIGHT_LINE_TYPES);
+                setLinePermissionsReady(true);
+                return;
+            }
+
+            if (currentUser.role === UserRole.Admin) {
+                setAllowedLineTypes(ALL_FREIGHT_LINE_TYPES);
+                setLinePermissionsReady(true);
                 return;
             }
             
@@ -839,8 +895,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                               currentUser.role === 'کارمند برنامه‌ریزی';
             
             if (!isManager && !isEmployee) {
-                // اگر نه مدیر و نه کارمند، همه مجوزها را دارد
-                setAllowedLineTypes([FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+                setAllowedLineTypes(ALL_FREIGHT_LINE_TYPES);
+                setLinePermissionsReady(true);
                 return;
             }
             
@@ -856,7 +912,6 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     const userPerms = permissions.filter((p: any) => p.user_id === currentUser.id);
                     setUserPermissions(userPerms);
                     
-                    // استخراج لاین‌های مجاز
                     const permissionType = isManager ? 'approval' : 'create';
                     const allowed = userPerms
                         .filter((p: any) => p.permission_type === permissionType)
@@ -868,29 +923,51 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                         })
                         .filter((lt: any) => Object.values(FreightLineType).includes(lt));
                     
-                    setAllowedLineTypes(allowed.length > 0 ? allowed : [FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
-                    
-                    // اگر تب فعلی مجاز نیست، به اولین تب مجاز برو
-                    if (allowed.length > 0 && !allowed.includes(activeTab)) {
-                        setActiveTab(allowed[0]);
-                    }
+                    const resolved =
+                        allowed.length > 0 ? allowed : ALL_FREIGHT_LINE_TYPES;
+                    setAllowedLineTypes(resolved);
+                    setActiveTab((prev) => {
+                        if (allowed.length > 0 && allowed.length < 3) {
+                            return allowed.includes(prev) ? prev : allowed[0];
+                        }
+                        if (allowed.length > 0 && !allowed.includes(prev)) {
+                            return allowed[0];
+                        }
+                        return prev;
+                    });
+                } else {
+                    setAllowedLineTypes(ALL_FREIGHT_LINE_TYPES);
                 }
             } catch (error) {
                 console.error('Error fetching user permissions:', error);
-                // در صورت خطا، همه مجوزها را بده
-                setAllowedLineTypes([FreightLineType.IceCream, FreightLineType.Dairy, FreightLineType.Ambient]);
+                setAllowedLineTypes(ALL_FREIGHT_LINE_TYPES);
+            } finally {
+                setLinePermissionsReady(true);
             }
         };
         
+        setLinePermissionsReady(false);
         fetchUserPermissions();
     }, [currentUser]);
+
+    const visibleLineTabs = useMemo(() => {
+        if (!linePermissionsReady) return [];
+        if (!currentUser || currentUser.role === UserRole.Admin || !isPlanningPlannerRole(currentUser)) {
+            return ALL_FREIGHT_LINE_TYPES;
+        }
+        if (allowedLineTypes.length === 0 || allowedLineTypes.length === 3) {
+            return ALL_FREIGHT_LINE_TYPES;
+        }
+        return allowedLineTypes;
+    }, [linePermissionsReady, currentUser, allowedLineTypes]);
 
 
     const handleOpenCreatePanel = useCallback(() => {
         // Create mode: no preset data object to avoid accidental edit-mode
         setPanelData(null);
+        setPanelLineType(activeTab);
         setIsPanelOpen(true);
-    }, []);
+    }, [activeTab]);
 
     const handleOpenEditPanel = useCallback((ann: FreightAnnouncement) => {
         setPanelData(ann);
@@ -1152,7 +1229,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                 <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
                                 {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
                                 {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                                <span className="text-purple-600">{formatRepresentativeType(d.representativeType)}</span>
+                                <span className="text-purple-600">{resolveDestinationRepTypeLabel(ann, d)}</span>
                             </div>
                         ))}
                     </div>
@@ -1303,6 +1380,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     }, [viewMode, activeTab, allColumns]);
 
     const filteredAnnouncements = useMemo(() => {
+        if (!linePermissionsReady && isPlanningPlannerRole(currentUser)) {
+            return [];
+        }
+
         let data = announcements;
 
         // فیلتر بر اساس لاین فعلی
@@ -1387,7 +1468,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 ? sortByIceCreamDisplayOrder(data)
                 : data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         return sorted;
-    }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, allowedLineTypes, currentUser]);
+    }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, allowedLineTypes, currentUser, linePermissionsReady]);
 
     const canManageIceCreamOrder =
         activeTab === FreightLineType.IceCream && typeof onUpdateIceCreamDisplayOrder === 'function';
@@ -1681,20 +1762,18 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                 {canCreate && <button onClick={handleOpenCreatePanel} className="flex items-center gap-1 px-3 py-1.5 bg-sky-600 text-white rounded-md text-xs hover:bg-sky-700"><PlusCircleIcon className="w-4 h-4"/>اعلام بار جدید</button>}
                             </div>
                         </div>
+                        {!linePermissionsReady ? (
+                            <div
+                                className="flex items-center p-1 bg-slate-100 rounded-lg mb-4 h-9 animate-pulse print:hidden"
+                                aria-hidden
+                            />
+                        ) : visibleLineTabs.length > 0 ? (
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg mb-4 print:hidden">
-                            {Object.values(FreightLineType)
-                                .filter(lt => {
-                                    // اگر Admin است یا مجوزی تعریف نشده، همه تب‌ها را نمایش بده
-                                    if (currentUser?.role === UserRole.Admin || allowedLineTypes.length === 0 || allowedLineTypes.length === 3) {
-                                        return true;
-                                    }
-                                    // فقط تب‌های مجاز را نمایش بده
-                                    return allowedLineTypes.includes(lt as any);
-                                })
-                                .map(lt => (
+                            {visibleLineTabs.map((lt) => (
                                     <button key={lt} onClick={() => setActiveTab(lt as any)} className={`flex-1 py-1 rounded-md text-sm font-semibold transition-colors ${activeTab === lt ? 'bg-sky-600 text-white shadow' : 'hover:bg-slate-200'}`}>{lt}</button>
                                 ))}
                         </div>
+                        ) : null}
                         {canManageIceCreamOrder && iceCreamOrderSaving && (
                             <p className="text-xs text-sky-600 mb-2 print:hidden">در حال ذخیره ترتیب نمایش...</p>
                         )}
@@ -1842,6 +1921,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             <AnnouncementPanel
                 isOpen={isPanelOpen}
                 data={panelData}
+                initialLineType={panelLineType}
                 onClose={handleClosePanel}
                 onSaveNew={onAddAnnouncement}
                 onSaveEdit={onUpdateAnnouncement}
@@ -1908,7 +1988,8 @@ const AnnouncementPanel: React.FC<{
     onRouteQueryChange: (value: string) => void;
     currentUser?: User;
     allowedLineTypes?: FreightLineType[];
-}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [] }) => {
+    initialLineType?: FreightLineType;
+}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [], initialLineType }) => {
     const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: 0, vehicleType: '', notes: '' };
@@ -1937,7 +2018,8 @@ const AnnouncementPanel: React.FC<{
     const [originCity1Valid, setOriginCity1Valid] = useState(false);
     const [originCity2Valid, setOriginCity2Valid] = useState(false);
 
-    const resetForm = () => {
+    const resetForm = (lineOverride?: FreightLineType) => {
+        const effectiveLineType = lineOverride ?? lineType;
         // Don't reset lineType to allow multiple entries of the same type
         // Don't reset loadingDate to preserve the selected date
         // Don't reset platformArrivalTime to preserve the selected time
@@ -1966,27 +2048,34 @@ const AnnouncementPanel: React.FC<{
             return null;
         };
         
-        const lineTypeKey = lineType === FreightLineType.IceCream ? 'IceCream' 
-            : lineType === FreightLineType.Dairy ? 'Dairy' 
+        const lineTypeKey = effectiveLineType === FreightLineType.IceCream ? 'IceCream' 
+            : effectiveLineType === FreightLineType.Dairy ? 'Dairy' 
             : 'Ambient';
         
         const lastChoices = getLastUserChoices(lineTypeKey) as LastFreightChoices | null;
         if (lastChoices) {
-            applyLastFreightChoices(lastChoices, lineType, {
+            applyLastFreightChoices(lastChoices, effectiveLineType, {
                 setLoadingLocationState,
                 setBrandState,
                 setCommonState,
                 setDestinations,
             });
-        } else if (lineType === FreightLineType.Dairy) {
+            if (effectiveLineType === FreightLineType.IceCream) {
+                setOriginCity1Valid(false);
+                setOriginCity2Valid(false);
+            }
+        } else if (effectiveLineType === FreightLineType.Dairy) {
             setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهر لبنیات', originCity2: '' });
             setBrandState(initialBrandState);
-        } else if (lineType === FreightLineType.Ambient) {
+        } else if (effectiveLineType === FreightLineType.Ambient) {
             setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
             setBrandState(initialBrandState);
         } else {
             setLoadingLocationState(initialLoadingLocationState);
             setBrandState(initialBrandState);
+        }
+        if (effectiveLineType !== FreightLineType.IceCream) {
+            setOriginCity1Valid(!!resolvePlannerOriginCity1(effectiveLineType, lastChoices).trim());
         }
         setCommonState((s) => ({ ...s, vehicleType: '' }));
     };
@@ -2129,7 +2218,11 @@ const AnnouncementPanel: React.FC<{
                     setDestCityValid(cityValidity);
                 }
             } else { // Create mode: ensure form is clear
-                resetForm();
+                const openLineType = initialLineType ?? lineType;
+                if (initialLineType && initialLineType !== lineType) {
+                    setLineType(initialLineType);
+                }
+                resetForm(openLineType);
                 // اگر کارمند برنامه‌ریزی است و مجوزها محدود است، به اولین لاین مجاز برو
                 if (currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی')) {
                     if (allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
@@ -2140,7 +2233,7 @@ const AnnouncementPanel: React.FC<{
                 }
             }
         }
-    }, [data, isOpen, currentUser, allowedLineTypes, lineType]);
+    }, [data, isOpen, currentUser, allowedLineTypes]);
 
     useEffect(() => {
         // Only run for new announcements and when lineType changes
@@ -2183,10 +2276,23 @@ const AnnouncementPanel: React.FC<{
                 setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهر لبنیات', originCity2: '' });
             } else if (lineType === FreightLineType.Ambient) {
                 setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
+            } else if (lineType === FreightLineType.IceCream) {
+                setLoadingLocationState(initialLoadingLocationState);
+                setOriginCity1Valid(false);
+                setOriginCity2Valid(false);
+            }
+            if (lineType !== FreightLineType.IceCream) {
+                setOriginCity1Valid(!!resolvePlannerOriginCity1(lineType, lastChoices).trim());
             }
             setCommonState((s) => ({ ...s, vehicleType: '' }));
         }
     }, [lineType, data, isOpen]); // Rerun when panel opens too
+
+    useEffect(() => {
+        if (isPlannerPresetOrigin(loadingLocationState.originCity1)) {
+            setOriginCity1Valid(true);
+        }
+    }, [loadingLocationState.originCity1]);
 
     const addDestination = () => {
         if (destinations.length < 4) {
@@ -2244,7 +2350,7 @@ const AnnouncementPanel: React.FC<{
 
         let iceCreamBuilt: ReturnType<typeof buildIceCreamFromDairyLikeForm> = null;
         if (lineType === FreightLineType.IceCream) {
-            if (!loadingLocationState.originCity1.trim() || !originCity1Valid) {
+            if (!isOriginCity1Accepted(loadingLocationState.originCity1, originCity1Valid)) {
                 alert('مبدا بارگیری را از لیست پیشنهادها انتخاب کنید.');
                 return;
             }
@@ -2276,11 +2382,15 @@ const AnnouncementPanel: React.FC<{
             }
         }
 
+        const resolvedOriginCity1 = isDairyAmbientLine(lineType)
+            ? getEffectiveOriginCity1(lineType, loadingLocationState.originCity1)
+            : loadingLocationState.originCity1.trim();
+
         const finalOriginCity = lineType === FreightLineType.IceCream && iceCreamBuilt
             ? iceCreamBuilt.originCity
             : loadingLocationState.loadingType === 'double'
-            ? `${loadingLocationState.originCity1} و ${loadingLocationState.originCity2}`
-            : loadingLocationState.originCity1;
+            ? `${resolvedOriginCity1} و ${loadingLocationState.originCity2}`
+            : resolvedOriginCity1;
 
         const finalBrand = lineType === FreightLineType.IceCream && iceCreamBuilt
             ? iceCreamBuilt.brand
@@ -2309,10 +2419,6 @@ const AnnouncementPanel: React.FC<{
         }
 
         if (lineType !== FreightLineType.IceCream) {
-            if (!loadingLocationState.originCity1.trim() || !originCity1Valid) {
-                alert('مبدا بارگیری را از لیست پیشنهادها انتخاب کنید.');
-                return;
-            }
             if (
                 loadingLocationState.loadingType === 'double' &&
                 (!loadingLocationState.originCity2.trim() || !originCity2Valid)
@@ -2390,7 +2496,7 @@ const AnnouncementPanel: React.FC<{
                 platformArrivalTime: multiDestState.platformArrivalTime, 
                 destinations: validDestinations as Destination[],
                 loadingType: loadingLocationState.loadingType,
-                originCity1: loadingLocationState.originCity1,
+                originCity1: resolvedOriginCity1,
                 originCity2: loadingLocationState.originCity2 || null,
                 brandType: brandState.brandType,
                 brand1: brandState.brand1,
@@ -2432,8 +2538,13 @@ const AnnouncementPanel: React.FC<{
                     : 'Ambient';
                 const lastChoices: LastFreightChoices = {
                     loadingType: loadingLocationState.loadingType,
-                    originCity1: loadingLocationState.originCity1,
-                    originCity2: loadingLocationState.originCity2 || '',
+                    originCity1:
+                        lineType === FreightLineType.IceCream
+                            ? ''
+                            : isDairyAmbientLine(lineType)
+                              ? getEffectiveOriginCity1(lineType, loadingLocationState.originCity1)
+                              : loadingLocationState.originCity1,
+                    originCity2: lineType === FreightLineType.IceCream ? '' : loadingLocationState.originCity2 || '',
                     brandType: brandState.brandType,
                     brand1: brandState.brand1,
                     brand2: brandState.brand2 || '',
@@ -2989,8 +3100,6 @@ const AnnouncementPanel: React.FC<{
                                                 onRouteQueryChange(city);
                                                 setLoadingLocationState(s => ({ ...s, originCity1: city }));
                                             }}
-                                            onValidityChange={setOriginCity1Valid}
-                                            requireSelection
                                             placeholder="جستجوی مبدا..."
                                             className="input-style mt-1 w-full"
                                             required
@@ -3006,8 +3115,6 @@ const AnnouncementPanel: React.FC<{
                                                     onRouteQueryChange(city);
                                                     setLoadingLocationState(s => ({ ...s, originCity1: city }));
                                                 }}
-                                                onValidityChange={setOriginCity1Valid}
-                                                requireSelection
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required

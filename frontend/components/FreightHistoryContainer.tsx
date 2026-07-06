@@ -20,12 +20,13 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     const [filterDestination, setFilterDestination] = useState<string>('');
     const [filterBillOfLading, setFilterBillOfLading] = useState<string>(''); // شماره بارنامه
     const [filterDriverName, setFilterDriverName] = useState<string>(''); // نام راننده
+    const [filterCreatorName, setFilterCreatorName] = useState<string>(''); // کارمند اعلام‌کننده
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
-    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50) => {
+    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, creatorName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50) => {
         setLoading(true);
         setError(null);
         try {
@@ -38,6 +39,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             if (destination && destination.trim()) params.append('destination', destination.trim());
             if (billOfLading && billOfLading.trim()) params.append('billOfLading', billOfLading.trim());
             if (driverName && driverName.trim()) params.append('driverName', driverName.trim());
+            if (creatorName && creatorName.trim()) params.append('creatorName', creatorName.trim());
             if (lineType) params.append('lineType', lineType);
             params.append('page', page.toString());
             params.append('limit', limit.toString());
@@ -167,7 +169,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     // جستجو - فقط یک بار در mount برای بارگذاری اولیه
     useEffect(() => {
         setCurrentPage(1); // Reset to first page when line changes
-        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage); // بارگذاری اولیه بدون فیلتر اما با activeLine
+        fetchHistoryData(undefined, undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage); // بارگذاری اولیه بدون فیلتر اما با activeLine
     }, [activeLine]); // وقتی activeLine تغییر می‌کند، دوباره fetch کن
     
     // جستجو دستی با دکمه - فقط برای تب فعلی
@@ -178,6 +180,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterDestination?.trim() || undefined,
             filterBillOfLading?.trim() || undefined,
             filterDriverName?.trim() || undefined,
+            filterCreatorName?.trim() || undefined,
             activeLine, // فقط برای تب فعلی
             1, // Reset to first page
             itemsPerPage
@@ -189,8 +192,9 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
         setFilterDestination('');
         setFilterBillOfLading('');
         setFilterDriverName('');
+        setFilterCreatorName('');
         setCurrentPage(1);
-        fetchHistoryData(undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage);
+        fetchHistoryData(undefined, undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage);
     };
     
     const handlePageChange = (newPage: number) => {
@@ -200,6 +204,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterDestination?.trim() || undefined,
             filterBillOfLading?.trim() || undefined,
             filterDriverName?.trim() || undefined,
+            filterCreatorName?.trim() || undefined,
             activeLine,
             newPage,
             itemsPerPage
@@ -214,6 +219,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterDestination?.trim() || undefined,
             filterBillOfLading?.trim() || undefined,
             filterDriverName?.trim() || undefined,
+            filterCreatorName?.trim() || undefined,
             activeLine,
             1,
             newLimit
@@ -241,6 +247,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setFilterBillOfLading={setFilterBillOfLading}
             filterDriverName={filterDriverName}
             setFilterDriverName={setFilterDriverName}
+            filterCreatorName={filterCreatorName}
+            setFilterCreatorName={setFilterCreatorName}
             onSearch={handleSearch}
             onClearFilters={handleClearFilters}
             currentPage={currentPage}

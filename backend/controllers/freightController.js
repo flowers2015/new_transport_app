@@ -3293,11 +3293,11 @@ async function getFreightAnnouncementHistory(req, res) {
 
 /**
  * دریافت اعلام بارهای تاریخچه شده (Finalized) با قابلیت فیلتر بر اساس تاریخ و مقصد
- * GET /api/freight-announcements/history?date=1403/10/15&destination=تهران
+ * GET /api/freight-announcements/history?date=1403/10/15&destination=تهران&creatorName=...
  */
 async function getFreightHistory(req, res) {
   try {
-    const { date, destination, billOfLading, driverName, lineType, page = 1, limit = 50 } = req.query;
+    const { date, destination, billOfLading, driverName, creatorName, lineType, page = 1, limit = 50 } = req.query;
     
     // Pagination parameters
     const pageNum = parseInt(page, 10) || 1;
@@ -3413,28 +3413,22 @@ async function getFreightHistory(req, res) {
       console.log(`📦 [getFreightHistory] Filtering by lineType: ${lineType}`);
     }
     
-    // فیلتر بر اساس تاریخ شمسی بارگیری
-    // تاریخ در دیتابیس به صورت DATE ذخیره می‌شود اما با سال شمسی (1404)
-    // پس باید مستقیماً با تاریخ شمسی مقایسه کنیم
+    // فیلتر بر اساس تاریخ اعلام بار (created_at) — ورودی شمسی
     if (date && date.trim() !== '') {
-      // پذیرش فرمت 1404/05/01 یا 1404-05-01
-      const normalizedDate = date.trim().replace(/\//g, '-'); // تبدیل `/` به `-`
+      const normalizedDate = date.trim().replace(/\//g, '-');
       const dateMatch = normalizedDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (dateMatch) {
         const [, jy, jm, jd] = dateMatch.map(Number);
-        
-        // تبدیل به فرمت YYYY-MM-DD برای مقایسه مستقیم با تاریخ شمسی در دیتابیس
         const jalaliDateStr = `${jy}-${String(jm).padStart(2, '0')}-${String(jd).padStart(2, '0')}`;
-        
-        console.log(`📅 [getFreightHistory] Filtering by loading_date: ${date} (${jy}/${jm}/${jd})`);
-        console.log(`📅 [getFreightHistory] Jalali date string: ${jalaliDateStr}`);
-        
-        // استفاده از SUBSTRING برای استخراج تاریخ شمسی از loading_date و مقایسه
-        // loading_date در دیتابیس به صورت DATE است اما با سال شمسی (1404)
-        // پس باید مستقیماً با string مقایسه کنیم
-        query += ` AND SUBSTRING(CAST(fa.loading_date AS TEXT) FROM 1 FOR 10) = $${paramIndex}`;
-        params.push(jalaliDateStr);
-        paramIndex += 1;
+        const dayStart = parseJalaliDateString(jalaliDateStr.replace(/-/g, '/'));
+        if (dayStart) {
+          const dayEnd = new Date(dayStart);
+          dayEnd.setDate(dayEnd.getDate() + 1);
+          console.log(`📅 [getFreightHistory] Filtering by announcement date (created_at): ${date}`);
+          query += ` AND fa.created_at >= $${paramIndex} AND fa.created_at < $${paramIndex + 1}`;
+          params.push(dayStart, dayEnd);
+          paramIndex += 2;
+        }
       } else {
         console.log(`⚠️ [getFreightHistory] Invalid date format: ${date}. Expected: 1404-05-01 or 1404/05/01`);
       }
@@ -3453,6 +3447,20 @@ async function getFreightHistory(req, res) {
     if (driverName && driverName.trim()) {
       query += ` AND (COALESCE(fa.assigned_driver_name, d.name, pd.name) ILIKE $${paramIndex})`;
       params.push(`%${driverName.trim()}%`);
+      paramIndex += 1;
+    }
+
+    // فیلتر بر اساس کارمند اعلام‌کننده
+    if (creatorName && creatorName.trim()) {
+      const creatorPattern = `%${creatorName.trim()}%`;
+      query += ` AND (
+        COALESCE(
+          NULLIF(TRIM(u_creator.${nameColumn}), ''),
+          NULLIF(TRIM(creator_hist.user_name), '')
+        ) ILIKE $${paramIndex}
+        OR u_creator.username ILIKE $${paramIndex}
+      )`;
+      params.push(creatorPattern);
       paramIndex += 1;
     }
     

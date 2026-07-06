@@ -17,6 +17,8 @@ interface CityAutocompleteProps {
     inModal?: boolean;
     /** فقط نام شهر — بدون مسافت/دسته مسیر (مثلاً فرم اعلام بار برنامه‌ریزی) */
     cityOnlyLabels?: boolean;
+    /** مقادیر از پیش‌تعیین‌شده که بدون انتخاب از لیست معتبرند (مثلاً مبدا پیش‌فرض کارخانه) */
+    presetValues?: string[];
 }
 
 interface CityOption {
@@ -45,6 +47,8 @@ export function formatCityRouteLabel(suggestion: CityOption, cityOnly = false): 
     return suggestion.city;
 }
 
+const EMPTY_PRESET_VALUES: string[] = [];
+
 const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
     value,
     onChange,
@@ -57,8 +61,12 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
     onRouteSelect,
     inModal = false,
     cityOnlyLabels = false,
+    presetValues: presetValuesProp,
 }) => {
     const safeValue = value ?? '';
+    const presetValues = presetValuesProp ?? EMPTY_PRESET_VALUES;
+    const isPresetValue = (text: string) =>
+        presetValues.some((p) => p.trim() === text.trim());
     const [query, setQuery] = useState(safeValue);
     const [suggestions, setSuggestions] = useState<CityOption[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -70,6 +78,14 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
 
     useEffect(() => {
         const next = value ?? '';
+        // هنگام تایپ کاربر query را با value همگام نکن (جلوگیری از چشمک‌زدن)
+        if (inputRef.current === document.activeElement) {
+            if (requireSelection && next.trim()) {
+                onValidityChange?.(true);
+                setInvalid(false);
+            }
+            return;
+        }
         setQuery(next);
         if (requireSelection && next.trim()) {
             onValidityChange?.(true);
@@ -243,6 +259,11 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
             setShowSuggestions(false);
             if (requireSelection) {
                 const committed = value ?? '';
+                if (isPresetValue(committed)) {
+                    onValidityChange?.(true);
+                    setInvalid(false);
+                    return;
+                }
                 if (query.trim() && query.trim() !== committed.trim()) {
                     setQuery(committed);
                     setInvalid(true);
