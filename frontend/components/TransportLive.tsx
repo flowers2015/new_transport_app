@@ -805,7 +805,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     };
 
 
-    const visibleColumns = useMemo(() => {
+    const buildVisibleColumns = useCallback((columnMode: 'compact' | 'full') => {
         const lineForColumns = isPendingBillOfLadingTab(activeLine)
             ? FreightLineType.Dairy
             : (activeLine as FreightLineType);
@@ -892,7 +892,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Dairy compact: mirror planner (kg), then extras
-        if (lineForColumns === FreightLineType.Dairy && viewMode === 'compact' && activeLine === FreightLineType.Dairy) {
+        if (lineForColumns === FreightLineType.Dairy && columnMode === 'compact' && activeLine === FreightLineType.Dairy) {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
@@ -911,7 +911,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Ambient compact: mirror Dairy compact order, then extras
-        if (activeLine === FreightLineType.Ambient && viewMode === 'compact') {
+        if (activeLine === FreightLineType.Ambient && columnMode === 'compact') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
@@ -930,7 +930,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Dairy full: common columns order then extras; destinations are rendered separately
-        if (activeLine === FreightLineType.Dairy && viewMode === 'full') {
+        if (activeLine === FreightLineType.Dairy && columnMode === 'full') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
@@ -947,7 +947,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Ambient full: mirror Dairy full
-        if (activeLine === FreightLineType.Ambient && viewMode === 'full') {
+        if (activeLine === FreightLineType.Ambient && columnMode === 'full') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
@@ -964,10 +964,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         // Default fallback
-        const colsAll = columnsConfig(viewMode);
+        const colsAll = columnsConfig(columnMode);
         const cols = colsAll.filter(c => c.display(lineForColumns)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [viewMode, activeLine, props, columnsConfig, renderVehicleTypeCell, editingVehicleTypeId, props.drivers, props.personalDrivers, props.vehicles, props.personalVehicles, personalTariffColumns]);
+    }, [activeLine, columnsConfig, renderVehicleTypeCell, personalTariffColumns, props]);
+
+    const visibleColumns = useMemo(() => buildVisibleColumns(viewMode), [buildVisibleColumns, viewMode]);
 
     const displayAnnouncements = useMemo(() => {
         const ordered = applyTransportLiveDisplayOrder(filteredAnnouncements, {
@@ -1199,17 +1201,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
     const resolveExportColumns = useCallback(
-        (mode: 'compact' | 'full') => {
-            if (isPendingBillOfLadingTab(activeLine) || activeLine === FreightLineType.IceCream) {
-                return visibleColumns;
-            }
-            if (mode === viewMode) {
-                return visibleColumns;
-            }
-            const lineForExport = activeLine as FreightLineType;
-            return columnsConfig(mode).filter((c: any) => c.display(lineForExport));
-        },
-        [activeLine, columnsConfig, viewMode, visibleColumns]
+        (mode: 'compact' | 'full') => buildVisibleColumns(mode),
+        [buildVisibleColumns]
     );
 
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
@@ -1272,6 +1265,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     if (col.header === 'مقصد') {
                         value = getDestinationCitiesLabel(ann);
                         row.push(value);
+                        return;
+                    }
+                    if (col.header === 'توضیحات') {
+                        row.push(ann.notes || '');
                         return;
                     }
                     
@@ -1546,6 +1543,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
                 if (header === 'مقصد') {
                     return getDestinationCitiesLabel(ann);
+                }
+                if (header === 'توضیحات') {
+                    return ann.notes || '';
                 }
                 
                 const col = visibleCols.find((c: any) => c.header === header);
