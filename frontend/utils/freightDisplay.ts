@@ -545,6 +545,34 @@ export function getRepresentativeTypesLabel(
     return unique.length > 0 ? unique.join('، ') : '-';
 }
 
+/** ستون «نوع نماینده» فشرده پاستوریزه/لبنیات — یک برچسب به ازای هر مقصد */
+export function getDestinationRepTypesColumnLabel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'destinations'> | null | undefined
+): string {
+    const destinations = ann?.destinations || [];
+    if (!destinations.length) return '-';
+    const types = destinations
+        .map((d) => formatRepresentativeType(d.representativeType || ann?.representativeType))
+        .filter((t) => t !== '-');
+    return types.length > 0 ? types.join('، ') : '-';
+}
+
+/** ستون «نام نماینده» فشرده — فقط برای نوع نماینده؛ پخش/دپو خالی */
+export function getDestinationRepNamesColumnLabel(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'> | null | undefined
+): string {
+    const destinations = ann?.destinations || [];
+    if (!destinations.length) return '-';
+    const names = destinations
+        .map((d) => {
+            const rawType = d.representativeType || ann?.representativeType;
+            if (!isAgentRepresentativeType(rawType)) return '';
+            return (d.representativeName || ann?.representativeName || '').trim();
+        })
+        .filter(Boolean);
+    return names.length > 0 ? names.join('، ') : '-';
+}
+
 /** تماس/پلاک پیش‌فرض برای تخصیص شخصی لبنیات-فروتلند (فاز نام باربری) */
 export const DAIRY_AMBIENT_PLACEHOLDER_MOBILE = '11';
 export const DAIRY_AMBIENT_PLACEHOLDER_PLATE = '11ع111-11';

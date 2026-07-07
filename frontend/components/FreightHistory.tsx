@@ -18,6 +18,8 @@ const renderAnnouncementDateTimeCell = (createdAt: Date | string | null | undefi
 import {
     getDestinationCitiesLabel,
     getAnnouncementRepDisplayLabel,
+    getDestinationRepTypesColumnLabel,
+    getDestinationRepNamesColumnLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
@@ -456,6 +458,17 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             return [...base, ...extraCols];
         }
 
+        const dairyAmbientCompactRepCols = [
+            {
+                header: 'نوع نماینده',
+                render: (ann: FreightAnnouncement) => getDestinationRepTypesColumnLabel(ann),
+            },
+            {
+                header: 'نام نماینده',
+                render: (ann: FreightAnnouncement) => getDestinationRepNamesColumnLabel(ann),
+            },
+        ];
+
         if (activeLine === FreightLineType.Dairy && columnMode === 'compact') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
@@ -467,6 +480,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
+                ...dairyAmbientCompactRepCols,
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
                         {ann.destinations.map((d, i) => (
@@ -497,6 +511,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
+                ...dairyAmbientCompactRepCols,
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
                         {ann.destinations.map((d, i) => (
@@ -596,6 +611,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 if (header === 'کل تناژ (کیلوگرم)') {
                     const totalTonnage = ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
                     return totalTonnage;
+                }
+                if (header === 'نوع نماینده') {
+                    return getDestinationRepTypesColumnLabel(ann);
+                }
+                if (header === 'نام نماینده') {
+                    return getDestinationRepNamesColumnLabel(ann);
                 }
                 if (header === 'توضیحات') {
                     return ann.notes || '';
@@ -817,6 +838,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     }
                     if (header === 'کل تناژ (کیلوگرم)') {
                         return ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
+                    }
+                    if (header === 'نوع نماینده') {
+                        return getDestinationRepTypesColumnLabel(ann);
+                    }
+                    if (header === 'نام نماینده') {
+                        return getDestinationRepNamesColumnLabel(ann);
                     }
                     if (header === 'توضیحات') {
                         return ann.notes || '';

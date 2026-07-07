@@ -129,6 +129,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                         id: d.id,
                         city: d.city,
                         representativeName: d.representative_name || d.representativeName,
+                        representativeType: d.representative_type || d.representativeType,
                         tonnage: d.tonnage,
                         unloadTime: d.unload_time || d.unloadTime,
                         freightCost: d.freight_cost ?? d.freightCost,
