@@ -22,3 +22,50 @@ body {
   animation: blink 1.5s linear infinite;
 }
 
+/* Frozen table headers — remove class freight-sticky-table-wrap from table wrapper to revert */
+.freight-sticky-table-wrap {
+  max-height: min(calc(100vh - 14rem), 75vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.freight-sticky-table-wrap[data-sticky-rows='compact'] {
+  --freight-sticky-h1: 1.85rem;
+}
+
+.freight-sticky-table-wrap[data-sticky-rows='full'] {
+  --freight-sticky-h1: 2.4rem;
+}
+
+.freight-sticky-table-wrap table thead th {
+  position: sticky;
+  z-index: 12;
+  background-color: #f9fafb;
+  box-shadow: 0 1px 0 #e5e7eb;
+}
+
+.freight-sticky-table-wrap table thead tr:first-child th {
+  top: 0;
+}
+
+.freight-sticky-table-wrap table thead tr:nth-child(2) th {
+  top: var(--freight-sticky-h1, 1.85rem);
+  background-color: #f1f5f9;
+  z-index: 11;
+  box-shadow: 0 1px 0 #e2e8f0;
+}
+
+.freight-sticky-table-wrap table thead tr:first-child th[rowspan='2'] {
+  z-index: 13;
+}
+
+.freight-sticky-table-wrap table thead th.freight-sticky-corner {
+  z-index: 30;
+}
+
+.freight-sticky-table-wrap table tbody td.col-checkbox,
+.freight-sticky-table-wrap table tbody td.col-operations {
+  z-index: 6;
+}
+

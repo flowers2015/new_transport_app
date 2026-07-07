@@ -1146,7 +1146,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         {displayAnnouncements.length.toLocaleString('fa-IR')} / {filteredAnnouncements.length.toLocaleString('fa-IR')} ردیف
                     </span>
                 </div>
-        <div className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg ${isFullDairyAmbient ? 'overflow-x-auto overscroll-x-contain' : 'overflow-x-hidden'}`} style={isFullDairyAmbient ? { WebkitOverflowScrolling: 'touch' } : undefined}>
+        <div
+          className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap"
+          data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <table className={`text-[10px] sm:text-xs text-center border-collapse [&_th]:px-1 [&_th]:py-1 [&_td]:px-1 [&_td]:py-1.5 ${
               isFullDairyAmbient
                   ? 'table-auto w-max min-w-[2800px]'

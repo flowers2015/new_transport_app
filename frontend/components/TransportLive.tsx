@@ -1934,7 +1934,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         {displayAnnouncements.length.toLocaleString('fa-IR')} / {filteredAnnouncements.length.toLocaleString('fa-IR')} ردیف
                     </span>
                 </div>
-                <div className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg ${isFullDairyAmbient ? 'overflow-x-auto overscroll-x-contain' : 'overflow-x-hidden'}`} style={isFullDairyAmbient ? { WebkitOverflowScrolling: 'touch' } : undefined}>
+                <div
+                    className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap"
+                    data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                >
                     <table
                         className={`text-[10px] sm:text-xs text-center border-collapse [&_th]:px-1 [&_th]:py-1 [&_td]:px-1 [&_td]:py-1.5 ${
                             isFullDairyAmbient
@@ -1946,7 +1950,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                              {isFullDairyAmbient ? (
                                 <>
                                     <tr>
-                                        {canPerformActions && <th rowSpan={2} className="p-2 text-center align-middle sticky left-0 bg-gray-50 z-10"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(displayAnnouncements.map(a=>a.id)) : new Set())}/></th>}
+                                        {canPerformActions && <th rowSpan={2} className="p-2 text-center align-middle sticky left-0 bg-gray-50 freight-sticky-corner col-checkbox"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(displayAnnouncements.map(a=>a.id)) : new Set())}/></th>}
                                         {commonCols.map(col => (
                                             <th key={col.header} rowSpan={2} className="p-2 text-center align-top">
                                                 <div className="mb-1">{renderSortableHeader(col.header)}</div>
@@ -1968,7 +1972,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
                                         <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
-                                        <th rowSpan={2} className="p-2 text-center align-middle sticky -left-px bg-gray-50 z-10" style={{width: '180px'}}>عملیات</th>
+                                        <th rowSpan={2} className="p-2 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations" style={{width: '180px'}}>عملیات</th>
                                     </tr>
                                     <tr>
                                         {[1, 2, 3, 4].map(i => (
@@ -2000,16 +2004,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                              ) : (
                                 <>
                                 <tr>
-                                    {canPerformActions && <th className="p-1.5 text-center align-middle sticky left-0 bg-gray-50 z-10 col-checkbox"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(displayAnnouncements.map(a=>a.id)) : new Set())}/></th>}
+                                    {canPerformActions && <th className="p-1.5 text-center align-middle sticky left-0 bg-gray-50 freight-sticky-corner col-checkbox"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(displayAnnouncements.map(a=>a.id)) : new Set())}/></th>}
                                     {visibleColumns.map(col => (
                                         <th key={col.header} className="p-1 text-center align-bottom whitespace-normal leading-tight font-semibold break-words">
                                             {renderSortableHeader(col.header)}
                                         </th>
                                     ))}
-                                    <th className="p-1.5 text-center align-middle sticky -left-px bg-gray-50 z-10 col-operations whitespace-normal leading-tight">عملیات</th>
+                                    <th className="p-1.5 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations whitespace-normal leading-tight">عملیات</th>
                                 </tr>
                                 <tr className="bg-slate-100/80">
-                                    {canPerformActions && <th className="p-1 sticky left-0 bg-slate-100 z-10 col-checkbox" />}
+                                    {canPerformActions && <th className="p-1 sticky left-0 bg-slate-100 freight-sticky-corner col-checkbox" />}
                                     {visibleColumns.map(col => (
                                         <th key={`filter-${col.header}`} className="p-1 font-normal">
                                             <input
@@ -2026,7 +2030,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                             />
                                         </th>
                                     ))}
-                                    <th className="p-1 sticky -left-px bg-slate-100 z-10" />
+                                    <th className="p-1 sticky -left-px bg-slate-100 freight-sticky-corner col-operations" />
                                 </tr>
                                 </>
                              )}
