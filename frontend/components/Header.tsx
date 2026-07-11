@@ -102,14 +102,14 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.AllowanceRegulation, label: 'بخشنامه', roles: [UserRole.TransportationFinance] },
       { type: 'divider', roles: [UserRole.TransportationFinance] },
       // Planning Section - برنامه ریزی (اولین برای PlanningEmployee)
-      { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
+      { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager] },
       // Freight Management Section - اعلام بار
-      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
+      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
       { view: View.CarrierManagement, label: 'تعریف باربری', roles: [UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.AmbientBaleNotifySettings, label: 'اعلان بله فروتلند', roles: [UserRole.Transportation_Personal_Vehicle_User, UserRole.Admin] },
-      { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
+      { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
       // داشبورد برای PlanningEmployee (بعد از تاریخچه اعلام بار)
-      { view: View.Dashboard, label: 'داشبورد', roles: [UserRole.PlanningEmployee, UserRole.PlanningManager] },
+      { view: View.Dashboard, label: 'داشبورد', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager] },
       { type: 'divider', roles: [UserRole.TransportationFinance] },
       // سایر منوها
       { view: View.FreightFinance, label: 'مالی حمل', roles: [UserRole.BranchFinance, UserRole.HQFinance] },
@@ -144,7 +144,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.CostReport, label: 'گزارش هزینه‌های شعب', roles: [] },
       { type: 'divider', roles: Object.values(UserRole) },
       { view: View.SupportTickets, label: 'تیکت پشتیبانی', roles: [
-        UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.PlanningManager,
+        UserRole.Workshop, UserRole.Warehouse, UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager,
         UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance,
         UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.VehicleAllocationExpert,
         UserRole.Transportation, UserRole.Merchant,
@@ -191,7 +191,7 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                     <div className="flex items-center">
                         <nav className="hidden md:flex items-center flex-wrap gap-x-2 gap-y-1">
-                            {!isTransportDefault && !isTransportRole && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && (
+                            {!isTransportDefault && !isTransportRole && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.SalesExpert && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && (
                                 <button onClick={() => onNavigate(defaultDashboardView)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
                             )}
                             

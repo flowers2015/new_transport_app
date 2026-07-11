@@ -1,7 +1,7 @@
 // This is a new file: components/TransportLive.tsx
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
-import { formatJalaliDateTime, formatJalali, formatPlateNumber } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, formatPlateNumber, compareByCreatedAtDesc } from '../utils/jalali';
 import IranianPlateInput, {
     DEFAULT_PLATE_LETTER,
     formatIranianPlateString,
@@ -47,7 +47,11 @@ import {
     formatRepresentativeType,
     localizeExcelValue,
     formatCompactDestinationsForExcel,
+    formatDairyCompactDestinationsText,
+    formatDestinationRepCompactSegment,
     resolveDestinationRepTypeLabel,
+    formatDestinationBrandLabel,
+    formatDestinationProductsLabel,
     formatTonnageKgFromRaw,
     sortByIceCreamDisplayOrder,
     isFreightDestinationDetailHeader,
@@ -72,6 +76,9 @@ import {
     loadTransportLiveFilterPrefs,
     saveTransportLiveFilterPrefs,
     transportLiveFilterStorageKey,
+    loadTransportLiveHiddenColumns,
+    saveTransportLiveHiddenColumns,
+    transportLiveColumnStorageKey,
     type ColumnFiltersState,
     type SortDirection,
 } from '../utils/transportLiveFilters';
@@ -84,10 +91,12 @@ import { HistoryIcon } from './icons/HistoryIcon';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import BaleReportDialog from './BaleReportDialog';
+import DairyRouteArrangementDialog from './DairyRouteArrangementDialog';
 import {
     buildCompanyBaleReportRows,
     selectCompanyBaleReportAnnouncements,
 } from '../utils/baleCompanyReport';
+import { isDairyAnnouncementForArrangement } from '../utils/dairyRouteArrangement';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
@@ -107,6 +116,10 @@ const withReannounceBadge = (ann: FreightAnnouncement, content: React.ReactNode)
     </div>
 );
 
+const renderDairyCompactText = (content: React.ReactNode) => (
+    <span className="dairy-compact-cell block w-full text-[10px] sm:text-xs leading-snug text-center">{content}</span>
+);
+
 const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
     ann.destinations.map((d, idx) => {
         const destRepType = resolveDestinationRepTypeLabel(ann, d);
@@ -124,6 +137,54 @@ const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
             </span>
         );
     });
+
+const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
+    ردیف: 'col-row',
+    'کارمند اعلام‌کننده': 'col-creator',
+    'نوع خودرو': 'col-vehicle-type',
+    'مبدا بارگیری': 'col-origin',
+    'کل تناژ (کیلوگرم)': 'col-tonnage',
+    مقاصد: 'col-destinations',
+    'ارزش بار (ریال)': 'col-cargo-value',
+    'ساعت حضور': 'col-platform-time',
+    'تاریخ اعلام بار': 'col-created-at',
+};
+
+const renderDairyCompactDestinations = (ann: FreightAnnouncement) => {
+    if (!ann.destinations?.length) return <span>-</span>;
+    return (
+        <div className="dest-compact-list text-[9px] sm:text-[10px] leading-snug text-right w-full min-w-0">
+            {ann.destinations.map((d, idx) => {
+                const products = formatDestinationProductsLabel(d);
+                return (
+                    <div key={d.id || idx} className="dest-compact-line">
+                        <span className="dest-compact-num">{idx + 1}</span>
+                        <div className="dest-compact-body">
+                            <span className="dest-compact-city">{(d.city || '').trim() || '-'}</span>
+                            {d.tonnage ? (
+                                <span className="dest-compact-tonnage">({formatTonnageKgFromRaw(d.tonnage)})</span>
+                            ) : null}
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-rep">{formatDestinationRepCompactSegment(ann, d)}</span>
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-brand">{formatDestinationBrandLabel(d)}</span>
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-lis">{d.lisCode?.trim() || '-'}</span>
+                            {products !== '-' ? (
+                                <>
+                                    <span className="dest-compact-dot">·</span>
+                                    <span className="dest-compact-products">{products}</span>
+                                </>
+                            ) : null}
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-date">{d.deliveryDate || '-'}</span>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
 
 interface TransportLiveProps {
     announcements: FreightAnnouncement[];
@@ -151,7 +212,18 @@ interface TransportLiveProps {
     }) => void;
     onFinalize: (announcementIds: string[], lineTypeForBackend?: string) => void | Promise<void>;
     finalizePermissions?: Record<string, boolean>;
-    onTransferDestination: (sourceAnnouncementId: string, destinationId: string, targetAnnouncementId: string, newPosition: number) => Promise<boolean>;
+    onTransferDestination: (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        targetAnnouncementId: string,
+        newPosition: number,
+        options?: { silent?: boolean }
+    ) => Promise<import('../utils/optimisticUpdates').TransferDestinationResult>;
+    onSplitDestinationToNew?: (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        options?: { vehicleType?: string; silent?: boolean }
+    ) => Promise<import('../utils/optimisticUpdates').SplitDestinationResult>;
     onForward: (announcementId: string | string[]) => void | Promise<void>;
     onReferToCarrier?: (
         announcementId: string,
@@ -262,7 +334,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {} } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onSplitDestinationToNew, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {} } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -272,6 +344,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     //     timestamp: new Date().toISOString()
     // });
     const [viewMode, setViewMode] = useState<'compact' | 'full'>('compact');
+    const [hiddenColumnHeaders, setHiddenColumnHeaders] = useState<Set<string>>(() => new Set());
+    const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+    const columnPickerRef = useRef<HTMLDivElement>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>({});
     const [quickSearch, setQuickSearch] = useState('');
@@ -280,6 +355,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [baleReportOpen, setBaleReportOpen] = useState(false);
+    const [dairyArrangementOpen, setDairyArrangementOpen] = useState(false);
     const isTransportUser = isTransportRole(currentUser.role);
     const isCompanyTransportUser =
         currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
@@ -288,6 +364,42 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         () => transportLiveFilterStorageKey(currentUser.id, activeLine, viewMode),
         [currentUser.id, activeLine, viewMode]
     );
+
+    const columnStorageKey = useMemo(
+        () => transportLiveColumnStorageKey(currentUser.id, activeLine, viewMode),
+        [currentUser.id, activeLine, viewMode]
+    );
+
+    const isDairyCompactTable =
+        viewMode === 'compact' &&
+        activeLine === FreightLineType.Dairy &&
+        !isPendingBillOfLadingTab(activeLine);
+
+    useEffect(() => {
+        if (!isDairyCompactTable) {
+            setHiddenColumnHeaders(new Set());
+            setColumnPickerOpen(false);
+            return;
+        }
+        setHiddenColumnHeaders(loadTransportLiveHiddenColumns(columnStorageKey));
+        setColumnPickerOpen(false);
+    }, [columnStorageKey, isDairyCompactTable]);
+
+    useEffect(() => {
+        if (!isDairyCompactTable) return;
+        saveTransportLiveHiddenColumns(columnStorageKey, hiddenColumnHeaders);
+    }, [columnStorageKey, hiddenColumnHeaders, isDairyCompactTable]);
+
+    useEffect(() => {
+        if (!columnPickerOpen) return;
+        const onDocClick = (e: MouseEvent) => {
+            if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
+                setColumnPickerOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [columnPickerOpen]);
 
     useEffect(() => {
         const prefs = loadTransportLiveFilterPrefs(filterStorageKey);
@@ -476,16 +588,21 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 </select>
             );
         }
+        const useCompactVehicleStyle = activeLine === FreightLineType.Dairy;
         return (
-            <div
+            <span
                 onClick={() => setEditingVehicleTypeId(ann.id)}
-                className="px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]"
-                title="کلیک برای تغییر نوع خودرو"
+                className={
+                    useCompactVehicleStyle
+                        ? 'dairy-compact-cell block w-full text-center text-[10px] sm:text-xs leading-snug cursor-pointer hover:bg-slate-50 rounded'
+                        : 'px-2 py-1 text-sm border border-transparent rounded-md hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors min-w-[80px]'
+                }
+                title={useCompactVehicleStyle ? `${ann.vehicleType || '-'} — کلیک برای تغییر` : 'کلیک برای تغییر نوع خودرو'}
             >
                 {ann.vehicleType || '-'}
-            </div>
+            </span>
         );
-    }, [isCarrierUser, isDairyOrAmbientLine, editingVehicleTypeId, onChangeVehicleType]);
+    }, [isCarrierUser, isDairyOrAmbientLine, editingVehicleTypeId, onChangeVehicleType, activeLine]);
     
     // Memoize columnsConfig to prevent unnecessary recalculations
     const columnsConfig = useCallback((viewMode: 'compact' | 'full') => {
@@ -545,7 +662,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 return (
                     <div className="flex gap-1 flex-wrap">
                         {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
-                        {canPerformActions && (ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه' || ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
+                        {canPerformActions && (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
                 </div>
                 );
             } },
@@ -673,7 +790,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                    a.status !== FreightAnnouncementStatus.Cancelled;
         });
         
-        return filtered.sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
+        return filtered.sort(compareByCreatedAtDesc);
     }, [announcements, currentUser]);
 
     const companyBaleReportRows = useMemo(() => {
@@ -756,6 +873,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
         return list;
     }, [liveAnnouncements, activeLine, pendingBolAnnouncements, pendingSubLine, pendingDayOffset, pendingDayTabs]);
+
+    const dairyArrangementAnnouncements = useMemo(() => {
+        if (activeLine !== FreightLineType.Dairy || isPendingBillOfLadingTab(activeLine)) {
+            return [];
+        }
+        return filteredAnnouncements.filter(isDairyAnnouncementForArrangement);
+    }, [activeLine, filteredAnnouncements]);
 
     const canFinalizeCurrentTab = useMemo(() => {
         if (currentUser.role === 'ادمین' || currentUser.role === 'Admin') return true;
@@ -895,13 +1019,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (lineForColumns === FreightLineType.Dairy && columnMode === 'compact' && activeLine === FreightLineType.Dairy) {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) =>
+                    renderDairyCompactText((ann.creator_full_name || ann.creator_username || '-')) },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
-                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
+                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) =>
+                    renderDairyCompactText(ann.originCity || '-') },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
-                    withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
+                    withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -936,7 +1061,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
@@ -969,7 +1093,33 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return [...cols, ...extraCols];
     }, [activeLine, columnsConfig, renderVehicleTypeCell, personalTariffColumns, props]);
 
-    const visibleColumns = useMemo(() => buildVisibleColumns(viewMode), [buildVisibleColumns, viewMode]);
+    const allColumns = useMemo(() => buildVisibleColumns(viewMode), [buildVisibleColumns, viewMode]);
+
+    const visibleColumns = useMemo(
+        () =>
+            isDairyCompactTable
+                ? allColumns.filter((col) => !hiddenColumnHeaders.has(col.header))
+                : allColumns,
+        [allColumns, hiddenColumnHeaders, isDairyCompactTable]
+    );
+
+    const toggleColumnVisibility = useCallback((header: string) => {
+        setHiddenColumnHeaders((prev) => {
+            const next = new Set(prev);
+            if (next.has(header)) next.delete(header);
+            else next.add(header);
+            return next;
+        });
+    }, []);
+
+    const resetColumnVisibility = useCallback(() => {
+        setHiddenColumnHeaders(new Set());
+    }, []);
+
+    const getColumnCellClass = useCallback(
+        (header: string) => (isDairyCompactTable ? DAIRY_COMPACT_COLUMN_CLASSES[header] || '' : ''),
+        [isDairyCompactTable]
+    );
 
     const displayAnnouncements = useMemo(() => {
         const ordered = applyTransportLiveDisplayOrder(filteredAnnouncements, {
@@ -1198,6 +1348,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         viewMode === 'full' &&
         !isPendingBillOfLadingTab(activeLine) &&
         [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeLine as FreightLineType);
+    const isFullDairy = isFullDairyAmbient && activeLine === FreightLineType.Dairy;
+    const fullDestSubColCount = isFullDairy ? 9 : 6;
+    const fullDestSubHeaders = isFullDairy
+        ? ['نوع برند', 'کد LIS', 'محصولات', 'نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)']
+        : ['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)'];
+    const fullDestTotalCols = fullDestSubColCount * 4;
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
     const resolveExportColumns = useCallback(
@@ -1207,7 +1363,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
     const generateExcelExport = (mode: 'compact' | 'full') => {
-        const visibleCols = resolveExportColumns(mode);
+        const applyDairyHiddenColumns =
+            activeLine === FreightLineType.Dairy &&
+            !isPendingBillOfLadingTab(activeLine) &&
+            mode === 'compact';
+        const hiddenForMode = applyDairyHiddenColumns
+            ? mode === viewMode
+                ? hiddenColumnHeaders
+                : loadTransportLiveHiddenColumns(
+                      transportLiveColumnStorageKey(currentUser.id, activeLine, mode)
+                  )
+            : new Set<string>();
+        const visibleCols = resolveExportColumns(mode).filter((col) => !hiddenForMode.has(col.header));
         const isFullDairyAmbientMode =
             mode === 'full' &&
             !isPendingBillOfLadingTab(activeLine) &&
@@ -1258,7 +1425,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
 
                     if (col.header === 'مقاصد') {
-                        value = formatCompactDestinationsForExcel(ann);
+                        value =
+                            activeLine === FreightLineType.Dairy && mode === 'compact'
+                                ? formatDairyCompactDestinationsText(ann)
+                                : formatCompactDestinationsForExcel(ann);
                         row.push(value);
                         return;
                     }
@@ -1732,6 +1902,21 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 )}
                             </button>
                         )}
+                        {canPerformActions && !isCarrierUser && activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine) && (
+                            <button
+                                type="button"
+                                onClick={() => setDairyArrangementOpen(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs hover:bg-indigo-700 transition-colors shrink-0"
+                                title="چیدمان مسیر پاستوریزه — نمای تمام‌صفحه برای گروه‌بندی مقاصد و مسیرها"
+                            >
+                                چیدمان مسیر
+                                {dairyArrangementAnnouncements.length > 0 && (
+                                    <span className="bg-white/20 rounded px-1.5">
+                                        {dairyArrangementAnnouncements.length.toLocaleString('fa-IR')}
+                                    </span>
+                                )}
+                            </button>
+                        )}
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0">
                             {!isCarrierUser && (
                             <button
@@ -1858,6 +2043,61 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             <button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button>
                             <button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button>
                         </div>
+                        {isDairyCompactTable && (
+                            <div className="relative" ref={columnPickerRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setColumnPickerOpen((o) => !o)}
+                                    className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border ${
+                                        hiddenColumnHeaders.size > 0
+                                            ? 'border-sky-400 bg-sky-50 text-sky-800'
+                                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                    title="نمایش یا پنهان کردن ستون‌ها — تنظیمات در مرورگر ذخیره می‌شود"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    ستون‌ها
+                                    {hiddenColumnHeaders.size > 0 && (
+                                        <span className="bg-sky-600 text-white rounded-full px-1 min-w-[1rem] text-[10px]">
+                                            {hiddenColumnHeaders.size.toLocaleString('fa-IR')}
+                                        </span>
+                                    )}
+                                </button>
+                                {columnPickerOpen && (
+                                    <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-2 text-right">
+                                        <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
+                                            <span className="text-xs font-semibold text-slate-700">ستون‌های جدول</span>
+                                            <button
+                                                type="button"
+                                                onClick={resetColumnVisibility}
+                                                className="text-[10px] text-sky-700 hover:underline"
+                                            >
+                                                همه
+                                            </button>
+                                        </div>
+                                        {allColumns.map((col) => (
+                                            <label
+                                                key={col.header}
+                                                className="flex items-center gap-2 py-1 px-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!hiddenColumnHeaders.has(col.header)}
+                                                    onChange={() => toggleColumnVisibility(col.header)}
+                                                />
+                                                <span>{col.header}</span>
+                                            </label>
+                                        ))}
+                                        <p className="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                                            انتخاب شما برای این تب و حالت نمایش ذخیره می‌شود.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <div className="flex items-center gap-1">
                             <button 
                                 onClick={() => downloadExcel('compact')} 
@@ -1935,15 +2175,19 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     </span>
                 </div>
                 <div
-                    className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap"
+                    className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${isDairyCompactTable ? ' transport-live-dairy-compact-wrap' : ''}`}
                     data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
                     style={{ WebkitOverflowScrolling: 'touch' }}
                 >
                     <table
-                        className={`text-[10px] sm:text-xs text-center border-collapse [&_th]:px-1 [&_th]:py-1 [&_td]:px-1 [&_td]:py-1.5 ${
+                        className={`text-[10px] sm:text-xs text-center border-collapse ${
+                            isDairyCompactTable
+                                ? '[&_th]:px-1 [&_th]:py-0.5 [&_td]:px-1 [&_td]:py-1'
+                                : '[&_th]:px-1 [&_th]:py-1 [&_td]:px-1 [&_td]:py-1.5'
+                        } ${
                             isFullDairyAmbient
                                 ? 'table-auto w-max min-w-[2800px]'
-                                : 'w-full table-fixed transport-live-fit-table'
+                                : `w-full table-fixed transport-live-fit-table${isDairyCompactTable ? ' transport-live-dairy-compact' : ''}`
                         }`}
                     >
                          <thead className="text-xs uppercase bg-gray-50">
@@ -1968,16 +2212,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 />
                                             </th>
                                         ))}
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد اول</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد دوم</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد سوم</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد چهارم</th>
                                         <th rowSpan={2} className="p-2 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations" style={{width: '180px'}}>عملیات</th>
                                     </tr>
                                     <tr>
                                         {[1, 2, 3, 4].map(i => (
                                             <React.Fragment key={i}>
-                                                {['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)'].map((sub) => {
+                                                {fullDestSubHeaders.map((sub) => {
                                                     const key = `مقصد${i}-${sub}`;
                                                     return (
                                                         <th key={key} className="p-1 text-center font-normal border align-top">
@@ -2006,7 +2250,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 <tr>
                                     {canPerformActions && <th className="p-1.5 text-center align-middle sticky left-0 bg-gray-50 freight-sticky-corner col-checkbox"><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(displayAnnouncements.map(a=>a.id)) : new Set())}/></th>}
                                     {visibleColumns.map(col => (
-                                        <th key={col.header} className="p-1 text-center align-bottom whitespace-normal leading-tight font-semibold break-words">
+                                        <th key={col.header} className={`p-1 text-center align-bottom whitespace-normal leading-tight font-semibold break-words ${getColumnCellClass(col.header)}`}>
                                             {renderSortableHeader(col.header)}
                                         </th>
                                     ))}
@@ -2015,7 +2259,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 <tr className="bg-slate-100/80">
                                     {canPerformActions && <th className="p-1 sticky left-0 bg-slate-100 freight-sticky-corner col-checkbox" />}
                                     {visibleColumns.map(col => (
-                                        <th key={`filter-${col.header}`} className="p-1 font-normal">
+                                        <th key={`filter-${col.header}`} className={`p-1 font-normal ${getColumnCellClass(col.header)}`}>
                                             <input
                                                 type="search"
                                                 value={columnFilters[col.header] || ''}
@@ -2041,7 +2285,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     <td
                                         colSpan={
                                             isFullDairyAmbient
-                                                ? (canPerformActions ? 1 : 0) + commonCols.length + 24 + 1
+                                                ? (canPerformActions ? 1 : 0) + commonCols.length + fullDestTotalCols + 1
                                                 : (canPerformActions ? 1 : 0) + visibleColumns.length + 1
                                         }
                                         className="p-8 text-center text-slate-500"
@@ -2222,6 +2466,21 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                             ))}
                                             {[0, 1, 2, 3].map(i => {
                                                 const dest = ann.destinations[i];
+                                                if (isFullDairy) {
+                                                    return (
+                                                        <React.Fragment key={i}>
+                                                            <td className="p-2 text-center border">{formatDestinationBrandLabel(dest)}</td>
+                                                            <td className="p-2 text-center border">{dest?.lisCode || '-'}</td>
+                                                            <td className="p-2 text-center border">{formatDestinationProductsLabel(dest)}</td>
+                                                            <td className="p-2 text-center border">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
+                                                            <td className="p-2 text-center border">{dest?.city || '-'}</td>
+                                                            <td className="p-2 text-center border">{dest?.tonnage != null ? formatTonnageKg(parseNumericField(dest.tonnage)) : '-'}</td>
+                                                            <td className="p-2 text-center border">{(dest as any)?.deliveryDate || '-'}</td>
+                                                            <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
+                                                            <td className="p-2 text-center border">{formatDestinationFreightCost(dest?.freightCost)}</td>
+                                                        </React.Fragment>
+                                                    );
+                                                }
                                                 return (
                                                     <React.Fragment key={i}>
                                                         <td className="p-2 text-center border">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
@@ -2238,7 +2497,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         visibleColumns.map(col => (
                                             <td
                                                 key={col.header}
-                                                className="text-center align-middle whitespace-normal leading-tight break-words"
+                                                className={`text-center align-middle whitespace-normal leading-tight break-words ${getColumnCellClass(col.header)}`}
                                             >
                                                 {col.render(ann, idx, props)}
                                             </td>
@@ -2258,7 +2517,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 </div>
                                             )}
                                             {canPerformActions && !isCarrierUser && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
-                                            {canPerformActions && (ann.lineType === FreightLineType.Dairy || ann.lineType === 'Dairy' || ann.lineType === 'پاستوریزه' || ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
+                                            {canPerformActions && (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
                                             {canPerformActions && !isCarrierUser && <button disabled={!canForward} onClick={() => {
                                                 const isAmbientPersonal =
                                                     isPersonalTransportUser &&
@@ -2367,6 +2626,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 onClose={() => setBaleReportOpen(false)}
                 rows={companyBaleReportRows}
              />
+             <DairyRouteArrangementDialog
+                isOpen={dairyArrangementOpen}
+                onClose={() => setDairyArrangementOpen(false)}
+                announcements={dairyArrangementAnnouncements}
+                userId={currentUser.id}
+                onTransferDestination={onTransferDestination}
+                onSplitDestinationToNew={onSplitDestinationToNew}
+                onChangeVehicleType={onChangeVehicleType}
+                onRefresh={onRefresh}
+             />
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
@@ -2393,6 +2662,91 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 .transport-live-fit-table .col-checkbox { width: 2rem; }
                 .transport-live-fit-table .col-operations { width: 10.5rem; }
                 .transport-live-fit-table th input { min-width: 0; width: 100%; max-width: 100%; }
+                .transport-live-dairy-compact-wrap[data-sticky-rows='compact'] {
+                    overflow-x: hidden;
+                }
+                .transport-live-dairy-compact {
+                    table-layout: fixed;
+                    width: 100%;
+                }
+                .transport-live-dairy-compact th,
+                .transport-live-dairy-compact td {
+                    white-space: normal;
+                    word-break: break-word;
+                    overflow-wrap: break-word;
+                    line-height: 1.25;
+                    vertical-align: middle;
+                    overflow: hidden;
+                    border: 1px solid #e2e8f0;
+                }
+                .transport-live-dairy-compact .col-destinations {
+                    overflow: visible;
+                    vertical-align: top;
+                }
+                .transport-live-dairy-compact .dairy-compact-cell {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 1.35rem;
+                }
+                .transport-live-dairy-compact .col-checkbox { width: 1.75rem; }
+                .transport-live-dairy-compact .col-operations { width: 9%; min-width: 0; vertical-align: middle; }
+                .transport-live-dairy-compact .col-row { width: 2%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-creator { width: 6%; vertical-align: middle; }
+                .transport-live-dairy-compact .col-vehicle-type { width: 4%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-origin { width: 5.5%; vertical-align: middle; }
+                .transport-live-dairy-compact .col-tonnage { width: 4.5%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-destinations { width: 22%; }
+                .transport-live-dairy-compact .col-cargo-value { width: 5%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-platform-time { width: 3%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-created-at { width: 5%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact thead th {
+                    background: #f8fafc;
+                    font-size: 0.65rem;
+                    line-height: 1.25;
+                    vertical-align: bottom;
+                }
+                .dest-compact-list { display: flex; flex-direction: column; gap: 0.2rem; width: 100%; min-width: 0; }
+                .dest-compact-line {
+                    display: flex;
+                    gap: 0.2rem;
+                    align-items: flex-start;
+                    padding-bottom: 0.2rem;
+                    border-bottom: 1px solid #f1f5f9;
+                }
+                .dest-compact-line:last-child { border-bottom: none; padding-bottom: 0; }
+                .dest-compact-num {
+                    flex-shrink: 0;
+                    width: 0.9rem;
+                    height: 0.9rem;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 9999px;
+                    background: #e2e8f0;
+                    color: #475569;
+                    font-size: 0.55rem;
+                    font-weight: 700;
+                    margin-top: 0.05rem;
+                }
+                .dest-compact-body {
+                    flex: 1;
+                    min-width: 0;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.1rem 0.15rem;
+                    align-items: baseline;
+                    justify-content: flex-start;
+                    text-align: right;
+                }
+                .dest-compact-city { font-weight: 600; color: #1e40af; }
+                .dest-compact-tonnage { color: #64748b; font-size: 0.95em; }
+                .dest-compact-dot { color: #cbd5e1; user-select: none; }
+                .dest-compact-rep { color: #7e22ce; }
+                .dest-compact-brand { color: #334155; }
+                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.9em; }
+                .dest-compact-products { color: #047857; }
+                .dest-compact-date { color: #15803d; white-space: nowrap; }
              `}</style>
         </div>
     );

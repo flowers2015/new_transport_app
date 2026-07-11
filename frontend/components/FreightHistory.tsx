@@ -31,6 +31,11 @@ import {
     localizeExcelValue,
     isFreightDestinationDetailHeader,
     formatTotalTonnageFromDestinations,
+    formatDestinationBrandLabel,
+    formatDestinationProductsLabel,
+    formatDestinationRepCompactSegment,
+    formatDairyCompactDestinationsText,
+    formatTonnageKgFromRaw,
     matchesFreightLine,
     isDairyOrAmbientLineType,
     parseNumericField,
@@ -40,6 +45,69 @@ import {
     TARIFF_FREIGHT_HEADER,
     TARIFF_DIFF_HEADER,
 } from '../utils/freightDisplay';
+
+const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
+    ردیف: 'col-row',
+    'کارمند اعلام‌کننده': 'col-creator',
+    'نوع خودرو': 'col-vehicle-type',
+    'مبدا بارگیری': 'col-origin',
+    'کل تناژ (کیلوگرم)': 'col-tonnage',
+    مقاصد: 'col-destinations',
+    'ارزش بار (ریال)': 'col-cargo-value',
+    'ساعت حضور': 'col-platform-time',
+    'تاریخ اعلام بار': 'col-created-at',
+    باربری: 'col-carrier',
+    'نام راننده': 'col-driver',
+    'تماس راننده': 'col-driver-contact',
+    'کد خودرو': 'col-vehicle-code',
+    'پلاک خودرو': 'col-plate',
+    'شماره بارنامه': 'col-bol',
+    [TOTAL_FREIGHT_HEADER]: 'col-freight',
+    [TARIFF_FREIGHT_HEADER]: 'col-tariff',
+    [TARIFF_DIFF_HEADER]: 'col-tariff-diff',
+    توضیحات: 'col-notes',
+};
+
+const renderDairyCompactText = (text: string) => (
+    <span className="text-slate-700 text-[10px] sm:text-xs leading-snug break-words">{text}</span>
+);
+
+/** مقاصد فشرده پاستوریزه — مطابق پیگیری اعلام بار زنده */
+const renderDairyCompactDestinations = (ann: FreightAnnouncement) => {
+    if (!ann.destinations?.length) return <span>-</span>;
+    return (
+        <div className="dest-compact-list text-[9px] sm:text-[10px] leading-snug text-right w-full min-w-0">
+            {ann.destinations.map((d, idx) => {
+                const products = formatDestinationProductsLabel(d);
+                return (
+                    <div key={d.id || idx} className="dest-compact-line">
+                        <span className="dest-compact-num">{idx + 1}</span>
+                        <div className="dest-compact-body">
+                            <span className="dest-compact-city">{(d.city || '').trim() || '-'}</span>
+                            {d.tonnage ? (
+                                <span className="dest-compact-tonnage">({formatTonnageKgFromRaw(d.tonnage)})</span>
+                            ) : null}
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-rep">{formatDestinationRepCompactSegment(ann, d)}</span>
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-brand">{formatDestinationBrandLabel(d)}</span>
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-lis">{d.lisCode?.trim() || '-'}</span>
+                            {products !== '-' ? (
+                                <>
+                                    <span className="dest-compact-dot">·</span>
+                                    <span className="dest-compact-products">{products}</span>
+                                </>
+                            ) : null}
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-date">{d.deliveryDate || '-'}</span>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
 import {
     ColumnFiltersState,
     SortDirection,
@@ -349,6 +417,34 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
 
     const isDairyOrAmbientTab = isDairyOrAmbientLineType(activeLine);
 
+    const dairyFullBase = useMemo(
+        () => [
+            { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+            {
+                header: 'کارمند اعلام‌کننده',
+                render: (ann: any) => (
+                    <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
+                ),
+            },
+            { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType || '-' },
+            { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+            {
+                header: 'کل تناژ (کیلوگرم)',
+                render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations),
+            },
+            {
+                header: 'ارزش بار (ریال)',
+                render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR'),
+            },
+            { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+            {
+                header: 'تاریخ اعلام بار',
+                render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
+            },
+        ],
+        []
+    );
+
     const dairyAmbientFullBase = useMemo(
         () => [
             { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
@@ -378,7 +474,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         []
     );
 
-    const DESTINATION_SUB_HEADERS = ['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)'] as const;
+    const AMBIENT_DEST_SUB_HEADERS = ['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)'] as const;
+    const DAIRY_DEST_SUB_HEADERS = ['نوع برند', 'کد LIS', 'محصولات', 'نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه (ریال)'] as const;
 
     // Helper function to extract text from React element
     const extractTextFromElement = (element: React.ReactElement | React.ReactNode): string => {
@@ -470,32 +567,36 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         ];
 
         if (activeLine === FreightLineType.Dairy && columnMode === 'compact') {
+            // مطابق پیگیری اعلام بار زنده (پاستوریزه فشرده)
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 {
                     header: 'کارمند اعلام‌کننده',
-                    render: (ann: any) => (
-                        <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
-                    ),
+                    render: (ann: any) =>
+                        renderDairyCompactText(ann.creator_full_name || ann.creator_username || '-'),
                 },
-                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
-                ...dairyAmbientCompactRepCols,
-                { header: 'مقاصد', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col text-xs space-y-1">
-                        {ann.destinations.map((d, i) => (
-                            <div key={d.id || i} className="flex items-center justify-center gap-2 flex-wrap">
-                                <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
-                                <span className="font-semibold text-slate-800">{d.city}</span>
-                            </div>
-                        ))}
-                    </div>
-                ) },
-                { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
-                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType || '-' },
+                {
+                    header: 'مبدا بارگیری',
+                    render: (ann: FreightAnnouncement) => renderDairyCompactText(ann.originCity || '-'),
+                },
+                {
+                    header: 'کل تناژ (کیلوگرم)',
+                    render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations),
+                },
+                {
+                    header: 'مقاصد',
+                    render: (ann: FreightAnnouncement) => renderDairyCompactDestinations(ann),
+                },
+                {
+                    header: 'ارزش بار (ریال)',
+                    render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR'),
+                },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
+                {
+                    header: 'تاریخ اعلام بار',
+                    render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
+                },
             ];
             return [...base, ...extraCols];
         }
@@ -531,6 +632,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             return [...base, ...extraCols];
         }
 
+        if (activeLine === FreightLineType.Dairy && columnMode === 'full') {
+            return [...dairyFullBase, ...extraCols];
+        }
+
+        if (activeLine === FreightLineType.Ambient && columnMode === 'full') {
+            return [...dairyAmbientFullBase, ...extraCols];
+        }
+
         if (isDairyOrAmbientTab && columnMode === 'full') {
             return [...dairyAmbientFullBase, ...extraCols];
         }
@@ -547,6 +656,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         const cols = resolveExportColumns(mode);
         
         const isFullDairyAmbientMode = mode === 'full' && isDairyOrAmbientLineType(activeLine);
+        const isFullDairyMode = isFullDairyAmbientMode && activeLine === FreightLineType.Dairy;
         
         // Get headers - دقیقاً مطابق با ترتیب cols
         const headers: string[] = [];
@@ -563,7 +673,21 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم
         if (isFullDairyAmbientMode) {
             for (let i = 1; i <= 4; i++) {
-                headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                if (isFullDairyMode) {
+                    headers.push(
+                        `مقصد ${i} - نوع برند`,
+                        `مقصد ${i} - کد LIS`,
+                        `مقصد ${i} - محصولات`,
+                        `مقصد ${i} - نماینده`,
+                        `مقصد ${i} - شهر`,
+                        `مقصد ${i} - تناژ`,
+                        `مقصد ${i} - تاریخ تحویل`,
+                        `مقصد ${i} - ساعت تخلیه`,
+                        `مقصد ${i} - کرایه`
+                    );
+                } else {
+                    headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                }
             }
         }
         
@@ -611,6 +735,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 if (header === 'کل تناژ (کیلوگرم)') {
                     const totalTonnage = ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
                     return totalTonnage;
+                }
+                if (header === 'مقاصد' && mode === 'compact' && activeLine === FreightLineType.Dairy) {
+                    return formatDairyCompactDestinationsText(ann);
                 }
                 if (header === 'نوع نماینده') {
                     return getDestinationRepTypesColumnLabel(ann);
@@ -702,16 +829,30 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
                         const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
-                        row.push(
-                            repType,
-                            dest.city || '',
-                            tonnage,
-                            deliveryDate,
-                            unloadTime,
-                            freightCost
-                        );
+                        if (isFullDairyMode) {
+                            row.push(
+                                formatDestinationBrandLabel(dest),
+                                dest.lisCode || '',
+                                formatDestinationProductsLabel(dest),
+                                repType,
+                                dest.city || '',
+                                tonnage,
+                                deliveryDate,
+                                unloadTime,
+                                freightCost
+                            );
+                        } else {
+                            row.push(
+                                repType,
+                                dest.city || '',
+                                tonnage,
+                                deliveryDate,
+                                unloadTime,
+                                freightCost
+                            );
+                        }
                     } else {
-                        row.push('', '', '', '', '', '');
+                        row.push(...Array(isFullDairyMode ? 9 : 6).fill(''));
                     }
                 }
             }
@@ -779,6 +920,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 // Get headers and data
                 const cols = resolveExportColumns(mode);
                 const isFullDairyAmbientMode = mode === 'full' && isDairyOrAmbientLineType(activeLine);
+                const isFullDairyMode = isFullDairyAmbientMode && activeLine === FreightLineType.Dairy;
                 
                 const headers: string[] = [];
                 const seenHeaders = new Set<string>();
@@ -792,7 +934,21 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 
                 if (isFullDairyAmbientMode) {
                     for (let i = 1; i <= 4; i++) {
-                        headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                        if (isFullDairyMode) {
+                            headers.push(
+                                `مقصد ${i} - نوع برند`,
+                                `مقصد ${i} - کد LIS`,
+                                `مقصد ${i} - محصولات`,
+                                `مقصد ${i} - نماینده`,
+                                `مقصد ${i} - شهر`,
+                                `مقصد ${i} - تناژ`,
+                                `مقصد ${i} - تاریخ تحویل`,
+                                `مقصد ${i} - ساعت تخلیه`,
+                                `مقصد ${i} - کرایه`
+                            );
+                        } else {
+                            headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                        }
                     }
                 }
 
@@ -838,6 +994,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     }
                     if (header === 'کل تناژ (کیلوگرم)') {
                         return ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0);
+                    }
+                    if (header === 'مقاصد' && mode === 'compact' && activeLine === FreightLineType.Dairy) {
+                        return formatDairyCompactDestinationsText(ann);
                     }
                     if (header === 'نوع نماینده') {
                         return getDestinationRepTypesColumnLabel(ann);
@@ -905,9 +1064,23 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             const deliveryDate = (dest as any).deliveryDate || '';
                             const unloadTime = dest.unloadTime || '';
                             const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
-                            rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                            if (isFullDairyMode) {
+                                rowData.push(
+                                    formatDestinationBrandLabel(dest),
+                                    dest.lisCode || '',
+                                    formatDestinationProductsLabel(dest),
+                                    repType,
+                                    dest.city || '',
+                                    tonnage,
+                                    deliveryDate,
+                                    unloadTime,
+                                    freightCost
+                                );
+                            } else {
+                                rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                            }
                         } else {
-                            rowData.push('', '', '', '', '', '');
+                            rowData.push(...Array(isFullDairyMode ? 9 : 6).fill(''));
                         }
                     }
                     }
@@ -985,6 +1158,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const visibleColumns = useMemo(() => buildVisibleColumns(viewMode), [viewMode, activeLine, props, dairyAmbientFullBase, isDairyOrAmbientTab, personalTariffColumns]);
 
     const isFullDairyAmbient = viewMode === 'full' && isDairyOrAmbientTab;
+    const isFullDairy = isFullDairyAmbient && activeLine === FreightLineType.Dairy;
+    const isDairyCompactTable = viewMode === 'compact' && activeLine === FreightLineType.Dairy;
+    const fullDestSubColCount = isFullDairy ? DAIRY_DEST_SUB_HEADERS.length : AMBIENT_DEST_SUB_HEADERS.length;
+    const fullDestSubHeaders = isFullDairy ? DAIRY_DEST_SUB_HEADERS : AMBIENT_DEST_SUB_HEADERS;
+    const fullDestTotalCols = fullDestSubColCount * 4;
     const commonCols = useMemo(() => visibleColumns, [visibleColumns]);
 
     const displayAnnouncements = useMemo(() => {
@@ -1172,14 +1350,18 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     </span>
                 </div>
         <div
-          className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap"
+          className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${
+              isDairyCompactTable ? ' transport-history-dairy-compact-wrap' : ''
+          }`}
           data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           <table className={`text-[10px] sm:text-xs text-center border-collapse [&_th]:px-1 [&_th]:py-1 [&_td]:px-1 [&_td]:py-1.5 ${
               isFullDairyAmbient
                   ? 'table-auto w-max min-w-[2800px]'
-                  : 'w-full table-fixed transport-live-fit-table'
+                    : isDairyCompactTable
+                    ? 'table-auto w-max min-w-[2000px] transport-history-dairy-compact'
+                    : 'w-full table-fixed transport-live-fit-table'
           }`}>
             <thead className="text-xs uppercase bg-gray-50">
                              {isFullDairyAmbient ? (
@@ -1202,15 +1384,15 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                                 />
                                             </th>
                                         ))}
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
-                                        <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد اول</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد دوم</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد سوم</th>
+                                        <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد چهارم</th>
                                     </tr>
                                     <tr>
                                         {[1, 2, 3, 4].map(i => (
                                             <React.Fragment key={i}>
-                                                {DESTINATION_SUB_HEADERS.map((sub) => {
+                                                {fullDestSubHeaders.map((sub) => {
                                                     const key = `مقصد${i}-${sub}`;
                                                     return (
                                                         <th key={key} className="p-1 text-center font-normal border align-top">
@@ -1238,14 +1420,24 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 <>
                                 <tr>
                                     {visibleColumns.map(col => (
-                                        <th key={col.header} className="p-1 text-center align-bottom whitespace-normal leading-tight font-semibold break-words">
+                                        <th
+                                            key={col.header}
+                                            className={`p-1 text-center align-bottom whitespace-normal leading-tight font-semibold break-words ${
+                                                isDairyCompactTable ? DAIRY_COMPACT_COLUMN_CLASSES[col.header] || '' : ''
+                                            }`}
+                                        >
                                             {renderSortableHeader(col.header)}
                                         </th>
                                     ))}
                                 </tr>
                                 <tr className="bg-slate-100/80">
                                     {visibleColumns.map(col => (
-                                        <th key={`filter-${col.header}`} className="p-1 font-normal">
+                                        <th
+                                            key={`filter-${col.header}`}
+                                            className={`p-1 font-normal ${
+                                                isDairyCompactTable ? DAIRY_COMPACT_COLUMN_CLASSES[col.header] || '' : ''
+                                            }`}
+                                        >
                                             <input
                                                 type="search"
                                                 value={columnFilters[col.header] || ''}
@@ -1270,7 +1462,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                     <td
                                         colSpan={
                                             isFullDairyAmbient
-                                                ? commonCols.length + 24
+                                                ? commonCols.length + fullDestTotalCols
                                                 : Math.max(visibleColumns.length, 1)
                                         }
                                         className="p-8 text-center text-slate-500"
@@ -1294,6 +1486,25 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                             ))}
                                             {[0, 1, 2, 3].map(i => {
                                                 const dest = ann.destinations[i];
+                                                if (isFullDairy) {
+                                                    return (
+                                                        <React.Fragment key={i}>
+                                                            <td className="p-2 text-center border whitespace-normal">{formatDestinationBrandLabel(dest)}</td>
+                                                            <td className="p-2 text-center border whitespace-normal">{dest?.lisCode || '-'}</td>
+                                                            <td className="p-2 text-center border whitespace-normal">{formatDestinationProductsLabel(dest)}</td>
+                                                            <td className="p-2 text-center border whitespace-normal">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
+                                                            <td className="p-2 text-center border whitespace-normal">{dest?.city || '-'}</td>
+                                                            <td className="p-2 text-center border">
+                                                                {dest?.tonnage != null
+                                                                    ? formatTonnageKg(parseNumericField(dest.tonnage))
+                                                                    : '-'}
+                                                            </td>
+                                                            <td className="p-2 text-center border whitespace-normal">{dest?.deliveryDate || '-'}</td>
+                                                            <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
+                                                            <td className="p-2 text-center border">{formatFreightAmountCell(dest?.freightCost)}</td>
+                                                        </React.Fragment>
+                                                    );
+                                                }
                                                 return (
                                                     <React.Fragment key={i}>
                                                         <td className="p-2 text-center border whitespace-normal">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
@@ -1312,7 +1523,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                         </>
                                     ) : (
                                         visibleColumns.map(col => (
-                                            <td key={col.header} className="p-1 text-center align-middle whitespace-normal break-words">
+                                            <td
+                                                key={col.header}
+                                                className={`p-1 text-center align-middle whitespace-normal break-words ${
+                                                    isDairyCompactTable ? DAIRY_COMPACT_COLUMN_CLASSES[col.header] || '' : ''
+                                                }`}
+                                            >
                                                 {col.render(ann, idx)}
                                             </td>
                                         ))
@@ -1333,6 +1549,78 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     line-height: 1.25;
                     vertical-align: middle;
                 }
+                .transport-history-dairy-compact th,
+                .transport-history-dairy-compact td {
+                    white-space: normal;
+                    word-break: break-word;
+                    overflow-wrap: break-word;
+                    line-height: 1.3;
+                    vertical-align: middle;
+                    border: 1px solid #e2e8f0;
+                    padding: 0.35rem 0.45rem !important;
+                }
+                .transport-history-dairy-compact thead th {
+                    background: #f8fafc;
+                    font-size: 0.7rem;
+                    line-height: 1.25;
+                    vertical-align: bottom;
+                    white-space: normal;
+                    writing-mode: horizontal-tb;
+                    transform: none;
+                }
+                .transport-history-dairy-compact .col-freight,
+                .transport-history-dairy-compact .col-tariff,
+                .transport-history-dairy-compact .col-tariff-diff,
+                .transport-history-dairy-compact .col-bol,
+                .transport-history-dairy-compact .col-plate,
+                .transport-history-dairy-compact .col-vehicle-code,
+                .transport-history-dairy-compact .col-driver-contact,
+                .transport-history-dairy-compact .col-cargo-value,
+                .transport-history-dairy-compact .col-tonnage {
+                    font-variant-numeric: tabular-nums;
+                }
+                .transport-history-dairy-compact .col-row { min-width: 2.5rem; width: 2.5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-creator { min-width: 7.5rem; }
+                .transport-history-dairy-compact .col-vehicle-type { min-width: 5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-origin { min-width: 7rem; }
+                .transport-history-dairy-compact .col-tonnage { min-width: 5.5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-destinations { min-width: 18rem; max-width: 26rem; vertical-align: top; }
+                .transport-history-dairy-compact .col-cargo-value { min-width: 6.5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-platform-time { min-width: 4rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-created-at { min-width: 5.5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-carrier { min-width: 6rem; }
+                .transport-history-dairy-compact .col-driver { min-width: 7rem; }
+                .transport-history-dairy-compact .col-driver-contact { min-width: 7.5rem; white-space: nowrap; font-family: ui-monospace, monospace; }
+                .transport-history-dairy-compact .col-vehicle-code { min-width: 4.5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-plate { min-width: 7rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-bol { min-width: 6rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-freight { min-width: 6.5rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-tariff { min-width: 6rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-tariff-diff { min-width: 6rem; white-space: nowrap; }
+                .transport-history-dairy-compact .col-notes { min-width: 8rem; max-width: 12rem; }
+                .dest-compact-list { display: flex; flex-direction: column; gap: 0.2rem; width: 100%; min-width: 0; }
+                .dest-compact-line {
+                    display: flex; align-items: flex-start; gap: 0.25rem;
+                    border-bottom: 1px solid #f1f5f9; padding-bottom: 0.15rem;
+                }
+                .dest-compact-line:last-child { border-bottom: none; padding-bottom: 0; }
+                .dest-compact-num {
+                    flex-shrink: 0; width: 1rem; height: 1rem; border-radius: 9999px;
+                    background: #e2e8f0; color: #334155; font-weight: 700; font-size: 0.65rem;
+                    display: inline-flex; align-items: center; justify-content: center; margin-top: 0.1rem;
+                }
+                .dest-compact-body {
+                    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.25rem; min-width: 0;
+                    text-align: right;
+                }
+                .dest-compact-city { font-weight: 600; color: #1e40af; }
+                .dest-compact-tonnage { color: #64748b; font-size: 0.95em; }
+                .dest-compact-dot { color: #cbd5e1; user-select: none; }
+                .dest-compact-rep { color: #7e22ce; }
+                .dest-compact-brand { color: #334155; }
+                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.9em; }
+                .dest-compact-products { color: #047857; }
+                .dest-compact-date { color: #15803d; white-space: nowrap; }
             `}</style>
         
         {/* صفحه‌بندی */}

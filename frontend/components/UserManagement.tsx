@@ -80,6 +80,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
   const roles = [
     { value: 'admin', label: 'مدیر سیستم' },
     { value: 'planner', label: 'کارمند برنامه‌ریزی' },
+    { value: 'sales_expert', label: 'کارشناس فروش' },
     { value: 'planner_manager', label: 'مدیر برنامه‌ریزی' },
     { value: 'transport_user', label: 'کاربر ترابری (شرکت)' },
     { value: 'personal_transport_user', label: 'کاربر ترابری (خودرو شخصی)' },

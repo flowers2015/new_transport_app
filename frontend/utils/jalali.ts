@@ -14,10 +14,15 @@ export const formatJalali = (date: Date | string | null | undefined): string => 
     return '-';
 };
 
-function coerceToDate(date: Date | string | null | undefined): Date | null {
-    if (!date) return null;
+/** تبدیل مقدار API (Date، ISO string، timestamp) به Date — رشته شمسی را Date نمی‌کند */
+export function coerceToDate(date: Date | string | number | null | undefined): Date | null {
+    if (date == null || date === '') return null;
     if (date instanceof Date) {
         return isNaN(date.getTime()) ? null : date;
+    }
+    if (typeof date === 'number') {
+        const dateObj = new Date(date);
+        return isNaN(dateObj.getTime()) ? null : dateObj;
     }
     if (typeof date === 'string') {
         if (!date.includes('T') && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/.test(date)) {
@@ -31,6 +36,19 @@ function coerceToDate(date: Date | string | null | undefined): Date | null {
         }
     }
     return null;
+}
+
+/** مرتب‌سازی امن — createdAt ممکن است پس از SSE به‌صورت رشته باشد */
+export function toTimestamp(value: Date | string | number | null | undefined): number {
+    const d = coerceToDate(value);
+    return d ? d.getTime() : 0;
+}
+
+export function compareByCreatedAtDesc(
+    a: { createdAt?: Date | string | number | null },
+    b: { createdAt?: Date | string | number | null }
+): number {
+    return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
 }
 
 export const formatJalaliDateTime = (date: Date | string | null | undefined): string => {

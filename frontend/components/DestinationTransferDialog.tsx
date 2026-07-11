@@ -18,7 +18,7 @@ type Props = {
         destinationId: string,
         targetAnnouncementId: string,
         newPosition: number
-    ) => Promise<boolean>;
+    ) => Promise<import('../utils/optimisticUpdates').TransferDestinationResult>;
 };
 
 const formatTransferDestinationLine = (
@@ -126,13 +126,13 @@ const DestinationTransferDialog: React.FC<Props> = ({
         }
         setSaving(true);
         try {
-            const ok = await onSave(
+            const result = await onSave(
                 sourceAnnouncementId,
                 destinationId,
                 targetAnnouncementId,
                 newPosition
             );
-            if (ok) onClose();
+            if (result.ok) onClose();
         } finally {
             setSaving(false);
         }

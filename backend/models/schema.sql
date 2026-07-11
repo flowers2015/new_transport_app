@@ -6,6 +6,7 @@ DO $$ BEGIN
     'admin',
     'planner',
     'planner_manager',
+    'sales_expert',
     'transport_user',
     'personal_transport_user',
     'finance',

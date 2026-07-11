@@ -13,6 +13,9 @@ const EMPLOYEE_ROLES = [
   'کارمند برنامه‌ریزی',
   'PlanningEmployee',
   'planning_employee',
+  'sales_expert',
+  'کارشناس فروش',
+  'SalesExpert',
 ];
 
 async function queryPlanningUsers(roles) {

@@ -34,6 +34,7 @@ const {
   rejectChangeRequest,
   archiveChangeRequest,
   transferDestination,
+  splitDestinationToNewAnnouncement,
   getVehicleTypes,
   changeVehicleType,
   updateIceCreamDisplayOrder,
@@ -44,18 +45,22 @@ const {
   carrierReturnToPersonal,
   carrierCompleteHandoff,
 } = require('../controllers/carrierHandoffController');
+const { getDairyRouteSuggestions } = require('../controllers/dairyRouteSuggestionController');
 
 const { getPerformanceIndex, getPersonalPerformanceIndex } = require('../controllers/performanceIndexController');
 
 const PLANNER_ROLES = [
   'planner',
   'planner_manager',
+  'sales_expert',
   'admin',
   'کارمند برنامه‌ریزی',
   'مدیر برنامه‌ریزی',
+  'کارشناس فروش',
   'ادمین',
   'PlanningEmployee',
   'PlanningManager',
+  'SalesExpert',
   'planning_employee',
   'planning_manager',
 ];
@@ -96,6 +101,13 @@ router.get(
   searchDispatchRoutes
 );
 
+router.post(
+  '/dairy-route-suggestions',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
+  getDairyRouteSuggestions
+);
+
 // Get city statistics (for transport dashboard)
 router.get('/city-statistics', authenticateToken, getCityStatistics);
 
@@ -122,7 +134,7 @@ router.put(
 router.get(
   '/:id/history',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'viewer', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'viewer', 'admin']),
   getFreightAnnouncementHistory
 );
 
@@ -166,7 +178,7 @@ router.get('/:id', authenticateToken, getFreightAnnouncementById);
 router.post(
   '/',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'admin']),
   createFreightAnnouncement
 );
 
@@ -174,7 +186,7 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'admin']),
   updateFreightAnnouncement
 );
 
@@ -282,6 +294,14 @@ router.put(
   transferDestination
 );
 
+// Split one destination out into a brand-new announcement (own row)
+router.post(
+  '/:id/split-destination-to-new',
+  authenticateToken,
+  authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
+  splitDestinationToNewAnnouncement
+);
+
 // Change vehicle type for an announcement
 router.put(
   '/:id/vehicle-type',
@@ -339,7 +359,7 @@ router.post(
 router.delete(
   '/:id',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'admin']),
   deleteFreightAnnouncement
 );
 

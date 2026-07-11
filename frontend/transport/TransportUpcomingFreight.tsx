@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FreightAnnouncement, FreightLineType } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
-import { formatJalaliDateTime } from '../utils/jalali';
+import { formatJalaliDateTime, compareByCreatedAtDesc } from '../utils/jalali';
 import {
     formatRepresentativeType,
     getDestinationCitiesLabel,
@@ -104,9 +104,7 @@ const TransportUpcomingFreight: React.FC = () => {
                     )
             );
         }
-        return [...data].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+        return [...data].sort(compareByCreatedAtDesc);
     }, [tabAnnouncements, filter]);
 
     const vehicleSummary = useMemo(() => summarizeVehicleTypes(rows), [rows]);

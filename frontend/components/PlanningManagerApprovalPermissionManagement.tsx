@@ -36,6 +36,9 @@ const EMPLOYEE_ROLES = new Set([
   'کارمند برنامه‌ریزی',
   'PlanningEmployee',
   'planning_employee',
+  'sales_expert',
+  'کارشناس فروش',
+  'SalesExpert',
 ]);
 
 const normalizePlanningUser = (raw: any): PlanningUser => ({
@@ -48,6 +51,15 @@ const normalizePlanningUser = (raw: any): PlanningUser => ({
 
 const isManagerRole = (role: string) => MANAGER_ROLES.has(role);
 const isEmployeeRole = (role: string) => EMPLOYEE_ROLES.has(role);
+const isSalesExpertRole = (role: string) =>
+  role === 'sales_expert' || role === 'کارشناس فروش' || role === 'SalesExpert';
+
+const roleLabelFa = (role: string) => {
+  if (isManagerRole(role)) return 'مدیر برنامه‌ریزی';
+  if (isSalesExpertRole(role)) return 'کارشناس فروش';
+  if (isEmployeeRole(role)) return 'کارمند برنامه‌ریزی';
+  return role || '-';
+};
 
 const PlanningManagerApprovalPermissionManagement: React.FC = () => {
   const [planningManagers, setPlanningManagers] = useState<PlanningUser[]>([]);
@@ -142,7 +154,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
       : planningEmployees.find(e => e.id === selectedUser);
     
     if (!user) {
-      alert(`${selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی یافت نشد`);
+      alert(`${selectedUserType === 'manager' ? 'مدیر برنامه‌ریزی' : 'کارمند / کارشناس فروش'} یافت نشد`);
       return;
     }
 
@@ -288,16 +300,18 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
     <div className="p-6 max-w-7xl mx-auto" dir="rtl">
       <div className="bg-white rounded-lg shadow-md">
         <div className="p-4 border-b">
-          <h2 className="text-2xl font-bold">مجوز تاییدیه مدیران و کارمندان برنامه‌ریزی</h2>
+          <h2 className="text-2xl font-bold">مجوز تاییدیه مدیران، کارمندان برنامه‌ریزی و کارشناس فروش</h2>
           <p className="text-sm text-gray-600 mt-1">
             در این بخش می‌توانید تعیین کنید:
             <br />
             • کدام مدیران برنامه‌ریزی می‌توانند برای هر لاین تاییدیه بدهند (و فقط بارهای همان لاین را ببینند)
             <br />
-            • کدام کارمندان برنامه‌ریزی می‌توانند برای هر لاین اعلام بار ایجاد کنند (و فقط تب‌های مربوط به لاین‌های مجاز را ببینند)
+            • کدام کارمندان برنامه‌ریزی / کارشناسان فروش می‌توانند برای هر لاین اعلام بار ایجاد کنند (و فقط تب‌های مربوط به لاین‌های مجاز را ببینند)
+            <br />
+            • کارشناس فروش بعد از ثبت، بدون تایید مدیر مستقیم به صف ترابری می‌رود
           </p>
           <p className="text-xs text-slate-500 mt-2">
-            کاربران یافت‌شده: {planningManagers.length.toLocaleString('fa-IR')} مدیر، {planningEmployees.length.toLocaleString('fa-IR')} کارمند
+            کاربران یافت‌شده: {planningManagers.length.toLocaleString('fa-IR')} مدیر، {planningEmployees.length.toLocaleString('fa-IR')} کارمند/کارشناس فروش
           </p>
         </div>
 
@@ -317,7 +331,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                 className="w-full px-3 py-2 border rounded-lg bg-white"
               >
                 <option value="manager">مدیر برنامه‌ریزی (مجوز تاییدیه)</option>
-                <option value="employee">کارمند برنامه‌ریزی (مجوز ایجاد اعلام بار)</option>
+                <option value="employee">کارمند برنامه‌ریزی / کارشناس فروش (مجوز ایجاد اعلام بار)</option>
               </select>
               {selectedUserType && (
                 <div className="mt-2 p-3 rounded-lg bg-white border-2 border-blue-200">
@@ -332,7 +346,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                     <span className="text-sm text-gray-700">
                       {selectedUserType === 'manager' 
                         ? 'این کاربر می‌تواند اعلام بارها را تایید کند و فقط بارهای لاین‌های مجاز را می‌بیند'
-                        : 'این کاربر می‌تواند اعلام بار ایجاد کند و فقط تب‌های لاین‌های مجاز را می‌بیند'}
+                        : 'این کاربر می‌تواند اعلام بار ایجاد کند و فقط تب‌های لاین‌های مجاز را می‌بیند (کارشناس فروش بدون تایید مدیر مستقیم به ترابری می‌رود)'}
                     </span>
                   </div>
                 </div>
@@ -340,11 +354,11 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">
-                انتخاب {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی:
+                انتخاب {selectedUserType === 'manager' ? 'مدیر برنامه‌ریزی' : 'کارمند / کارشناس فروش'}:
               </label>
               <input
                 type="text"
-                placeholder={`جستجو بین ${availableUsers.length} ${selectedUserType === 'manager' ? 'مدیر' : 'کارمند'}...`}
+                placeholder={`جستجو بین ${availableUsers.length} کاربر...`}
                 value={userPickerSearch}
                 onChange={(e) => setUserPickerSearch(e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg mb-2"
@@ -356,18 +370,18 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                 className="w-full px-3 py-2 border rounded-lg bg-white"
               >
                 <option value="">
-                  -- انتخاب {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی --
+                  -- انتخاب {selectedUserType === 'manager' ? 'مدیر' : 'کارمند / کارشناس فروش'} --
                 </option>
                 {filteredUsers.map(user => (
                   <option key={user.id} value={user.id}>
-                    {(user.full_name || user.username)} ({user.username})
+                    {(user.full_name || user.username)} ({user.username}) — {roleLabelFa(user.role)}
                     {user.employee_id ? ` - ${user.employee_id}` : ''}
                   </option>
                 ))}
               </select>
               {availableUsers.length === 0 && (
                 <p className="mt-2 text-xs text-amber-700">
-                  هیچ {selectedUserType === 'manager' ? 'مدیر' : 'کارمند'} برنامه‌ریزی در سیستم ثبت نشده است.
+                  هیچ {selectedUserType === 'manager' ? 'مدیر برنامه‌ریزی' : 'کارمند برنامه‌ریزی / کارشناس فروش'} در سیستم ثبت نشده است.
                 </p>
               )}
               {availableUsers.length > 0 && filteredUsers.length === 0 && (
@@ -385,7 +399,7 @@ const PlanningManagerApprovalPermissionManagement: React.FC = () => {
                 <p className="text-xs text-gray-600 mb-2">
                   {selectedUserType === 'manager' 
                     ? 'لاین‌هایی که این مدیر می‌تواند برای آن‌ها تاییدیه بدهد:'
-                    : 'لاین‌هایی که این کارمند می‌تواند برای آن‌ها اعلام بار ایجاد کند:'}
+                    : 'لاین‌هایی که این کاربر می‌تواند برای آن‌ها اعلام بار ایجاد کند:'}
                 </p>
               )}
               <div className="flex gap-2 flex-wrap">

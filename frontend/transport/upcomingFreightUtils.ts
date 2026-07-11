@@ -83,6 +83,21 @@ export function normalizeUpcomingAnnouncement(raw: Record<string, unknown>): Fre
                   unloadTime: (d.unload_time || d.unloadTime) as string | undefined,
                   deliveryDate: (d.delivery_date || d.deliveryDate) as string | undefined,
                   representativeType: (d.representative_type || d.representativeType) as string | undefined,
+                  lisCode: (d.lis_code || d.lisCode) as string | undefined,
+                  brandType: (d.brand_type || d.brandType) as 'single' | 'double' | undefined,
+                  brand: d.brand as string | undefined,
+                  brand2: d.brand2 as string | undefined,
+                  products: Array.isArray(d.products)
+                      ? (d.products as string[])
+                      : typeof d.products === 'string'
+                        ? (() => {
+                              try {
+                                  return JSON.parse(d.products);
+                              } catch {
+                                  return [];
+                              }
+                          })()
+                        : [],
               }))
             : [],
     } as FreightAnnouncement;

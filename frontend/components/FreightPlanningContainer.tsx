@@ -102,8 +102,24 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     tonnage: d.tonnage,
                     unloadTime: d.unload_time || d.unloadTime,
                     freightCost: d.freight_cost ?? d.freightCost,
+                    cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                     deliveryDate: d.delivery_date || d.deliveryDate,
                     representativeType: d.representative_type || d.representativeType,
+                    lisCode: d.lis_code || d.lisCode,
+                    brandType: d.brand_type || d.brandType,
+                    brand: d.brand,
+                    brand2: d.brand2,
+                    products: Array.isArray(d.products)
+                        ? d.products
+                        : typeof d.products === 'string'
+                          ? (() => {
+                                try {
+                                    return JSON.parse(d.products);
+                                } catch {
+                                    return [];
+                                }
+                            })()
+                          : [],
                 })) : [],
                 history: a.history || [],
             } as any);

@@ -180,7 +180,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectOrder, onSelectInvoice, o
     return (
         <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {hasAccess([UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.Transportation, UserRole.PlanningEmployee, UserRole.PlanningManager]) && (
+                {hasAccess([UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.Transportation, UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager]) && (
                     <StatCard title="بارهای امروز در انتظار تخصیص" value={pendingAnnouncements} icon={<TruckIcon className="w-12 h-12 text-purple-500" />} color="border-purple-500" onClick={() => onNavigate(View.TransportLive)} />
                 )}
                 {hasAccess([UserRole.Workshop, UserRole.Transportation]) && (
@@ -255,7 +255,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectOrder, onSelectInvoice, o
                 </div>
             )}
             
-            {hasAccess([UserRole.PlanningEmployee, UserRole.PlanningManager]) && (
+            {hasAccess([UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager]) && (
                  <div className="bg-white p-6 rounded-xl shadow-md">
                     <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                         <h2 className="text-xl font-bold text-slate-800">آخرین اعلام بارها</h2>

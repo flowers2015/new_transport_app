@@ -24,6 +24,7 @@ const vehicleSearchRoles = [
   'transport_finance',
   'planner',
   'planner_manager',
+  'sales_expert',
   'finance',
   'central_finance',
 ];

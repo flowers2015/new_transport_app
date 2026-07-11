@@ -14,6 +14,7 @@ interface CargoValueInputProps {
   onChangeRials: (rials: number) => void;
   resetKey?: string | number;
   required?: boolean;
+  disabled?: boolean;
   inputClassName?: string;
   selectClassName?: string;
 }
@@ -23,6 +24,7 @@ const CargoValueInput: React.FC<CargoValueInputProps> = ({
   onChangeRials,
   resetKey,
   required = false,
+  disabled = false,
   inputClassName = 'w-full px-3 py-2 border rounded',
   selectClassName = 'px-3 py-2 border rounded bg-white min-w-[140px]',
 }) => {
@@ -66,15 +68,18 @@ const CargoValueInput: React.FC<CargoValueInputProps> = ({
           inputMode="decimal"
           value={amount}
           onChange={(e) => handleAmountChange(e.target.value)}
-          className={`${inputClassName} flex-1 min-w-[100px]`}
+          className={`${inputClassName} flex-1 min-w-[100px]${disabled ? ' bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
           dir="ltr"
           required={required}
+          disabled={disabled}
+          readOnly={disabled}
           placeholder="مثال: 11.4"
         />
         <select
           value={unit}
           onChange={(e) => handleUnitChange(e.target.value as CargoValueUnit)}
-          className={selectClassName}
+          className={`${selectClassName}${disabled ? ' bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+          disabled={disabled}
         >
           {CARGO_VALUE_UNIT_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

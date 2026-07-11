@@ -15,6 +15,7 @@ import {
     matchesFreightLine,
     sortByIceCreamDisplayOrder,
 } from './freightDisplay';
+import { compareByCreatedAtDesc } from './jalali';
 import { getAssignedVehicleCode } from './transportLiveViewUtils';
 
 export const COMPANY_BALE_REPORT_HEADERS = [
@@ -99,13 +100,7 @@ function sortByVehicleTypeThenLineRules(
         if (line === FreightLineType.IceCream) {
             sorted.push(...sortByIceCreamDisplayOrder(batch));
         } else {
-            sorted.push(
-                ...batch.sort(
-                    (a, b) =>
-                        new Date(b.createdAt as string | Date).getTime() -
-                        new Date(a.createdAt as string | Date).getTime()
-                )
-            );
+            sorted.push(...batch.sort(compareByCreatedAtDesc));
         }
     }
     return sorted;

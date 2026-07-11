@@ -26,6 +26,124 @@ function resolveActingUserName(user) {
   return displayName || 'system';
 }
 
+const CREATE_PERMISSION_ROLES = new Set([
+  'planner',
+  'کارمند برنامه‌ریزی',
+  'PlanningEmployee',
+  'planning_employee',
+  'sales_expert',
+  'کارشناس فروش',
+  'SalesExpert',
+]);
+
+const SALES_EXPERT_ROLES = new Set([
+  'sales_expert',
+  'کارشناس فروش',
+  'SalesExpert',
+]);
+
+function isCreatePermissionRole(role) {
+  return CREATE_PERMISSION_ROLES.has(role);
+}
+
+function isSalesExpertRole(role) {
+  return SALES_EXPERT_ROLES.has(role);
+}
+
+function normalizeFreightLineTypeKey(lineType) {
+  if (lineType === 'بستنی' || lineType === 'IceCream') return 'IceCream';
+  if (lineType === 'پاستوریزه' || lineType === 'Dairy') return 'Dairy';
+  if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') return 'Ambient';
+  return lineType;
+}
+
+/** همان منطق تایید مدیر: بستنی→شرکتی، پاستوریزه/محیطی→شخصی */
+function resolveAssignmentQueueFromLineType(lineType) {
+  const iceCreamMatches = ['IceCream', 'بستنی'];
+  const dairyMatches = ['Dairy', 'پاستوریزه'];
+  const ambientMatches = ['Ambient', 'لبنیات-فروتلند'];
+
+  if (iceCreamMatches.includes(lineType)) {
+    return { status: 'PendingCompanyAssignment', assignmentType: 'company', queueLabel: 'شرکتی' };
+  }
+  if (dairyMatches.includes(lineType) || ambientMatches.includes(lineType)) {
+    return { status: 'PendingPersonalAssignment', assignmentType: 'personal', queueLabel: 'شخصی' };
+  }
+  return { status: 'PendingCompanyAssignment', assignmentType: 'company', queueLabel: 'شرکتی' };
+}
+
+async function assertCreateLinePermission(userId, lineType) {
+  const normalizedLineType = normalizeFreightLineTypeKey(lineType);
+  const tableCheck = await pool.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = 'planning_manager_approval_permissions'
+    );
+  `);
+
+  if (!tableCheck.rows[0].exists) return;
+
+  const permissionCheck = await pool.query(
+    `
+      SELECT COUNT(*) as count
+      FROM planning_manager_approval_permissions
+      WHERE user_id = $1 AND line_type = $2 AND permission_type = 'create'
+    `,
+    [userId, normalizedLineType]
+  );
+
+  if (parseInt(permissionCheck.rows[0].count, 10) < 1) {
+    const err = new Error(
+      `شما مجوز ایجاد اعلام بار برای لاین "${lineType}" را ندارید. لطفاً با ادمین تماس بگیرید.`
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
+const DESTINATION_INSERT_COLUMNS = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, created_at`;
+
+function buildDestinationInsertParams(announcementId, d, destId = crypto.randomUUID()) {
+  const products = d.products;
+  let productsJson = '[]';
+  if (Array.isArray(products)) {
+    productsJson = JSON.stringify(products);
+  } else if (typeof products === 'string' && products.trim()) {
+    try {
+      productsJson = JSON.stringify(JSON.parse(products));
+    } catch {
+      productsJson = '[]';
+    }
+  }
+
+  return [
+    destId,
+    announcementId,
+    d.city || null,
+    d.representativeName || null,
+    d.tonnage || null,
+    d.freightCost ?? d.freight_cost ?? null,
+    d.cargoValue ?? d.cargo_value ?? null,
+    d.unloadTime || d.unload_time || null,
+    d.deliveryDate || d.delivery_date || null,
+    d.representativeType || d.representative_type || 'agent',
+    d.lisCode || d.lis_code || null,
+    d.brandType || d.brand_type || null,
+    d.brand || null,
+    d.brand2 || null,
+    productsJson,
+  ];
+}
+
+async function insertFreightDestinations(clientOrPool, announcementId, destinations) {
+  const db = clientOrPool;
+  const insertDestQuery = `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())`;
+  for (const d of destinations) {
+    await db.query(insertDestQuery, buildDestinationInsertParams(announcementId, d));
+  }
+}
+
 async function updateAnnouncementStatusWithFallback(client, announcementId, candidates) {
   let lastError = null;
   for (const statusValue of candidates) {
@@ -255,12 +373,13 @@ async function getFreightAnnouncements(req, res) {
     const userRole = req.user?.role || req.user?.userRole;
     const userId = req.user?.id || req.user?.userId;
     const isPlanningEmployee = userRole === 'planner' || userRole === 'کارمند برنامه‌ریزی';
+    const isSalesExpert = isSalesExpertRole(userRole);
     const isPlanningManager = userRole === 'planner_manager' || userRole === 'مدیر برنامه‌ریزی';
     const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
     
-    // Add filter for planning employees (only see their own announcements)
+    // Add filter for planning employees / sales experts (only see their own announcements)
     let userFilter = '';
-    if (isPlanningEmployee && userId) {
+    if ((isPlanningEmployee || isSalesExpert) && userId) {
       userFilter = ` AND fa.created_by_user_id = '${userId}'`;
     }
     
@@ -632,6 +751,18 @@ async function updateFreightAnnouncement(req, res) {
         return res.status(404).json({ message: 'Freight announcement not found.' });
       }
       const oldRecord = oldRecordQuery.rows[0];
+
+      // کارشناس فروش: ارجاع مثل تایید مدیر → مستقیم صف شخصی/شرکتی
+      let effectiveStatus = status;
+      let effectiveAssignmentType = assignmentType;
+      if (
+        isSalesExpertRole(req.user?.role) &&
+        status === 'PendingManagerApproval'
+      ) {
+        const queue = resolveAssignmentQueueFromLineType(lineType || oldRecord.line_type);
+        effectiveStatus = queue.status;
+        effectiveAssignmentType = queue.assignmentType;
+      }
       
       // گرفتن مقاصد قبلی
       const oldDestQuery = await client.query(
@@ -695,7 +826,7 @@ async function updateFreightAnnouncement(req, res) {
       if (assignedVehicleModel !== undefined) { fields.push(`assigned_vehicle_model = $${idx++}`); values.push(assignedVehicleModel || null); }
       if (assignedVehicleBrand !== undefined) { fields.push(`assigned_vehicle_brand = $${idx++}`); values.push(assignedVehicleBrand || null); }
       if (vehiclePlate !== undefined) { fields.push(`vehicle_plate = $${idx++}`); values.push(vehiclePlate || null); }
-      if (assignmentType !== undefined) { fields.push(`assignment_type = $${idx++}`); values.push(assignmentType || null); }
+      if (effectiveAssignmentType !== undefined) { fields.push(`assignment_type = $${idx++}`); values.push(effectiveAssignmentType || null); }
       
       // یادداشت
       if (notes !== undefined) {
@@ -708,12 +839,18 @@ async function updateFreightAnnouncement(req, res) {
         }
       }
       
-      if (status) { fields.push(`status = $${idx++}`); values.push(status); }
+      if (effectiveStatus) { fields.push(`status = $${idx++}`); values.push(effectiveStatus); }
 
       // اعلام مجدد: کارمند برنامه‌ریزی بار «بار مانده» را برای تایید مدیر دوباره ارسال کرده
+      // کارشناس فروش: اعلام مجدد مستقیم به صف ترابری
       const leftoverStatuses = ['Leftover', 'بار مانده'];
+      const reannounceTargetStatuses = [
+        'PendingManagerApproval',
+        'PendingPersonalAssignment',
+        'PendingCompanyAssignment',
+      ];
       if (
-        status === 'PendingManagerApproval' &&
+        reannounceTargetStatuses.includes(effectiveStatus) &&
         leftoverStatuses.includes(oldRecord.status)
       ) {
         const reannounceCol = await client.query(
@@ -739,25 +876,7 @@ async function updateFreightAnnouncement(req, res) {
       if (Array.isArray(destinations)) {
         await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);
 
-        // INSERT با همه فیلدها شامل delivery_date و representative_type
-        const insertDestQuery = `INSERT INTO freight_destinations 
-          (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, delivery_date, representative_type, created_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`;
-
-        for (const d of destinations) {
-          const params = [
-            crypto.randomUUID(),
-            id,
-            d.city || null,
-            d.representativeName || null,
-            d.tonnage || null,
-            d.freightCost || null,
-            d.unloadTime || null,
-            d.deliveryDate || null,
-            d.representativeType || 'agent',
-          ];
-          await client.query(insertDestQuery, params);
-        }
+        await insertFreightDestinations(client, id, destinations);
         
         // محاسبه و آپدیت کرایه کل (فقط اگر admin مقدار صریح نداده باشد)
         if (totalFreightCost === undefined) {
@@ -834,6 +953,7 @@ async function updateFreightAnnouncement(req, res) {
             'personal_transport_user': 'کاربر ترابری (شخصی)',
             'planner': 'کارمند برنامه‌ریزی',
             'planner_manager': 'مدیر برنامه‌ریزی',
+            'sales_expert': 'کارشناس فروش',
             'transport_finance': 'مالی ترابری',
             'finance': 'مالی شعب',
             'central_finance': 'مالی ستاد',
@@ -861,37 +981,58 @@ async function updateFreightAnnouncement(req, res) {
           action = 'STATUS_CHANGED';
           if (
             ['Leftover', 'بار مانده'].includes(oldRecord.status) &&
-            newRecord.status === 'PendingManagerApproval'
+            [
+              'PendingManagerApproval',
+              'PendingPersonalAssignment',
+              'PendingCompanyAssignment',
+            ].includes(newRecord.status)
           ) {
             action = 'REANNOUNCED';
           }
         }
         
-        // اگر فقط وضعیت از Draft یا Leftover به PendingManagerApproval تغییر کرده (ارجاع)، فقط تغییر وضعیت را ثبت کن
-        // تغییرات کرایه و سایر فیلدها در این مرحله معنی ندارند
+        // اگر فقط وضعیت از Draft یا Leftover به صف تایید/ترابری تغییر کرده (ارجاع)، فقط تغییر وضعیت را ثبت کن
         let filteredChanges = allChanges;
-        if ((oldRecord.status === 'Draft' || oldRecord.status === 'Leftover') && newRecord.status === 'PendingManagerApproval') {
+        const routedStatuses = [
+          'PendingManagerApproval',
+          'PendingPersonalAssignment',
+          'PendingCompanyAssignment',
+        ];
+        if (
+          (oldRecord.status === 'Draft' || oldRecord.status === 'Leftover') &&
+          routedStatuses.includes(newRecord.status)
+        ) {
           // فقط تغییر وضعیت را نگه دار، بقیه را حذف کن
-          // حذف تمام فیلدها به جز status
           filteredChanges = {};
           if (allChanges && allChanges.status) {
             filteredChanges.status = allChanges.status;
           } else {
-            // اگر status در allChanges نیست، آن را از oldStatus و newStatus بساز
             filteredChanges.status = {
               old: oldRecord.status,
               new: newRecord.status
             };
           }
+          if (allChanges && allChanges.assignment_type) {
+            filteredChanges.assignment_type = allChanges.assignment_type;
+          }
         }
-        
-        const description = generateChangeDescription(
+
+        let description = generateChangeDescription(
           action,
           filteredChanges,
           oldRecord.status,
           newRecord.status,
           newRecord.line_type
         );
+        if (
+          isSalesExpertRole(req.user?.role) &&
+          routedStatuses.includes(newRecord.status) &&
+          newRecord.status !== 'PendingManagerApproval'
+        ) {
+          const queueLabel =
+            newRecord.assignment_type === 'personal' ? 'شخصی' : 'شرکتی';
+          description = `کارشناس فروش اعلام بار را مستقیم به صف ترابری ${queueLabel} ارجاع داد`;
+        }
         
         await logFreightHistory({
           announcementId: id,
@@ -1007,50 +1148,29 @@ async function createFreightAnnouncement(req, res) {
       return res.status(400).json({ message: 'loadingDate, lineType and vehicleType are required.' });
     }
 
-    // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی
+    // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی و کارشناس فروش
     const userId = req.user?.id || req.user?.userId;
     const role = req.user?.role;
-    if (role === 'planner' || role === 'کارمند برنامه‌ریزی' || role === 'PlanningEmployee' || role === 'planning_employee') {
-      // تبدیل lineType به فرمت استاندارد
-      let normalizedLineType = lineType;
-      if (lineType === 'بستنی' || lineType === 'IceCream') {
-        normalizedLineType = 'IceCream';
-      } else if (lineType === 'پاستوریزه' || lineType === 'Dairy') {
-        normalizedLineType = 'Dairy';
-      } else if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') {
-        normalizedLineType = 'Ambient';
-      }
-      
-      // بررسی وجود جدول
-      const tableCheck = await pool.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' 
-          AND table_name = 'planning_manager_approval_permissions'
-        );
-      `);
-      
-      if (tableCheck.rows[0].exists) {
-        // بررسی مجوز
-        const permissionCheck = await pool.query(`
-          SELECT COUNT(*) as count
-          FROM planning_manager_approval_permissions
-          WHERE user_id = $1 AND line_type = $2 AND permission_type = 'create'
-        `, [userId, normalizedLineType]);
-        
-        const hasPermission = parseInt(permissionCheck.rows[0].count) > 0;
-        
-        if (!hasPermission) {
-          return res.status(403).json({ 
-            message: `شما مجوز ایجاد اعلام بار برای لاین "${lineType}" را ندارید. لطفاً با ادمین تماس بگیرید.` 
-          });
-        }
+    if (isCreatePermissionRole(role)) {
+      try {
+        await assertCreateLinePermission(userId, lineType);
+      } catch (permErr) {
+        return res.status(permErr.statusCode || 403).json({ message: permErr.message });
       }
     }
 
     const id = crypto.randomUUID();
     const announcementCode = `ANN-${Date.now()}`;
-    const status = isDraft ? 'Draft' : 'PendingManagerApproval';
+
+    let status = isDraft ? 'Draft' : 'PendingManagerApproval';
+    // کارشناس فروش: بدون صف مدیر، مستقیم صف ترابری (همان قوانین شخصی/شرکتی)
+    let createAssignmentType = representativeType || null;
+    let salesQueueMeta = null;
+    if (!isDraft && isSalesExpertRole(role)) {
+      salesQueueMeta = resolveAssignmentQueueFromLineType(lineType);
+      status = salesQueueMeta.status;
+      createAssignmentType = salesQueueMeta.assignmentType;
+    }
 
     // Calculate total freight cost if provided in destinations
     const totalFreightCost = Array.isArray(destinations)
@@ -1093,7 +1213,7 @@ async function createFreightAnnouncement(req, res) {
       status,
       cargoValue || 0,
       vehicleType,
-      representativeType || null, // using assignment_type to store representativeType when applicable
+      createAssignmentType, // کارشناس فروش: personal/company؛ بقیه: رفتار قبلی (representativeType)
       totalFreightCost || null,
       platformArrivalTime || null,
       cartonCount || null,
@@ -1112,28 +1232,7 @@ async function createFreightAnnouncement(req, res) {
     // Insert destinations if provided
     if (Array.isArray(destinations) && destinations.length > 0) {
       // Detect unload_time column existence for flexible insert
-      // INSERT destinations با فیلدهای جدید (delivery_date, representative_type)
-      const insertDestQuery = `INSERT INTO freight_destinations (
-           id, freight_announcement_id, city, representative_name, tonnage, freight_cost, unload_time, delivery_date, representative_type, created_at
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
-         )`;
-
-      for (const d of destinations) {
-        const destId = crypto.randomUUID();
-        const params = [
-          destId,
-          id,
-          d.city || null,
-          d.representativeName || null,
-          d.tonnage || null,
-          d.freightCost || null,
-          d.unloadTime || null,
-          d.deliveryDate || null,
-          d.representativeType || 'agent',
-        ];
-        await pool.query(insertDestQuery, params);
-      }
+      await insertFreightDestinations(pool, id, destinations);
     }
 
     // Fetch the created record with destinations for response
@@ -1226,6 +1325,7 @@ async function createFreightAnnouncement(req, res) {
         'personal_transport_user': 'کاربر ترابری (شخصی)',
         'planner': 'کارمند برنامه‌ریزی',
         'planner_manager': 'مدیر برنامه‌ریزی',
+        'sales_expert': 'کارشناس فروش',
         'transport_finance': 'مالی ترابری',
         'finance': 'مالی شعب',
         'central_finance': 'مالی ستاد',
@@ -1247,7 +1347,10 @@ async function createFreightAnnouncement(req, res) {
     })();
     // گرفتن شهر برای نمایش در توضیحات (از همان destRows استفاده می‌کنیم)
     const city = destRows.rows[0]?.city || 'بدون مقصد';
-    const description = `اعلام بار به مقصد ${city} ایجاد شد (${lineType})`;
+    let description = `اعلام بار به مقصد ${city} ایجاد شد (${lineType})`;
+    if (salesQueueMeta) {
+      description = `کارشناس فروش اعلام بار به مقصد ${city} را مستقیم به صف ترابری ${salesQueueMeta.queueLabel} ارسال کرد (${lineType})`;
+    }
     
     console.log(`📝 [createFreightAnnouncement] Creating history entry:`, {
       announcementId: id,
@@ -1276,6 +1379,7 @@ async function createFreightAnnouncement(req, res) {
       // آماده‌سازی داده کامل برای optimistic update
       const notificationData = {
         status: status,
+        assignmentType: salesQueueMeta ? salesQueueMeta.assignmentType : undefined,
         lineType: lineType,
         announcementCode: announcementCode,
         vehicleType: vehicleType,
@@ -1411,20 +1515,9 @@ async function approveAnnouncement(req, res) {
     
     let newStatus;
     let assignmentType;
-    const iceCreamMatches = ['IceCream', 'بستنی'];
-    const dairyMatches = ['Dairy', 'پاستوریزه'];
-    const ambientMatches = ['Ambient', 'لبنیات-فروتلند'];
-    
-    if (iceCreamMatches.includes(lineType)) {
-      newStatus = 'PendingCompanyAssignment';
-      assignmentType = 'company';
-    } else if (dairyMatches.includes(lineType) || ambientMatches.includes(lineType)) {
-      newStatus = 'PendingPersonalAssignment';
-      assignmentType = 'personal';
-    } else {
-      newStatus = 'PendingCompanyAssignment';
-      assignmentType = 'company';
-    }
+    const queue = resolveAssignmentQueueFromLineType(lineType);
+    newStatus = queue.status;
+    assignmentType = queue.assignmentType;
 
     const description = `بار به مقصد ${destinationLabel} توسط ${userName} تایید شد و به صف ${assignmentType === 'company' ? 'شرکتی' : 'شخصی'} ارجاع شد`;
 
@@ -8728,6 +8821,216 @@ async function transferDestination(req, res) {
 }
 
 module.exports.transferDestination = transferDestination;
+
+/**
+ * جدا کردن یک مقصد از اعلام‌بار فعلی و ساخت اعلام‌بار جدید فقط برای همان مقصد.
+ * POST /api/v1/freight-announcements/:id/split-destination-to-new
+ * body: { destinationId }
+ */
+async function splitDestinationToNewAnnouncement(req, res) {
+  const { id: sourceAnnouncementId } = req.params;
+  const { destinationId, vehicleType: requestedVehicleType } = req.body || {};
+  const userId = req.user?.userId || req.user?.id;
+
+  let userFullName = '';
+  if (userId) {
+    try {
+      const userCheck = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = userCheck.rows.some((r) => r.column_name === 'full_name');
+      const hasName = userCheck.rows.some((r) => r.column_name === 'name');
+      const nameColumn = hasFullName ? 'full_name' : hasName ? 'name' : 'username';
+      const userRow = await pool.query(`SELECT ${nameColumn} as display_name FROM users WHERE id = $1`, [userId]);
+      if (userRow.rows.length > 0) userFullName = userRow.rows[0].display_name || '';
+    } catch (e) {
+      console.error('Failed to fetch user name:', e);
+    }
+  }
+
+  const username = req.user?.username || '';
+  const role = req.user?.role || '';
+  const roleLabels = {
+    transport_user: 'کاربر ترابری (شرکت)',
+    personal_transport_user: 'کاربر ترابری (شخصی)',
+    planner: 'کارمند برنامه‌ریزی',
+    planner_manager: 'مدیر برنامه‌ریزی',
+    admin: 'مدیر سیستم',
+  };
+  const roleLabel = roleLabels[role] || role || '';
+  const userName =
+    username && userFullName && roleLabel
+      ? `${username} - ${userFullName} - ${roleLabel}`
+      : username && userFullName
+        ? `${username} - ${userFullName}`
+        : username || userFullName || 'کاربر';
+
+  if (!destinationId) {
+    return res.status(400).json({ message: 'destinationId الزامی است.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // اول مالک واقعی مقصد را از روی destinationId پیدا کن
+    // (ممکن است فرانت اشتباهاً id ردیف میزبان را بفرستد)
+    const { rows: destOwnerRows } = await client.query(
+      `SELECT id, city, freight_announcement_id
+       FROM freight_destinations
+       WHERE id = $1
+       FOR UPDATE`,
+      [destinationId]
+    );
+    if (destOwnerRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'مقصد یافت نشد.' });
+    }
+
+    let effectiveSourceId = String(destOwnerRows[0].freight_announcement_id);
+    if (String(sourceAnnouncementId) !== effectiveSourceId) {
+      console.warn('⚠️ [splitDestinationToNewAnnouncement] source mismatch; using actual owner', {
+        requestedSourceAnnouncementId: sourceAnnouncementId,
+        actualSourceAnnouncementId: effectiveSourceId,
+        destinationId,
+      });
+    }
+
+    const { rows: sourceRows } = await client.query(
+      `SELECT * FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [effectiveSourceId]
+    );
+    if (sourceRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار مبدا یافت نشد.' });
+    }
+    const sourceAnn = sourceRows[0];
+    const destination = { id: destOwnerRows[0].id, city: destOwnerRows[0].city };
+
+    const { rows: countRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM freight_destinations WHERE freight_announcement_id = $1`,
+      [effectiveSourceId]
+    );
+    if ((countRows[0]?.count || 0) <= 1) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'این مقصد تنها مقصد اعلام‌بار است؛ نیازی به جداسازی نیست.',
+      });
+    }
+
+    const crypto = require('crypto');
+    const newId = crypto.randomUUID();
+    const annCode = `ANN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const assignmentType = sourceAnn.assignment_type || 'company';
+    const pendingStatus =
+      assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
+    // اگر مبدا در صف تخصیص است همان وضعیت را نگه دار؛ وگرنه به صف برگردان
+    const keepPending = ['PendingPersonalAssignment', 'PendingCompanyAssignment', 'Assigned'].includes(
+      String(sourceAnn.status || '')
+    );
+    const newStatus = keepPending ? sourceAnn.status : pendingStatus;
+    const vehicleType = requestedVehicleType || sourceAnn.vehicle_type || 'ده چرخ';
+
+    await client.query(
+      `INSERT INTO freight_announcements (
+        id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
+        vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
+        total_freight_cost, platform_arrival_time, carton_count, pallet_count, loading_type,
+        created_at, updated_at,
+        origin_city, brand, representative_type, representative_name, priority, products, notes,
+        created_by_user_id
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, NULL, NULL,
+        $10, $11, $12, $13, $14, NOW(), NOW(),
+        $15, $16, $17, $18, $19, $20, $21, $22
+      )`,
+      [
+        newId,
+        annCode,
+        sourceAnn.loading_date,
+        sourceAnn.delivery_date || null,
+        sourceAnn.line_type,
+        newStatus,
+        sourceAnn.cargo_value || 0,
+        vehicleType,
+        assignmentType,
+        null,
+        sourceAnn.platform_arrival_time || null,
+        sourceAnn.carton_count || null,
+        sourceAnn.pallet_count || null,
+        sourceAnn.loading_type || null,
+        sourceAnn.origin_city || null,
+        sourceAnn.brand || null,
+        sourceAnn.representative_type || null,
+        sourceAnn.representative_name || null,
+        sourceAnn.priority || null,
+        sourceAnn.products || '[]',
+        sourceAnn.notes || null,
+        sourceAnn.created_by_user_id || userId || null,
+      ]
+    );
+
+    await client.query(
+      `UPDATE freight_destinations
+       SET freight_announcement_id = $1, created_at = NOW()
+       WHERE id = $2`,
+      [newId, destinationId]
+    );
+
+    await logFreightHistory({
+      announcementId: effectiveSourceId,
+      userId: userId || null,
+      userName,
+      action: 'DESTINATION_SPLIT_OUT',
+      oldStatus: sourceAnn.status,
+      newStatus: sourceAnn.status,
+      description: `مقصد ${destination.city} به اعلام‌بار جدید ${annCode} جدا شد (توسط ${userName})`,
+      ipAddress: req.ip,
+      client,
+    });
+
+    await logFreightHistory({
+      announcementId: newId,
+      userId: userId || null,
+      userName,
+      action: 'ANNOUNCEMENT_SPLIT_CREATED',
+      oldStatus: null,
+      newStatus,
+      fieldChanges: {
+        created_from: { old: null, new: effectiveSourceId },
+        destination_id: { old: null, new: destinationId },
+      },
+      description: `اعلام‌بار جدید از جداسازی مقصد ${destination.city} از ${sourceAnn.announcement_code} ایجاد شد (توسط ${userName})`,
+      ipAddress: req.ip,
+      client,
+    });
+
+    await client.query('COMMIT');
+
+    return res.status(200).json({
+      message: 'مقصد به اعلام‌بار جدید منتقل شد',
+      sourceAnnouncementId: effectiveSourceId,
+      requestedSourceAnnouncementId: sourceAnnouncementId,
+      newAnnouncementId: newId,
+      newAnnouncementCode: annCode,
+      destinationId,
+      vehicleType,
+      status: newStatus,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [splitDestinationToNewAnnouncement]', error);
+    return res.status(500).json({ message: 'خطا در جداسازی مقصد به اعلام‌بار جدید', details: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports.splitDestinationToNewAnnouncement = splitDestinationToNewAnnouncement;
 
 /**
  * دریافت لیست انواع خودروهای موجود

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { FreightAnnouncement, FreightLineType, FreightAnnouncementStatus, User, Destination } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
-import { formatJalaliDateTime, formatJalali } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, compareByCreatedAtDesc } from '../utils/jalali';
 import { formatNumberWhileTyping, parseNumberFromFormatted, formatNumberWithSeparator } from '../utils/numberFormatter';
 import { formatCargoValueShort, formatRialsPreview } from '../utils/cargoValueUtils';
 import CargoValueInput from './CargoValueInput';
@@ -83,11 +83,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
         return matchesSearch && matchesStatus && matchesLineType;
       });
       
-      const sorted = [...filtered].sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return dateB - dateA;
-      });
+      const sorted = [...filtered].sort(compareByCreatedAtDesc);
       
       const editedIndex = sorted.findIndex(ann => ann.id === lastEditedAnnouncementId);
       
@@ -545,11 +541,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     });
     
     // مرتب‌سازی بر اساس تاریخ ایجاد (جدیدترین اول) - ایجاد کپی جدید برای sort
-    const sorted = [...filtered].sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return dateB - dateA; // نزولی (جدیدترین اول)
-    });
+    const sorted = [...filtered].sort(compareByCreatedAtDesc);
     
     console.log('✅ [FreightManagement] بعد از مرتب‌سازی:', {
       sortedCount: sorted.length,

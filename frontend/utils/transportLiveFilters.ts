@@ -1,5 +1,6 @@
 import React from 'react';
 import { FreightAnnouncement } from '../types';
+import { toTimestamp } from './jalali';
 import { TransportLiveTab } from './freightDisplay';
 
 export type ColumnFiltersState = Record<string, string>;
@@ -56,6 +57,35 @@ export function loadTransportLiveFilterPrefs(key: string): TransportLiveFilterPr
 export function saveTransportLiveFilterPrefs(key: string, prefs: TransportLiveFilterPrefs): void {
     try {
         localStorage.setItem(key, JSON.stringify(prefs));
+    } catch {
+        /* ignore quota errors */
+    }
+}
+
+const COLUMN_STORAGE_PREFIX = 'transport-live-columns-v1';
+
+export function transportLiveColumnStorageKey(
+    userId: string,
+    activeLine: TransportLiveTab,
+    viewMode: 'compact' | 'full'
+): string {
+    return `${COLUMN_STORAGE_PREFIX}:${userId}:${activeLine}:${viewMode}`;
+}
+
+export function loadTransportLiveHiddenColumns(key: string): Set<string> {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw) as { hiddenHeaders?: string[] };
+        return new Set(parsed.hiddenHeaders || []);
+    } catch {
+        return new Set();
+    }
+}
+
+export function saveTransportLiveHiddenColumns(key: string, hiddenHeaders: Set<string>): void {
+    try {
+        localStorage.setItem(key, JSON.stringify({ hiddenHeaders: Array.from(hiddenHeaders) }));
     } catch {
         /* ignore quota errors */
     }
@@ -240,7 +270,7 @@ function numericSortValue(header: string, ann: FreightAnnouncement): number | nu
 
 function dateSortValue(header: string, ann: FreightAnnouncement): string | null {
     if (header === 'تاریخ اعلام بار') {
-        const t = new Date(ann.createdAt as string | Date).getTime();
+        const t = toTimestamp(ann.createdAt);
         return Number.isFinite(t) ? String(t) : null;
     }
     if (header === 'تاریخ تحویل بار') {

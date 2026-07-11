@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { DrillDownInfo, RepairOrder, PartUsage, Part, Vehicle, OutsourcingRequest, Branch } from '../types';
-import { formatJalali, formatPlateNumber } from '../utils/jalali';
+import { formatJalali, formatPlateNumber, toTimestamp } from '../utils/jalali';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { ChartBarIcon } from './icons/ChartBarIcon';
 
@@ -50,14 +50,14 @@ const DrillDownView: React.FC<DrillDownViewProps> = (props) => {
         const filteredOrders = repairOrders.filter(order => {
             if (order.branchId !== branchId) return false;
             
-            if (startDate && order.createdAt.getTime() < new Date(startDate).getTime()) {
+            if (startDate && toTimestamp(order.createdAt) < new Date(startDate).getTime()) {
                 return false;
             }
 
             if (endDate) {
                 const endOfDay = new Date(endDate);
                 endOfDay.setHours(23, 59, 59, 999);
-                if (order.createdAt.getTime() > endOfDay.getTime()) {
+                if (toTimestamp(order.createdAt) > endOfDay.getTime()) {
                     return false;
                 }
             }

@@ -73,6 +73,7 @@ const TransportUpcomingFreight = React.lazy(() => import('./transport/TransportU
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
         case UserRole.PlanningEmployee:
+        case UserRole.SalesExpert:
         case UserRole.PlanningManager:
             return View.FreightPlanning; // برنامه ریزی ارسال بار
         case UserRole.TransportationUser:
@@ -128,6 +129,7 @@ const App: React.FC = () => {
             case 'admin': return UserRole.Admin;
             case 'planner': return UserRole.PlanningEmployee;
             case 'planner_manager': return UserRole.PlanningManager;
+            case 'sales_expert': return UserRole.SalesExpert;
             case 'transport_user': return UserRole.TransportationUser;
             case 'personal_transport_user': return UserRole.Transportation_Personal_Vehicle_User;
             case 'finance': return UserRole.BranchFinance;

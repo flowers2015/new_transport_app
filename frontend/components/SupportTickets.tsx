@@ -5,7 +5,7 @@ import {
     SupportTicketStatus,
     User,
 } from '../types';
-import { formatJalaliDateTime } from '../utils/jalali';
+import { formatJalaliDateTime, compareByCreatedAtDesc } from '../utils/jalali';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { TicketIcon } from './icons/TicketIcon';
 
@@ -62,11 +62,7 @@ const SupportTickets: React.FC<SupportTicketsProps> = ({
     const [formError, setFormError] = useState<string | null>(null);
 
     const sortedTickets = useMemo(
-        () =>
-            [...tickets].sort(
-                (a, b) =>
-                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            ),
+        () => [...tickets].sort(compareByCreatedAtDesc),
         [tickets]
     );
 

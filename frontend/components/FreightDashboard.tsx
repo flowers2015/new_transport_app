@@ -1,7 +1,7 @@
 // This is a new file: components/FreightDashboard.tsx
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { FreightAnnouncement, FreightLineType, Destination, FreightAnnouncementStatus, UserRole, User, View, DispatchRouteSuggestion } from '../types';
-import { formatJalaliDateTime, formatJalali, parseJalaliDateString } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, parseJalaliDateString, compareByCreatedAtDesc } from '../utils/jalali';
 import { getApiUrl } from '../utils/apiConfig';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDairyDestinationColumnLines } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -23,16 +23,149 @@ const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک
 const PRIORITIES = { low: 'کم اهمیت', normal: 'عادی', high: 'فوری' };
 const ICE_CREAM_PRODUCTS = ['کره', 'کترینگ', 'پنیر پیتزا', 'خامه قنادی'];
 const ALL_FREIGHT_LINE_TYPES = Object.values(FreightLineType);
+const DAIRY_DEST_SUB_COL_COUNT = 9;
+const AMBIENT_DEST_SUB_COL_COUNT = 6;
+const DAIRY_DEST_SUB_HEADERS = ['نوع برند', 'کد LIS', 'محصولات', 'نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه'] as const;
+const AMBIENT_DEST_SUB_HEADERS = ['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه'] as const;
+
+const sortByCanonicalLineOrder = (types: FreightLineType[]) =>
+    ALL_FREIGHT_LINE_TYPES.filter((lt) => types.includes(lt));
+
+const createInitialDairyDestination = (): Partial<Destination> => ({
+    id: generateUUID(),
+    city: '',
+    representativeName: '',
+    representativeType: 'agent',
+    brandType: 'single',
+    brand: 'میهن',
+    brand2: '',
+    lisCode: '',
+    products: [],
+    cargoValue: 0,
+});
+
+const sumDestinationCargoValues = (destinations: Partial<Destination>[]): number =>
+    destinations.reduce((sum, d) => sum + (Number(d.cargoValue) || 0), 0);
+
+/** برای اعلام‌های قدیمی بدون ارزش بار تفکیک‌شده روی مقصد */
+const migrateDairyDestinationCargoValues = (
+    dests: Partial<Destination>[],
+    announcementCargo: number
+): Partial<Destination>[] => {
+    const existingSum = sumDestinationCargoValues(dests);
+    if (existingSum > 0 || !announcementCargo) return dests;
+    if (dests.length === 1) return [{ ...dests[0], cargoValue: announcementCargo }];
+    const per = Math.floor(announcementCargo / dests.length);
+    return dests.map((d, i) => ({
+        ...d,
+        cargoValue:
+            i === dests.length - 1
+                ? announcementCargo - per * (dests.length - 1)
+                : per,
+    }));
+};
+
+const computeDairyAnnouncementBrand = (destinations: Partial<Destination>[]): string => {
+    const labels = destinations
+        .map((d) => {
+            const primary = (d.brand || 'میهن').trim();
+            if (d.brandType === 'double' && d.brand2?.trim()) {
+                return `${primary} و ${d.brand2.trim()}`;
+            }
+            return primary;
+        })
+        .filter(Boolean);
+    return [...new Set(labels)].join('، ');
+};
+
+const isValidDairyRepresentativeType = (value?: string) =>
+    value === 'agent' || value === 'distributor' || value === 'organizational';
+
+const isValidAmbientRepresentativeType = (value?: string) =>
+    value === 'agent' || value === 'distributor';
+
+const normalizeDestinationDeliveryDate = (value?: string): string => {
+    if (!value?.trim()) return '';
+    const parts = value.trim().replace(/-/g, '/').split('/');
+    if (parts.length !== 3) return value.trim();
+    const year = parts[0].padStart(4, '0');
+    const month = parts[1].padStart(2, '0');
+    const day = parts[2].padStart(2, '0');
+    if (year.length !== 4) return value.trim();
+    return `${year}/${month}/${day}`;
+};
+
+/** ردیف مقصدی که کاربر شروع به پر کردن کرده (شهر یا تناژ یا تاریخ تحویل دارد) */
+const isActiveDestinationRow = (d: Partial<Destination>): boolean =>
+    !!(
+        d.city?.trim() ||
+        (d.tonnage != null && d.tonnage !== '' && Number(d.tonnage) > 0) ||
+        d.deliveryDate?.trim()
+    );
+
+const isCompleteDestinationRow = (d: Partial<Destination>, lineType: FreightLineType): boolean => {
+    const deliveryDate = normalizeDestinationDeliveryDate(d.deliveryDate);
+    if (!d.city?.trim()) return false;
+    const repTypeValid =
+        lineType === FreightLineType.Dairy
+            ? isValidDairyRepresentativeType(d.representativeType)
+            : isValidAmbientRepresentativeType(d.representativeType);
+    if (!repTypeValid) return false;
+    if (lineType === FreightLineType.Dairy) {
+        const brandType = d.brandType || 'single';
+        if (!d.brand?.trim()) return false;
+        if (brandType === 'double' && !d.brand2?.trim()) return false;
+    }
+    if (d.tonnage == null || d.tonnage === '' || Number(d.tonnage) <= 0) return false;
+    if (!deliveryDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(deliveryDate)) return false;
+    if (lineType === FreightLineType.Dairy && !(Number(d.cargoValue) > 0)) return false;
+    return true;
+};
+
+const prepareDestinationForSubmit = (
+    d: Partial<Destination>,
+    lineType: FreightLineType
+): Partial<Destination> => ({
+    ...d,
+    deliveryDate: normalizeDestinationDeliveryDate(d.deliveryDate),
+    brandType: lineType === FreightLineType.Dairy ? (d.brandType || 'single') : d.brandType,
+    brand: lineType === FreightLineType.Dairy ? d.brand || 'میهن' : d.brand,
+    cargoValue: lineType === FreightLineType.Dairy ? Number(d.cargoValue) || 0 : d.cargoValue,
+});
 
 const isPlanningPlannerRole = (user?: User): boolean => {
     if (!user) return false;
     return (
         user.role === UserRole.PlanningEmployee ||
+        user.role === UserRole.SalesExpert ||
         user.role === UserRole.PlanningManager ||
         user.role === 'planner' ||
+        user.role === 'sales_expert' ||
         user.role === 'planner_manager' ||
         user.role === 'کارمند برنامه‌ریزی' ||
+        user.role === 'کارشناس فروش' ||
         user.role === 'مدیر برنامه‌ریزی'
+    );
+};
+
+const isFreightCreateRole = (user?: User): boolean => {
+    if (!user) return false;
+    return (
+        user.role === UserRole.PlanningEmployee ||
+        user.role === UserRole.SalesExpert ||
+        user.role === 'planner' ||
+        user.role === 'sales_expert' ||
+        user.role === 'کارمند برنامه‌ریزی' ||
+        user.role === 'کارشناس فروش'
+    );
+};
+
+const isSalesExpertUser = (user?: User): boolean => {
+    if (!user) return false;
+    return (
+        user.role === UserRole.SalesExpert ||
+        user.role === 'sales_expert' ||
+        user.role === 'کارشناس فروش'
     );
 };
 
@@ -721,7 +854,7 @@ const columnsConfig = (props: {
             }
             
             // برای Leftover: اعلام مجدد، ویرایش، حذف، تاریخچه
-            if (isLeftover && (currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager)) {
+            if (isLeftover && (currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.SalesExpert || currentUser?.role === UserRole.PlanningManager)) {
                 return (
                     <div className="flex justify-center gap-1">
                         <button onClick={() => onReAnnounce?.(ann.id)} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs">اعلام مجدد</button>
@@ -744,7 +877,7 @@ const columnsConfig = (props: {
             // درخواست تغییر: دکمه‌های ویرایش، ارجاع، تاریخچه و خارج کردن از کارتابل برای planner
             if (ann.status === FreightAnnouncementStatus.ChangeRequested) {
                 const changeReq = (props?.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
-                if (changeReq && (currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager)) {
+                if (changeReq && (currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.SalesExpert || currentUser?.role === UserRole.PlanningManager)) {
                     return (
                         <div className="flex justify-center gap-1 flex-wrap">
                             <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
@@ -790,7 +923,7 @@ const columnsConfig = (props: {
             }
             
             // ویرایش/حذف (کارمند و مدیر برنامه‌ریزی) - فقط برای Draft و Rejected
-            if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
+            if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.SalesExpert || currentUser?.role === UserRole.PlanningManager) && [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected].includes(ann.status)) {
                  return (
                     <div className="flex justify-center gap-1">
                         <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
@@ -801,7 +934,7 @@ const columnsConfig = (props: {
             }
             
             // برای Archived: ویرایش و ارجاع (برای بازگرداندن به چرخه)
-            if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.PlanningManager) && ann.status === FreightAnnouncementStatus.Archived) {
+            if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.SalesExpert || currentUser?.role === UserRole.PlanningManager) && ann.status === FreightAnnouncementStatus.Archived) {
                 return (
                     <div className="flex justify-center gap-1">
                         <button onClick={() => onEdit?.(ann)} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs">ویرایش</button>
@@ -890,9 +1023,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             const isManager = currentUser.role === UserRole.PlanningManager || 
                              currentUser.role === 'planner_manager' || 
                              currentUser.role === 'مدیر برنامه‌ریزی';
-            const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
-                              currentUser.role === 'planner' || 
-                              currentUser.role === 'کارمند برنامه‌ریزی';
+            const isEmployee = isFreightCreateRole(currentUser);
             
             if (!isManager && !isEmployee) {
                 setAllowedLineTypes(ALL_FREIGHT_LINE_TYPES);
@@ -923,8 +1054,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                         })
                         .filter((lt: any) => Object.values(FreightLineType).includes(lt));
                     
-                    const resolved =
-                        allowed.length > 0 ? allowed : ALL_FREIGHT_LINE_TYPES;
+                    const resolved = sortByCanonicalLineOrder(
+                        allowed.length > 0 ? allowed : ALL_FREIGHT_LINE_TYPES
+                    );
                     setAllowedLineTypes(resolved);
                     setActiveTab((prev) => {
                         if (allowed.length > 0 && allowed.length < 3) {
@@ -958,7 +1090,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         if (allowedLineTypes.length === 0 || allowedLineTypes.length === 3) {
             return ALL_FREIGHT_LINE_TYPES;
         }
-        return allowedLineTypes;
+        return sortByCanonicalLineOrder(allowedLineTypes);
     }, [linePermissionsReady, currentUser, allowedLineTypes]);
 
 
@@ -1146,7 +1278,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     };
 
     const isManager = currentUser.role === UserRole.PlanningManager;
-    const canCreate = hasAccess([UserRole.PlanningEmployee]);
+    const canCreate = hasAccess([UserRole.PlanningEmployee, UserRole.SalesExpert]);
 
     const handleColumnFilterChange = (header: string, value: string) => {
         setColumnFilters(prev => ({ ...prev, [header]: value }));
@@ -1218,7 +1350,27 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
+                { header: 'نوع برند', accessor: (ann: FreightAnnouncement) => formatDairyDestinationColumnLines(ann.destinations, 'brandType'), width: '130px', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id || i}><span className="font-bold">{i + 1}.</span> {formatDestinationBrandLabel(d)}</div>
+                        ))}
+                    </div>
+                )},
+                { header: 'کد LIS', accessor: (ann: FreightAnnouncement) => formatDairyDestinationColumnLines(ann.destinations, 'lisCode'), width: '120px', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id || i}><span className="font-bold">{i + 1}.</span> {d.lisCode || '-'}</div>
+                        ))}
+                    </div>
+                )},
+                { header: 'محصولات', accessor: (ann: FreightAnnouncement) => formatDairyDestinationColumnLines(ann.destinations, 'products'), width: '150px', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col text-xs space-y-1">
+                        {ann.destinations.map((d, i) => (
+                            <div key={d.id || i}><span className="font-bold">{i + 1}.</span> {formatDestinationProductsLabel(d)}</div>
+                        ))}
+                    </div>
+                )},
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '500px', render: (ann: FreightAnnouncement) => (
                     <div className="flex flex-col text-xs space-y-1">
@@ -1309,7 +1461,6 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
                 { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'برند', accessor: 'brand', width: '120px', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
@@ -1394,9 +1545,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             const isManager = currentUser.role === UserRole.PlanningManager || 
                              currentUser.role === 'planner_manager' || 
                              currentUser.role === 'مدیر برنامه‌ریزی';
-            const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
-                              currentUser.role === 'planner' || 
-                              currentUser.role === 'کارمند برنامه‌ریزی';
+            const isEmployee = isFreightCreateRole(currentUser);
             
             if (isManager || isEmployee) {
                 // فقط بارهای لاین‌های مجاز را نمایش بده
@@ -1466,7 +1615,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         const sorted =
             activeTab === FreightLineType.IceCream
                 ? sortByIceCreamDisplayOrder(data)
-                : data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                : data.sort(compareByCreatedAtDesc);
         return sorted;
     }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, allowedLineTypes, currentUser, linePermissionsReady]);
 
@@ -1728,6 +1877,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     
     // Header rendering logic
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeTab as any);
+    const isFullDairy = viewMode === 'full' && activeTab === FreightLineType.Dairy;
+    const fullDestSubColCount = isFullDairy ? DAIRY_DEST_SUB_COL_COUNT : AMBIENT_DEST_SUB_COL_COUNT;
+    const fullDestSubHeaders = isFullDairy ? DAIRY_DEST_SUB_HEADERS : AMBIENT_DEST_SUB_HEADERS;
+    const fullDestTotalCols = fullDestSubColCount * 4;
     // فیلتر کردن checkbox و عملیات از commonCols - checkbox جداگانه render می‌شود
     const commonCols = useMemo(() => visibleColumns.filter(c => c.header !== 'عملیات' && c.header !== ''), [visibleColumns]);
     const actionCol = useMemo(() => visibleColumns.find(c => c.header === 'عملیات'), [visibleColumns]);
@@ -1796,21 +1949,18 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                         />
                                                     </th>
                                                 {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center" style={{ width: col.width }}>{col.header}</th>)}
-                                                <th colSpan={6} className="p-2 text-center border-x">مقصد اول</th>
-                                                <th colSpan={6} className="p-2 text-center border-x">مقصد دوم</th>
-                                                <th colSpan={6} className="p-2 text-center border-x">مقصد سوم</th>
-                                                <th colSpan={6} className="p-2 text-center border-x">مقصد چهارم</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد اول</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد دوم</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد سوم</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد چهارم</th>
                                                 {actionCol && <th key={actionCol.header} rowSpan={2} className="p-2 text-center" style={{ width: actionCol.width }}>{actionCol.header}</th>}
                                             </tr>
                                             <tr>
                                                 {[1, 2, 3, 4].map(i => (
                                                     <React.Fragment key={i}>
-                                                        <th className="p-2 text-center font-normal border">نماینده</th>
-                                                        <th className="p-2 text-center font-normal border">مقصد</th>
-                                                        <th className="p-2 text-center font-normal border">تناژ</th>
-                                                        <th className="p-2 text-center font-normal border">تاریخ تحویل</th>
-                                                        <th className="p-2 text-center font-normal border">ساعت تخلیه</th>
-                                                        <th className="p-2 text-center font-normal border">کرایه</th>
+                                                        {fullDestSubHeaders.map((header) => (
+                                                            <th key={`${i}-${header}`} className="p-2 text-center font-normal border">{header}</th>
+                                                        ))}
                                                     </React.Fragment>
                                                 ))}
                                             </tr>
@@ -1848,7 +1998,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                 ) : null}
                                             </th>
                                         ))}
-                                        {isFullDairyAmbient && [...Array(24)].map((_, i) => <th key={`ph-${i}`}></th>)}
+                                        {isFullDairyAmbient && [...Array(fullDestTotalCols)].map((_, i) => <th key={`ph-${i}`}></th>)}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1889,6 +2039,21 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                     {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)}
                                                     {[0, 1, 2, 3].map(i => {
                                                         const dest = ann.destinations[i];
+                                                        if (isFullDairy) {
+                                                            return (
+                                                                <React.Fragment key={i}>
+                                                                    <td className="p-2 text-center border">{formatDestinationBrandLabel(dest)}</td>
+                                                                    <td className="p-2 text-center border">{dest?.lisCode || '-'}</td>
+                                                                    <td className="p-2 text-center border">{formatDestinationProductsLabel(dest)}</td>
+                                                                    <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
+                                                                    <td className="p-2 text-center border">{dest?.city || '-'}</td>
+                                                                    <td className="p-2 text-center border">{dest?.tonnage || '-'}</td>
+                                                                    <td className="p-2 text-center border">{dest?.deliveryDate || '-'}</td>
+                                                                    <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
+                                                                    <td className="p-2 text-center border font-mono">{formatCurrency(dest?.freightCost)}</td>
+                                                                </React.Fragment>
+                                                            );
+                                                        }
                                                         return (
                                                             <React.Fragment key={i}>
                                                                 <td className="p-2 text-center border">{dest?.representativeName || '-'}</td>
@@ -1908,7 +2073,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                         </tr>
                                     ))}
                                     {tableAnnouncements.length === 0 && (
-                                        <tr><td colSpan={isFullDairyAmbient ? commonCols.length + 25 : visibleColumns.length} className="text-center py-8 text-slate-500">موردی یافت نشد.</td></tr>
+                                        <tr><td colSpan={isFullDairyAmbient ? commonCols.length + fullDestTotalCols + 1 : visibleColumns.length} className="text-center py-8 text-slate-500">موردی یافت نشد.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -1995,7 +2160,7 @@ const AnnouncementPanel: React.FC<{
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: 0, vehicleType: '', notes: '' };
     const initialIceCreamState = { originCity: '', brand: 'میهن', cartonCount: '', palletCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
-    const initialDestinations = [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }];
+    const initialDestinations = [createInitialDairyDestination()];
     const initialLoadingLocationState = { loadingType: 'single' as 'single' | 'double', originCity1: '', originCity2: '' };
     const initialBrandState = { brandType: 'single' as 'single' | 'double', brand1: 'میهن', brand2: '' };
 
@@ -2018,6 +2183,12 @@ const AnnouncementPanel: React.FC<{
     const [originCity1Valid, setOriginCity1Valid] = useState(false);
     const [originCity2Valid, setOriginCity2Valid] = useState(false);
 
+    useEffect(() => {
+        if (lineType !== FreightLineType.Dairy) return;
+        const total = sumDestinationCargoValues(destinations);
+        setCommonState((s) => (s.cargoValue === total ? s : { ...s, cargoValue: total }));
+    }, [lineType, destinations]);
+
     const resetForm = (lineOverride?: FreightLineType) => {
         const effectiveLineType = lineOverride ?? lineType;
         // Don't reset lineType to allow multiple entries of the same type
@@ -2028,7 +2199,7 @@ const AnnouncementPanel: React.FC<{
         setIceCreamRouteType('single');
         setIceCreamLegs([createInitialIceCreamLeg(), createInitialIceCreamLeg()]);
         setMultiDestState(prev => ({ ...initialMultiDestState, platformArrivalTime: prev.platformArrivalTime }));
-        setDestinations(initialDestinations);
+        setDestinations(lineType === FreightLineType.Dairy ? [createInitialDairyDestination()] : [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }]);
         setDestCityValid({});
         setIceCreamDestCityValid([false, false]);
         setIceCreamOriginCityValid([false, false]);
@@ -2205,14 +2376,29 @@ const AnnouncementPanel: React.FC<{
                     setMultiDestState({ platformArrivalTime: data.platformArrivalTime || '' });
                     const mappedDests =
                         data.destinations.length > 0
-                            ? data.destinations.map((d) => ({
+                            ? data.destinations.map((d, index) => ({
                                   ...d,
                                   representativeType: d.representativeType || ('agent' as const),
+                                  brandType: d.brandType || (data.lineType === FreightLineType.Dairy ? 'single' : undefined),
+                                  brand: d.brand || (data.lineType === FreightLineType.Dairy && index === 0 ? data.brand || 'میهن' : d.brand),
+                                  brand2: d.brand2 || '',
+                                  lisCode: d.lisCode || '',
+                                  products: d.products || [],
+                                  cargoValue: Number(d.cargoValue) || 0,
                               }))
-                            : initialDestinations;
-                    setDestinations(mappedDests);
+                            : data.lineType === FreightLineType.Dairy
+                              ? [createInitialDairyDestination()]
+                              : [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as const }];
+                    const finalDests =
+                        data.lineType === FreightLineType.Dairy
+                            ? migrateDairyDestinationCargoValues(
+                                  mappedDests,
+                                  Number(data.cargoValue) || 0
+                              )
+                            : mappedDests;
+                    setDestinations(finalDests);
                     const cityValidity: Record<string, boolean> = {};
-                    mappedDests.forEach((d) => {
+                    finalDests.forEach((d) => {
                         if (d.id) cityValidity[d.id] = !!d.city?.trim();
                     });
                     setDestCityValid(cityValidity);
@@ -2224,7 +2410,7 @@ const AnnouncementPanel: React.FC<{
                 }
                 resetForm(openLineType);
                 // اگر کارمند برنامه‌ریزی است و مجوزها محدود است، به اولین لاین مجاز برو
-                if (currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی')) {
+                if (currentUser && isFreightCreateRole(currentUser)) {
                     if (allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
                         if (!allowedLineTypes.includes(lineType as any)) {
                             setLineType(allowedLineTypes[0]);
@@ -2296,17 +2482,23 @@ const AnnouncementPanel: React.FC<{
 
     const addDestination = () => {
         if (destinations.length < 4) {
-            const id = generateUUID();
-            setDestinations([
-                ...destinations,
-                { id, city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' },
-            ]);
+            const newDest =
+                lineType === FreightLineType.Dairy
+                    ? createInitialDairyDestination()
+                    : { id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' };
+            const id = newDest.id!;
+            setDestinations([...destinations, newDest]);
             setDestCityValid((prev) => ({ ...prev, [id]: false }));
         }
     };
     const removeDestination = (id: string) => setDestinations(destinations.filter(d => d.id !== id));
     const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
-        setDestinations(destinations.map((d) => (d.id === id ? { ...d, [field]: value } : d)));
+        setDestinations(
+            destinations.map((d) => {
+                if (d.id !== id) return d;
+                return { ...d, [field]: value };
+            })
+        );
     };
 
     const handleDestinationCitySelect = (id: string, city: string) => {
@@ -2314,13 +2506,42 @@ const AnnouncementPanel: React.FC<{
         setDestinations(destinations.map((d) => (d.id === id ? { ...d, city } : d)));
         setDestCityValid((prev) => ({ ...prev, [id]: true }));
     };
-    const handleProductChange = (product: string, checked: boolean) => setIceCreamState(s => ({ ...s, products: checked ? [...s.products, product] : s.products.filter(p => p !== product)}));
+    const handleProductChange = (product: string, checked: boolean) =>
+        setIceCreamState((s) => ({
+            ...s,
+            products: checked ? [...s.products, product] : s.products.filter((p) => p !== product),
+        }));
+
+    const handleDestinationProductChange = (id: string, product: string, checked: boolean) => {
+        setDestinations(
+            destinations.map((d) => {
+                if (d.id !== id) return d;
+                const current = d.products || [];
+                return {
+                    ...d,
+                    products: checked ? [...current, product] : current.filter((p) => p !== product),
+                };
+            })
+        );
+    };
 
     const handleSubmit = (e: React.FormEvent, isDraft: boolean = false) => {
         e.preventDefault();
-        const cargoValueInRials = commonState.cargoValue;
+        let cargoValueInRials = commonState.cargoValue;
+        if (lineType === FreightLineType.Dairy) {
+            const dairyDestsForCargo = isDraft
+                ? (destinations.filter(isActiveDestinationRow).length > 0
+                      ? destinations.filter(isActiveDestinationRow)
+                      : destinations)
+                : destinations.filter((d) => isCompleteDestinationRow(d, lineType));
+            cargoValueInRials = sumDestinationCargoValues(dairyDestsForCargo);
+        }
         if (!cargoValueInRials || cargoValueInRials <= 0) {
-            alert('ارزش بار باید بزرگتر از صفر باشد.');
+            alert(
+                lineType === FreightLineType.Dairy
+                    ? 'ارزش بار هر مقصد باید بزرگتر از صفر باشد.'
+                    : 'ارزش بار باید بزرگتر از صفر باشد.'
+            );
             return;
         }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
@@ -2392,33 +2613,32 @@ const AnnouncementPanel: React.FC<{
             ? `${resolvedOriginCity1} و ${loadingLocationState.originCity2}`
             : resolvedOriginCity1;
 
-        const finalBrand = lineType === FreightLineType.IceCream && iceCreamBuilt
-            ? iceCreamBuilt.brand
-            : brandState.brandType === 'double'
-            ? `${brandState.brand1} و ${brandState.brand2}`
-            : brandState.brand1;
-        
-        // برای Dairy و Ambient: فیلتر کردن مقاصدی که city ندارند و بررسی فیلدهای اجباری
-        const validDestinations = lineType !== FreightLineType.IceCream
-            ? destinations.filter(d => {
-                // بررسی فیلدهای اجباری (به جز unloadTime و representativeName)
-                if (!d.city || d.city.trim() === '') return false;
-                // بررسی representativeType: باید 'agent' یا 'distributor' باشد
-                if (!d.representativeType || (d.representativeType !== 'agent' && d.representativeType !== 'distributor')) return false;
-                // representativeName اختیاری است - حذف شد
-                if (!d.tonnage || Number(d.tonnage) <= 0) return false;
-                if (!d.deliveryDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(d.deliveryDate)) return false;
-                return true;
-            })
-            : [];
-        
-        // بررسی اینکه حداقل یک مقصد معتبر وجود دارد (برای Dairy و Ambient)
-        if (lineType !== FreightLineType.IceCream && validDestinations.length === 0) {
-            alert('حداقل یک مقصد با تمام فیلدهای اجباری (شهر، نوع نماینده، تناژ، تاریخ تحویل) الزامی است.');
+        // برای Dairy و Ambient: فقط مقاصد فعال (پر شده) اعتبارسنجی می‌شوند
+        const preparedDestinations =
+            lineType !== FreightLineType.IceCream
+                ? destinations.map((d) => prepareDestinationForSubmit(d, lineType))
+                : [];
+
+        const activeDestinations =
+            lineType !== FreightLineType.IceCream
+                ? preparedDestinations.filter(isActiveDestinationRow)
+                : [];
+
+        const validDestinations =
+            lineType !== FreightLineType.IceCream
+                ? activeDestinations.filter((d) => isCompleteDestinationRow(d, lineType))
+                : [];
+
+        if (!isDraft && lineType !== FreightLineType.IceCream && validDestinations.length === 0) {
+            alert(
+                lineType === FreightLineType.Dairy
+                    ? 'حداقل یک مقصد با تمام فیلدهای اجباری (نوع برند، شهر، نوع نماینده، تناژ، ارزش بار، تاریخ تحویل) الزامی است.'
+                    : 'حداقل یک مقصد با تمام فیلدهای اجباری (شهر، نوع نماینده، تناژ، تاریخ تحویل) الزامی است.'
+            );
             return;
         }
 
-        if (lineType !== FreightLineType.IceCream) {
+        if (!isDraft && lineType !== FreightLineType.IceCream) {
             if (
                 loadingLocationState.loadingType === 'double' &&
                 (!loadingLocationState.originCity2.trim() || !originCity2Valid)
@@ -2426,20 +2646,43 @@ const AnnouncementPanel: React.FC<{
                 alert('مبدا بارگیری دوم را از لیست پیشنهادها انتخاب کنید.');
                 return;
             }
-            const badCity = destinations.filter(
+            const badCity = activeDestinations.filter(
                 (d) => d.city?.trim() && d.id && !destCityValid[d.id]
             );
             if (badCity.length > 0) {
                 alert('شهر مقصد را از لیست پیشنهادها انتخاب کنید.');
                 return;
             }
+
+            const incompleteDestinations = activeDestinations.filter(
+                (d) => !isCompleteDestinationRow(d, lineType)
+            );
+            if (incompleteDestinations.length > 0) {
+                alert(
+                    lineType === FreightLineType.Dairy
+                        ? 'مقاصد پر شده باید شهر، نوع برند، نوع نماینده، تناژ، ارزش بار و تاریخ تحویل معتبر (مثلاً 1404/09/18) داشته باشند. ردیف‌های خالی را حذف کنید.'
+                        : 'مقاصد پر شده باید شهر، نوع نماینده، تناژ و تاریخ تحویل معتبر (مثلاً 1404/09/18) داشته باشند. ردیف‌های خالی را حذف کنید.'
+                );
+                return;
+            }
         }
 
-        // بررسی اینکه تمام مقاصد معتبر هستند (برای Dairy و Ambient)
-        if (lineType !== FreightLineType.IceCream && validDestinations.length !== destinations.length) {
-            alert('تمام مقاصد باید دارای شهر، نوع نماینده، تناژ و تاریخ تحویل معتبر باشند.');
-            return;
-        }
+        const destinationsForSubmit =
+            lineType === FreightLineType.IceCream
+                ? []
+                : isDraft
+                  ? activeDestinations.length > 0
+                      ? activeDestinations
+                      : preparedDestinations
+                  : validDestinations;
+
+        const finalBrand = lineType === FreightLineType.IceCream && iceCreamBuilt
+            ? iceCreamBuilt.brand
+            : lineType === FreightLineType.Dairy
+              ? computeDairyAnnouncementBrand(destinationsForSubmit)
+            : brandState.brandType === 'double'
+            ? `${brandState.brand1} و ${brandState.brand2}`
+            : brandState.brand1;
         
         // بررسی تاریخ تحویل برای بستنی (اگر وارد شده باشد)
         if (lineType === FreightLineType.IceCream && commonState.deliveryDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(commonState.deliveryDate)) {
@@ -2449,9 +2692,7 @@ const AnnouncementPanel: React.FC<{
 
         // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی
         if (!isEditMode && currentUser) {
-            const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
-                              currentUser.role === 'planner' || 
-                              currentUser.role === 'کارمند برنامه‌ریزی';
+            const isEmployee = isFreightCreateRole(currentUser);
             
             if (isEmployee && allowedLineTypes.length > 0 && allowedLineTypes.length < 3) {
                 if (!allowedLineTypes.includes(lineType as any)) {
@@ -2494,13 +2735,17 @@ const AnnouncementPanel: React.FC<{
                 originCity: finalOriginCity,
                 brand: finalBrand as any,
                 platformArrivalTime: multiDestState.platformArrivalTime, 
-                destinations: validDestinations as Destination[],
+                destinations: destinationsForSubmit as Destination[],
                 loadingType: loadingLocationState.loadingType,
                 originCity1: resolvedOriginCity1,
                 originCity2: loadingLocationState.originCity2 || null,
-                brandType: brandState.brandType,
-                brand1: brandState.brand1,
-                brand2: brandState.brand2 || null
+                ...(lineType === FreightLineType.Ambient
+                    ? {
+                          brandType: brandState.brandType,
+                          brand1: brandState.brand1,
+                          brand2: brandState.brand2 || null,
+                      }
+                    : {}),
             } as any;
         
         if (isEditMode) {
@@ -2581,10 +2826,8 @@ const AnnouncementPanel: React.FC<{
                                     if (!currentUser || currentUser.role === UserRole.Admin || allowedLineTypes.length === 0 || allowedLineTypes.length === 3) {
                                         return true;
                                     }
-                                    // برای کارمندان برنامه‌ریزی: فقط لاین‌های مجاز را نمایش بده
-                                    const isEmployee = currentUser.role === UserRole.PlanningEmployee || 
-                                                      currentUser.role === 'planner' || 
-                                                      currentUser.role === 'کارمند برنامه‌ریزی';
+                                    // برای کارمندان برنامه‌ریزی / کارشناس فروش: فقط لاین‌های مجاز را نمایش بده
+                                    const isEmployee = isFreightCreateRole(currentUser);
                                     if (isEmployee) {
                                         return allowedLineTypes.includes(lt as any);
                                     }
@@ -2597,11 +2840,7 @@ const AnnouncementPanel: React.FC<{
                                                      allowedLineTypes.length === 0 || 
                                                      allowedLineTypes.length === 3 ||
                                                      allowedLineTypes.includes(lt as any);
-                                    const isEmployee = currentUser && (
-                                        currentUser.role === UserRole.PlanningEmployee || 
-                                        currentUser.role === 'planner' || 
-                                        currentUser.role === 'کارمند برنامه‌ریزی'
-                                    );
+                                    const isEmployee = isFreightCreateRole(currentUser);
                                     const isDisabled = isEmployee && !isAllowed;
                                     
                                     return (
@@ -2626,7 +2865,7 @@ const AnnouncementPanel: React.FC<{
                                     );
                                 })}
                         </div>
-                        {currentUser && (currentUser.role === UserRole.PlanningEmployee || currentUser.role === 'planner' || currentUser.role === 'کارمند برنامه‌ریزی') && allowedLineTypes.length > 0 && allowedLineTypes.length < 3 && (
+                        {currentUser && isFreightCreateRole(currentUser) && allowedLineTypes.length > 0 && allowedLineTypes.length < 3 && (
                             <p className="text-xs text-slate-500 mt-1">
                                 فقط لاین‌های مجاز برای شما قابل انتخاب هستند
                             </p>
@@ -2726,10 +2965,11 @@ const AnnouncementPanel: React.FC<{
                             <RequiredField label="نوع خودرو*">
                                 <select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1 w-full" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select>
                             </RequiredField>
-                                <RequiredField label="ارزش بار*">
+                                <RequiredField label={lineType === FreightLineType.Dairy ? 'ارزش کل بار (مجموع مقاصد)*' : 'ارزش بار*'}>
                                     <CargoValueInput
                                         valueRials={commonState.cargoValue}
                                         onChangeRials={(rials) => setCommonState((s) => ({ ...s, cargoValue: rials }))}
+                                        disabled={lineType === FreightLineType.Dairy}
                                         resetKey={data?.id ?? 'new'}
                                         required
                                         inputClassName="input-style mt-1"
@@ -3147,6 +3387,7 @@ const AnnouncementPanel: React.FC<{
                                 </select>
                             </div>
                         </fieldset>
+                        {lineType === FreightLineType.Ambient && (
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">برند محصول</legend>
                             <div className="mb-3">
@@ -3158,7 +3399,7 @@ const AnnouncementPanel: React.FC<{
                                             name="brandType"
                                             value="single"
                                             checked={brandState.brandType === 'single'}
-                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'single' as 'single' | 'double', brand2: '' }))}
+                                            onChange={() => setBrandState(s => ({ ...s, brandType: 'single' as 'single' | 'double', brand2: '' }))}
                                             className="cursor-pointer"
                                         />
                                         <span className="text-xs">تک برند</span>
@@ -3169,7 +3410,7 @@ const AnnouncementPanel: React.FC<{
                                             name="brandType"
                                             value="double"
                                             checked={brandState.brandType === 'double'}
-                                            onChange={(e) => setBrandState(s => ({ ...s, brandType: 'double' as 'single' | 'double' }))}
+                                            onChange={() => setBrandState(s => ({ ...s, brandType: 'double' as 'single' | 'double' }))}
                                             className="cursor-pointer"
                                         />
                                         <span className="text-xs">دو برند</span>
@@ -3218,6 +3459,7 @@ const AnnouncementPanel: React.FC<{
                                 )}
                             </div>
                         </fieldset>
+                        )}
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">مقاصد</legend>
                             <div className="space-y-2">
@@ -3226,6 +3468,91 @@ const AnnouncementPanel: React.FC<{
                                         <span className="absolute top-2 left-2 bg-slate-300 text-slate-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{index + 1}</span>
                                         {destinations.length > 1 && <button type="button" onClick={() => removeDestination(dest.id!)} className="absolute top-2 right-2 text-red-500 text-xs">حذف</button>}
                                         <div className="grid grid-cols-2 gap-2">
+                                            {lineType === FreightLineType.Dairy && (
+                                                <>
+                                                    <div className="col-span-2">
+                                                        <label className="text-xs font-semibold mb-2 block">نوع برند*</label>
+                                                        <div className="flex gap-4 mb-2">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`dairyBrandType-${dest.id}`}
+                                                                    checked={(dest.brandType || 'single') === 'single'}
+                                                                    onChange={() => handleDestinationChange(dest.id!, 'brandType', 'single')}
+                                                                    className="cursor-pointer"
+                                                                />
+                                                                <span className="text-xs">تک برند</span>
+                                                            </label>
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`dairyBrandType-${dest.id}`}
+                                                                    checked={dest.brandType === 'double'}
+                                                                    onChange={() => handleDestinationChange(dest.id!, 'brandType', 'double')}
+                                                                    className="cursor-pointer"
+                                                                />
+                                                                <span className="text-xs">دو برند</span>
+                                                            </label>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="text-xs">برند*</label>
+                                                                <select
+                                                                    value={dest.brand || 'میهن'}
+                                                                    onChange={(e) => handleDestinationChange(dest.id!, 'brand', e.target.value)}
+                                                                    className="input-style mt-1"
+                                                                    required
+                                                                >
+                                                                    {BRANDS.map((b) => (
+                                                                        <option key={b} value={b}>{b}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            {dest.brandType === 'double' && (
+                                                                <div>
+                                                                    <label className="text-xs">برند دوم*</label>
+                                                                    <select
+                                                                        value={dest.brand2 || ''}
+                                                                        onChange={(e) => handleDestinationChange(dest.id!, 'brand2', e.target.value)}
+                                                                        className="input-style mt-1"
+                                                                        required
+                                                                    >
+                                                                        <option value="">-- انتخاب کنید --</option>
+                                                                        {BRANDS.map((b) => (
+                                                                            <option key={b} value={b}>{b}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs">کد LIS</label>
+                                                        <input
+                                                            value={dest.lisCode || ''}
+                                                            onChange={(e) => handleDestinationChange(dest.id!, 'lisCode', e.target.value)}
+                                                            className="input-style"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs">محصولات</label>
+                                                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                                            {DAIRY_DESTINATION_PRODUCT_OPTIONS.map((product) => (
+                                                                <label key={product} className="flex items-center gap-1 text-xs">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={(dest.products || []).includes(product)}
+                                                                        onChange={(e) =>
+                                                                            handleDestinationProductChange(dest.id!, product, e.target.checked)
+                                                                        }
+                                                                    />
+                                                                    {product}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
                                             <RequiredField label="شهر مقصد*">
                                                 <CityAutocomplete
                                                     cityOnlyLabels
@@ -3250,12 +3577,38 @@ const AnnouncementPanel: React.FC<{
                                                 <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style w-full" required>
                                                     <option value="agent">نماینده</option>
                                                     <option value="distributor">پخش</option>
+                                                    {lineType === FreightLineType.Dairy && (
+                                                        <option value="organizational">سازمانی</option>
+                                                    )}
                                                 </select>
                                             </RequiredField>
-                                            <div><label className="text-xs">نام نماینده</label><input value={dest.representativeName || ''} onChange={e => handleDestinationChange(dest.id!, 'representativeName', e.target.value)} className="input-style" /></div>
+                                            <div>
+                                                <label className="text-xs">نام نماینده</label>
+                                                <input
+                                                    value={dest.representativeName || ''}
+                                                    onChange={(e) =>
+                                                        handleDestinationChange(dest.id!, 'representativeName', e.target.value)
+                                                    }
+                                                    className="input-style"
+                                                />
+                                            </div>
                                             <RequiredField label="تناژ (کیلوگرم)*">
                                                 <input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style w-full" required min="0" step="0.01"/>
                                             </RequiredField>
+                                            {lineType === FreightLineType.Dairy && (
+                                                <RequiredField label="ارزش بار*">
+                                                    <CargoValueInput
+                                                        valueRials={Number(dest.cargoValue) || 0}
+                                                        onChangeRials={(rials) =>
+                                                            handleDestinationChange(dest.id!, 'cargoValue', rials)
+                                                        }
+                                                        resetKey={`${data?.id ?? 'new'}-${dest.id}`}
+                                                        required
+                                                        inputClassName="input-style"
+                                                        selectClassName="input-style min-w-[140px]"
+                                                    />
+                                                </RequiredField>
+                                            )}
                                             <div><label className="text-xs">تاریخ تحویل*</label><input type="text" value={dest.deliveryDate || ''} onChange={e => {
                                                 let value = e.target.value.replace(/[^\d\/]/g, '');
                                                 // اعمال خودکار فرمت YYYY/MM/DD
@@ -3310,7 +3663,7 @@ const AnnouncementPanel: React.FC<{
                  <div className="p-4 bg-white border-t flex justify-end gap-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     {!isEditMode && <button type="button" onClick={(e) => handleSubmit(e, true)} className="px-4 py-2 bg-slate-600 text-white rounded-md text-sm">ذخیره پیش‌نویس</button>}
-                    <button type="submit" form="freight-form" className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">{isEditMode ? 'ذخیره تغییرات' : 'ثبت و ارجاع'}</button>
+                    <button type="submit" form="freight-form" className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">{isEditMode ? 'ذخیره تغییرات' : (isSalesExpertUser(currentUser) ? 'ثبت و ارسال به ترابری' : 'ثبت و ارجاع')}</button>
                 </div>
                 <datalist id="cities">
                     {routeOptions.map(route => (

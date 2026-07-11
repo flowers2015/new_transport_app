@@ -5,7 +5,7 @@ import FreightHistoryDialog from './FreightHistoryDialog';
 import { getApiUrl } from '../utils/apiConfig';
 import { cachedFetch } from '../utils/apiCache';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
-import { OptimisticUpdateManager, applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import { OptimisticUpdateManager, applyOptimisticUpdate, applyDestinationTransferToAnnouncements, applySplitDestinationToAnnouncements, TransferDestinationResult, SplitDestinationResult } from '../utils/optimisticUpdates';
 import {
     pickAssignmentFieldsFromApi,
     mergeAssignmentDisplayFields,
@@ -47,6 +47,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     });
     
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
+    const announcementsRef = useRef<FreightAnnouncement[]>([]);
+    useEffect(() => {
+        announcementsRef.current = announcements;
+    }, [announcements]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [personalDrivers, setPersonalDrivers] = useState<PersonalDriver[]>([]);
@@ -265,8 +269,24 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             tonnage: d.tonnage != null && d.tonnage !== '' ? normalizeTonnageKg(d.tonnage) : undefined,
                             unloadTime: d.unload_time || d.unloadTime,
                             freightCost: d.freight_cost ?? d.freightCost,
+                            cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                             deliveryDate: d.delivery_date || d.deliveryDate,
                             representativeType: d.representative_type || d.representativeType,
+                            lisCode: d.lis_code || d.lisCode,
+                            brandType: d.brand_type || d.brandType,
+                            brand: d.brand,
+                            brand2: d.brand2,
+                            products: Array.isArray(d.products)
+                                ? d.products
+                                : typeof d.products === 'string'
+                                  ? (() => {
+                                        try {
+                                            return JSON.parse(d.products);
+                                        } catch {
+                                            return [];
+                                        }
+                                    })()
+                                  : [],
                         })) : [],
                         history: a.history || [],
                         isReannouncement: !!(a.is_reannouncement ?? a.isReannouncement),
@@ -601,8 +621,24 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                         tonnage: d.tonnage != null && d.tonnage !== '' ? normalizeTonnageKg(d.tonnage) : undefined,
                                         unloadTime: d.unloadTime || d.unload_time,
                                         freightCost: d.freightCost ?? d.freight_cost,
+                                        cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                                         deliveryDate: d.deliveryDate || d.delivery_date,
                                         representativeType: d.representativeType || d.representative_type,
+                                        lisCode: d.lis_code || d.lisCode,
+                                        brandType: d.brand_type || d.brandType,
+                                        brand: d.brand,
+                                        brand2: d.brand2,
+                                        products: Array.isArray(d.products)
+                                            ? d.products
+                                            : typeof d.products === 'string'
+                                              ? (() => {
+                                                    try {
+                                                        return JSON.parse(d.products);
+                                                    } catch {
+                                                        return [];
+                                                    }
+                                                })()
+                                              : [],
                                     })) : [],
                                     history: [],
                                     isReannouncement: !!(data.is_reannouncement ?? data.isReannouncement),
@@ -1027,8 +1063,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         sourceAnnouncementId: string,
         destinationId: string,
         targetAnnouncementId: string,
-        newPosition: number
-    ): Promise<boolean> => {
+        newPosition: number,
+        options?: { silent?: boolean }
+    ): Promise<TransferDestinationResult> => {
         console.log('🔄 [TransportLive] Destination Transfer Request:', {
             sourceAnnouncementId,
             destinationId,
@@ -1042,7 +1079,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!token) {
                 console.error('❌ [TransportLive] No token found');
                 alert('لطفا دوباره وارد شوید');
-                return false;
+                return { ok: false };
             }
             
             // پیدا کردن source و target announcements برای لاگ
@@ -1107,37 +1144,22 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const result = await res.json();
             console.log('✅ [TransportLive] Transfer API response:', result);
 
-            setAnnouncements(prev => {
-                const sourceAnn = prev.find(a => a.id === sourceAnnouncementId);
-                const updated = prev.map(ann => {
-                    if (ann.id === sourceAnnouncementId) {
-                        const updatedDestinations = ann.destinations.filter(d => d.id !== destinationId);
-                        if (updatedDestinations.length === 0 || result.sourceAnnouncementDeleted) {
-                            return null;
-                        }
-                        return { ...ann, destinations: updatedDestinations };
-                    }
-                    if (ann.id === targetAnnouncementId) {
-                        const transferredDest = sourceAnn?.destinations.find(d => d.id === destinationId);
-                        if (transferredDest) {
-                            const newDestinations = [...ann.destinations];
-                            const existingIndex = newDestinations.findIndex(d => d.id === destinationId);
-                            if (existingIndex >= 0) {
-                                newDestinations.splice(existingIndex, 1);
-                            }
-                            const insertIndex = Math.min(newPosition - 1, newDestinations.length);
-                            newDestinations.splice(insertIndex, 0, transferredDest);
-                            return { ...ann, destinations: newDestinations };
-                        }
-                    }
-                    return ann;
-                });
-                return updated.filter((ann): ann is FreightAnnouncement => ann !== null);
-            });
+            const nextAnnouncements = applyDestinationTransferToAnnouncements(
+                announcementsRef.current,
+                sourceAnnouncementId,
+                destinationId,
+                targetAnnouncementId,
+                newPosition,
+                Boolean(result.sourceAnnouncementDeleted)
+            );
+            announcementsRef.current = nextAnnouncements;
+            setAnnouncements(nextAnnouncements);
 
-            void fetchData(true, needsPersonalResourcesRef.current, true);
-            alert(result.message || 'انتقال مقصد با موفقیت انجام شد.');
-            return true;
+            if (!options?.silent) {
+                void fetchData(true, needsPersonalResourcesRef.current, true);
+                alert(result.message || 'انتقال مقصد با موفقیت انجام شد.');
+            }
+            return { ok: true, announcements: nextAnnouncements };
         } catch (error: any) {
             console.error('❌ [TransportLive] Transfer destination error:', error);
             let message = 'خطا در انتقال مقصد';
@@ -1147,7 +1169,76 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 if (error?.message) message = error.message;
             }
             alert(message);
-            return false;
+            return { ok: false };
+        }
+    };
+
+    const onSplitDestinationToNew = async (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        options?: { vehicleType?: string; silent?: boolean }
+    ): Promise<SplitDestinationResult> => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('لطفا دوباره وارد شوید');
+                return { ok: false };
+            }
+
+            const res = await fetch(
+                getApiUrl(`freight-announcements/${sourceAnnouncementId}/split-destination-to-new`),
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        destinationId,
+                        vehicleType: options?.vehicleType,
+                    }),
+                }
+            );
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(errorText || 'خطا در جداسازی مقصد');
+            }
+
+            const result = await res.json();
+            const effectiveSourceId = result.sourceAnnouncementId || sourceAnnouncementId;
+            const nextAnnouncements = applySplitDestinationToAnnouncements(
+                announcementsRef.current,
+                effectiveSourceId,
+                destinationId,
+                result.newAnnouncementId,
+                result.newAnnouncementCode,
+                { vehicleType: result.vehicleType, status: result.status }
+            );
+            announcementsRef.current = nextAnnouncements;
+            setAnnouncements(nextAnnouncements);
+
+            if (!options?.silent) {
+                void fetchData(true, needsPersonalResourcesRef.current, true);
+                alert(result.message || 'مقصد به ردیف جدید منتقل شد.');
+            }
+
+            return {
+                ok: true,
+                announcements: nextAnnouncements,
+                newAnnouncementId: result.newAnnouncementId,
+                newAnnouncementCode: result.newAnnouncementCode,
+            };
+        } catch (error: any) {
+            console.error('❌ [TransportLive] Split destination error:', error);
+            let message = 'خطا در جداسازی مقصد به ردیف جدید';
+            try {
+                message = JSON.parse(error?.message || '').message || message;
+            } catch {
+                if (error?.message) message = error.message;
+            }
+            alert(message);
+            return { ok: false };
         }
     };
 
@@ -1572,6 +1663,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onUpdateAssignment={onUpdateAssignment}
                 onFinalize={onFinalize}
                 onTransferDestination={onTransferDestination}
+                onSplitDestinationToNew={onSplitDestinationToNew}
                 onForward={onForward}
                 onReferToCarrier={onReferToCarrier}
                 onReferToCarrierBulk={onReferToCarrierBulk}

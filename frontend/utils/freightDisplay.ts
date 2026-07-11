@@ -1,5 +1,5 @@
 import { Destination, Driver, FreightAnnouncement, FreightAnnouncementStatus, FreightLineType, PersonalDriver, Vehicle } from '../types';
-import { formatPlateNumber, jalaliCalendarDayDiff } from './jalali';
+import { formatPlateNumber, jalaliCalendarDayDiff, toTimestamp, coerceToDate } from './jalali';
 
 /** نوع نماینده — همیشه فارسی برای UI و اکسل */
 export function formatRepresentativeType(value?: string | null): string {
@@ -7,9 +7,169 @@ export function formatRepresentativeType(value?: string | null): string {
     const v = String(value).trim().toLowerCase();
     if (v === 'distributor' || v === 'distribution' || v === 'پخش') return 'پخش';
     if (v === 'depot' || v === 'دپو') return 'دپو';
+    if (v === 'organizational' || v === 'سازمانی') return 'سازمانی';
     if (v === 'agent' || v === 'representative' || v === 'نماینده') return 'نماینده';
-    if (value === 'پخش' || value === 'نماینده' || value === 'دپو') return value;
+    if (value === 'پخش' || value === 'نماینده' || value === 'دپو' || value === 'سازمانی') return value;
     return String(value);
+}
+
+export const DAIRY_DESTINATION_PRODUCT_OPTIONS = ['تخم مرغ دارد', 'پک پرسنل دارد', 'نوشیدنی دارد'] as const;
+
+export function formatDestinationBrandTypeLabel(
+    dest?: Pick<Destination, 'brandType'> | null
+): string {
+    if (!dest?.brandType) return '-';
+    return dest.brandType === 'double' ? 'دو برند' : 'تک برند';
+}
+
+export function formatDestinationBrandLabel(
+    dest?: Pick<Destination, 'brandType' | 'brand' | 'brand2'> | null
+): string {
+    if (!dest) return '-';
+    const primary = (dest.brand || '').trim();
+    if (dest.brandType === 'double') {
+        const secondary = (dest.brand2 || '').trim();
+        if (primary && secondary) return `${primary} و ${secondary}`;
+        return primary || secondary || '-';
+    }
+    return primary || '-';
+}
+
+export function formatDestinationProductsLabel(
+    dest?: Pick<Destination, 'products'> | null
+): string {
+    const items = dest?.products;
+    if (!Array.isArray(items) || items.length === 0) return '-';
+    return items.join('، ');
+}
+
+/** ادغام مقاصد پس از refresh — فقط متادیتای فیلدهای خالی از state قبلی پر می‌شود؛ بدون تکرار ردیف */
+export function mergeAnnouncementDestinations(
+    previous?: Destination[] | null,
+    incoming?: Destination[] | null
+): Destination[] {
+    if (!incoming?.length) return previous || [];
+    if (!previous?.length) return dedupeDestinationsById(incoming);
+
+    const prevById = new Map(previous.filter((d) => d.id).map((d) => [d.id, d]));
+    const prevByKey = new Map<string, Destination>();
+    for (const p of previous) {
+        prevByKey.set(destinationMergeKey(p), p);
+    }
+    const usedPrevIds = new Set<string>();
+
+    const mergeOne = (prev: Destination | undefined, next: Destination): Destination => {
+        if (!prev) return next;
+        const nextProducts = Array.isArray(next.products) ? next.products : [];
+        const prevProducts = Array.isArray(prev.products) ? prev.products : [];
+        return {
+            ...prev,
+            ...next,
+            id: next.id || prev.id,
+            city: (next.city || '').trim() || prev.city,
+            representativeName: (next.representativeName || '').trim() || prev.representativeName,
+            representativeType: next.representativeType || prev.representativeType,
+            lisCode: (next.lisCode || '').trim() || prev.lisCode,
+            brand: (next.brand || '').trim() || prev.brand,
+            brand2: (next.brand2 || '').trim() || prev.brand2,
+            brandType: next.brandType || prev.brandType,
+            products: nextProducts.length > 0 ? nextProducts : prevProducts,
+            deliveryDate: next.deliveryDate || prev.deliveryDate,
+            unloadTime: next.unloadTime || prev.unloadTime,
+            tonnage: next.tonnage ?? prev.tonnage,
+            freightCost: next.freightCost ?? prev.freightCost,
+        };
+    };
+
+    const resolvePrevious = (next: Destination): Destination | undefined => {
+        if (next.id) {
+            const byId = prevById.get(next.id);
+            if (byId?.id && !usedPrevIds.has(byId.id)) {
+                usedPrevIds.add(byId.id);
+                return byId;
+            }
+        }
+        const byKey = prevByKey.get(destinationMergeKey(next));
+        if (byKey?.id && !usedPrevIds.has(byKey.id)) {
+            usedPrevIds.add(byKey.id);
+            return byKey;
+        }
+        const looseKey = destinationMergeKeyLoose(next);
+        for (const p of previous) {
+            if (!p.id || usedPrevIds.has(p.id)) continue;
+            if (destinationMergeKeyLoose(p) === looseKey) {
+                usedPrevIds.add(p.id);
+                return p;
+            }
+        }
+        return undefined;
+    };
+
+    return dedupeDestinationsLogical(incoming).map((d) => mergeOne(resolvePrevious(d), d));
+}
+
+function destinationMergeKey(d: Destination): string {
+    const city = (d.city || '').trim().toLowerCase();
+    const tonnage = d.tonnage != null && d.tonnage !== '' ? String(d.tonnage) : '';
+    const delivery = String(d.deliveryDate || '').trim();
+    return `${city}|${tonnage}|${delivery}`;
+}
+
+function destinationMergeKeyLoose(d: Destination): string {
+    const city = (d.city || '').trim().toLowerCase();
+    const tonnage = d.tonnage != null && d.tonnage !== '' ? String(d.tonnage) : '';
+    return `${city}|${tonnage}`;
+}
+
+/** حذف تکرار مقصد — نسخهٔ غنی‌تر (LIS، محصولات، …) نگه داشته می‌شود */
+function dedupeDestinationsLogical(destinations: Destination[]): Destination[] {
+    const bestByKey = new Map<string, Destination>();
+    for (const d of destinations) {
+        const key = destinationMergeKeyLoose(d);
+        const cur = bestByKey.get(key);
+        if (!cur || destinationRichnessScore(d) > destinationRichnessScore(cur)) {
+            bestByKey.set(key, d);
+        }
+    }
+    const addedKeys = new Set<string>();
+    const result: Destination[] = [];
+    for (const d of destinations) {
+        const key = destinationMergeKeyLoose(d);
+        if (addedKeys.has(key)) continue;
+        addedKeys.add(key);
+        result.push(bestByKey.get(key)!);
+    }
+    return result;
+}
+
+function destinationRichnessScore(d: Destination): number {
+    let score = 0;
+    if ((d.lisCode || '').trim()) score += 4;
+    if ((d.representativeName || '').trim()) score += 2;
+    if (Array.isArray(d.products) && d.products.length > 0) score += 2;
+    if ((d.brand || '').trim()) score += 1;
+    if (d.deliveryDate) score += 1;
+    return score;
+}
+
+function dedupeDestinationsById(destinations: Destination[]): Destination[] {
+    return dedupeDestinationsLogical(destinations);
+}
+
+export function formatDairyDestinationColumnLines(
+    destinations: Destination[] | undefined,
+    field: 'brandType' | 'lisCode' | 'products' | 'brand'
+): string {
+    if (!Array.isArray(destinations) || destinations.length === 0) return '-';
+    const lines = destinations.map((dest, index) => {
+        let value = '-';
+        if (field === 'brandType') value = formatDestinationBrandTypeLabel(dest);
+        else if (field === 'lisCode') value = dest.lisCode?.trim() || '-';
+        else if (field === 'products') value = formatDestinationProductsLabel(dest);
+        else value = formatDestinationBrandLabel(dest);
+        return `${index + 1}: ${value}`;
+    });
+    return lines.join(' | ');
 }
 
 /** نوع بارگیری بستنی — تک مبدا / دو مبدا (فقط از فیلد loading_type یا مبدا با « و ») */
@@ -32,6 +192,7 @@ const EXCEL_EN_FA: Record<string, string> = {
     distributor: 'پخش',
     distribution: 'پخش',
     depot: 'دپو',
+    organizational: 'سازمانی',
     agent: 'نماینده',
     representative: 'نماینده',
     single: 'تک مبدا',
@@ -124,6 +285,48 @@ function resolveDestinationRepTypeLabel(
 
 /** برچسب مقصد فشرده — برای نماینده نام نماینده، برای پخش/دپو همان نوع */
 export { resolveDestinationRepTypeLabel, resolveDestinationRepDisplayLabel };
+
+/** برچسب نوع/نام نماینده برای ستون مقاصد فشرده */
+export function formatDestinationRepCompactSegment(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
+    dest: Pick<Destination, 'representativeType' | 'representativeName'>
+): string {
+    const name = (dest.representativeName || ann.representativeName || '').trim();
+    const rawType = resolveDestinationRepTypeRaw(ann, dest);
+    const typeLabel = formatRepresentativeType(rawType);
+    if (isAgentRepresentativeType(rawType)) {
+        return name || (typeLabel !== '-' ? typeLabel : '-');
+    }
+    if (name) return name;
+    return typeLabel !== '-' ? typeLabel : '-';
+}
+
+/** یک خط مقصد فشرده پاستوریزه: شهر(تناژ) - نماینده - برند - LIS - محصولات - تاریخ تحویل */
+export function formatDairyCompactDestinationLine(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
+    dest: Destination,
+    index: number
+): string {
+    const city = (dest.city || '').trim() || '-';
+    const tonnage = dest.tonnage ? formatTonnageKgFromRaw(dest.tonnage) : '';
+    const tonnagePart = tonnage && tonnage !== '-' ? `(${tonnage})` : '';
+    const repPart = formatDestinationRepCompactSegment(ann, dest);
+    const brand = formatDestinationBrandLabel(dest);
+    const lis = dest.lisCode?.trim() || '-';
+    const products = formatDestinationProductsLabel(dest);
+    const productsPart = products !== '-' ? products : '-';
+    const deliveryDate = String(dest.deliveryDate || '').trim() || '-';
+    return `${index + 1}- ${city}${tonnagePart ? ` ${tonnagePart}` : ''} - ${repPart} - ${brand} - ${lis} - ${productsPart} - ${deliveryDate}`;
+}
+
+/** متن چندخطی مقاصد فشرده پاستوریزه — برای اکسل */
+export function formatDairyCompactDestinationsText(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'>
+): string {
+    const destinations = ann.destinations || [];
+    if (!destinations.length) return '-';
+    return destinations.map((d, i) => formatDairyCompactDestinationLine(ann, d, i)).join(' | ');
+}
 
 /** ستون «مقاصد» فشرده پاستوریزه/لبنیات — خروجی اکسل بدون وابستگی به React */
 export function formatCompactDestinationsForExcel(
@@ -424,7 +627,9 @@ export function mergeAssignmentDisplayFields(
             handoffCarrierName: incoming.handoffCarrierName ?? previous.handoffCarrierName,
             freightCostLockedAt: incoming.freightCostLockedAt ?? previous.freightCostLockedAt,
             destinations:
-                incoming.destinations?.length > 0 ? incoming.destinations : previous.destinations,
+                incoming.destinations?.length > 0
+                    ? mergeAnnouncementDestinations(previous.destinations, incoming.destinations)
+                    : previous.destinations,
         };
     }
 
@@ -452,6 +657,7 @@ export function mergeAssignmentDisplayFields(
         handoffCarrierId: incoming.handoffCarrierId ?? previous.handoffCarrierId,
         handoffCarrierName: incoming.handoffCarrierName ?? previous.handoffCarrierName,
         freightCostLockedAt: incoming.freightCostLockedAt ?? previous.freightCostLockedAt,
+        destinations: mergeAnnouncementDestinations(previous.destinations, incoming.destinations),
     };
 }
 
@@ -782,6 +988,29 @@ export type IceCreamDisplayOrderItem = {
 
 type DisplayOrderSortable = Pick<FreightAnnouncement, 'displayPinned' | 'displaySortOrder' | 'createdAt'>;
 
+const FREIGHT_ISO_DATE_FIELDS: ReadonlyArray<[camel: string, snake: string]> = [
+    ['createdAt', 'created_at'],
+    ['assignmentFinalizedAt', 'assignment_finalized_at'],
+    ['awaitingBillOfLadingAt', 'awaiting_bill_of_lading_at'],
+    ['freightCostLockedAt', 'freight_cost_locked_at'],
+    ['financeRejectedAt', 'finance_rejected_at'],
+];
+
+/** نرمال‌سازی فیلدهای تاریخ در patch اعلام بار (API/SSE) */
+export function normalizeFreightAnnouncementPatch<T extends Record<string, unknown>>(patch: T): T {
+    const out = { ...patch } as Record<string, unknown>;
+    for (const [camel, snake] of FREIGHT_ISO_DATE_FIELDS) {
+        const raw = out[camel] ?? out[snake];
+        if (raw == null) continue;
+        const d = coerceToDate(raw as Date | string | number);
+        if (d) {
+            out[camel] = d;
+            if (snake in out) delete out[snake];
+        }
+    }
+    return out as T;
+}
+
 /** ترتیب نمایش بستنی: سنجاق‌شده‌ها اول، سپس displaySortOrder، سپس تاریخ ثبت */
 export function sortByIceCreamDisplayOrder<T extends DisplayOrderSortable>(items: T[]): T[] {
     return [...items].sort((a, b) => {
@@ -793,9 +1022,7 @@ export function sortByIceCreamDisplayOrder<T extends DisplayOrderSortable>(items
         const orderB = b.displaySortOrder ?? Number.MAX_SAFE_INTEGER;
         if (orderA !== orderB) return orderA - orderB;
 
-        const aTime = new Date(a.createdAt as string | Date).getTime();
-        const bTime = new Date(b.createdAt as string | Date).getTime();
-        return bTime - aTime;
+        return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
     });
 }
 

@@ -40,6 +40,16 @@ const rolePermissions = {
     description: 'کارمند برنامه‌ریزی'
   },
 
+  // کارشناس فروش — اعلام بار مستقیم به ترابری (بدون تایید مدیر)
+  sales_expert: {
+    menus: [
+      'freight_planning',
+      'freight_tracking',
+      'support_tickets'
+    ],
+    description: 'کارشناس فروش'
+  },
+
   // مدیر برنامه‌ریزی
   planner_manager: {
     menus: [

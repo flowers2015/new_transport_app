@@ -73,6 +73,8 @@ export enum UserRole {
     // New Freight Roles
     PlanningEmployee = 'کارمند برنامه‌ریزی',
     PlanningManager = 'مدیر برنامه‌ریزی',
+    /** اعلام بار مثل کارمند برنامه‌ریزی، بدون تایید مدیر → مستقیم صف ترابری */
+    SalesExpert = 'کارشناس فروش',
     TransportationUser = 'کاربر ترابری (شرکت)',
     Transportation_Personal_Vehicle_User = 'کاربر ترابری (خودرو شخصی)',
     CarrierUser = 'کاربر باربری',
@@ -641,10 +643,16 @@ export interface Destination {
     representativeName: string;
     tonnage?: number;
     unloadTime?: string;
-    brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس' | 'فروتلند';
+    brand?: 'میهن' | 'پاندا' | 'برنارد' | 'میلکوم' | 'پانلا' | 'آلینوس' | 'فروتلند' | string;
+    brandType?: 'single' | 'double';
+    brand2?: string;
+    lisCode?: string;
     freightCost?: number;
+    /** ارزش بار مقصد (ریال) — فقط پاستوریزه */
+    cargoValue?: number;
     deliveryDate?: string; // تاریخ تحویل بار (شمسی)
-    representativeType?: 'agent' | 'distributor' | 'depot' | 'distribution'; // نوع نماینده: نماینده، پخش یا دپو
+    representativeType?: 'agent' | 'distributor' | 'depot' | 'distribution' | 'organizational';
+    products?: string[];
 }
 
 export interface AnnouncementHistory {
