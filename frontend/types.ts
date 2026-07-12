@@ -195,6 +195,8 @@ export enum FreightAnnouncementStatus {
     Cancelled = 'لغو شده',
     ReAnnounced = 'اعلام مجدد شده',
     Leftover = 'بار مانده',
+    /** برگشت از ترابری به اعلام‌کننده برای اصلاح و ارسال مجدد */
+    ReturnedToCreator = 'برگشت به اعلام‌کننده',
     ChangeRequested = 'درخواست تغییر',
     Archived = 'بایگانی شده',
 }
@@ -653,6 +655,10 @@ export interface Destination {
     deliveryDate?: string; // تاریخ تحویل بار (شمسی)
     representativeType?: 'agent' | 'distributor' | 'depot' | 'distribution' | 'organizational';
     products?: string[];
+    /** اعلام‌کننده اصلی این مقصد (قبل از ادغام در ردیف دیگر) */
+    originalCreatedByUserId?: string | null;
+    originalCreatorFullName?: string | null;
+    originalCreatorUsername?: string | null;
 }
 
 export interface AnnouncementHistory {

@@ -11,6 +11,7 @@ import IranianPlateInput, {
 import DestinationTransferDialog from './DestinationTransferDialog';
 import {
     getDestinationCitiesLabel,
+    getAnnouncementCreatorLabel,
     getAnnouncementRepDisplayLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
@@ -224,6 +225,18 @@ interface TransportLiveProps {
         destinationId: string,
         options?: { vehicleType?: string; silent?: boolean }
     ) => Promise<import('../utils/optimisticUpdates').SplitDestinationResult>;
+    onReturnToCreator?: (announcementId: string, reason: string) => Promise<boolean>;
+    onReturnDestinationToCreator?: (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        reason: string
+    ) => Promise<{
+        ok: boolean;
+        mode?: 'whole' | 'split';
+        sourceAnnouncementId?: string;
+        returnedAnnouncementId?: string;
+        destinationId?: string;
+    }>;
     onForward: (announcementId: string | string[]) => void | Promise<void>;
     onReferToCarrier?: (
         announcementId: string,
@@ -327,6 +340,9 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.Cancelled]: 'bg-slate-100 text-slate-800',
     [FreightAnnouncementStatus.ReAnnounced]: 'bg-gray-400 text-white',
     [FreightAnnouncementStatus.Leftover]: 'bg-red-200 text-red-900',
+    [FreightAnnouncementStatus.ReturnedToCreator]: 'bg-amber-100 text-amber-900',
+    [FreightAnnouncementStatus.ChangeRequested]: 'bg-orange-200 text-orange-900',
+    [FreightAnnouncementStatus.Archived]: 'bg-slate-300 text-slate-800',
 };
 
 
@@ -334,7 +350,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onSplitDestinationToNew, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {} } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onSplitDestinationToNew, onReturnToCreator, onReturnDestinationToCreator, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {} } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -612,7 +628,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'ردیف', align: 'center', display: () => viewMode === 'full', render: (_: any, idx: number) => idx + 1 },
             { header: 'کد اعلام بار', align: 'center', display: () => true, render: (ann: FreightAnnouncement) => ann.announcementCode },
             // { header: 'وضعیت', display: () => true, render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-            { header: 'کارمند اعلام‌کننده', display: () => true, render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+            { header: 'کارمند اعلام‌کننده', display: () => true, render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
             { header: 'تاریخ بارگیری', display: () => true, render: (ann: FreightAnnouncement) => <span>{formatJalali(ann.loadingDate)}</span> },
             { header: 'مبدا بارگیری', display: () => true, render: (ann: FreightAnnouncement) => ann.originCity || '-' },
             { header: 'برند', display: () => true, render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -967,7 +983,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (isPendingBillOfLadingTab(activeLine)) {
             const pendingBase = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
@@ -993,7 +1009,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (activeLine === FreightLineType.IceCream) {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
                 { header: 'مقصد', render: (ann: FreightAnnouncement) =>
@@ -1020,7 +1036,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) =>
-                    renderDairyCompactText((ann.creator_full_name || ann.creator_username || '-')) },
+                    renderDairyCompactText((getAnnouncementCreatorLabel(ann))) },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) =>
                     renderDairyCompactText(ann.originCity || '-') },
@@ -1039,7 +1055,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (activeLine === FreightLineType.Ambient && columnMode === 'compact') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -1058,7 +1074,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (activeLine === FreightLineType.Dairy && columnMode === 'full') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
@@ -1074,7 +1090,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (activeLine === FreightLineType.Ambient && columnMode === 'full') {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
-                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(ann.creator_full_name || ann.creator_username || '-')}</span> },
+                { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -2633,6 +2649,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 userId={currentUser.id}
                 onTransferDestination={onTransferDestination}
                 onSplitDestinationToNew={onSplitDestinationToNew}
+                onReturnToCreator={
+                    currentUser.role === UserRole.Transportation_Personal_Vehicle_User || currentUser.role === UserRole.Admin
+                        ? onReturnToCreator
+                        : undefined
+                }
+                onReturnDestinationToCreator={
+                    currentUser.role === UserRole.Transportation_Personal_Vehicle_User || currentUser.role === UserRole.Admin
+                        ? onReturnDestinationToCreator
+                        : undefined
+                }
                 onChangeVehicleType={onChangeVehicleType}
                 onRefresh={onRefresh}
              />

@@ -265,6 +265,11 @@ createSupportTicketsTable().catch(err => {
   console.error('❌ [Server] خطا در ایجاد جدول support_tickets:', err);
 });
 
+const addDestinationOriginalCreator = require('./migrations/add_destination_original_creator');
+addDestinationOriginalCreator().catch(err => {
+  console.error('❌ [Server] خطا در اضافه کردن original_created_by_user_id به مقاصد:', err);
+});
+
 const baleSessionEngine = require('./services/bale/baleSessionEngine');
 const { startBalePolling } = require('./services/bale/balePolling');
 if (process.env.BALE_BOT_TOKEN) {

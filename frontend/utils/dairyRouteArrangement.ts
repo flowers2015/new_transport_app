@@ -135,6 +135,32 @@ export function isDairyAnnouncementForArrangement(ann: FreightAnnouncement): boo
     return PENDING_ARRANGEMENT_STATUSES.has(status) && ann.destinations.length > 0;
 }
 
+/** اعلام‌باری که واقعاً خودرو و راننده دارد — فقط نمایش در چیدمان، بدون ویرایش */
+export function isAnnouncementAssignmentLocked(ann: FreightAnnouncement | undefined | null): boolean {
+    if (!ann) return false;
+    // فقط تخصیص واقعی؛ وضعیت Assigned بدون راننده/خودرو (مثلاً بعد از ردیف جدید) قفل نیست
+    return Boolean(ann.assignedDriverId && ann.assignedVehicleId);
+}
+
+/** ردیف چیدمان قفل‌شده به‌خاطر تخصیص راننده/خودرو روی هر اعلام‌بار مرتبط */
+export function isRouteAssignmentLocked(
+    route: DairyArrangementRoute,
+    announcementById: Map<string, FreightAnnouncement>
+): boolean {
+    const ids = new Set<string>();
+    for (const id of route.sourceAnnouncementIds || []) {
+        if (id) ids.add(id);
+    }
+    if (route.targetAnnouncementId) ids.add(route.targetAnnouncementId);
+    for (const block of routeStopsInOrder(route).flatMap(stopBlocks)) {
+        ids.add(block.announcementId);
+    }
+    for (const id of ids) {
+        if (isAnnouncementAssignmentLocked(announcementById.get(id))) return true;
+    }
+    return false;
+}
+
 export function matchesDairyLine(ann: FreightAnnouncement): boolean {
     return matchesFreightLine(ann, FreightLineType.Dairy);
 }
@@ -267,6 +293,33 @@ export function buildInitialRoutes(announcements: FreightAnnouncement[]): DairyA
 function firstRouteLabel(route: DairyArrangementRoute): string {
     const b = routeStopsInOrder(route)[0];
     return b ? stopBlocks(b)[0]?.announcementCode || '' : '';
+}
+
+/** حذف مقصدها از چیدمان فعلی (مثلاً قبل از ساخت ردیف جدید بعد از «ردیف جدید») */
+export function removeDestinationIdsFromRoutes(
+    routes: DairyArrangementRoute[],
+    destinationIds: Set<string> | Iterable<string>
+): DairyArrangementRoute[] {
+    const ids = destinationIds instanceof Set ? destinationIds : new Set(destinationIds);
+    if (ids.size === 0) return routes;
+
+    return routes
+        .map((route) => {
+            const slots = ensureRouteSlots(route.stops);
+            const nextSlots: (DairyArrangementStop | null)[] = slots.map((stop) => {
+                if (!stop) return null;
+                const blocks = stopBlocks(stop).filter((b) => !ids.has(b.destinationId));
+                if (blocks.length === 0) return null;
+                return blocks.length === 1 ? singleStop(blocks[0]) : mergedStop(blocks);
+            });
+            if (!nextSlots.some((s) => s != null)) return null;
+            return {
+                ...route,
+                stops: nextSlots,
+                sourceAnnouncementIds: collectAnnouncementIds(nextSlots),
+            };
+        })
+        .filter((r): r is DairyArrangementRoute => r != null);
 }
 
 export function mergeNewAnnouncementsIntoRoutes(
@@ -754,7 +807,7 @@ export function decodeDragPayload(raw: string): { dragKey: string; sourceRouteId
     return null;
 }
 
-const ARRANGEMENT_STORAGE_VERSION = 8;
+const ARRANGEMENT_STORAGE_VERSION = 9;
 
 export function arrangementStorageKey(userId: string): string {
     return `dairy-route-arrangement:v${ARRANGEMENT_STORAGE_VERSION}:${userId}`;
@@ -898,7 +951,7 @@ export function reconcileRoutesWithAnnouncements(
     const reconciled = reconcileRoutesCore(routes, announcements);
     const withNew = mergeNewAnnouncementsIntoRoutes(reconciled, announcements);
     const attached = attachMissingDestinationsToRoutes(withNew, announcements);
-    return reapplyApprovalsFromIndex(attached, approvalIndex);
+    return reapplyApprovalsFromIndex(dedupeDestinationsAcrossRoutes(attached), approvalIndex);
 }
 
 function attachMissingDestinationsToRoutes(
@@ -944,6 +997,30 @@ function attachMissingDestinationsToRoutes(
         for (const d of missing) layoutDestIds.add(d.id);
     }
     return dedupeRoutesById(result);
+}
+
+/**
+ * بعد از جداسازی مقصد به اعلام‌بار جدید: مقصد را از ردیف فعلی بردار و ردیف مستقل بساز.
+ * اگر فقط reconcile شود، announcementId بلوک عوض می‌شود ولی روی همان ردیف می‌ماند و merge ردیف جدید نمی‌سازد.
+ */
+export function applyNewAnnouncementRowsToRoutes(
+    routes: DairyArrangementRoute[],
+    announcements: FreightAnnouncement[],
+    newAnnouncementIds: string[]
+): DairyArrangementRoute[] {
+    const approvalIndex = buildApprovalIndex(routes);
+    const destIds = new Set<string>();
+    for (const id of newAnnouncementIds) {
+        const ann = announcements.find((a) => a.id === id);
+        for (const d of ann?.destinations || []) {
+            if (d.id) destIds.add(d.id);
+        }
+    }
+    const stripped = removeDestinationIdsFromRoutes(routes, destIds);
+    const reconciled = reconcileRoutesCore(stripped, announcements);
+    const withNew = mergeNewAnnouncementsIntoRoutes(reconciled, announcements);
+    const attached = attachMissingDestinationsToRoutes(withNew, announcements);
+    return dedupeRoutesById(reapplyApprovalsFromIndex(dedupeDestinationsAcrossRoutes(attached), approvalIndex));
 }
 
 export function loadPersistedArrangement(

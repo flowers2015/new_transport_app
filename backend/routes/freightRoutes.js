@@ -6,6 +6,8 @@ const {
   getFreightAnnouncementById,
   approveAnnouncement,
   rejectAnnouncement,
+  returnAnnouncementToCreator,
+  returnDestinationToCreator,
   assignVehicleAndDriver,
   createFreightAnnouncement,
   updateFreightAnnouncement,
@@ -206,6 +208,22 @@ router.post(
   authenticateToken,
   authorizeRole(['planner_manager', 'admin']),
   rejectAnnouncement
+);
+
+// برگشت اعلام‌بار از ترابری شخصی به اعلام‌کننده (کارشناس فروش / کارمند برنامه‌ریزی)
+router.post(
+  '/:id/return-to-creator',
+  authenticateToken,
+  authorizeRole(['personal_transport_user', 'admin']),
+  returnAnnouncementToCreator
+);
+
+// برگشت فقط یک مقصد به اعلام‌کننده (جداسازی در صورت چندمقصدی)
+router.post(
+  '/:id/return-destination-to-creator',
+  authenticateToken,
+  authorizeRole(['personal_transport_user', 'admin']),
+  returnDestinationToCreator
 );
 
 // Route to assign a vehicle and driver to a freight announcement

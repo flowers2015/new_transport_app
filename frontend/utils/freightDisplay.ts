@@ -247,6 +247,35 @@ export function getDestinationCitiesLabel(
     return cities.length > 0 ? cities.join('، ') : '-';
 }
 
+/** نام کارمند(ان) اعلام‌کننده — در صورت ادغام مقاصد کارشناسان مختلف، همه را نشان می‌دهد */
+export function getAnnouncementCreatorLabel(ann: any): string {
+    const fromDests: string[] = [];
+    const seen = new Set<string>();
+    for (const d of ann?.destinations || []) {
+        const label = (
+            d.originalCreatorFullName ||
+            d.original_creator_full_name ||
+            d.originalCreatorUsername ||
+            d.original_creator_username ||
+            ''
+        ).trim();
+        const key = String(
+            d.originalCreatedByUserId ||
+                d.original_created_by_user_id ||
+                d.original_creator_user_id ||
+                label
+        );
+        if (label && !seen.has(key)) {
+            seen.add(key);
+            fromDests.push(label);
+        }
+    }
+    if (fromDests.length > 0) return fromDests.join('، ');
+    const aggregated = String(ann?.destination_creator_names || ann?.destinationCreatorNames || '').trim();
+    if (aggregated) return aggregated;
+    return ann?.creator_full_name || ann?.creator_username || '-';
+}
+
 function isAgentRepresentativeType(value?: string | null): boolean {
     if (!value) return false;
     const v = String(value).trim().toLowerCase();

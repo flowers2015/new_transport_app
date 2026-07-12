@@ -226,6 +226,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     Finalized: FreightAnnouncementStatus.Finalized,
                     Cancelled: FreightAnnouncementStatus.Cancelled,
                     ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+                    Leftover: FreightAnnouncementStatus.Leftover,
+                    ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
                     ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
                 };
 
@@ -287,6 +289,15 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                         }
                                     })()
                                   : [],
+                            originalCreatedByUserId:
+                                d.original_created_by_user_id ||
+                                d.originalCreatedByUserId ||
+                                d.original_creator_user_id ||
+                                null,
+                            originalCreatorFullName:
+                                d.original_creator_full_name || d.originalCreatorFullName || null,
+                            originalCreatorUsername:
+                                d.original_creator_username || d.originalCreatorUsername || null,
                         })) : [],
                         history: a.history || [],
                         isReannouncement: !!(a.is_reannouncement ?? a.isReannouncement),
@@ -301,6 +312,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         creator_full_name: a.creator_full_name || a.creatorFullName,
                         creator_username: a.creator_username || a.creatorUsername,
                         creator_user_id: a.creator_user_id || a.creatorUserId,
+                        destination_creator_names: a.destination_creator_names || a.destinationCreatorNames,
                     };
                 };
 
@@ -541,6 +553,33 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     return;
                 }
 
+                if (
+                    updateType === 'returned_to_creator' ||
+                    data.status === 'ReturnedToCreator' ||
+                    data.status === 'برگشت به اعلام‌کننده'
+                ) {
+                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+                    return;
+                }
+
+                if (updateType === 'destination_returned_out' && data?.destinationId) {
+                    setAnnouncements((prev) =>
+                        prev
+                            .map((a) =>
+                                a.id === announcementId
+                                    ? {
+                                          ...a,
+                                          destinations: (a.destinations || []).filter(
+                                              (d) => d.id !== data.destinationId
+                                          ),
+                                      }
+                                    : a
+                            )
+                            .filter((a) => (a.destinations || []).length > 0)
+                    );
+                    return;
+                }
+
                 if (updateType === 'display_order_updated') {
                     setAnnouncements((prev) =>
                         prev.map((a) =>
@@ -580,6 +619,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                     Finalized: FreightAnnouncementStatus.Finalized,
                                     Cancelled: FreightAnnouncementStatus.Cancelled,
                                     ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+                                    Leftover: FreightAnnouncementStatus.Leftover,
+                                    ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
                                     ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
                                 };
                                 
@@ -1155,8 +1196,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             announcementsRef.current = nextAnnouncements;
             setAnnouncements(nextAnnouncements);
 
+            // حتی در حالت silent هم لیست زنده را از سرور همگام کن
+            void fetchData(true, needsPersonalResourcesRef.current, true);
             if (!options?.silent) {
-                void fetchData(true, needsPersonalResourcesRef.current, true);
                 alert(result.message || 'انتقال مقصد با موفقیت انجام شد.');
             }
             return { ok: true, announcements: nextAnnouncements };
@@ -1169,6 +1211,116 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 if (error?.message) message = error.message;
             }
             alert(message);
+            return { ok: false };
+        }
+    };
+
+    const onReturnToCreator = async (announcementId: string, reason: string): Promise<boolean> => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('لطفا دوباره وارد شوید');
+                return false;
+            }
+            const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/return-to-creator`), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ reason }),
+            });
+            if (!res.ok) {
+                const errorText = await res.text();
+                let message = 'خطا در برگشت اعلام بار';
+                try {
+                    message = JSON.parse(errorText).message || message;
+                } catch {
+                    if (errorText) message = errorText;
+                }
+                alert(message);
+                return false;
+            }
+            setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
+            return true;
+        } catch (error: any) {
+            console.error('❌ [TransportLive] Return to creator error:', error);
+            alert(error?.message || 'خطا در برگشت اعلام بار به اعلام‌کننده');
+            return false;
+        }
+    };
+
+    /** برگشت فقط یک مقصد — در صورت چندمقصدی، بقیه در صف می‌مانند */
+    const onReturnDestinationToCreator = async (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        reason: string
+    ): Promise<{
+        ok: boolean;
+        mode?: 'whole' | 'split';
+        sourceAnnouncementId?: string;
+        returnedAnnouncementId?: string;
+        destinationId?: string;
+    }> => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('لطفا دوباره وارد شوید');
+                return { ok: false };
+            }
+            const res = await fetch(
+                getApiUrl(`freight-announcements/${sourceAnnouncementId}/return-destination-to-creator`),
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ destinationId, reason }),
+                }
+            );
+            if (!res.ok) {
+                const errorText = await res.text();
+                let message = 'خطا در برگشت مقصد';
+                try {
+                    message = JSON.parse(errorText).message || message;
+                } catch {
+                    if (errorText) message = errorText;
+                }
+                alert(message);
+                return { ok: false };
+            }
+            const result = await res.json();
+            const effectiveSourceId = result.sourceAnnouncementId || sourceAnnouncementId;
+            const returnedId = result.returnedAnnouncementId || effectiveSourceId;
+
+            if (result.mode === 'whole' || returnedId === effectiveSourceId) {
+                setAnnouncements((prev) => prev.filter((a) => a.id !== effectiveSourceId));
+            } else {
+                setAnnouncements((prev) =>
+                    prev
+                        .map((a) =>
+                            a.id === effectiveSourceId
+                                ? {
+                                      ...a,
+                                      destinations: (a.destinations || []).filter((d) => d.id !== destinationId),
+                                  }
+                                : a
+                        )
+                        .filter((a) => (a.destinations || []).length > 0)
+                );
+            }
+
+            return {
+                ok: true,
+                mode: result.mode,
+                sourceAnnouncementId: effectiveSourceId,
+                returnedAnnouncementId: returnedId,
+                destinationId,
+            };
+        } catch (error: any) {
+            console.error('❌ [TransportLive] Return destination error:', error);
+            alert(error?.message || 'خطا در برگشت مقصد به اعلام‌کننده');
             return { ok: false };
         }
     };
@@ -1664,6 +1816,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 onFinalize={onFinalize}
                 onTransferDestination={onTransferDestination}
                 onSplitDestinationToNew={onSplitDestinationToNew}
+                onReturnToCreator={onReturnToCreator}
+                onReturnDestinationToCreator={onReturnDestinationToCreator}
                 onForward={onForward}
                 onReferToCarrier={onReferToCarrier}
                 onReferToCarrierBulk={onReferToCarrierBulk}

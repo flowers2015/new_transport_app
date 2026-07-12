@@ -102,9 +102,9 @@ async function assertCreateLinePermission(userId, lineType) {
   }
 }
 
-const DESTINATION_INSERT_COLUMNS = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, created_at`;
+const DESTINATION_INSERT_COLUMNS = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, original_created_by_user_id, created_at`;
 
-function buildDestinationInsertParams(announcementId, d, destId = crypto.randomUUID()) {
+function buildDestinationInsertParams(announcementId, d, destId = crypto.randomUUID(), originalCreatedByUserId = null) {
   const products = d.products;
   let productsJson = '[]';
   if (Array.isArray(products)) {
@@ -133,15 +133,28 @@ function buildDestinationInsertParams(announcementId, d, destId = crypto.randomU
     d.brand || null,
     d.brand2 || null,
     productsJson,
+    originalCreatedByUserId || d.originalCreatedByUserId || d.original_created_by_user_id || null,
   ];
 }
 
-async function insertFreightDestinations(clientOrPool, announcementId, destinations) {
+async function insertFreightDestinations(clientOrPool, announcementId, destinations, originalCreatedByUserId = null) {
   const db = clientOrPool;
-  const insertDestQuery = `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())`;
+  const insertDestQuery = `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())`;
   for (const d of destinations) {
-    await db.query(insertDestQuery, buildDestinationInsertParams(announcementId, d));
+    await db.query(insertDestQuery, buildDestinationInsertParams(announcementId, d, crypto.randomUUID(), originalCreatedByUserId));
   }
+  await db.query(
+    `
+    UPDATE freight_destinations d
+    SET original_created_by_user_id = fa.created_by_user_id
+    FROM freight_announcements fa
+    WHERE d.freight_announcement_id = fa.id
+      AND d.freight_announcement_id = $1
+      AND d.original_created_by_user_id IS NULL
+      AND fa.created_by_user_id IS NOT NULL
+    `,
+    [announcementId]
+  );
 }
 
 async function updateAnnouncementStatusWithFallback(client, announcementId, candidates) {
@@ -357,7 +370,11 @@ async function getFreightAnnouncements(req, res) {
       whereClause += "'Finalized', 'Reannounced', 'Archived', 'بایگانی شده', 'Cancelled'";
     }
     if (includeLeftover !== 'true') {
-      whereClause += ", 'Leftover'";
+      whereClause += ", 'Leftover', 'ReturnedToCreator'";
+    }
+    // حتی در includeFinalized (مالی) این وضعیت نباید بیاید
+    if (includeFinalized === 'true') {
+      whereClause += ", 'ReturnedToCreator', 'Leftover'";
     }
     whereClause += ")";
     
@@ -377,10 +394,19 @@ async function getFreightAnnouncements(req, res) {
     const isPlanningManager = userRole === 'planner_manager' || userRole === 'مدیر برنامه‌ریزی';
     const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
     
-    // Add filter for planning employees / sales experts (only see their own announcements)
+    // کارمند/کارشناس: اعلام‌بارهای خودشان + ردیف‌هایی که مقصدشان بعد از ادغام روی اعلام‌بار دیگری رفته
     let userFilter = '';
     if ((isPlanningEmployee || isSalesExpert) && userId) {
-      userFilter = ` AND fa.created_by_user_id = '${userId}'`;
+      const safeUserId = String(userId).replace(/'/g, "''");
+      userFilter = ` AND (
+        fa.created_by_user_id = '${safeUserId}'
+        OR EXISTS (
+          SELECT 1
+          FROM freight_destinations d_own
+          WHERE d_own.freight_announcement_id = fa.id
+            AND d_own.original_created_by_user_id = '${safeUserId}'
+        )
+      )`;
     }
     
     // Add filter for branch finance users (only see announcements with destinations matching their branch city)
@@ -534,10 +560,31 @@ async function getFreightAnnouncements(req, res) {
     
     for (let announcement of rows) {
       const destRows = await pool.query(
-        'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+        `SELECT
+           d.*,
+           u_orig.id AS original_creator_user_id,
+           u_orig.${nameColumn} AS original_creator_full_name,
+           u_orig.username AS original_creator_username
+         FROM freight_destinations d
+         LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
+         WHERE d.freight_announcement_id = $1
+         ORDER BY d.created_at ASC`,
         [announcement.id]
       );
       announcement.destinations = destRows.rows;
+      const creatorNames = [];
+      const seenCreators = new Set();
+      for (const dest of destRows.rows) {
+        const label = dest.original_creator_full_name || dest.original_creator_username;
+        const key = dest.original_created_by_user_id || dest.original_creator_user_id || label;
+        if (label && key && !seenCreators.has(String(key))) {
+          seenCreators.add(String(key));
+          creatorNames.push(label);
+        }
+      }
+      if (creatorNames.length > 0) {
+        announcement.destination_creator_names = creatorNames.join('، ');
+      }
       
       // آمار representative_name
       destRows.rows.forEach(dest => {
@@ -1032,6 +1079,12 @@ async function updateFreightAnnouncement(req, res) {
           const queueLabel =
             newRecord.assignment_type === 'personal' ? 'شخصی' : 'شرکتی';
           description = `کارشناس فروش اعلام بار را مستقیم به صف ترابری ${queueLabel} ارجاع داد`;
+        }
+        if (
+          ['ReturnedToCreator', 'برگشت به اعلام‌کننده'].includes(oldRecord.status) &&
+          routedStatuses.includes(newRecord.status)
+        ) {
+          description = `ارسال مجدد پس از اصلاح توسط اعلام‌کننده — وضعیت جدید: ${newRecord.status}`;
         }
         
         await logFreightHistory({
@@ -1738,6 +1791,459 @@ async function rejectAnnouncement(req, res) {
     await client.query('ROLLBACK');
     console.error('Failed to reject announcement:', e);
     return res.status(500).json({ message: 'Internal server error while rejecting announcement.' });
+  } finally {
+    client.release();
+  }
+}
+
+const RETURNABLE_STATUSES = new Set([
+  'PendingPersonalAssignment',
+  'PendingCompanyAssignment',
+  'در انتظار تخصیص (شخصی)',
+  'در انتظار تخصیص (شرکت)',
+  'در انتظار تخصیص شخصی',
+  'در انتظار تخصیص شرکتی',
+]);
+
+/**
+ * ترابری شخصی: برگشت اعلام‌بار به اعلام‌کننده (کارشناس فروش / کارمند برنامه‌ریزی)
+ * وضعیت ReturnedToCreator — در صف ترابری/مالی دیده نمی‌شود.
+ */
+async function returnAnnouncementToCreator(req, res) {
+  const { id: announcementId } = req.params;
+  const { userId, name, username, role } = req.user || {};
+  const userName = username
+    ? name
+      ? `${username} - ${name}`
+      : username
+    : name || 'ترابری';
+  const reason = String((req.body && req.body.reason) || '').trim();
+  if (!reason) {
+    return res.status(400).json({ message: 'علت برگشت الزامی است.' });
+  }
+
+  const newStatus = 'ReturnedToCreator';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `SELECT status, announcement_code, created_by_user_id, line_type, assignment_type
+       FROM freight_announcements WHERE id = $1`,
+      [announcementId]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+
+    const row = rows[0];
+    const oldStatus = row.status;
+    if (!RETURNABLE_STATUSES.has(String(oldStatus))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'فقط اعلام‌بارهای در انتظار تخصیص قابل برگشت به اعلام‌کننده هستند.',
+      });
+    }
+
+    if (!row.created_by_user_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'اعلام‌کننده این بار مشخص نیست؛ امکان برگشت وجود ندارد.',
+      });
+    }
+
+    const destRows = await client.query(
+      'SELECT city FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC LIMIT 3',
+      [announcementId]
+    );
+    const destinationLabel = destRows.rows.map((d) => d.city).filter(Boolean).join('، ') || 'بدون مقصد';
+
+    const rejectionCol = await client.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'freight_announcements' AND column_name = 'rejection_reason'`
+    );
+
+    if (rejectionCol.rowCount > 0) {
+      await client.query(
+        `UPDATE freight_announcements
+         SET status = $1,
+             rejection_reason = $2,
+             assignment_type = NULL,
+             assigned_driver_id = NULL,
+             assigned_vehicle_id = NULL,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [newStatus, reason, announcementId]
+      );
+    } else {
+      await client.query(
+        `UPDATE freight_announcements
+         SET status = $1,
+             notes = COALESCE(notes, '') || $2,
+             assignment_type = NULL,
+             assigned_driver_id = NULL,
+             assigned_vehicle_id = NULL,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [newStatus, ` برگشت به اعلام‌کننده: ${reason}`, announcementId]
+      );
+    }
+
+    const description = `برگشت از ترابری به اعلام‌کننده — مقصد ${destinationLabel}. علت: ${reason}`;
+
+    await logFreightHistory({
+      announcementId,
+      userId,
+      userName: `${userName}${role ? ` - ${role}` : ''}`,
+      action: 'RETURNED_TO_CREATOR',
+      oldStatus,
+      newStatus,
+      fieldChanges: { returnReason: { old: null, new: reason } },
+      description,
+      ipAddress: req.ip,
+      client,
+    });
+
+    await client.query('COMMIT');
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'returned_to_creator',
+        {
+          status: newStatus,
+          rejectionReason: reason,
+          createdByUserId: row.created_by_user_id,
+        },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [returnAnnouncementToCreator] realtime error:', realtimeError);
+    }
+
+    return res.status(200).json({
+      message: 'اعلام بار به اعلام‌کننده برگشت داده شد.',
+      status: newStatus,
+      createdByUserId: row.created_by_user_id,
+    });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Failed to return announcement to creator:', e);
+    return res.status(500).json({ message: 'خطا در برگشت اعلام بار به اعلام‌کننده.' });
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * برگشت فقط یک مقصد به اعلام‌کننده.
+ * اگر اعلام‌بار چند مقصد داشته باشد: مقصد جدا می‌شود و فقط همان تکه برمی‌گردد؛ بقیه در صف ترابری می‌مانند.
+ * اگر تنها مقصد باشد: کل اعلام‌بار برمی‌گردد.
+ * POST /:id/return-destination-to-creator  body: { destinationId, reason }
+ */
+async function returnDestinationToCreator(req, res) {
+  const { id: requestedSourceId } = req.params;
+  const { userId, name, username, role } = req.user || {};
+  const userName = username
+    ? name
+      ? `${username} - ${name}`
+      : username
+    : name || 'ترابری';
+  const reason = String((req.body && req.body.reason) || '').trim();
+  const destinationId = req.body && req.body.destinationId;
+
+  if (!reason) {
+    return res.status(400).json({ message: 'علت برگشت الزامی است.' });
+  }
+  if (!destinationId) {
+    return res.status(400).json({ message: 'destinationId الزامی است.' });
+  }
+
+  const newStatus = 'ReturnedToCreator';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: destOwnerRows } = await client.query(
+      `SELECT id, city, freight_announcement_id, original_created_by_user_id
+       FROM freight_destinations
+       WHERE id = $1
+       FOR UPDATE`,
+      [destinationId]
+    );
+    if (destOwnerRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'مقصد یافت نشد.' });
+    }
+
+    const effectiveSourceId = String(destOwnerRows[0].freight_announcement_id);
+    const destCity = destOwnerRows[0].city || 'بدون مقصد';
+    if (String(requestedSourceId) !== effectiveSourceId) {
+      console.warn('⚠️ [returnDestinationToCreator] source mismatch; using actual owner', {
+        requestedSourceId,
+        effectiveSourceId,
+        destinationId,
+      });
+    }
+
+    const { rows: sourceRows } = await client.query(
+      `SELECT * FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [effectiveSourceId]
+    );
+    if (sourceRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار یافت نشد.' });
+    }
+    const sourceAnn = sourceRows[0];
+    const oldStatus = sourceAnn.status;
+    // اعلام‌کننده واقعی همین مقصد (نه لزوماً مالک ردیف فعلی بعد از ادغام)
+    const returnCreatorId =
+      destOwnerRows[0].original_created_by_user_id || sourceAnn.created_by_user_id || null;
+
+    if (!RETURNABLE_STATUSES.has(String(oldStatus))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'فقط اعلام‌بارهای در انتظار تخصیص قابل برگشت به اعلام‌کننده هستند.',
+      });
+    }
+    if (!returnCreatorId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'اعلام‌کننده این بار مشخص نیست؛ امکان برگشت وجود ندارد.',
+      });
+    }
+
+    const { rows: countRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM freight_destinations WHERE freight_announcement_id = $1`,
+      [effectiveSourceId]
+    );
+    const destCount = countRows[0]?.count || 0;
+
+    const rejectionCol = await client.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'freight_announcements' AND column_name = 'rejection_reason'`
+    );
+
+    // تنها مقصد: کل اعلام‌بار برمی‌گردد — مالک اعلام‌کننده همان اعلام‌کننده اصلی مقصد می‌شود
+    if (destCount <= 1) {
+      if (rejectionCol.rowCount > 0) {
+        await client.query(
+          `UPDATE freight_announcements
+           SET status = $1,
+               rejection_reason = $2,
+               assignment_type = NULL,
+               assigned_driver_id = NULL,
+               assigned_vehicle_id = NULL,
+               created_by_user_id = $3,
+               updated_at = NOW()
+           WHERE id = $4`,
+          [newStatus, reason, returnCreatorId, effectiveSourceId]
+        );
+      } else {
+        await client.query(
+          `UPDATE freight_announcements
+           SET status = $1,
+               notes = COALESCE(notes, '') || $2,
+               assignment_type = NULL,
+               assigned_driver_id = NULL,
+               assigned_vehicle_id = NULL,
+               created_by_user_id = $3,
+               updated_at = NOW()
+           WHERE id = $4`,
+          [newStatus, ` برگشت به اعلام‌کننده: ${reason}`, returnCreatorId, effectiveSourceId]
+        );
+      }
+
+      await client.query(
+        `UPDATE freight_destinations
+         SET original_created_by_user_id = COALESCE(original_created_by_user_id, $1)
+         WHERE id = $2`,
+        [returnCreatorId, destinationId]
+      );
+
+      await logFreightHistory({
+        announcementId: effectiveSourceId,
+        userId,
+        userName: `${userName}${role ? ` - ${role}` : ''}`,
+        action: 'RETURNED_TO_CREATOR',
+        oldStatus,
+        newStatus,
+        fieldChanges: { returnReason: { old: null, new: reason } },
+        description: `برگشت از ترابری به اعلام‌کننده — مقصد ${destCity}. علت: ${reason}`,
+        ipAddress: req.ip,
+        client,
+      });
+
+      await client.query('COMMIT');
+
+      try {
+        const realtimeService = require('../services/realtimeService');
+        realtimeService.notifyAnnouncementUpdate(
+          effectiveSourceId,
+          'returned_to_creator',
+          {
+            status: newStatus,
+            rejectionReason: reason,
+            createdByUserId: returnCreatorId,
+          },
+          userId
+        );
+      } catch (realtimeError) {
+        console.error('❌ [returnDestinationToCreator] realtime error:', realtimeError);
+      }
+
+      return res.status(200).json({
+        message: 'مقصد به اعلام‌کننده برگشت داده شد.',
+        mode: 'whole',
+        sourceAnnouncementId: effectiveSourceId,
+        returnedAnnouncementId: effectiveSourceId,
+        destinationId,
+        status: newStatus,
+        createdByUserId: returnCreatorId,
+      });
+    }
+
+    // چند مقصد: فقط این مقصد را جدا کن و به ReturnedToCreator بفرست
+    const crypto = require('crypto');
+    const newId = crypto.randomUUID();
+    const annCode = `ANN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    await client.query(
+      `INSERT INTO freight_announcements (
+        id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
+        vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
+        total_freight_cost, platform_arrival_time, carton_count, pallet_count, loading_type,
+        created_at, updated_at,
+        origin_city, brand, representative_type, representative_name, priority, products, notes,
+        created_by_user_id
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, NULL, NULL, NULL,
+        NULL, $9, $10, $11, $12, NOW(), NOW(),
+        $13, $14, $15, $16, $17, $18, $19, $20
+      )`,
+      [
+        newId,
+        annCode,
+        sourceAnn.loading_date,
+        sourceAnn.delivery_date || null,
+        sourceAnn.line_type,
+        newStatus,
+        sourceAnn.cargo_value || 0,
+        sourceAnn.vehicle_type || 'ده چرخ',
+        sourceAnn.platform_arrival_time || null,
+        sourceAnn.carton_count || null,
+        sourceAnn.pallet_count || null,
+        sourceAnn.loading_type || null,
+        sourceAnn.origin_city || null,
+        sourceAnn.brand || null,
+        sourceAnn.representative_type || null,
+        sourceAnn.representative_name || null,
+        sourceAnn.priority || null,
+        sourceAnn.products || '[]',
+        sourceAnn.notes || null,
+        returnCreatorId,
+      ]
+    );
+
+    if (rejectionCol.rowCount > 0) {
+      await client.query(
+        `UPDATE freight_announcements SET rejection_reason = $1, updated_at = NOW() WHERE id = $2`,
+        [reason, newId]
+      );
+    } else {
+      await client.query(
+        `UPDATE freight_announcements
+         SET notes = COALESCE(notes, '') || $1, updated_at = NOW()
+         WHERE id = $2`,
+        [` برگشت به اعلام‌کننده: ${reason}`, newId]
+      );
+    }
+
+    await client.query(
+      `UPDATE freight_destinations
+       SET freight_announcement_id = $1,
+           created_at = NOW(),
+           original_created_by_user_id = COALESCE(original_created_by_user_id, $3)
+       WHERE id = $2`,
+      [newId, destinationId, returnCreatorId]
+    );
+
+    await logFreightHistory({
+      announcementId: effectiveSourceId,
+      userId,
+      userName: `${userName}${role ? ` - ${role}` : ''}`,
+      action: 'DESTINATION_RETURNED_OUT',
+      oldStatus,
+      newStatus: oldStatus,
+      description: `مقصد ${destCity} برای برگشت به اعلام‌کننده جدا شد → ${annCode}. علت: ${reason}`,
+      ipAddress: req.ip,
+      client,
+    });
+
+    await logFreightHistory({
+      announcementId: newId,
+      userId,
+      userName: `${userName}${role ? ` - ${role}` : ''}`,
+      action: 'RETURNED_TO_CREATOR',
+      oldStatus,
+      newStatus,
+      fieldChanges: {
+        returnReason: { old: null, new: reason },
+        created_from: { old: null, new: effectiveSourceId },
+        destination_id: { old: null, new: destinationId },
+      },
+      description: `برگشت از ترابری به اعلام‌کننده — فقط مقصد ${destCity} (از ${sourceAnn.announcement_code}). علت: ${reason}`,
+      ipAddress: req.ip,
+      client,
+    });
+
+    await client.query('COMMIT');
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        newId,
+        'returned_to_creator',
+        {
+          status: newStatus,
+          rejectionReason: reason,
+          createdByUserId: returnCreatorId,
+          sourceAnnouncementId: effectiveSourceId,
+          destinationId,
+        },
+        userId
+      );
+      realtimeService.notifyAnnouncementUpdate(
+        effectiveSourceId,
+        'destination_returned_out',
+        {
+          status: oldStatus,
+          destinationId,
+          returnedAnnouncementId: newId,
+        },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [returnDestinationToCreator] realtime error:', realtimeError);
+    }
+
+    return res.status(200).json({
+      message: `فقط مقصد ${destCity} به اعلام‌کننده برگشت داده شد؛ بقیه مقاصد در صف ترابری ماندند.`,
+      mode: 'split',
+      sourceAnnouncementId: effectiveSourceId,
+      returnedAnnouncementId: newId,
+      returnedAnnouncementCode: annCode,
+      destinationId,
+      status: newStatus,
+      createdByUserId: returnCreatorId,
+    });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Failed to return destination to creator:', e);
+    return res.status(500).json({ message: 'خطا در برگشت مقصد به اعلام‌کننده.' });
   } finally {
     client.release();
   }
@@ -7462,6 +7968,8 @@ module.exports = {
   getFreightAnnouncementById,
   approveAnnouncement,
   rejectAnnouncement,
+  returnAnnouncementToCreator,
+  returnDestinationToCreator,
   assignVehicleAndDriver,
   createFreightAnnouncement,
   updateFreightAnnouncement,
@@ -8649,12 +9157,17 @@ async function transferDestination(req, res) {
       newTimestamp: newCreatedAt.getTime()
     });
 
-    // انتقال مقصد: تغییر freight_announcement_id و created_at
+    // انتقال مقصد: تغییر freight_announcement_id و created_at — اعلام‌کننده اصلی مقصد حفظ می‌شود
     await client.query(
       `UPDATE freight_destinations
-       SET freight_announcement_id = $1, created_at = $2
+       SET freight_announcement_id = $1,
+           created_at = $2,
+           original_created_by_user_id = COALESCE(
+             original_created_by_user_id,
+             (SELECT created_by_user_id FROM freight_announcements WHERE id = $4)
+           )
        WHERE id = $3`,
-      [targetAnnouncementId, newCreatedAt, destinationId]
+      [targetAnnouncementId, newCreatedAt, destinationId, sourceAnnouncementId]
     );
 
     console.log('✅ [transferDestination] Destination transferred:', {
@@ -8927,8 +9440,9 @@ async function splitDestinationToNewAnnouncement(req, res) {
     const assignmentType = sourceAnn.assignment_type || 'company';
     const pendingStatus =
       assignmentType === 'personal' ? 'PendingPersonalAssignment' : 'PendingCompanyAssignment';
-    // اگر مبدا در صف تخصیص است همان وضعیت را نگه دار؛ وگرنه به صف برگردان
-    const keepPending = ['PendingPersonalAssignment', 'PendingCompanyAssignment', 'Assigned'].includes(
+    // ردیف جدید باید دوباره قابل تخصیص باشد؛ وضعیت Assigned را از مبدا کپی نکن
+    // (مبدا ممکن است Assigned باشد ولی راننده/خودرو روی اعلام‌بار جدید نمی‌آید)
+    const keepPending = ['PendingPersonalAssignment', 'PendingCompanyAssignment'].includes(
       String(sourceAnn.status || '')
     );
     const newStatus = keepPending ? sourceAnn.status : pendingStatus;

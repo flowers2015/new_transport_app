@@ -25,7 +25,8 @@ import {
     getMovingBlocksForDrag,
     groupRoutesByCity,
     loadPersistedArrangement,
-    mergeNewAnnouncementsIntoRoutes,
+    applyNewAnnouncementRowsToRoutes,
+    isRouteAssignmentLocked,
     moveBlockBetweenRoutes,
     reconcileRoutesCore,
     resolveTargetAnnouncementId,
@@ -80,6 +81,20 @@ type Props = {
     ) => Promise<import('../utils/optimisticUpdates').SplitDestinationResult>;
     onChangeVehicleType?: (announcementId: string, vehicleType: string) => Promise<boolean>;
     onRefresh?: () => void;
+    /** برگشت کل اعلام‌بار به اعلام‌کننده */
+    onReturnToCreator?: (announcementId: string, reason: string) => Promise<boolean>;
+    /** برگشت فقط یک مقصد به اعلام‌کننده */
+    onReturnDestinationToCreator?: (
+        sourceAnnouncementId: string,
+        destinationId: string,
+        reason: string
+    ) => Promise<{
+        ok: boolean;
+        mode?: 'whole' | 'split';
+        sourceAnnouncementId?: string;
+        returnedAnnouncementId?: string;
+        destinationId?: string;
+    }>;
 };
 
 type PanelDensity = 'compact' | 'detail';
@@ -91,9 +106,40 @@ type UndoEntry = {
 };
 
 const MAX_UNDO = 40;
+const ZOOM_STEPS = [0.7, 0.85, 1, 1.15, 1.3] as const;
+/** زوم پنل فشرده — حداقل خیلی کوچک تا همه ردیف‌ها در یک نما جا شوند */
+const COMPACT_ZOOM_STEPS = [0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 1, 1.15] as const;
+/** اندیس پیش‌فرض ≈ 55٪ تا ردیف‌های بیشتری دیده شود */
+const DEFAULT_COMPACT_ZOOM_INDEX = 3;
 /** پس‌زمینه نرم — نزدیک سفید ولی کمتر خسته‌کننده برای چشم */
 const PAGE_BG = 'bg-stone-100';
 const SURFACE_BG = 'bg-stone-50';
+
+const isReturnableAnnouncementStatus = (status?: string) => {
+    const s = String(status || '');
+    return (
+        !s ||
+        s === 'PendingPersonalAssignment' ||
+        s === 'PendingCompanyAssignment' ||
+        s.includes('در انتظار تخصیص')
+    );
+};
+
+const collectReturnableAnnouncementIds = (
+    stop: DairyArrangementStop,
+    announcementById: Map<string, FreightAnnouncement>
+): string[] => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const block of stopBlocks(stop)) {
+        if (seen.has(block.announcementId)) continue;
+        const ann = announcementById.get(block.announcementId);
+        if (!isReturnableAnnouncementStatus(ann?.status as string | undefined)) continue;
+        seen.add(block.announcementId);
+        ids.push(block.announcementId);
+    }
+    return ids;
+};
 
 const StopCard: React.FC<{
     stop: DairyArrangementStop;
@@ -104,10 +150,37 @@ const StopCard: React.FC<{
     draggable?: boolean;
     onDragStart: (dragKey: string, routeId: string) => void;
     onSplit?: (routeId: string, stopKey: string) => void;
-}> = ({ stop, slotIndex, routeId, density, announcementById, draggable = true, onDragStart, onSplit }) => {
+    onRequestReturn?: (routeId: string, stopKey: string) => void;
+    onRequestSplitToNew?: (routeId: string, stopKey: string) => void;
+    canShowReturn?: boolean;
+    canShowSplitToNew?: boolean;
+}> = ({
+    stop,
+    slotIndex,
+    routeId,
+    density,
+    announcementById,
+    draggable = true,
+    onDragStart,
+    onSplit,
+    onRequestReturn,
+    onRequestSplitToNew,
+    canShowReturn = false,
+    canShowSplitToNew = false,
+}) => {
     const mini = density === 'compact';
     const detail = formatStopCardDetail(stop, announcementById);
     const dragKey = stopDragKey(stop);
+    const returnableIds = collectReturnableAnnouncementIds(stop, announcementById);
+    const showReturn = canShowReturn && !!onRequestReturn && returnableIds.length > 0;
+    const blocks = stopBlocks(stop);
+    const canSplitToNew =
+        canShowSplitToNew &&
+        !!onRequestSplitToNew &&
+        blocks.some((b) => {
+            const ann = announcementById.get(b.announcementId);
+            return (ann?.destinations?.length || 0) > 1;
+        });
 
     return (
         <div
@@ -117,9 +190,13 @@ const StopCard: React.FC<{
                 e.dataTransfer.effectAllowed = 'move';
                 onDragStart(dragKey, routeId);
             }}
-            className={`w-full h-full rounded border-2 border-black ${SURFACE_BG} cursor-grab active:cursor-grabbing relative ${
+            className={`w-full h-full rounded border-2 ${
+                draggable
+                    ? `border-black ${SURFACE_BG} cursor-grab active:cursor-grabbing`
+                    : 'border-stone-400 bg-stone-100 text-stone-500 cursor-not-allowed'
+            } relative ${
                 detail.isMerged ? 'ring-2 ring-red-600' : ''
-            } ${mini ? 'p-1' : 'p-1.5'}`}
+            } ${mini ? 'p-1 pb-5' : 'p-1.5 pb-6'}`}
             title={detail.codes}
         >
             <div className="flex items-center justify-between gap-0.5">
@@ -153,20 +230,52 @@ const StopCard: React.FC<{
             {detail.products ? (
                 <div className={`text-black font-semibold truncate ${mini ? 'text-[8px]' : 'text-[10px]'}`}>{detail.products}</div>
             ) : null}
-            {detail.isMerged && onSplit && (
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onSplit(routeId, dragKey);
-                    }}
-                    className={`absolute bottom-0.5 left-0.5 rounded border-2 border-black ${SURFACE_BG} text-black font-bold hover:bg-stone-100 ${
-                        mini ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5'
-                    }`}
-                >
-                    تفکیک
-                </button>
-            )}
+            <div className="absolute bottom-0.5 left-0.5 flex flex-wrap gap-0.5 max-w-full">
+                {detail.isMerged && onSplit && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSplit(routeId, dragKey);
+                        }}
+                        className={`rounded border-2 border-black ${SURFACE_BG} text-black font-bold hover:bg-stone-100 ${
+                            mini ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5'
+                        }`}
+                    >
+                        تفکیک
+                    </button>
+                )}
+                {canSplitToNew && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRequestSplitToNew?.(routeId, dragKey);
+                        }}
+                        className={`rounded border-2 border-sky-700 text-sky-900 font-black hover:bg-sky-50 ${
+                            mini ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5'
+                        }`}
+                        title="جدا کردن این مقصد به ردیف/اعلام‌بار جدید در ترابری"
+                    >
+                        ردیف جدید
+                    </button>
+                )}
+                {showReturn && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRequestReturn?.(routeId, dragKey);
+                        }}
+                        className={`rounded border-2 border-amber-700 text-amber-900 font-black hover:bg-amber-50 ${
+                            mini ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5'
+                        }`}
+                        title="برگشت فقط این مقصد به اعلام‌کننده"
+                    >
+                        برگشت
+                    </button>
+                )}
+            </div>
         </div>
     );
 };
@@ -188,6 +297,8 @@ const RouteRow: React.FC<{
     onApprove: (routeId: string) => void;
     onUnapprove: (routeId: string) => void;
     onSuggest: (routeId: string) => void;
+    onRequestReturn?: (routeId: string, stopKey: string) => void;
+    onRequestSplitToNew?: (routeId: string, stopKey: string) => void;
 }> = ({
     route,
     rowIndex,
@@ -201,6 +312,8 @@ const RouteRow: React.FC<{
     onApprove,
     onUnapprove,
     onSuggest,
+    onRequestReturn,
+    onRequestSplitToNew,
 }) => {
     const mini = density === 'compact';
     const tonnage = sumRouteTonnageKg(route);
@@ -212,23 +325,35 @@ const RouteRow: React.FC<{
     const firstStop = slots.find((s) => s != null);
     const firstBlock = firstStop ? stopBlocks(firstStop)[0] : undefined;
     const primaryCode = firstBlock?.announcementCode || '—';
+    const assignmentLocked = isRouteAssignmentLocked(route, announcementById);
+    const interactionLocked = route.approved || assignmentLocked;
 
     const handleDrop = (e: React.DragEvent, targetIndex?: number) => {
         e.preventDefault();
         e.stopPropagation();
-        if (route.approved) return;
+        if (interactionLocked) return;
         const mime = e.dataTransfer.getData(DAIRY_ARRANGEMENT_DRAG_MIME);
         const payload = decodeDragPayload(mime);
         onDropOnRoute(route.id, targetIndex, payload ?? undefined);
     };
 
+    const assignedAnn = firstBlock ? announcementById.get(firstBlock.announcementId) : undefined;
+    const assignedLabel = assignmentLocked
+        ? [assignedAnn?.assignedDriverName, assignedAnn?.assignedVehiclePlate].filter(Boolean).join(' · ') ||
+          'تخصیص خودرو و راننده'
+        : '';
+
     return (
         <div
-            className={`rounded border-2 transition-colors ${SURFACE_BG} ${
-                route.approved ? 'border-red-600 opacity-95' : 'border-black hover:border-red-700'
+            className={`rounded border-2 transition-colors ${
+                assignmentLocked
+                    ? 'bg-stone-200 border-stone-400 opacity-80'
+                    : route.approved
+                      ? `${SURFACE_BG} border-red-600 opacity-95`
+                      : `${SURFACE_BG} border-black hover:border-red-700`
             } ${mini ? 'p-1' : 'p-2'}`}
             onDragOver={(e) => {
-                if (route.approved) return;
+                if (interactionLocked) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
             }}
@@ -236,25 +361,37 @@ const RouteRow: React.FC<{
         >
             <div className={`flex flex-wrap items-center gap-1 ${mini ? 'mb-0.5' : 'mb-1.5'}`}>
                 {!mini && (
-                    <span className="font-black text-black shrink-0 text-xs w-5">
+                    <span className={`font-black shrink-0 text-xs w-5 ${assignmentLocked ? 'text-stone-500' : 'text-black'}`}>
                         {rowIndex.toLocaleString('fa-IR')}
                     </span>
                 )}
                 <span
-                    className={`font-black text-black shrink-0 truncate ${
-                        mini ? 'text-[9px] max-w-[3.5rem]' : 'text-sm max-w-[6rem]'
-                    }`}
+                    className={`font-black shrink-0 truncate ${
+                        assignmentLocked ? 'text-stone-500' : 'text-black'
+                    } ${mini ? 'text-[9px] max-w-[3.5rem]' : 'text-sm max-w-[6rem]'}`}
                 >
                     {primaryCode}
                 </span>
+                {assignmentLocked && (
+                    <span
+                        className={`shrink-0 rounded border border-stone-500 bg-stone-300 text-stone-700 font-black ${
+                            mini ? 'text-[8px] px-1 py-0' : 'text-[10px] px-1.5 py-0.5'
+                        }`}
+                        title={assignedLabel}
+                    >
+                        تخصیص‌شده
+                    </span>
+                )}
                 <select
                     value={route.vehicleType}
-                    disabled={route.approved}
+                    disabled={interactionLocked}
                     onChange={(e) => onVehicleChange(route.id, e.target.value)}
-                    className={`border-2 border-black rounded ${SURFACE_BG} shrink-0 font-bold text-black ${
-                        mini ? 'text-[8px] px-0.5 py-0 min-w-[3.5rem]' : 'text-xs px-1 py-0.5 min-w-[5rem]'
-                    }`}
-                    title="تغییر نوع خودرو — در سیستم ثبت می‌شود"
+                    className={`border-2 rounded shrink-0 font-bold ${
+                        assignmentLocked
+                            ? 'border-stone-400 bg-stone-200 text-stone-500 cursor-not-allowed'
+                            : `border-black ${SURFACE_BG} text-black`
+                    } ${mini ? 'text-[8px] px-0.5 py-0 min-w-[3.5rem]' : 'text-xs px-1 py-0.5 min-w-[5rem]'}`}
+                    title={assignmentLocked ? 'ردیف تخصیص‌شده — تغییر مجاز نیست' : 'تغییر نوع خودرو — در سیستم ثبت می‌شود'}
                 >
                     {DAIRY_ARRANGEMENT_VEHICLE_TYPES.map((vt) => (
                         <option key={vt} value={vt}>
@@ -263,12 +400,16 @@ const RouteRow: React.FC<{
                     ))}
                 </select>
                 <span
-                    className={`font-black px-1 rounded border-2 shrink-0 ${capClass} ${mini ? 'text-[9px]' : 'text-sm'}`}
+                    className={`font-black px-1 rounded border-2 shrink-0 ${
+                        assignmentLocked
+                            ? 'text-stone-500 bg-stone-200 border-stone-400'
+                            : capClass
+                    } ${mini ? 'text-[9px]' : 'text-sm'}`}
                     title={capTitle}
                 >
                     {tonnage.toLocaleString('fa-IR')} kg
                 </span>
-                {!route.approved && (
+                {!interactionLocked && (
                     <button
                         type="button"
                         onClick={() => onSuggest(route.id)}
@@ -280,7 +421,7 @@ const RouteRow: React.FC<{
                         پیشنهاد
                     </button>
                 )}
-                {!mini && (
+                {!mini && !assignmentLocked && (
                     <div className="mr-auto shrink-0">
                         {route.approved ? (
                             <button
@@ -309,11 +450,13 @@ const RouteRow: React.FC<{
                 {slots.map((stop, idx) => (
                     <div
                         key={`slot-${route.id}-${idx}`}
-                        className={`flex-1 min-w-0 rounded border border-dashed border-black/70 bg-stone-200/30 flex items-stretch ${
-                            mini ? 'min-h-[3.75rem]' : 'min-h-[5rem]'
-                        }`}
+                        className={`flex-1 min-w-0 rounded border border-dashed flex items-stretch ${
+                            assignmentLocked
+                                ? 'border-stone-400 bg-stone-300/40'
+                                : 'border-black/70 bg-stone-200/30'
+                        } ${mini ? 'min-h-[3.75rem]' : 'min-h-[5rem]'}`}
                         onDragOver={(e) => {
-                            if (route.approved) return;
+                            if (interactionLocked) return;
                             e.preventDefault();
                             e.stopPropagation();
                         }}
@@ -326,26 +469,40 @@ const RouteRow: React.FC<{
                                 routeId={route.id}
                                 density={density}
                                 announcementById={announcementById}
-                                draggable={!route.approved}
+                                draggable={!interactionLocked}
                                 onDragStart={onDragStart}
-                                onSplit={onSplitStop}
+                                onSplit={interactionLocked ? undefined : onSplitStop}
+                                onRequestReturn={onRequestReturn}
+                                onRequestSplitToNew={onRequestSplitToNew}
+                                canShowReturn={!interactionLocked}
+                                canShowSplitToNew={!interactionLocked}
                             />
                         ) : (
-                            <span className={`text-black font-bold m-auto ${mini ? 'text-[8px]' : 'text-xs'}`}>{idx + 1}</span>
+                            <span
+                                className={`font-bold m-auto ${
+                                    assignmentLocked ? 'text-stone-400' : 'text-black'
+                                } ${mini ? 'text-[8px]' : 'text-xs'}`}
+                            >
+                                {idx + 1}
+                            </span>
                         )}
                     </div>
                 ))}
             </div>
-            {dragSource && dragSource.routeId !== route.id && !route.approved && (
+            {dragSource && dragSource.routeId !== route.id && !interactionLocked && (
                 <p className={`text-red-700 font-bold mt-0.5 ${mini ? 'text-[8px]' : 'text-xs'}`}>
                     رها کنید — جابجایی در سیستم ثبت می‌شود
                 </p>
             )}
-            {route.approved && (
+            {assignmentLocked ? (
+                <p className={`text-stone-600 mt-0.5 font-black ${mini ? 'text-[8px]' : 'text-xs'}`}>
+                    تخصیص‌شده{assignedLabel ? ` — ${assignedLabel}` : ''} — همه فعالیت‌ها غیرفعال
+                </p>
+            ) : route.approved ? (
                 <p className={`text-red-700 mt-0.5 font-black ${mini ? 'text-[8px]' : 'text-xs'}`}>
                     تأیید شده — جابجایی غیرفعال
                 </p>
-            )}
+            ) : null}
         </div>
     );
 };
@@ -367,6 +524,8 @@ const CitySection: React.FC<{
     onApprove: (routeId: string) => void;
     onUnapprove: (routeId: string) => void;
     onSuggest: (routeId: string) => void;
+    onRequestReturn?: (routeId: string, stopKey: string) => void;
+    onRequestSplitToNew?: (routeId: string, stopKey: string) => void;
 }> = ({
     city,
     routes,
@@ -380,6 +539,8 @@ const CitySection: React.FC<{
     onApprove,
     onUnapprove,
     onSuggest,
+    onRequestReturn,
+    onRequestSplitToNew,
 }) => {
     const mini = density === 'compact';
     const totalTonnage = routes.reduce((sum, r) => sum + sumRouteTonnageKg(r), 0);
@@ -419,6 +580,8 @@ const CitySection: React.FC<{
                         onApprove={onApprove}
                         onUnapprove={onUnapprove}
                         onSuggest={onSuggest}
+                        onRequestReturn={onRequestReturn}
+                        onRequestSplitToNew={onRequestSplitToNew}
                     />
                 ))}
             </div>
@@ -435,6 +598,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     onSplitDestinationToNew,
     onChangeVehicleType,
     onRefresh,
+    onReturnToCreator,
+    onReturnDestinationToCreator,
 }) => {
     const [routes, setRoutes] = useState<DairyArrangementRoute[]>([]);
     const routesRef = useRef<DairyArrangementRoute[]>([]);
@@ -445,6 +610,18 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const [isApplying, setIsApplying] = useState(false);
     const [detailPanelPercent, setDetailPanelPercent] = useState(67);
     const [suggestRouteId, setSuggestRouteId] = useState<string | null>(null);
+    const [detailZoomIndex, setDetailZoomIndex] = useState(2);
+    const [compactZoomIndex, setCompactZoomIndex] = useState(DEFAULT_COMPACT_ZOOM_INDEX);
+    const compactScrollRef = useRef<HTMLDivElement>(null);
+    const compactContentRef = useRef<HTMLDivElement>(null);
+    const [returnTarget, setReturnTarget] = useState<{
+        routeId: string;
+        stopKey: string;
+        items: Array<{ announcementId: string; destinationId: string; city: string }>;
+        cityLabel: string;
+    } | null>(null);
+    const [returnReason, setReturnReason] = useState('');
+    const [isReturning, setIsReturning] = useState(false);
     const panelContainerRef = useRef<HTMLDivElement>(null);
     const panelDragRef = useRef<{ startX: number; startPct: number } | null>(null);
     const wasOpenRef = useRef(false);
@@ -508,17 +685,14 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         const removed = [...prevIdSet].filter((id) => !newIdSet.has(id));
         const added = [...newIdSet].filter((id) => !prevIdSet.has(id));
 
-        if (removed.length > 0) {
+        if (added.length > 0) {
+            logArrangement('MERGE new announcements', { added, removed });
+            setRoutes((prev) => applyNewAnnouncementRowsToRoutes(prev, ann, added));
+        } else if (removed.length > 0) {
             logArrangement('PRUNE removed announcements', { removed });
             setRoutes((prev) => {
                 const idx = buildApprovalIndex(prev);
                 return dedupeRoutesById(reapplyApprovalsFromIndex(reconcileRoutesCore(prev, ann), idx));
-            });
-        } else if (added.length > 0) {
-            logArrangement('MERGE new announcements', { added });
-            setRoutes((prev) => {
-                const idx = buildApprovalIndex(prev);
-                return dedupeRoutesById(reapplyApprovalsFromIndex(mergeNewAnnouncementsIntoRoutes(prev, ann), idx));
             });
         }
 
@@ -631,12 +805,13 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 logArrangementRoutes('DROP success reconciled', reconciled);
                 setRoutes(reconciled);
                 savePersistedArrangement(userId, reconciled);
+                onRefresh?.();
                 return true;
             } finally {
                 setIsApplying(false);
             }
         },
-        [onTransferDestination, userId, pushUndo, runTransferOps]
+        [onTransferDestination, userId, pushUndo, runTransferOps, onRefresh]
     );
 
     const handleDropOnRoute = useCallback(
@@ -662,12 +837,35 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             const currentRoutes = routesRef.current;
             const sourceRoute = currentRoutes.find((r) => r.id === source.sourceRouteId);
             const targetRouteBefore = currentRoutes.find((r) => r.id === targetRouteId);
-            if (targetRouteBefore?.approved) {
-                logArrangement('DROP blocked', { reason: 'target route approved', targetRouteId });
+            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            if (
+                !targetRouteBefore ||
+                targetRouteBefore.approved ||
+                isRouteAssignmentLocked(targetRouteBefore, annMap)
+            ) {
+                logArrangement('DROP blocked', {
+                    reason: !targetRouteBefore
+                        ? 'target missing'
+                        : targetRouteBefore.approved
+                          ? 'target route approved'
+                          : 'target route assignment-locked',
+                    targetRouteId,
+                });
                 return;
             }
-            if (sourceRoute?.approved) {
-                logArrangement('DROP blocked', { reason: 'source route approved', sourceRouteId: source.sourceRouteId });
+            if (
+                !sourceRoute ||
+                sourceRoute.approved ||
+                isRouteAssignmentLocked(sourceRoute, annMap)
+            ) {
+                logArrangement('DROP blocked', {
+                    reason: !sourceRoute
+                        ? 'source missing'
+                        : sourceRoute.approved
+                          ? 'source route approved'
+                          : 'source route assignment-locked',
+                    sourceRouteId: source.sourceRouteId,
+                });
                 return;
             }
 
@@ -690,7 +888,6 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             const targetRoute = nextRoutes.find((r) => r.id === targetRouteId);
             const targetAnnId = targetRoute ? resolveTargetAnnouncementId(targetRoute) : null;
 
-            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
             let ops = targetAnnId
                 ? collectTransferOpsForMove(nextRoutes, targetRouteId, movingBlocks, annMap).sort(
                       (a, b) => a.newPosition - b.newPosition
@@ -735,6 +932,9 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     const handleSplitStop = useCallback(
         (routeId: string, stopKey: string) => {
+            const route = routesRef.current.find((r) => r.id === routeId);
+            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            if (!route || route.approved || isRouteAssignmentLocked(route, annMap)) return;
             pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
             setRoutes((prev) => splitStopInRoute(prev, routeId, stopKey));
         },
@@ -745,7 +945,15 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         async (routeId: string, vehicleType: string) => {
             const currentRoutes = routesRef.current;
             const route = currentRoutes.find((r) => r.id === routeId);
-            if (!route || route.approved || route.vehicleType === vehicleType) return;
+            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            if (
+                !route ||
+                route.approved ||
+                isRouteAssignmentLocked(route, annMap) ||
+                route.vehicleType === vehicleType
+            ) {
+                return;
+            }
 
             const annId = resolveTargetAnnouncementId(route);
             if (!annId) return;
@@ -779,6 +987,9 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     const handleApprove = useCallback(
         (routeId: string) => {
+            const route = routesRef.current.find((r) => r.id === routeId);
+            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            if (!route || isRouteAssignmentLocked(route, annMap)) return;
             pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
             setRoutes((prev) => {
                 const next = setRouteApproved(prev, routeId, true);
@@ -791,6 +1002,9 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     const handleUnapprove = useCallback(
         (routeId: string) => {
+            const route = routesRef.current.find((r) => r.id === routeId);
+            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            if (!route || isRouteAssignmentLocked(route, annMap)) return;
             pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
             setRoutes((prev) => {
                 const next = setRouteApproved(prev, routeId, false);
@@ -857,7 +1071,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     const handleOpenSuggest = useCallback((routeId: string) => {
         const route = routesRef.current.find((r) => r.id === routeId);
-        if (!route || route.approved) return;
+        const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+        if (!route || route.approved || isRouteAssignmentLocked(route, annMap)) return;
         setSuggestRouteId(routeId);
     }, []);
 
@@ -866,7 +1081,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             if (!suggestRouteId) return;
             const currentRoutes = routesRef.current;
             const target = currentRoutes.find((r) => r.id === suggestRouteId);
-            if (!target || target.approved) return;
+            const annMapForLock = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            if (!target || target.approved || isRouteAssignmentLocked(target, annMapForLock)) return;
 
             const removeIds = new Set((suggestion.removeStops || []).map((s) => s.destinationId));
             const alreadyIds = new Set(
@@ -1008,7 +1224,247 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         onApprove: handleApprove,
         onUnapprove: handleUnapprove,
         onSuggest: handleOpenSuggest,
+        onRequestReturn: onReturnDestinationToCreator || onReturnToCreator
+            ? (routeId: string, stopKey: string) => {
+                  const route = routesRef.current.find((r) => r.id === routeId);
+                  if (!route) return;
+                  const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+                  if (isRouteAssignmentLocked(route, annMap)) {
+                      alert('این ردیف تخصیص خودرو و راننده شده و قابل تغییر نیست.');
+                      return;
+                  }
+                  if (route.approved) {
+                      alert('برای برگشت، ابتدا ردیف را با دکمه «باز» از حالت تأیید خارج کنید.');
+                      return;
+                  }
+                  const stop =
+                      route.stops.find((s) => s && stopDragKey(s) === stopKey) ||
+                      route.stops.find((s) =>
+                          s ? stopBlocks(s).some((b) => stopKey.includes(b.destinationId)) : false
+                      );
+                  if (!stop) {
+                      alert('کارت مقصد یافت نشد.');
+                      return;
+                  }
+                  const items: Array<{ announcementId: string; destinationId: string; city: string }> = [];
+                  const seen = new Set<string>();
+                  for (const block of stopBlocks(stop)) {
+                      if (seen.has(block.destinationId)) continue;
+                      const ann = announcementById.get(block.announcementId);
+                      if (!isReturnableAnnouncementStatus(ann?.status as string | undefined)) continue;
+                      seen.add(block.destinationId);
+                      items.push({
+                          announcementId: block.announcementId,
+                          destinationId: block.destinationId,
+                          city: block.destination.city?.trim() || 'مقصد',
+                      });
+                  }
+                  if (items.length === 0) {
+                      alert('این کارت قابل برگشت نیست (فقط بارهای در انتظار تخصیص).');
+                      return;
+                  }
+                  const cityLabel = items.map((i) => i.city).join('، ');
+                  setReturnTarget({ routeId, stopKey, items, cityLabel });
+                  setReturnReason('');
+              }
+            : undefined,
+        onRequestSplitToNew: onSplitDestinationToNew
+            ? async (routeId: string, stopKey: string) => {
+                  const route = routesRef.current.find((r) => r.id === routeId);
+                  if (!route) return;
+                  const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+                  if (isRouteAssignmentLocked(route, annMap)) {
+                      alert('این ردیف تخصیص خودرو و راننده شده و قابل تغییر نیست.');
+                      return;
+                  }
+                  if (route.approved) {
+                      alert('برای جداسازی، ابتدا ردیف را با دکمه «باز» از حالت تأیید خارج کنید.');
+                      return;
+                  }
+                  const stop =
+                      route.stops.find((s) => s && stopDragKey(s) === stopKey) ||
+                      route.stops.find((s) =>
+                          s ? stopBlocks(s).some((b) => stopKey.includes(b.destinationId)) : false
+                      );
+                  if (!stop) {
+                      alert('کارت مقصد یافت نشد.');
+                      return;
+                  }
+                  const blocks = stopBlocks(stop);
+                  const splitable = blocks.filter((b) => {
+                      const ann = announcementById.get(b.announcementId);
+                      return (ann?.destinations?.length || 0) > 1;
+                  });
+                  if (splitable.length === 0) {
+                      alert('این مقصد تنها مقصد اعلام‌بار است؛ برای ردیف جدا همین الان اعلام‌بار مستقل دارد.');
+                      return;
+                  }
+                  if (
+                      !confirm(
+                          `مقصد(های) «${formatStopCardDetail(stop, announcementById).city}» به ردیف/اعلام‌بار جدید در ترابری منتقل شوند؟`
+                      )
+                  ) {
+                      return;
+                  }
+                  setIsApplying(true);
+                  try {
+                      // همه مقصدهای قابل جداسازی این کارت را به یک ردیف جدید ببر
+                      const first = splitable[0];
+                      const firstResult = await onSplitDestinationToNew(first.announcementId, first.destinationId, {
+                          vehicleType: route.vehicleType,
+                          silent: true,
+                      });
+                      if (!firstResult.ok || !firstResult.newAnnouncementId) {
+                          alert('جداسازی به ردیف جدید ناموفق بود.');
+                          return;
+                      }
+                      const newId = firstResult.newAnnouncementId;
+                      let workingAnnouncements = firstResult.announcements || announcementsRef.current;
+                      for (let i = 1; i < splitable.length; i += 1) {
+                          const b = splitable[i];
+                          // اگر هنوز روی همان منبع است، به اعلام‌بار جدید منتقل کن
+                          const stillOnSource = workingAnnouncements
+                              .find((a) => a.id === b.announcementId)
+                              ?.destinations?.some((d) => d.id === b.destinationId);
+                          if (!stillOnSource) continue;
+                          const transferResult = await onTransferDestination(
+                              b.announcementId,
+                              b.destinationId,
+                              newId,
+                              i + 1,
+                              { silent: true }
+                          );
+                          if (transferResult.ok && transferResult.announcements) {
+                              workingAnnouncements = transferResult.announcements;
+                          }
+                      }
+                      announcementsRef.current = workingAnnouncements;
+                      const nextRoutes = applyNewAnnouncementRowsToRoutes(
+                          routesRef.current,
+                          workingAnnouncements,
+                          [newId]
+                      );
+                      setRoutes(nextRoutes);
+                      savePersistedArrangement(userId, nextRoutes);
+                      syncedIdsRef.current = buildDairyAnnouncementIdsKey(workingAnnouncements);
+                      onRefresh?.();
+                      alert('مقصد به ردیف جدید منتقل شد.');
+                  } finally {
+                      setIsApplying(false);
+                  }
+              }
+            : undefined,
     };
+
+    const detailZoomScale = ZOOM_STEPS[detailZoomIndex] ?? 1;
+    const compactZoomScale = COMPACT_ZOOM_STEPS[compactZoomIndex] ?? 1;
+
+    const fitCompactAllRows = useCallback(() => {
+        const scrollEl = compactScrollRef.current;
+        const contentEl = compactContentRef.current;
+        if (!scrollEl || !contentEl) return;
+
+        const prevZoom = contentEl.style.zoom;
+        contentEl.style.zoom = '1';
+        const contentH = contentEl.scrollHeight || contentEl.offsetHeight;
+        const contentW = contentEl.scrollWidth || contentEl.offsetWidth;
+        contentEl.style.zoom = prevZoom;
+
+        const availH = Math.max(1, scrollEl.clientHeight - 8);
+        const availW = Math.max(1, scrollEl.clientWidth - 8);
+        if (contentH <= 0) return;
+
+        const target = Math.min(1, availH / contentH, availW / contentW);
+        // بزرگ‌ترین پله‌ای که از target بیشتر نباشد تا همه جا شوند
+        let bestIdx = 0;
+        for (let i = 0; i < COMPACT_ZOOM_STEPS.length; i += 1) {
+            if (COMPACT_ZOOM_STEPS[i] <= target + 0.001) bestIdx = i;
+        }
+        setCompactZoomIndex(bestIdx);
+        requestAnimationFrame(() => {
+            if (compactScrollRef.current) compactScrollRef.current.scrollTop = 0;
+        });
+    }, []);
+
+    const handleConfirmReturn = useCallback(async () => {
+        if (!returnTarget) return;
+        const reason = returnReason.trim();
+        if (!reason) {
+            alert('علت برگشت الزامی است.');
+            return;
+        }
+        const route = routesRef.current.find((r) => r.id === returnTarget.routeId);
+        if (!route) return;
+        const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+        if (isRouteAssignmentLocked(route, annMap)) {
+            alert('این ردیف تخصیص خودرو و راننده شده و قابل تغییر نیست.');
+            return;
+        }
+        if (route.approved) {
+            alert('برای برگشت، ابتدا ردیف را باز کنید.');
+            return;
+        }
+        setIsReturning(true);
+        try {
+            const returnedDestIds = new Set<string>();
+            const removedAnnIds = new Set<string>();
+            let okCount = 0;
+
+            for (const item of returnTarget.items) {
+                if (onReturnDestinationToCreator) {
+                    const result = await onReturnDestinationToCreator(
+                        item.announcementId,
+                        item.destinationId,
+                        reason
+                    );
+                    if (!result.ok) continue;
+                    okCount += 1;
+                    if (result.destinationId) returnedDestIds.add(result.destinationId);
+                    else returnedDestIds.add(item.destinationId);
+                    if (result.mode === 'whole' || result.returnedAnnouncementId === result.sourceAnnouncementId) {
+                        removedAnnIds.add(result.sourceAnnouncementId || item.announcementId);
+                    }
+                } else if (onReturnToCreator) {
+                    const ok = await onReturnToCreator(item.announcementId, reason);
+                    if (!ok) continue;
+                    okCount += 1;
+                    removedAnnIds.add(item.announcementId);
+                }
+            }
+
+            if (okCount === 0) return;
+
+            const remainingAnn = announcementsRef.current
+                .filter((a) => !removedAnnIds.has(a.id))
+                .map((a) => ({
+                    ...a,
+                    destinations: (a.destinations || []).filter((d) => !returnedDestIds.has(d.id)),
+                }))
+                .filter((a) => (a.destinations || []).length > 0);
+            announcementsRef.current = remainingAnn;
+            setRoutes((prev) => {
+                const idx = buildApprovalIndex(prev);
+                const next = dedupeRoutesById(
+                    reapplyApprovalsFromIndex(reconcileRoutesCore(prev, remainingAnn), idx)
+                );
+                savePersistedArrangement(userId, next);
+                return next;
+            });
+            syncedIdsRef.current = buildDairyAnnouncementIdsKey(remainingAnn);
+            setReturnTarget(null);
+            setReturnReason('');
+            onRefresh?.();
+        } finally {
+            setIsReturning(false);
+        }
+    }, [
+        returnTarget,
+        returnReason,
+        onReturnDestinationToCreator,
+        onReturnToCreator,
+        userId,
+        onRefresh,
+    ]);
 
     if (!isOpen) return null;
 
@@ -1102,11 +1558,41 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                                 className={`min-w-0 flex flex-col rounded border-2 border-black ${SURFACE_BG} overflow-hidden`}
                                 style={{ width: `${detailPanelPercent}%` }}
                             >
-                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black`}>
-                                    پنل جزئیات — {filteredRoutes.length.toLocaleString('fa-IR')} ردیف
+                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black flex items-center gap-2`}>
+                                    <span>پنل جزئیات — {filteredRoutes.length.toLocaleString('fa-IR')} ردیف</span>
+                                    <div className={`mr-auto flex items-center gap-0.5 border-2 border-black rounded ${SURFACE_BG}`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDetailZoomIndex((i) => Math.max(0, i - 1))}
+                                            disabled={detailZoomIndex <= 0}
+                                            className="px-1.5 py-0.5 text-xs font-black hover:bg-stone-100 disabled:opacity-40"
+                                            title="کوچک‌نمایی پنل جزئیات"
+                                        >
+                                            −
+                                        </button>
+                                        <span className="text-[10px] font-bold px-1 min-w-[2.25rem] text-center tabular-nums">
+                                            {Math.round(detailZoomScale * 100)}%
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDetailZoomIndex((i) => Math.min(ZOOM_STEPS.length - 1, i + 1))}
+                                            disabled={detailZoomIndex >= ZOOM_STEPS.length - 1}
+                                            className="px-1.5 py-0.5 text-xs font-black hover:bg-stone-100 disabled:opacity-40"
+                                            title="بزرگ‌نمایی پنل جزئیات"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 ${PAGE_BG}`}>
-                                    {renderCitySections('detail')}
+                                    <div
+                                        style={{
+                                            zoom: detailZoomScale,
+                                            transformOrigin: 'top right',
+                                        }}
+                                    >
+                                        {renderCitySections('detail')}
+                                    </div>
                                 </div>
                             </div>
 
@@ -1122,11 +1608,53 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                             </div>
 
                             <div className={`flex-1 min-w-0 flex flex-col rounded border-2 border-black ${SURFACE_BG} overflow-hidden`}>
-                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black`}>
-                                    نمای فشرده
+                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black flex items-center gap-2`}>
+                                    <span>نمای فشرده</span>
+                                    <div className={`mr-auto flex items-center gap-0.5 border-2 border-black rounded ${SURFACE_BG}`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCompactZoomIndex((i) => Math.max(0, i - 1))}
+                                            disabled={compactZoomIndex <= 0}
+                                            className="px-1.5 py-0.5 text-xs font-black hover:bg-stone-100 disabled:opacity-40"
+                                            title="کوچک‌نمایی — ردیف‌های بیشتر"
+                                        >
+                                            −
+                                        </button>
+                                        <span className="text-[10px] font-bold px-1 min-w-[2.25rem] text-center tabular-nums">
+                                            {Math.round(compactZoomScale * 100)}%
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCompactZoomIndex((i) => Math.min(COMPACT_ZOOM_STEPS.length - 1, i + 1))}
+                                            disabled={compactZoomIndex >= COMPACT_ZOOM_STEPS.length - 1}
+                                            className="px-1.5 py-0.5 text-xs font-black hover:bg-stone-100 disabled:opacity-40"
+                                            title="بزرگ‌نمایی نمای فشرده"
+                                        >
+                                            +
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={fitCompactAllRows}
+                                            className="px-1.5 py-0.5 text-[10px] font-black border-r-2 border-black hover:bg-red-50 text-red-700"
+                                            title="زوم را طوری تنظیم کن که همه ردیف‌ها در پنل دیده شوند"
+                                        >
+                                            همه
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-1 ${PAGE_BG}`}>
-                                    {renderCitySections('compact')}
+                                <div
+                                    ref={compactScrollRef}
+                                    className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-1 ${PAGE_BG}`}
+                                >
+                                    <div
+                                        ref={compactContentRef}
+                                        style={{
+                                            zoom: compactZoomScale,
+                                            transformOrigin: 'top right',
+                                        }}
+                                    >
+                                        {renderCitySections('compact')}
+                                    </div>
                                 </div>
                             </div>
                         </>
@@ -1152,6 +1680,51 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                     onConfirm={handleConfirmSuggestion}
                     isApplying={isApplying}
                 />
+            )}
+
+            {returnTarget && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" dir="rtl">
+                    <div className={`w-full max-w-md rounded-lg border-2 border-black ${SURFACE_BG} shadow-xl p-4`}>
+                        <h3 className="text-base font-black text-black mb-1">برگشت کارت مقصد به اعلام‌کننده</h3>
+                        <p className="text-xs text-black font-semibold mb-3">
+                            فقط مقصد «{returnTarget.cityLabel}» به اعلام‌کننده برمی‌گردد.
+                            {returnTarget.items.length > 1
+                                ? ` (${returnTarget.items.length.toLocaleString('fa-IR')} مقصد روی کارت)`
+                                : ''}{' '}
+                            اگر اعلام‌بار چند مقصد داشته باشد، بقیه در چیدمان/صف ترابری می‌مانند.
+                        </p>
+                        <label className="block text-xs font-bold text-black mb-1">علت برگشت (اجباری)</label>
+                        <textarea
+                            value={returnReason}
+                            onChange={(e) => setReturnReason(e.target.value)}
+                            rows={3}
+                            className="w-full border-2 border-black rounded-md px-2 py-1.5 text-sm font-semibold"
+                            placeholder="مثلاً: تناژ باید اصلاح شود"
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-2 mt-3">
+                            <button
+                                type="button"
+                                disabled={isReturning}
+                                onClick={() => {
+                                    setReturnTarget(null);
+                                    setReturnReason('');
+                                }}
+                                className={`px-3 py-1.5 text-xs font-bold rounded border-2 border-black ${SURFACE_BG}`}
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isReturning || !returnReason.trim()}
+                                onClick={handleConfirmReturn}
+                                className="px-3 py-1.5 text-xs font-black rounded border-2 border-amber-800 bg-amber-700 text-white disabled:opacity-40"
+                            >
+                                {isReturning ? 'در حال برگشت...' : 'تأیید برگشت'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

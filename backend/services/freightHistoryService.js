@@ -222,6 +222,7 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       'ChangeRequested': 'درخواست تغییر',
       'Reannounced': 'اعلام مجدد شده',
       'Leftover': 'بار مانده',
+      'ReturnedToCreator': 'برگشت به اعلام‌کننده',
       'Archived': 'بایگانی شده',
       'رد شده': 'رد شده',
       'پیش‌نویس': 'پیش‌نویس',
@@ -235,6 +236,7 @@ function generateChangeDescription(action, fieldChanges, oldStatus, newStatus, l
       'درخواست تغییر': 'درخواست تغییر',
       'اعلام مجدد شده': 'اعلام مجدد شده',
       'بار مانده': 'بار مانده',
+      'برگشت به اعلام‌کننده': 'برگشت به اعلام‌کننده',
       'بایگانی شده': 'بایگانی شده'
     };
     

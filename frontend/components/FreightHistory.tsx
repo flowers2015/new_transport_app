@@ -192,6 +192,10 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
     [FreightAnnouncementStatus.Finalized]: 'bg-teal-100 text-teal-800',
     [FreightAnnouncementStatus.Cancelled]: 'bg-slate-100 text-slate-800',
     [FreightAnnouncementStatus.ReAnnounced]: 'bg-gray-400 text-white',
+    [FreightAnnouncementStatus.Leftover]: 'bg-red-200 text-red-900',
+    [FreightAnnouncementStatus.ReturnedToCreator]: 'bg-amber-100 text-amber-900',
+    [FreightAnnouncementStatus.ChangeRequested]: 'bg-orange-200 text-orange-900',
+    [FreightAnnouncementStatus.Archived]: 'bg-slate-300 text-slate-800',
 };
 
 

@@ -5,7 +5,7 @@
 
 const pool = require('../db');
 
-const REQUIRED_STATUSES = ['ChangeRequested', 'Archived', 'Leftover'];
+const REQUIRED_STATUSES = ['ChangeRequested', 'Archived', 'Leftover', 'ReturnedToCreator'];
 
 async function run() {
   const client = await pool.connect();

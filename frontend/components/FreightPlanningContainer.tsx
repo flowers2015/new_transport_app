@@ -38,6 +38,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 Cancelled: FreightAnnouncementStatus.Cancelled,
                 ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
                 Leftover: FreightAnnouncementStatus.Leftover,
+                ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
                 ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
                 Archived: FreightAnnouncementStatus.Archived,
             };
@@ -120,8 +121,18 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                                 }
                             })()
                           : [],
+                    originalCreatedByUserId:
+                        d.original_created_by_user_id ||
+                        d.originalCreatedByUserId ||
+                        d.original_creator_user_id ||
+                        null,
+                    originalCreatorFullName:
+                        d.original_creator_full_name || d.originalCreatorFullName || null,
+                    originalCreatorUsername:
+                        d.original_creator_username || d.originalCreatorUsername || null,
                 })) : [],
                 history: a.history || [],
+                destination_creator_names: a.destination_creator_names || a.destinationCreatorNames,
             } as any);
             const normalized: FreightAnnouncement[] = Array.isArray(raw) ? raw.map(normalize) : [];
             console.log('🧭 [FreightPlanning] Normalized announcements:', {
