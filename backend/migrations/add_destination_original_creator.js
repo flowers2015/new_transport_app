@@ -6,14 +6,13 @@ const pool = require('../db');
 async function addDestinationOriginalCreator() {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
+    // ستون را جدا از backfill اضافه کن تا شکست FK کل migration را rollback نکند
     await client.query(`
       ALTER TABLE freight_destinations
-      ADD COLUMN IF NOT EXISTS original_created_by_user_id VARCHAR(255) REFERENCES users(id)
+      ADD COLUMN IF NOT EXISTS original_created_by_user_id VARCHAR(255)
     `);
 
-    // پر کردن برای مقاصد موجود از اعلام‌بار فعلی
+    // فقط وقتی user واقعاً وجود دارد پر کن (جلوگیری از خطای FK یتیم)
     const backfill = await client.query(`
       UPDATE freight_destinations d
       SET original_created_by_user_id = fa.created_by_user_id
@@ -21,14 +20,19 @@ async function addDestinationOriginalCreator() {
       WHERE d.freight_announcement_id = fa.id
         AND d.original_created_by_user_id IS NULL
         AND fa.created_by_user_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM users u WHERE u.id = fa.created_by_user_id)
     `);
 
-    await client.query('COMMIT');
+    // ایندکس سبک برای فیلتر کارتابل
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_freight_destinations_original_creator
+      ON freight_destinations (original_created_by_user_id)
+    `);
+
     console.log(
       `✅ Added freight_destinations.original_created_by_user_id (backfilled ${backfill.rowCount} rows)`
     );
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('❌ add_destination_original_creator migration failed:', error);
     throw error;
   } finally {

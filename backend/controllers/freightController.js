@@ -396,17 +396,35 @@ async function getFreightAnnouncements(req, res) {
     
     // کارمند/کارشناس: اعلام‌بارهای خودشان + ردیف‌هایی که مقصدشان بعد از ادغام روی اعلام‌بار دیگری رفته
     let userFilter = '';
+    let hasOriginalCreatorCol = false;
+    try {
+      const colCheck = await pool.query(`
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'freight_destinations'
+          AND column_name = 'original_created_by_user_id'
+        LIMIT 1
+      `);
+      hasOriginalCreatorCol = (colCheck.rowCount || 0) > 0;
+    } catch (_) {
+      hasOriginalCreatorCol = false;
+    }
+
     if ((isPlanningEmployee || isSalesExpert) && userId) {
       const safeUserId = String(userId).replace(/'/g, "''");
-      userFilter = ` AND (
-        fa.created_by_user_id = '${safeUserId}'
-        OR EXISTS (
-          SELECT 1
-          FROM freight_destinations d_own
-          WHERE d_own.freight_announcement_id = fa.id
-            AND d_own.original_created_by_user_id = '${safeUserId}'
-        )
-      )`;
+      if (hasOriginalCreatorCol) {
+        userFilter = ` AND (
+          fa.created_by_user_id = '${safeUserId}'
+          OR EXISTS (
+            SELECT 1
+            FROM freight_destinations d_own
+            WHERE d_own.freight_announcement_id = fa.id
+              AND d_own.original_created_by_user_id = '${safeUserId}'
+          )
+        )`;
+      } else {
+        userFilter = ` AND fa.created_by_user_id = '${safeUserId}'`;
+      }
     }
     
     // Add filter for branch finance users (only see announcements with destinations matching their branch city)
@@ -559,18 +577,28 @@ async function getFreightAnnouncements(req, res) {
     };
     
     for (let announcement of rows) {
-      const destRows = await pool.query(
-        `SELECT
-           d.*,
-           u_orig.id AS original_creator_user_id,
-           u_orig.${nameColumn} AS original_creator_full_name,
-           u_orig.username AS original_creator_username
-         FROM freight_destinations d
-         LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
-         WHERE d.freight_announcement_id = $1
-         ORDER BY d.created_at ASC`,
-        [announcement.id]
-      );
+      let destRows;
+      if (hasOriginalCreatorCol) {
+        destRows = await pool.query(
+          `SELECT
+             d.*,
+             u_orig.id AS original_creator_user_id,
+             u_orig.${nameColumn} AS original_creator_full_name,
+             u_orig.username AS original_creator_username
+           FROM freight_destinations d
+           LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
+           WHERE d.freight_announcement_id = $1
+           ORDER BY d.created_at ASC`,
+          [announcement.id]
+        );
+      } else {
+        destRows = await pool.query(
+          `SELECT * FROM freight_destinations
+           WHERE freight_announcement_id = $1
+           ORDER BY created_at ASC`,
+          [announcement.id]
+        );
+      }
       announcement.destinations = destRows.rows;
       const creatorNames = [];
       const seenCreators = new Set();
