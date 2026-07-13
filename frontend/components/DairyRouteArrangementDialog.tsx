@@ -30,6 +30,7 @@ import {
     moveBlockBetweenRoutes,
     reconcileRoutesCore,
     resolveTargetAnnouncementId,
+    resolveLiveTargetAnnouncementId,
     resolveOwnerAnnouncementIdForDestination,
     routeMatchesSearch,
     savePersistedArrangement,
@@ -889,39 +890,38 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             try {
                 let baseVersion = sharedVersionRef.current;
                 let result = await saveDairyArrangementState(nextRoutes, baseVersion);
-                // بعد از انتقال موفق DB: اگر تعارض نسخه بود یک‌بار با نسخهٔ تازه دوباره ذخیره کن
-                // (نباید چیدمان قدیمی طرف مقابل جای کارت جابجاشده را بگیرد)
-                if (result.ok === false && result.conflict === true && result.state && options?.forceRetry) {
-                    baseVersion = result.state.version;
+                // تعارض نسخه: یک‌بار با نسخهٔ تازه دوباره ذخیره کن و چیدمان محلی را نگه دار
+                // (اعمال چیدمان قدیمی سرور باعث برگرداندن کارت به ردیف قبلی می‌شد)
+                if (result.ok === false && result.conflict === true && result.state) {
+                    baseVersion = Number(result.state.version);
+                    sharedVersionRef.current = baseVersion;
                     setSharedVersion(baseVersion);
                     result = await saveDairyArrangementState(nextRoutes, baseVersion);
                 }
                 if (result.ok === true) {
+                    sharedVersionRef.current = result.state.version;
                     setSharedVersion(result.state.version);
                     setLocks(result.state.locks || {});
                     setSyncLabel(`همگام · نسخه ${result.state.version}`);
                     savePersistedArrangement(userId, nextRoutes);
+                    suppressSaveUntilRef.current = Date.now() + 500;
                     return;
                 }
-                if (result.conflict === true && result.state && !options?.forceRetry) {
-                    applyRemoteArrangementState(
-                        result.state,
+                if (result.conflict === true && result.state) {
+                    // هنوز conflict: نسخه را جلو ببر، چیدمان محلی را عوض نکن
+                    sharedVersionRef.current = Number(result.state.version);
+                    setSharedVersion(Number(result.state.version));
+                    setLocks(result.state.locks || {});
+                    setRemoteNotice(
                         result.message ||
-                            `چیدمان توسط «${result.state.updatedByUserName || 'کاربر دیگر'}» تغییر کرد و جایگزین شد.`
+                            'نسخه سرور همزمان تغییر کرد — چیدمان شما نگه داشته شد و دوباره همگام می‌شود.'
                     );
-                } else if (result.conflict === true && options?.forceRetry) {
-                    // حتی بعد از retry هم conflict: حداقل نسخه را جلو ببر، چیدمان فعلی خودمان را نگه دار
-                    if (result.state?.version != null) {
-                        setSharedVersion(result.state.version);
-                        setLocks(result.state.locks || {});
-                    }
-                    setRemoteNotice('چیدمان شما ذخیره شد ولی نسخه سرور همزمان تغییر کرده بود.');
                 }
             } finally {
                 saveInFlightRef.current = false;
             }
         },
-        [userId, applyRemoteArrangementState, isApplying]
+        [userId, isApplying]
     );
 
     useEffect(() => {
@@ -1142,41 +1142,95 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             let latestAnnouncements = announcementsRef.current;
             for (const op of ops) {
                 let sourceId = op.sourceAnnouncementId;
-                const owner = latestAnnouncements.find((a) =>
-                    (a.destinations || []).some((d) => d.id === op.destinationId)
-                );
-                if (owner) {
-                    if (owner.id === op.targetAnnouncementId) {
-                        logArrangement('TRANSFER skip — already on target', {
-                            destinationId: op.destinationId,
-                            target: op.targetAnnouncementId,
-                        });
-                        continue;
+                let targetId = op.targetAnnouncementId;
+
+                const refreshIds = () => {
+                    latestAnnouncements = announcementsRef.current;
+                    const byId = new Map(latestAnnouncements.map((a) => [a.id, a]));
+                    const owner = latestAnnouncements.find((a) =>
+                        (a.destinations || []).some((d) => d.id === op.destinationId)
+                    );
+                    if (owner) sourceId = owner.id;
+
+                    // اگر هدف مرده است، از چیدمان فعلی هدف زنده بگیر
+                    // مقصد در حال جابجایی را حذف کن تا مالک مبدأ به‌عنوان هدف اشتباه گرفته نشود
+                    if (!byId.has(targetId)) {
+                        const route = routesRef.current.find((r) =>
+                            routeStopsInOrder(r)
+                                .flatMap(stopBlocks)
+                                .some((b) => b.destinationId === op.destinationId)
+                        );
+                        if (route) {
+                            const live = resolveLiveTargetAnnouncementId(
+                                route,
+                                byId,
+                                new Set([op.destinationId])
+                            );
+                            if (live) targetId = live;
+                        }
                     }
-                    sourceId = owner.id;
+                    return byId;
+                };
+
+                let byId = refreshIds();
+                if (sourceId === targetId) {
+                    logArrangement('TRANSFER skip — already on target', {
+                        destinationId: op.destinationId,
+                        target: targetId,
+                    });
+                    continue;
+                }
+                if (!byId.has(sourceId) || !byId.has(targetId)) {
+                    onRefresh?.();
+                    await new Promise((r) => setTimeout(r, 400));
+                    byId = refreshIds();
+                }
+                if (!byId.has(sourceId) || !byId.has(targetId)) {
+                    logArrangement('TRANSFER skip — missing live announcement', {
+                        destinationId: op.destinationId,
+                        sourceId,
+                        targetId,
+                    });
+                    return false;
                 }
 
                 let result = await onTransferDestination(
                     sourceId,
                     op.destinationId,
-                    op.targetAnnouncementId,
+                    targetId,
                     op.newPosition,
                     { silent: true }
                 );
 
-                // یک‌بار تلاش مجدد برای خطای موقت شبکه / race
-                if (!result.ok) {
+                // فقط برای خطای شبکه/۵۰۰ یک‌بار تلاش مجدد — نه برای ۴۰۴
+                if (!result.ok && (result.status == null || result.status >= 500)) {
                     await new Promise((r) => setTimeout(r, 350));
-                    const owner2 = announcementsRef.current.find((a) =>
-                        (a.destinations || []).some((d) => d.id === op.destinationId)
-                    );
-                    if (owner2?.id === op.targetAnnouncementId) {
+                    byId = refreshIds();
+                    if (sourceId === targetId) {
                         result = { ok: true, announcements: announcementsRef.current };
-                    } else {
+                    } else if (byId.has(sourceId) && byId.has(targetId)) {
                         result = await onTransferDestination(
-                            owner2?.id || sourceId,
+                            sourceId,
                             op.destinationId,
-                            op.targetAnnouncementId,
+                            targetId,
+                            op.newPosition,
+                            { silent: true }
+                        );
+                    }
+                } else if (!result.ok && result.status === 404) {
+                    byId = refreshIds();
+                    if (sourceId === targetId) {
+                        result = { ok: true, announcements: announcementsRef.current };
+                    } else if (
+                        byId.has(sourceId) &&
+                        byId.has(targetId) &&
+                        sourceId !== op.sourceAnnouncementId
+                    ) {
+                        // مالک عوض شده — یک‌بار با شناسهٔ تازه
+                        result = await onTransferDestination(
+                            sourceId,
+                            op.destinationId,
+                            targetId,
                             op.newPosition,
                             { silent: true }
                         );
@@ -1185,7 +1239,11 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
                 logArrangementTransferResult({
                     ok: result.ok,
-                    op: { ...op, sourceAnnouncementId: sourceId },
+                    op: {
+                        ...op,
+                        sourceAnnouncementId: sourceId,
+                        targetAnnouncementId: targetId,
+                    },
                     announcementCount: result.ok ? result.announcements.length : undefined,
                 });
                 if (!result.ok) return false;
@@ -1194,7 +1252,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             }
             return true;
         },
-        [onTransferDestination]
+        [onTransferDestination, onRefresh]
     );
 
     const applyTransferOps = useCallback(
@@ -1234,7 +1292,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 logArrangementRoutes('DROP success reconciled', reconciled);
                 setRoutes(reconciled);
                 savePersistedArrangement(userId, reconciled);
-                suppressSaveUntilRef.current = 0;
+                suppressSaveUntilRef.current = Date.now() + 1200;
                 // تا ذخیره چیدمان تمام نشده، remote اعمال نشود
                 await pushSharedLayout(reconciled, { forceRetry: true });
                 onRefresh?.();
@@ -1352,13 +1410,26 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             const layoutChanged = nextRoutes !== currentRoutes;
 
             const targetRoute = nextRoutes.find((r) => r.id === targetRouteId);
-            const targetAnnId = targetRoute ? resolveTargetAnnouncementId(targetRoute) : null;
+            const movedDestIds = new Set(movingBlocks.map((b) => b.destinationId));
+            const targetAnnId = targetRoute
+                ? resolveLiveTargetAnnouncementId(targetRoute, annMap, movedDestIds)
+                : null;
 
-            let ops = targetAnnId
-                ? collectTransferOpsForMove(nextRoutes, targetRouteId, movingBlocks, annMap).sort(
-                      (a, b) => a.newPosition - b.newPosition
-                  )
-                : [];
+            if (!targetAnnId) {
+                logArrangement('DROP blocked', { reason: 'no live target announcement', targetRouteId });
+                setRemoteNotice('ردیف مقصد نامعتبر است — در حال همگام‌سازی...');
+                setDragSource(null);
+                void releaseRouteLock(source.sourceRouteId);
+                onRefresh?.();
+                setRoutes((prev) =>
+                    reconcileRoutesWithAnnouncements(prev, announcementsRef.current)
+                );
+                return;
+            }
+
+            let ops = collectTransferOpsForMove(nextRoutes, targetRouteId, movingBlocks, annMap).sort(
+                (a, b) => a.newPosition - b.newPosition
+            );
             if (ops.length === 0) {
                 ops = collectReorderOpsIfNeeded(nextRoutes, movingBlocks, targetRouteId, annMap).sort(
                     (a, b) => a.newPosition - b.newPosition

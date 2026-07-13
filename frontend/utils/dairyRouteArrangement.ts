@@ -561,8 +561,8 @@ export function collectReorderOpsIfNeeded(
 ): DairyTransferOp[] {
     const targetRoute = routesAfter.find((r) => r.id === targetRouteId);
     if (!targetRoute) return [];
-    const targetAnnId = resolveTargetAnnouncementId(targetRoute);
-    if (!targetAnnId) return [];
+    const targetAnnId = resolveLiveTargetAnnouncementId(targetRoute, announcementById);
+    if (!targetAnnId || !announcementById.has(targetAnnId)) return [];
 
     const ann = announcementById.get(targetAnnId);
     if (!ann) return [];
@@ -575,7 +575,7 @@ export function collectReorderOpsIfNeeded(
         const ownerId =
             resolveDestinationOwnerAnnouncementId(block.destinationId, announcementById) ||
             block.announcementId;
-        if (serverPos !== newPos && ownerId === targetAnnId) {
+        if (serverPos !== newPos && ownerId === targetAnnId && announcementById.has(ownerId)) {
             ops.push({
                 sourceAnnouncementId: ownerId,
                 destinationId: block.destinationId,
@@ -951,7 +951,8 @@ export function reconcileRoutesWithAnnouncements(
     const reconciled = reconcileRoutesCore(routes, announcements);
     const withNew = mergeNewAnnouncementsIntoRoutes(reconciled, announcements);
     const attached = attachMissingDestinationsToRoutes(withNew, announcements);
-    return reapplyApprovalsFromIndex(dedupeDestinationsAcrossRoutes(attached), approvalIndex);
+    const pruned = pruneDeadArrangementRoutes(attached, announcements);
+    return reapplyApprovalsFromIndex(dedupeDestinationsAcrossRoutes(pruned), approvalIndex);
 }
 
 function attachMissingDestinationsToRoutes(
@@ -1118,6 +1119,65 @@ export function resolveTargetAnnouncementId(route: DairyArrangementRoute): strin
     return first?.announcementId ?? null;
 }
 
+/**
+ * هدف واقعی ردیف فقط از اعلام‌بارهای زنده‌ای که هنوز در لیست هستند.
+ * excludeDestIds: مقصدهای در حال جابجایی (مالک‌شان هنوز مبدأ است).
+ */
+export function resolveLiveTargetAnnouncementId(
+    route: DairyArrangementRoute,
+    announcementById: Map<string, FreightAnnouncement>,
+    excludeDestIds?: Set<string>
+): string | null {
+    const counts = new Map<string, number>();
+    for (const block of routeStopsInOrder(route).flatMap(stopBlocks)) {
+        if (excludeDestIds?.has(block.destinationId)) continue;
+        const owner = resolveDestinationOwnerAnnouncementId(block.destinationId, announcementById);
+        if (owner && announcementById.has(owner)) {
+            counts.set(owner, (counts.get(owner) || 0) + 1);
+        }
+    }
+    let bestId: string | null = null;
+    let bestCount = 0;
+    for (const [id, count] of counts) {
+        if (count > bestCount) {
+            bestId = id;
+            bestCount = count;
+        }
+    }
+    if (bestId) return bestId;
+
+    const candidates = [
+        route.targetAnnouncementId,
+        route.id.startsWith('route-') ? route.id.slice('route-'.length) : null,
+        ...(route.sourceAnnouncementIds || []),
+    ];
+    for (const id of candidates) {
+        if (id && announcementById.has(id)) return id;
+    }
+    return null;
+}
+
+/** حذف ردیف‌هایی که نه مقصد زنده دارند نه اعلام‌بار زنده */
+export function pruneDeadArrangementRoutes(
+    routes: DairyArrangementRoute[],
+    announcements: FreightAnnouncement[]
+): DairyArrangementRoute[] {
+    const byId = new Map(announcements.map((a) => [a.id, a]));
+    const liveDestIds = new Set<string>();
+    for (const ann of announcements) {
+        for (const d of ann.destinations || []) {
+            if (d.id) liveDestIds.add(d.id);
+        }
+    }
+    return routes.filter((route) => {
+        const blocks = routeStopsInOrder(route).flatMap(stopBlocks);
+        const hasLiveDest = blocks.some((b) => liveDestIds.has(b.destinationId));
+        if (hasLiveDest) return true;
+        const tid = resolveLiveTargetAnnouncementId(route, byId);
+        return Boolean(tid);
+    });
+}
+
 export function buildAnnouncementFingerprint(announcements: FreightAnnouncement[]): string {
     return announcements
         .map((a) => `${a.id}:${(a.destinations || []).map((d) => d.id).join('.')}`)
@@ -1136,6 +1196,7 @@ export function reconcileRoutesCore(
     routes: DairyArrangementRoute[],
     announcements: FreightAnnouncement[]
 ): DairyArrangementRoute[] {
+    const byId = new Map(announcements.map((a) => [a.id, a]));
     const reconciled: DairyArrangementRoute[] = [];
     for (const route of routes) {
         const slots = ensureRouteSlots(route.stops);
@@ -1143,7 +1204,7 @@ export function reconcileRoutesCore(
         if (!nextSlots.some((s) => s != null)) continue;
         const filled = nextSlots.filter((s): s is DairyArrangementStop => s != null);
         const sourceAnnouncementIds = collectAnnouncementIds(nextSlots);
-        reconciled.push({
+        const draft: DairyArrangementRoute = {
             ...route,
             stops: nextSlots,
             sourceAnnouncementIds,
@@ -1153,6 +1214,15 @@ export function reconcileRoutesCore(
                   ? stopBlocks(filled[0])[0]?.destination.city?.trim() || 'بدون شهر'
                   : 'بدون شهر',
             targetAnnouncementId: route.targetAnnouncementId ?? null,
+        };
+        const liveTarget = resolveLiveTargetAnnouncementId(draft, byId);
+        reconciled.push({
+            ...draft,
+            // شناسهٔ اعلام‌بار حذف‌شده را نگه ندار — باعث ۴۰۴ transfer می‌شود
+            targetAnnouncementId: liveTarget,
+            sourceAnnouncementIds: liveTarget
+                ? Array.from(new Set([liveTarget, ...sourceAnnouncementIds.filter((id) => byId.has(id))]))
+                : sourceAnnouncementIds.filter((id) => byId.has(id)),
         });
     }
     return dedupeDestinationsAcrossRoutes(reconciled);
@@ -1366,7 +1436,12 @@ export function collectTransferOpsForMove(
 ): DairyTransferOp[] {
     const targetRoute = routesAfter.find((r) => r.id === targetRouteId);
     if (!targetRoute) return [];
-    const targetAnnId = resolveTargetAnnouncementId(targetRoute);
+    const excludeDestIds = new Set(movedBlocks.map((b) => b.destinationId));
+    const targetAnnId = resolveLiveTargetAnnouncementId(
+        targetRoute,
+        announcementById,
+        excludeDestIds
+    );
     if (!targetAnnId) return [];
 
     const ops: DairyTransferOp[] = [];
@@ -1376,6 +1451,10 @@ export function collectTransferOpsForMove(
             const sourceAnnouncementId =
                 resolveDestinationOwnerAnnouncementId(block.destinationId, announcementById) ||
                 block.announcementId;
+            // مبدأ/مقصد مرده → API نزن
+            if (!announcementById.has(sourceAnnouncementId) || !announcementById.has(targetAnnId)) {
+                continue;
+            }
             ops.push({
                 sourceAnnouncementId,
                 destinationId: block.destinationId,

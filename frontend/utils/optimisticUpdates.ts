@@ -8,7 +8,7 @@ import { FreightAnnouncement } from '../types';
 
 export type TransferDestinationResult =
     | { ok: true; announcements: FreightAnnouncement[] }
-    | { ok: false };
+    | { ok: false; status?: number; message?: string };
 
 export type SplitDestinationResult =
     | {

@@ -1179,7 +1179,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     statusText: res.statusText,
                     errorText
                 });
-                throw new Error(errorText || 'خطا در انتقال مقصد');
+                let message = 'خطا در انتقال مقصد';
+                try {
+                    message = JSON.parse(errorText || '').message || message;
+                } catch {
+                    if (errorText) message = errorText;
+                }
+                if (!options?.silent) {
+                    alert(message);
+                }
+                return { ok: false, status: res.status, message };
             }
             
             const result = await res.json();
@@ -1222,7 +1231,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!options?.silent) {
                 alert(message);
             }
-            return { ok: false };
+            return { ok: false, message };
         }
     };
 
