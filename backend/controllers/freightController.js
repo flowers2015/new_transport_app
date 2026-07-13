@@ -9014,7 +9014,7 @@ module.exports.archiveChangeRequest = archiveChangeRequest;
  * Body: { destinationId, targetAnnouncementId, newPosition }
  */
 async function transferDestination(req, res) {
-  const { id: sourceAnnouncementId } = req.params;
+  let sourceAnnouncementId = req.params.id;
   const { destinationId, targetAnnouncementId, newPosition } = req.body || {};
   const userId = req.user?.userId || req.user?.id;
   // ساخت userName به فرمت "username - name - role"

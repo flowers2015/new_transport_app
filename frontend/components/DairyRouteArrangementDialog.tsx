@@ -879,15 +879,23 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     );
 
     const pushSharedLayout = useCallback(
-        async (nextRoutes: DairyArrangementRoute[]) => {
-            if (applyingRemoteRef.current) return;
-            if (Date.now() < suppressSaveUntilRef.current) return;
+        async (nextRoutes: DairyArrangementRoute[], options?: { forceRetry?: boolean }) => {
+            if (applyingRemoteRef.current && !options?.forceRetry) return;
+            if (Date.now() < suppressSaveUntilRef.current && !options?.forceRetry) return;
             if (saveInFlightRef.current) return;
-            if (dropInProgressRef.current || isApplying) return;
+            if ((dropInProgressRef.current || isApplying) && !options?.forceRetry) return;
 
             saveInFlightRef.current = true;
             try {
-                const result = await saveDairyArrangementState(nextRoutes, sharedVersionRef.current);
+                let baseVersion = sharedVersionRef.current;
+                let result = await saveDairyArrangementState(nextRoutes, baseVersion);
+                // بعد از انتقال موفق DB: اگر تعارض نسخه بود یک‌بار با نسخهٔ تازه دوباره ذخیره کن
+                // (نباید چیدمان قدیمی طرف مقابل جای کارت جابجاشده را بگیرد)
+                if (result.ok === false && result.conflict === true && result.state && options?.forceRetry) {
+                    baseVersion = result.state.version;
+                    setSharedVersion(baseVersion);
+                    result = await saveDairyArrangementState(nextRoutes, baseVersion);
+                }
                 if (result.ok === true) {
                     setSharedVersion(result.state.version);
                     setLocks(result.state.locks || {});
@@ -895,12 +903,19 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                     savePersistedArrangement(userId, nextRoutes);
                     return;
                 }
-                if (result.conflict === true && result.state) {
+                if (result.conflict === true && result.state && !options?.forceRetry) {
                     applyRemoteArrangementState(
                         result.state,
                         result.message ||
                             `چیدمان توسط «${result.state.updatedByUserName || 'کاربر دیگر'}» تغییر کرد و جایگزین شد.`
                     );
+                } else if (result.conflict === true && options?.forceRetry) {
+                    // حتی بعد از retry هم conflict: حداقل نسخه را جلو ببر، چیدمان فعلی خودمان را نگه دار
+                    if (result.state?.version != null) {
+                        setSharedVersion(result.state.version);
+                        setLocks(result.state.locks || {});
+                    }
+                    setRemoteNotice('چیدمان شما ذخیره شد ولی نسخه سرور همزمان تغییر کرده بود.');
                 }
             } finally {
                 saveInFlightRef.current = false;
@@ -932,9 +947,16 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 if (message.updateType === 'dairy_arrangement_layout') {
                     const data = message.data || {};
                     if (data.updatedByUserId && String(data.updatedByUserId) === String(userId)) return;
-                    if (dropInProgressRef.current || isApplying) {
-                        // بعد از اتمام درگ، poll/resync می‌گیرد
+                    if (dropInProgressRef.current || isApplying || applyingRemoteRef.current) {
                         suppressSaveUntilRef.current = Date.now() + 500;
+                        return;
+                    }
+                    // اگر نسخه قدیمی‌تر یا مساوی است، نادیده بگیر
+                    if (
+                        data.version != null &&
+                        sharedVersionRef.current != null &&
+                        Number(data.version) <= Number(sharedVersionRef.current)
+                    ) {
                         return;
                     }
                     applyRemoteArrangementState(
@@ -950,8 +972,25 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                     return;
                 }
                 if (message.updateType === 'dairy_arrangement_data_changed') {
-                    setRemoteNotice('داده اعلام‌بار تغییر کرد — در حال همگام‌سازی...');
-                    void resyncFromServer('داده اعلام‌بار تغییر کرد — چیدمان از سرور بازخوانی شد.');
+                    // فقط لیست اعلام‌بار را تازه کن؛ کل چیدمان را عوض نکن
+                    // (بازنشانی کامل باعث پرش کارت به جای قبلی می‌شد)
+                    if (dropInProgressRef.current || isApplying) return;
+                    setRemoteNotice('داده اعلام‌بار تغییر کرد — هم‌ترازسازی ردیف‌ها...');
+                    onRefresh?.();
+                    setTimeout(() => {
+                        if (applyingRemoteRef.current || dropInProgressRef.current) return;
+                        setRoutes((prev) => {
+                            const next = reconcileRoutesWithAnnouncements(
+                                prev,
+                                announcementsRef.current
+                            );
+                            savePersistedArrangement(userId, next);
+                            syncedIdsRef.current = buildDairyAnnouncementIdsKey(
+                                announcementsRef.current
+                            );
+                            return next;
+                        });
+                    }, 600);
                 }
             }
             if (message.type === 'announcement_update') {
@@ -1102,7 +1141,6 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         async (ops: DairyTransferOp[]) => {
             let latestAnnouncements = announcementsRef.current;
             for (const op of ops) {
-                // مالک فعلی مقصد را از داده زنده پیدا کن (جلوگیری از 404 به‌خاطر source کهنه)
                 let sourceId = op.sourceAnnouncementId;
                 const owner = latestAnnouncements.find((a) =>
                     (a.destinations || []).some((d) => d.id === op.destinationId)
@@ -1118,13 +1156,33 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                     sourceId = owner.id;
                 }
 
-                const result = await onTransferDestination(
+                let result = await onTransferDestination(
                     sourceId,
                     op.destinationId,
                     op.targetAnnouncementId,
                     op.newPosition,
                     { silent: true }
                 );
+
+                // یک‌بار تلاش مجدد برای خطای موقت شبکه / race
+                if (!result.ok) {
+                    await new Promise((r) => setTimeout(r, 350));
+                    const owner2 = announcementsRef.current.find((a) =>
+                        (a.destinations || []).some((d) => d.id === op.destinationId)
+                    );
+                    if (owner2?.id === op.targetAnnouncementId) {
+                        result = { ok: true, announcements: announcementsRef.current };
+                    } else {
+                        result = await onTransferDestination(
+                            owner2?.id || sourceId,
+                            op.destinationId,
+                            op.targetAnnouncementId,
+                            op.newPosition,
+                            { silent: true }
+                        );
+                    }
+                }
+
                 logArrangementTransferResult({
                     ok: result.ok,
                     op: { ...op, sourceAnnouncementId: sourceId },
@@ -1157,16 +1215,18 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
             setIsApplying(true);
             setRoutes(nextRoutes);
+            // تا پایان انتقال، چیدمان remote اعمال نشود
+            beginRemoteApply();
 
             try {
                 const ok = await runTransferOps(ops);
                 if (!ok) {
                     logArrangementRoutes('ROLLBACK after API fail', prevRoutes);
                     setUndoStack((s) => (undoEntry ? s.slice(0, -1) : s));
-                    setRemoteNotice('جابجایی با دادهٔ سرور هم‌خوان نبود — در حال همگام‌سازی...');
-                    await resyncFromServer(
-                        'جابجایی ناموفق بود؛ چیدمان از سرور بازخوانی شد تا با کاربر دیگر هم‌تراز شود.'
-                    );
+                    setRoutes(prevRoutes);
+                    savePersistedArrangement(userId, prevRoutes);
+                    setRemoteNotice('جابجایی ثبت نشد — وضعیت قبلی نگه داشته شد.');
+                    onRefresh?.();
                     return false;
                 }
                 const reconciled = refreshBlocksInRoutes(nextRoutes, announcementsRef.current);
@@ -1174,16 +1234,25 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 logArrangementRoutes('DROP success reconciled', reconciled);
                 setRoutes(reconciled);
                 savePersistedArrangement(userId, reconciled);
-                // ذخیره نسخهٔ جدید چیدمان بعد از انتقال موفق
                 suppressSaveUntilRef.current = 0;
-                void pushSharedLayout(reconciled);
+                // تا ذخیره چیدمان تمام نشده، remote اعمال نشود
+                await pushSharedLayout(reconciled, { forceRetry: true });
                 onRefresh?.();
                 return true;
             } finally {
+                endRemoteApply();
                 setIsApplying(false);
             }
         },
-        [userId, pushUndo, runTransferOps, onRefresh, resyncFromServer, pushSharedLayout]
+        [
+            userId,
+            pushUndo,
+            runTransferOps,
+            onRefresh,
+            pushSharedLayout,
+            beginRemoteApply,
+            endRemoteApply,
+        ]
     );
 
     const isRouteLockedByOther = useCallback(
