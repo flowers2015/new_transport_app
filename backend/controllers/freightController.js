@@ -9093,18 +9093,7 @@ async function transferDestination(req, res) {
   try {
     await client.query('BEGIN');
 
-    // بررسی source announcement
-    const { rows: sourceRows } = await client.query(
-      `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
-      [sourceAnnouncementId]
-    );
-    if (sourceRows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'اعلام بار مبدا یافت نشد.' });
-    }
-    const sourceAnn = sourceRows[0];
-
-    // بررسی target announcement
+    // بررسی target announcement اول (ثابت است)
     const { rows: targetRows } = await client.query(
       `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
       [targetAnnouncementId]
@@ -9115,23 +9104,65 @@ async function transferDestination(req, res) {
     }
     const targetAnn = targetRows[0];
 
-    // بررسی destination
-    const { rows: destRows } = await client.query(
+    // مقصد را با id پیدا کن؛ اگر روی source درخواستی نبود، مالک فعلی را بگیر
+    let effectiveSourceId = sourceAnnouncementId;
+    let { rows: destRows } = await client.query(
       `SELECT id, city, representative_name, tonnage, freight_cost, freight_announcement_id
        FROM freight_destinations
        WHERE id = $1 AND freight_announcement_id = $2 FOR UPDATE`,
       [destinationId, sourceAnnouncementId]
     );
+
     if (destRows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'مقصد یافت نشد یا متعلق به این اعلام بار نیست.' });
+      const { rows: ownedRows } = await client.query(
+        `SELECT id, city, representative_name, tonnage, freight_cost, freight_announcement_id
+         FROM freight_destinations
+         WHERE id = $1 FOR UPDATE`,
+        [destinationId]
+      );
+      if (ownedRows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'مقصد یافت نشد.' });
+      }
+
+      if (String(ownedRows[0].freight_announcement_id) === String(targetAnnouncementId)) {
+        await client.query('COMMIT');
+        return res.status(200).json({
+          message: 'مقصد از قبل روی اعلام‌بار هدف بود.',
+          sourceAnnouncementId,
+          targetAnnouncementId,
+          destinationId,
+          newPosition,
+          alreadyOnTarget: true,
+          sourceAnnouncementDeleted: false,
+        });
+      }
+
+      effectiveSourceId = ownedRows[0].freight_announcement_id;
+      destRows = ownedRows;
+      console.log('♻️ [transferDestination] remapped stale source:', {
+        requestedSource: sourceAnnouncementId,
+        actualSource: effectiveSourceId,
+        destinationId,
+      });
     }
+
+    const { rows: sourceRows } = await client.query(
+      `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      [effectiveSourceId]
+    );
+    if (sourceRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'اعلام بار مبدا یافت نشد.' });
+    }
+    const sourceAnn = sourceRows[0];
     const destination = destRows[0];
+    sourceAnnouncementId = effectiveSourceId;
 
     console.log('📋 [transferDestination] Found:', {
       sourceAnnouncement: { id: sourceAnn.id, code: sourceAnn.announcement_code },
       targetAnnouncement: { id: targetAnn.id, code: targetAnn.announcement_code },
-      destination: { id: destination.id, city: destination.city }
+      destination: { id: destination.id, city: destination.city },
     });
 
     // گرفتن مقاصد target برای تعیین موقعیت

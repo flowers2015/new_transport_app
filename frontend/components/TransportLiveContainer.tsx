@@ -1185,9 +1185,18 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const result = await res.json();
             console.log('✅ [TransportLive] Transfer API response:', result);
 
+            if (result.alreadyOnTarget) {
+                void fetchData(true, needsPersonalResourcesRef.current, true);
+                if (!options?.silent) {
+                    alert(result.message || 'مقصد از قبل روی اعلام‌بار هدف بود.');
+                }
+                return { ok: true, announcements: announcementsRef.current };
+            }
+
+            const effectiveSourceId = result.sourceAnnouncementId || sourceAnnouncementId;
             const nextAnnouncements = applyDestinationTransferToAnnouncements(
                 announcementsRef.current,
-                sourceAnnouncementId,
+                effectiveSourceId,
                 destinationId,
                 targetAnnouncementId,
                 newPosition,
@@ -1210,7 +1219,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             } catch {
                 if (error?.message) message = error.message;
             }
-            alert(message);
+            if (!options?.silent) {
+                alert(message);
+            }
             return { ok: false };
         }
     };
