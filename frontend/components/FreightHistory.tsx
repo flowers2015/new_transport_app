@@ -1,7 +1,7 @@
 // This is a new file: components/TransportLive.tsx
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
-import { formatJalaliDateTime, formatJalali, formatPlateNumber, splitJalaliDateTime } from '../utils/jalali';
+import { formatJalaliDateTime, formatJalali, formatPlateNumber, splitJalaliDateTime, parseJalaliDateString } from '../utils/jalali';
 
 const renderAnnouncementDateTimeCell = (createdAt: Date | string | null | undefined) => {
     const parts = splitJalaliDateTime(createdAt);
@@ -33,6 +33,7 @@ import {
     formatTotalTonnageFromDestinations,
     formatDestinationBrandLabel,
     formatDestinationProductsLabel,
+    formatAnnouncementDestinationProductsLabel,
     formatDestinationRepCompactSegment,
     formatDairyCompactDestinationsText,
     formatTonnageKgFromRaw,
@@ -159,6 +160,10 @@ interface FreightHistoryProps {
     totalPages?: number;
     onPageChange?: (page: number) => void;
     onItemsPerPageChange?: (limit: number) => void;
+    onFetchForExcelExport?: (opts: {
+        dateFrom: string;
+        dateTo: string;
+    }) => Promise<FreightAnnouncement[]>;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
@@ -201,7 +206,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange, onFetchForExcelExport } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -251,6 +256,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     }, [filterStorageKey, columnFilters, sortColumn, sortDirection]);
 
     const [isRulesOpen, setIsRulesOpen] = useState(false);
+    const [excelExportDialog, setExcelExportDialog] = useState<{
+        mode: 'compact' | 'full';
+    } | null>(null);
+    const [excelDateFrom, setExcelDateFrom] = useState('');
+    const [excelDateTo, setExcelDateTo] = useState('');
+    const [excelExporting, setExcelExporting] = useState(false);
     
     // Helper functions inside component to ensure proper re-rendering
     const getDriverName = (id: string | undefined, drivers: Driver[], personalDrivers: any[] = []) => {
@@ -458,6 +469,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
                 ),
             },
+            {
+                header: 'محصولات',
+                render: (ann: FreightAnnouncement) => (
+                    <span className="text-xs text-slate-700 whitespace-normal">
+                        {formatAnnouncementDestinationProductsLabel(ann)}
+                    </span>
+                ),
+            },
             { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType || '-' },
             { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
             { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -614,6 +633,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <span className="text-slate-700">{ann.creator_full_name || ann.creator_username || '-'}</span>
                     ),
                 },
+                {
+                    header: 'محصولات',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="text-xs text-slate-700 whitespace-normal">
+                            {formatAnnouncementDestinationProductsLabel(ann)}
+                        </span>
+                    ),
+                },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 ...dairyAmbientCompactRepCols,
@@ -656,7 +683,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const resolveExportColumns = (mode: 'compact' | 'full') => buildVisibleColumns(mode);
 
     // Function to generate Excel export based on filtered data
-    const generateExcelExport = (mode: 'compact' | 'full' = viewMode) => {
+    const generateExcelExport = (
+        mode: 'compact' | 'full' = viewMode,
+        rowsToExport: FreightAnnouncement[] = filteredAnnouncements
+    ) => {
         const cols = resolveExportColumns(mode);
         
         const isFullDairyAmbientMode = mode === 'full' && isDairyOrAmbientLineType(activeLine);
@@ -702,8 +732,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         // اضافه کردن headers
         wsData.push(headers);
         
-        // Generate rows from filtered announcements
-        filteredAnnouncements.forEach((ann, idx) => {
+        // Generate rows from export data
+        rowsToExport.forEach((ann, idx) => {
             const row: any[] = [];
             
             // Helper to get value for a column header - دقیقاً مطابق با ترتیب headers
@@ -884,7 +914,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         headers.forEach((header, colIdx) => {
             const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h));
             if (isNumericColumn) {
-                for (let row = 1; row <= filteredAnnouncements.length; row++) {
+                for (let row = 1; row <= rowsToExport.length; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
                     if (ws[cellAddress] && ws[cellAddress].v) {
                         const cellValue = ws[cellAddress].v;
@@ -908,7 +938,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     };
 
     // Function to download Excel with styling
-    const downloadExcel = async (mode: 'compact' | 'full' = viewMode) => {
+    const downloadExcel = async (
+        mode: 'compact' | 'full' = viewMode,
+        rowsToExport: FreightAnnouncement[] = filteredAnnouncements
+    ) => {
         const lineTypeName = activeLine === FreightLineType.IceCream ? 'بستنی' : 
                             activeLine === FreightLineType.Dairy ? 'پاستوریزه' : 
                             'لبنیات-فروتلند';
@@ -1052,7 +1085,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 };
 
                 // Add data rows with zebra striping
-                filteredAnnouncements.forEach((ann, idx) => {
+                rowsToExport.forEach((ann, idx) => {
                     const rowData: any[] = [];
                     headers.forEach((header) => {
                         if (isFreightDestinationDetailHeader(header)) return;
@@ -1126,7 +1159,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 // Set column widths
                 headers.forEach((header, idx) => {
                     let maxLength = header.length;
-                    filteredAnnouncements.forEach(ann => {
+                    rowsToExport.forEach(ann => {
                         const value = getValueForHeader(header, ann, 0);
                         const cellValue = String(value || '');
                         maxLength = Math.max(maxLength, cellValue.length);
@@ -1155,8 +1188,60 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         }
         
         // Fallback: استفاده از xlsx بدون استایل
-        const wb = generateExcelExport(mode);
+        const wb = generateExcelExport(mode, rowsToExport);
         XLSX.writeFile(wb, fileName);
+    };
+
+    const openExcelExportDialog = (mode: 'compact' | 'full') => {
+        const to = new Date();
+        const from = new Date();
+        from.setMonth(from.getMonth() - 1);
+        setExcelDateFrom(formatJalali(from));
+        setExcelDateTo(formatJalali(to));
+        setExcelExportDialog({ mode });
+    };
+
+    const confirmExcelExport = async () => {
+        if (!excelExportDialog) return;
+        const fromNorm = excelDateFrom.trim().replace(/-/g, '/');
+        const toNorm = excelDateTo.trim().replace(/-/g, '/');
+        if (!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(fromNorm) || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(toNorm)) {
+            alert('تاریخ را به صورت ۱۴۰۴/۰۱/۰۱ وارد کنید.');
+            return;
+        }
+        const fromDate = parseJalaliDateString(fromNorm);
+        const toDate = parseJalaliDateString(toNorm);
+        if (!fromDate || !toDate) {
+            alert('تاریخ نامعتبر است.');
+            return;
+        }
+        if (fromDate.getTime() > toDate.getTime()) {
+            alert('تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.');
+            return;
+        }
+        if (!onFetchForExcelExport) {
+            await downloadExcel(excelExportDialog.mode, filteredAnnouncements);
+            setExcelExportDialog(null);
+            return;
+        }
+        setExcelExporting(true);
+        try {
+            const rows = await onFetchForExcelExport({ dateFrom: fromNorm, dateTo: toNorm });
+            if (!rows.length) {
+                alert('در این بازهٔ تاریخ اعلام بار، رکوردی یافت نشد.');
+                return;
+            }
+            if (rows.length >= 5000) {
+                alert('خروجی به ۵۰۰۰ ردیف محدود شد. بازه را کوچک‌تر کنید.');
+            }
+            await downloadExcel(excelExportDialog.mode, rows);
+            setExcelExportDialog(null);
+        } catch (e: any) {
+            console.error('❌ [FreightHistory] Excel export failed:', e);
+            alert(e?.message || 'خطا در تهیه خروجی اکسل');
+        } finally {
+            setExcelExporting(false);
+        }
     };
 
     const visibleColumns = useMemo(() => buildVisibleColumns(viewMode), [viewMode, activeLine, props, dairyAmbientFullBase, isDairyOrAmbientTab, personalTariffColumns]);
@@ -1325,10 +1410,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
-                        <button onClick={() => downloadExcel('compact')} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
+                        <button onClick={() => openExcelExportDialog('compact')} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
                             اکسل فشرده
                         </button>
-                        <button onClick={() => downloadExcel('full')} className="px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 whitespace-nowrap">
+                        <button onClick={() => openExcelExportDialog('full')} className="px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 whitespace-nowrap">
                             اکسل کامل
                         </button>
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
@@ -1677,6 +1762,70 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     </div>
           </div>
         )}
+             {excelExportDialog && (
+                <div
+                    className="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
+                    onClick={() => !excelExporting && setExcelExportDialog(null)}
+                >
+                    <div
+                        className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 space-y-4"
+                        dir="rtl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="text-base font-bold text-slate-800">
+                            بازه تاریخ اعلام بار برای اکسل{' '}
+                            {excelExportDialog.mode === 'compact' ? '(فشرده)' : '(کامل)'}
+                        </h3>
+                        <p className="text-xs text-slate-600">
+                            پیش‌فرض یک ماه اخیر است. همهٔ ردیف‌های همین تب و فیلترهای فعلی در بازه انتخابی خروجی گرفته می‌شود (نه فقط صفحه جاری).
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700 mb-1 block">از تاریخ</label>
+                                <input
+                                    type="text"
+                                    value={excelDateFrom}
+                                    onChange={(e) => setExcelDateFrom(e.target.value)}
+                                    placeholder="1404/01/01"
+                                    className="w-full px-2 py-1.5 text-sm border rounded-md"
+                                    dir="ltr"
+                                    disabled={excelExporting}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700 mb-1 block">تا تاریخ</label>
+                                <input
+                                    type="text"
+                                    value={excelDateTo}
+                                    onChange={(e) => setExcelDateTo(e.target.value)}
+                                    placeholder="1404/01/31"
+                                    className="w-full px-2 py-1.5 text-sm border rounded-md"
+                                    dir="ltr"
+                                    disabled={excelExporting}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                disabled={excelExporting}
+                                onClick={() => setExcelExportDialog(null)}
+                                className="px-3 py-1.5 text-sm rounded-md border bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                type="button"
+                                disabled={excelExporting}
+                                onClick={() => void confirmExcelExport()}
+                                className="px-3 py-1.5 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                                {excelExporting ? 'در حال تهیه...' : 'دانلود اکسل'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+             )}
              <style>{`.input-style { display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; } `}</style>
     </div>
   );

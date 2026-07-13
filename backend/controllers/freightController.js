@@ -4041,7 +4041,51 @@ async function getFreightHistory(req, res) {
     }
     
     // فیلتر بر اساس تاریخ اعلام بار (created_at) — ورودی شمسی
-    if (date && date.trim() !== '') {
+    // اولویت با بازه dateFrom/dateTo؛ در غیر این صورت تک‌روزه date
+    const dateFromRaw = (req.query.dateFrom || req.query.date_from || '').toString().trim();
+    const dateToRaw = (req.query.dateTo || req.query.date_to || '').toString().trim();
+    const hasDateRange = Boolean(dateFromRaw || dateToRaw);
+
+    if (hasDateRange) {
+      if (dateFromRaw) {
+        const normalizedFrom = dateFromRaw.replace(/\//g, '-');
+        const fromMatch = normalizedFrom.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (fromMatch) {
+          const [, jy, jm, jd] = fromMatch.map(Number);
+          const dayStart = parseJalaliDateString(
+            `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`
+          );
+          if (dayStart) {
+            query += ` AND fa.created_at >= $${paramIndex}`;
+            params.push(dayStart);
+            paramIndex += 1;
+            console.log(`📅 [getFreightHistory] dateFrom (created_at >=): ${dateFromRaw}`);
+          }
+        } else {
+          console.log(`⚠️ [getFreightHistory] Invalid dateFrom: ${dateFromRaw}`);
+        }
+      }
+      if (dateToRaw) {
+        const normalizedTo = dateToRaw.replace(/\//g, '-');
+        const toMatch = normalizedTo.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (toMatch) {
+          const [, jy, jm, jd] = toMatch.map(Number);
+          const dayStart = parseJalaliDateString(
+            `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`
+          );
+          if (dayStart) {
+            const dayEndExclusive = new Date(dayStart);
+            dayEndExclusive.setDate(dayEndExclusive.getDate() + 1);
+            query += ` AND fa.created_at < $${paramIndex}`;
+            params.push(dayEndExclusive);
+            paramIndex += 1;
+            console.log(`📅 [getFreightHistory] dateTo (created_at < next day): ${dateToRaw}`);
+          }
+        } else {
+          console.log(`⚠️ [getFreightHistory] Invalid dateTo: ${dateToRaw}`);
+        }
+      }
+    } else if (date && date.trim() !== '') {
       const normalizedDate = date.trim().replace(/\//g, '-');
       const dateMatch = normalizedDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (dateMatch) {
@@ -9343,6 +9387,48 @@ async function transferDestination(req, res) {
     await client.query('COMMIT');
     
     console.log('✅ [transferDestination] Transfer completed successfully');
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        targetAnnouncementId,
+        'updated',
+        {
+          reason: 'destination_transferred',
+          sourceAnnouncementId,
+          destinationId,
+          sourceAnnouncementDeleted: remainingDestCount === 0,
+        },
+        userId
+      );
+      if (remainingDestCount === 0) {
+        realtimeService.notifyAnnouncementUpdate(
+          sourceAnnouncementId,
+          'cancelled',
+          { reason: 'merged_into', targetAnnouncementId },
+          userId
+        );
+      } else {
+        realtimeService.notifyAnnouncementUpdate(
+          sourceAnnouncementId,
+          'updated',
+          { reason: 'destination_transferred_out', destinationId, targetAnnouncementId },
+          userId
+        );
+      }
+      realtimeService.notifyGeneralUpdate(
+        'dairy_arrangement_data_changed',
+        {
+          reason: 'destination_transferred',
+          sourceAnnouncementId,
+          targetAnnouncementId,
+          destinationId,
+        },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [transferDestination] realtime error:', realtimeError);
+    }
     
     return res.status(200).json({ 
       message: 'انتقال مقصد با موفقیت انجام شد',
@@ -9552,6 +9638,34 @@ async function splitDestinationToNewAnnouncement(req, res) {
     });
 
     await client.query('COMMIT');
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      realtimeService.notifyAnnouncementUpdate(
+        newId,
+        'created',
+        { reason: 'destination_split', sourceAnnouncementId: effectiveSourceId, destinationId },
+        userId
+      );
+      realtimeService.notifyAnnouncementUpdate(
+        effectiveSourceId,
+        'updated',
+        { reason: 'destination_split_out', destinationId, newAnnouncementId: newId },
+        userId
+      );
+      realtimeService.notifyGeneralUpdate(
+        'dairy_arrangement_data_changed',
+        {
+          reason: 'destination_split',
+          sourceAnnouncementId: effectiveSourceId,
+          newAnnouncementId: newId,
+          destinationId,
+        },
+        userId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [splitDestinationToNewAnnouncement] realtime error:', realtimeError);
+    }
 
     return res.status(200).json({
       message: 'مقصد به اعلام‌بار جدید منتقل شد',

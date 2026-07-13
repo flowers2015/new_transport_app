@@ -53,6 +53,7 @@ import {
     resolveDestinationRepTypeLabel,
     formatDestinationBrandLabel,
     formatDestinationProductsLabel,
+    formatAnnouncementDestinationProductsLabel,
     formatTonnageKgFromRaw,
     sortByIceCreamDisplayOrder,
     isFreightDestinationDetailHeader,
@@ -1056,6 +1057,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
+                {
+                    header: 'محصولات',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="text-xs text-slate-700 whitespace-normal">
+                            {formatAnnouncementDestinationProductsLabel(ann)}
+                        </span>
+                    ),
+                },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -1091,6 +1100,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const base = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
+                {
+                    header: 'محصولات',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="text-xs text-slate-700 whitespace-normal">
+                            {formatAnnouncementDestinationProductsLabel(ann)}
+                        </span>
+                    ),
+                },
                 { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
@@ -2647,6 +2664,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 onClose={() => setDairyArrangementOpen(false)}
                 announcements={dairyArrangementAnnouncements}
                 userId={currentUser.id}
+                userName={
+                    currentUser.username && currentUser.name
+                        ? `${currentUser.username} - ${currentUser.name}`
+                        : currentUser.username || currentUser.name
+                }
                 onTransferDestination={onTransferDestination}
                 onSplitDestinationToNew={onSplitDestinationToNew}
                 onReturnToCreator={

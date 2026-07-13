@@ -15,6 +15,15 @@ export function formatRepresentativeType(value?: string | null): string {
 
 export const DAIRY_DESTINATION_PRODUCT_OPTIONS = ['تخم مرغ دارد', 'پک پرسنل دارد', 'نوشیدنی دارد'] as const;
 
+/** محصولات مقصد — فقط تب لبنیات-فروتلند (Ambient) */
+export const AMBIENT_DESTINATION_PRODUCT_OPTIONS = [
+    'لبنیات',
+    'آبمیوه',
+    'پانلا',
+    'آلینوس',
+    'نوشیدنی',
+] as const;
+
 export function formatDestinationBrandTypeLabel(
     dest?: Pick<Destination, 'brandType'> | null
 ): string {
@@ -41,6 +50,25 @@ export function formatDestinationProductsLabel(
     const items = dest?.products;
     if (!Array.isArray(items) || items.length === 0) return '-';
     return items.join('، ');
+}
+
+/** جمع محصولات یکتا از همه مقاصد اعلام‌بار (برای ستون جداول) */
+export function formatAnnouncementDestinationProductsLabel(
+    ann?: Pick<FreightAnnouncement, 'destinations'> | null
+): string {
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const dest of ann?.destinations || []) {
+        const items = dest?.products;
+        if (!Array.isArray(items)) continue;
+        for (const raw of items) {
+            const label = String(raw || '').trim();
+            if (!label || seen.has(label)) continue;
+            seen.add(label);
+            ordered.push(label);
+        }
+    }
+    return ordered.length > 0 ? ordered.join('، ') : '-';
 }
 
 /** ادغام مقاصد پس از refresh — فقط متادیتای فیلدهای خالی از state قبلی پر می‌شود؛ بدون تکرار ردیف */

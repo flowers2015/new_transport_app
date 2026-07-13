@@ -1,9 +1,100 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import FreightHistory from './FreightHistory';
 import { Driver, FreightAnnouncement, FreightAnnouncementStatus, User, Vehicle, PersonalDriver, PersonalVehicle, FreightLineType } from '../types';
-import { gregorianToJalali } from '../utils/jalali';
 import { getApiUrl } from '../utils/apiConfig';
 import { pickAssignmentFieldsFromApi } from '../utils/freightDisplay';
+
+const HISTORY_STATUS_MAP: Record<string, FreightAnnouncementStatus> = {
+    Draft: FreightAnnouncementStatus.Draft,
+    PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
+    Rejected: FreightAnnouncementStatus.Rejected,
+    PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
+    PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
+    Assigned: FreightAnnouncementStatus.Assigned,
+    InTransit: FreightAnnouncementStatus.InTransit,
+    Finalized: FreightAnnouncementStatus.Finalized,
+    Cancelled: FreightAnnouncementStatus.Cancelled,
+    ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+};
+
+const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
+    return {
+        id: a.id,
+        announcementCode: a.announcement_code || a.announcementCode,
+        createdAt: new Date(a.created_at || a.createdAt || Date.now()),
+        loadingDate:
+            typeof a.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(a.loading_date)
+                ? (a.loading_date.replace(/-/g, '/') as any)
+                : new Date(a.loading_date || Date.now()),
+        lineType: a.line_type || a.lineType,
+        status: HISTORY_STATUS_MAP[a.status] || a.status,
+        cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
+        vehicleType: a.vehicle_type || a.vehicleType || '',
+        notes: a.notes,
+        ...pickAssignmentFieldsFromApi(a),
+        originCity: a.origin_city || a.originCity,
+        brand: a.brand,
+        representativeType: a.representative_type || a.representativeType,
+        representativeName: a.representative_name || a.representativeName,
+        cartonCount: a.carton_count ?? a.cartonCount,
+        palletCount: a.pallet_count ?? a.palletCount,
+        loadingType: a.loading_type || a.loadingType,
+        priority: a.priority,
+        products: Array.isArray(a.products)
+            ? a.products
+            : typeof a.products === 'string'
+              ? (() => {
+                    try {
+                        return JSON.parse(a.products);
+                    } catch {
+                        return [];
+                    }
+                })()
+              : a.products && typeof a.products === 'object'
+                ? a.products
+                : [],
+        platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+        destinations: Array.isArray(a.destinations)
+            ? a.destinations.map((d: any) => ({
+                  id: d.id,
+                  city: d.city,
+                  representativeName: d.representative_name || d.representativeName,
+                  representativeType: d.representative_type || d.representativeType,
+                  tonnage: d.tonnage,
+                  unloadTime: d.unload_time || d.unloadTime,
+                  freightCost: d.freight_cost ?? d.freightCost,
+                  cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
+                  deliveryDate: d.delivery_date || d.deliveryDate,
+                  lisCode: d.lis_code || d.lisCode,
+                  brandType: d.brand_type || d.brandType,
+                  brand: d.brand,
+                  brand2: d.brand2,
+                  products: Array.isArray(d.products)
+                      ? d.products
+                      : typeof d.products === 'string'
+                        ? (() => {
+                              try {
+                                  return JSON.parse(d.products);
+                              } catch {
+                                  return [];
+                              }
+                          })()
+                        : d.products && typeof d.products === 'object'
+                          ? d.products
+                          : [],
+              }))
+            : [],
+        history: a.history || [],
+        creator_full_name: a.creator_full_name || a.creatorFullName,
+        creator_username: a.creator_username || a.creatorUsername,
+        creator_user_id: a.creator_user_id || a.creatorUserId,
+        financeDisposition: a.finance_disposition || a.financeDisposition || null,
+        financeRejectType: a.finance_reject_type || a.financeRejectType || null,
+        financeRejectNote: a.finance_reject_note || a.financeRejectNote || null,
+        financeRejectedAt: a.finance_rejected_at || a.financeRejectedAt || null,
+        relatedExceptionId: a.related_exception_id || a.relatedExceptionId || null,
+    } as FreightAnnouncement;
+};
 
 const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -87,88 +178,9 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
 
             console.log(`✅ [FreightHistoryContainer] Received ${Array.isArray(historyRaw) ? historyRaw.length : 0} announcements (page ${page}, total: ${totalCount})`);
 
-            const statusMap: Record<string, FreightAnnouncementStatus> = {
-                Draft: FreightAnnouncementStatus.Draft,
-                PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
-                Rejected: FreightAnnouncementStatus.Rejected,
-                PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
-                PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
-                Assigned: FreightAnnouncementStatus.Assigned,
-                InTransit: FreightAnnouncementStatus.InTransit,
-                Finalized: FreightAnnouncementStatus.Finalized,
-                Cancelled: FreightAnnouncementStatus.Cancelled,
-                ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
-            };
-
-            const normalize = (a: any): FreightAnnouncement => {
-                return {
-                    id: a.id,
-                    announcementCode: a.announcement_code || a.announcementCode,
-                    createdAt: new Date(a.created_at || a.createdAt || Date.now()),
-                    // اگر loading_date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، همان را نگه دار
-                    loadingDate: (typeof a.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(a.loading_date)) 
-                        ? (a.loading_date.replace(/-/g, '/') as any)
-                        : new Date(a.loading_date || Date.now()),
-                    lineType: a.line_type || a.lineType,
-                    status: statusMap[a.status] || a.status,
-                    cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
-                    vehicleType: a.vehicle_type || a.vehicleType || '',
-                    notes: a.notes,
-                    ...pickAssignmentFieldsFromApi(a),
-                    originCity: a.origin_city || a.originCity,
-                    brand: a.brand,
-                    representativeType: a.representative_type || a.representativeType,
-                    representativeName: a.representative_name || a.representativeName,
-                    cartonCount: a.carton_count ?? a.cartonCount,
-                    palletCount: a.pallet_count ?? a.palletCount,
-                    loadingType: a.loading_type || a.loadingType,
-                    priority: a.priority,
-                    products: Array.isArray(a.products) ? a.products : (a.products ? JSON.parse(a.products) : []),
-                    platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
-                    destinations: Array.isArray(a.destinations) ? a.destinations.map((d: any) => ({
-                        id: d.id,
-                        city: d.city,
-                        representativeName: d.representative_name || d.representativeName,
-                        representativeType: d.representative_type || d.representativeType,
-                        tonnage: d.tonnage,
-                        unloadTime: d.unload_time || d.unloadTime,
-                        freightCost: d.freight_cost ?? d.freightCost,
-                        cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
-                        deliveryDate: d.delivery_date || d.deliveryDate,
-                        lisCode: d.lis_code || d.lisCode,
-                        brandType: d.brand_type || d.brandType,
-                        brand: d.brand,
-                        brand2: d.brand2,
-                        products: Array.isArray(d.products)
-                            ? d.products
-                            : typeof d.products === 'string'
-                              ? (() => {
-                                    try {
-                                        return JSON.parse(d.products);
-                                    } catch {
-                                        return [];
-                                    }
-                                })()
-                              : [],
-                    })) : [],
-                    history: a.history || [],
-                    // اطلاعات کارمند اعلام‌کننده
-                    creator_full_name: a.creator_full_name || a.creatorFullName,
-                    creator_username: a.creator_username || a.creatorUsername,
-                    creator_user_id: a.creator_user_id || a.creatorUserId,
-                    financeDisposition: a.finance_disposition || a.financeDisposition || null,
-                    financeRejectType: a.finance_reject_type || a.financeRejectType || null,
-                    financeRejectNote: a.finance_reject_note || a.financeRejectNote || null,
-                    financeRejectedAt: a.finance_rejected_at || a.financeRejectedAt || null,
-                    relatedExceptionId: a.related_exception_id || a.relatedExceptionId || null,
-                } as FreightAnnouncement & {
-                    financeDisposition?: string | null;
-                    financeRejectType?: string | null;
-                    financeRejectNote?: string | null;
-                };
-            };
-
-            const announcementsData: FreightAnnouncement[] = Array.isArray(historyRaw) ? historyRaw.map(normalize) : [];
+            const announcementsData: FreightAnnouncement[] = Array.isArray(historyRaw)
+                ? historyRaw.map(normalizeHistoryAnnouncement)
+                : [];
 
             setAnnouncements(announcementsData);
             setVehicles(vehiclesData);
@@ -182,6 +194,58 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setLoading(false);
         }
     };
+
+    const fetchHistoryForExcelExport = useCallback(
+        async (opts: { dateFrom: string; dateTo: string }): Promise<FreightAnnouncement[]> => {
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` } as HeadersInit;
+            const pageSize = 100;
+            const maxRows = 5000;
+            const all: FreightAnnouncement[] = [];
+            let page = 1;
+            let totalPagesLocal = 1;
+
+            while (page <= totalPagesLocal && all.length < maxRows) {
+                const params = new URLSearchParams();
+                if (opts.dateFrom?.trim()) params.append('dateFrom', opts.dateFrom.trim().replace(/-/g, '/'));
+                if (opts.dateTo?.trim()) params.append('dateTo', opts.dateTo.trim().replace(/-/g, '/'));
+                if (filterDestination?.trim()) params.append('destination', filterDestination.trim());
+                if (filterBillOfLading?.trim()) params.append('billOfLading', filterBillOfLading.trim());
+                if (filterDriverName?.trim()) params.append('driverName', filterDriverName.trim());
+                if (filterCreatorName?.trim()) params.append('creatorName', filterCreatorName.trim());
+                params.append('lineType', activeLine);
+                params.append('page', String(page));
+                params.append('limit', String(pageSize));
+
+                const res = await fetch(
+                    getApiUrl(`freight-announcements/history?${params.toString()}`),
+                    { headers }
+                );
+                if (!res.ok) {
+                    const errText = await res.text().catch(() => '');
+                    throw new Error(errText || 'خطا در دریافت داده برای خروجی اکسل');
+                }
+                const body = await res.json();
+                const raw = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+                all.push(...raw.map(normalizeHistoryAnnouncement));
+                totalPagesLocal = Number(body?.pagination?.totalPages) || 1;
+                if (raw.length === 0) break;
+                page += 1;
+            }
+
+            if (all.length >= maxRows) {
+                console.warn(`⚠️ [FreightHistoryContainer] Excel export capped at ${maxRows} rows`);
+            }
+            return all.slice(0, maxRows);
+        },
+        [
+            activeLine,
+            filterDestination,
+            filterBillOfLading,
+            filterDriverName,
+            filterCreatorName,
+        ]
+    );
 
     // جستجو - فقط یک بار در mount برای بارگذاری اولیه
     useEffect(() => {
@@ -274,6 +338,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             totalPages={totalPages}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
+            onFetchForExcelExport={fetchHistoryForExcelExport}
         />
     );
 };

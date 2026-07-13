@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDairyDestinationColumnLines } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDairyDestinationColumnLines } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -42,6 +42,14 @@ const createInitialDairyDestination = (): Partial<Destination> => ({
     lisCode: '',
     products: [],
     cargoValue: 0,
+});
+
+const createInitialAmbientDestination = (): Partial<Destination> => ({
+    id: generateUUID(),
+    city: '',
+    representativeName: '',
+    representativeType: 'agent',
+    products: [],
 });
 
 const sumDestinationCargoValues = (destinations: Partial<Destination>[]): number =>
@@ -2219,7 +2227,13 @@ const AnnouncementPanel: React.FC<{
         setIceCreamRouteType('single');
         setIceCreamLegs([createInitialIceCreamLeg(), createInitialIceCreamLeg()]);
         setMultiDestState(prev => ({ ...initialMultiDestState, platformArrivalTime: prev.platformArrivalTime }));
-        setDestinations(lineType === FreightLineType.Dairy ? [createInitialDairyDestination()] : [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }]);
+        setDestinations(
+            effectiveLineType === FreightLineType.Dairy
+                ? [createInitialDairyDestination()]
+                : effectiveLineType === FreightLineType.Ambient
+                  ? [createInitialAmbientDestination()]
+                  : [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' }]
+        );
         setDestCityValid({});
         setIceCreamDestCityValid([false, false]);
         setIceCreamOriginCityValid([false, false]);
@@ -2408,7 +2422,9 @@ const AnnouncementPanel: React.FC<{
                               }))
                             : data.lineType === FreightLineType.Dairy
                               ? [createInitialDairyDestination()]
-                              : [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as const }];
+                              : data.lineType === FreightLineType.Ambient
+                                ? [createInitialAmbientDestination()]
+                                : [{ id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as const }];
                     const finalDests =
                         data.lineType === FreightLineType.Dairy
                             ? migrateDairyDestinationCargoValues(
@@ -2505,7 +2521,9 @@ const AnnouncementPanel: React.FC<{
             const newDest =
                 lineType === FreightLineType.Dairy
                     ? createInitialDairyDestination()
-                    : { id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' };
+                    : lineType === FreightLineType.Ambient
+                      ? createInitialAmbientDestination()
+                      : { id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' };
             const id = newDest.id!;
             setDestinations([...destinations, newDest]);
             setDestCityValid((prev) => ({ ...prev, [id]: false }));
@@ -3612,6 +3630,29 @@ const AnnouncementPanel: React.FC<{
                                                     className="input-style"
                                                 />
                                             </div>
+                                            {lineType === FreightLineType.Ambient && (
+                                                <div className="col-span-2">
+                                                    <label className="text-xs font-semibold mb-1 block">محصولات</label>
+                                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                                        {AMBIENT_DESTINATION_PRODUCT_OPTIONS.map((product) => (
+                                                            <label key={product} className="flex items-center gap-1 text-xs cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={(dest.products || []).includes(product)}
+                                                                    onChange={(e) =>
+                                                                        handleDestinationProductChange(
+                                                                            dest.id!,
+                                                                            product,
+                                                                            e.target.checked
+                                                                        )
+                                                                    }
+                                                                />
+                                                                {product}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                             <RequiredField label="تناژ (کیلوگرم)*">
                                                 <input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style w-full" required min="0" step="0.01"/>
                                             </RequiredField>

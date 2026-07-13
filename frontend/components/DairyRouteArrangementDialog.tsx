@@ -44,6 +44,7 @@ import {
     sumRouteTonnageKg,
     reapplyApprovalsFromIndex,
     buildApprovalIndex,
+    reconcileRoutesWithAnnouncements,
 } from '../utils/dairyRouteArrangement';
 import {
     logArrangement,
@@ -52,6 +53,13 @@ import {
     logArrangementSync,
     logArrangementTransferResult,
 } from '../utils/dairyRouteArrangementDebug';
+import {
+    ArrangementLock,
+    fetchDairyArrangementState,
+    saveDairyArrangementState,
+    updateDairyArrangementLockApi,
+} from '../utils/dairyArrangementSync';
+import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import DairyRouteSuggestionDialog from './DairyRouteSuggestionDialog';
 import {
     DairyRouteSuggestion,
@@ -66,6 +74,8 @@ type Props = {
     onClose: () => void;
     announcements: FreightAnnouncement[];
     userId: string;
+    /** نام نمایشی برای قفل ردیف */
+    userName?: string;
     onTransferDestination: (
         sourceAnnouncementId: string,
         destinationId: string,
@@ -108,6 +118,14 @@ type UndoEntry = {
 const MAX_UNDO = 40;
 const ZOOM_STEPS = [0.7, 0.85, 1, 1.15, 1.3] as const;
 /** زوم پنل فشرده — حداقل خیلی کوچک تا همه ردیف‌ها در یک نما جا شوند */
+
+function buildAnnouncementMap(list: FreightAnnouncement[]): Map<string, FreightAnnouncement> {
+    const m = new Map<string, FreightAnnouncement>();
+    for (const a of list) {
+        m.set(a.id, a);
+    }
+    return m;
+}
 const COMPACT_ZOOM_STEPS = [0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 1, 1.15] as const;
 /** اندیس پیش‌فرض ≈ 55٪ تا ردیف‌های بیشتری دیده شود */
 const DEFAULT_COMPACT_ZOOM_INDEX = 3;
@@ -189,6 +207,12 @@ const StopCard: React.FC<{
                 e.dataTransfer.setData(DAIRY_ARRANGEMENT_DRAG_MIME, encodeDragPayload(dragKey, routeId));
                 e.dataTransfer.effectAllowed = 'move';
                 onDragStart(dragKey, routeId);
+            }}
+            onDragEnd={() => {
+                // drop موفق خودش قفل را آزاد می‌کند؛ اینجا برای لغو درگ
+                window.dispatchEvent(
+                    new CustomEvent('dairy-arrangement-drag-end', { detail: { routeId } })
+                );
             }}
             className={`w-full h-full rounded border-2 ${
                 draggable
@@ -286,6 +310,8 @@ const RouteRow: React.FC<{
     announcementById: Map<string, FreightAnnouncement>;
     density: PanelDensity;
     dragSource: DragSource | null;
+    routeLock?: ArrangementLock | null;
+    currentUserId: string;
     onDragStart: (dragKey: string, routeId: string) => void;
     onDropOnRoute: (
         targetRouteId: string,
@@ -305,6 +331,8 @@ const RouteRow: React.FC<{
     announcementById,
     density,
     dragSource,
+    routeLock,
+    currentUserId,
     onDragStart,
     onDropOnRoute,
     onSplitStop,
@@ -326,7 +354,8 @@ const RouteRow: React.FC<{
     const firstBlock = firstStop ? stopBlocks(firstStop)[0] : undefined;
     const primaryCode = firstBlock?.announcementCode || '—';
     const assignmentLocked = isRouteAssignmentLocked(route, announcementById);
-    const interactionLocked = route.approved || assignmentLocked;
+    const lockedByOther = Boolean(routeLock && routeLock.userId && routeLock.userId !== currentUserId);
+    const interactionLocked = route.approved || assignmentLocked || lockedByOther;
 
     const handleDrop = (e: React.DragEvent, targetIndex?: number) => {
         e.preventDefault();
@@ -346,11 +375,13 @@ const RouteRow: React.FC<{
     return (
         <div
             className={`rounded border-2 transition-colors ${
-                assignmentLocked
-                    ? 'bg-stone-200 border-stone-400 opacity-80'
-                    : route.approved
-                      ? `${SURFACE_BG} border-red-600 opacity-95`
-                      : `${SURFACE_BG} border-black hover:border-red-700`
+                lockedByOther
+                    ? 'bg-amber-50 border-amber-500 opacity-90'
+                    : assignmentLocked
+                      ? 'bg-stone-200 border-stone-400 opacity-80'
+                      : route.approved
+                        ? `${SURFACE_BG} border-red-600 opacity-95`
+                        : `${SURFACE_BG} border-black hover:border-red-700`
             } ${mini ? 'p-1' : 'p-2'}`}
             onDragOver={(e) => {
                 if (interactionLocked) return;
@@ -359,6 +390,11 @@ const RouteRow: React.FC<{
             }}
             onDrop={(e) => handleDrop(e)}
         >
+            {lockedByOther && (
+                <p className={`text-amber-800 font-black mb-0.5 ${mini ? 'text-[8px]' : 'text-[10px]'}`}>
+                    در حال ویرایش توسط {routeLock?.userName || 'کاربر دیگر'}
+                </p>
+            )}
             <div className={`flex flex-wrap items-center gap-1 ${mini ? 'mb-0.5' : 'mb-1.5'}`}>
                 {!mini && (
                     <span className={`font-black shrink-0 text-xs w-5 ${assignmentLocked ? 'text-stone-500' : 'text-black'}`}>
@@ -513,6 +549,8 @@ const CitySection: React.FC<{
     density: PanelDensity;
     announcementById: Map<string, FreightAnnouncement>;
     dragSource: DragSource | null;
+    locks: Record<string, ArrangementLock>;
+    currentUserId: string;
     onDragStart: (dragKey: string, routeId: string) => void;
     onDropOnRoute: (
         targetRouteId: string,
@@ -532,6 +570,8 @@ const CitySection: React.FC<{
     density,
     announcementById,
     dragSource,
+    locks,
+    currentUserId,
     onDragStart,
     onDropOnRoute,
     onSplitStop,
@@ -573,6 +613,8 @@ const CitySection: React.FC<{
                         announcementById={announcementById}
                         density={density}
                         dragSource={dragSource}
+                        routeLock={locks[route.id] || null}
+                        currentUserId={currentUserId}
                         onDragStart={onDragStart}
                         onDropOnRoute={onDropOnRoute}
                         onSplitStop={onSplitStop}
@@ -594,6 +636,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     onClose,
     announcements,
     userId,
+    userName,
     onTransferDestination,
     onSplitDestinationToNew,
     onChangeVehicleType,
@@ -614,6 +657,16 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const [compactZoomIndex, setCompactZoomIndex] = useState(DEFAULT_COMPACT_ZOOM_INDEX);
     const compactScrollRef = useRef<HTMLDivElement>(null);
     const compactContentRef = useRef<HTMLDivElement>(null);
+    const [sharedVersion, setSharedVersion] = useState<number | null>(null);
+    const sharedVersionRef = useRef<number | null>(null);
+    const [locks, setLocks] = useState<Record<string, ArrangementLock>>({});
+    const locksRef = useRef<Record<string, ArrangementLock>>({});
+    const [syncLabel, setSyncLabel] = useState('در حال همگام‌سازی...');
+    const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
+    const applyingRemoteRef = useRef(false);
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const heldLockRouteIdRef = useRef<string | null>(null);
+    const dropInProgressRef = useRef(false);
     const [returnTarget, setReturnTarget] = useState<{
         routeId: string;
         stopKey: string;
@@ -625,11 +678,13 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const panelContainerRef = useRef<HTMLDivElement>(null);
     const panelDragRef = useRef<{ startX: number; startPct: number } | null>(null);
     const wasOpenRef = useRef(false);
-    const announcementsRef = useRef(announcements);
+    const announcementsRef = useRef<FreightAnnouncement[]>(announcements);
     const syncedIdsRef = useRef('');
 
     routesRef.current = routes;
     announcementsRef.current = announcements;
+    sharedVersionRef.current = sharedVersion;
+    locksRef.current = locks;
 
     const pushUndo = useCallback((entry: UndoEntry) => {
         setUndoStack((prev) => [...prev.slice(-(MAX_UNDO - 1)), entry]);
@@ -651,43 +706,100 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             wasOpenRef.current = false;
             syncedIdsRef.current = '';
             setUndoStack([]);
+            setRemoteNotice(null);
+            setSyncLabel('قطع');
+            setSharedVersion(null);
+            setLocks({});
+            if (heldLockRouteIdRef.current) {
+                void updateDairyArrangementLockApi(heldLockRouteIdRef.current, 'release');
+                heldLockRouteIdRef.current = null;
+            }
             return;
         }
-        if (!wasOpenRef.current) {
-            const ann = announcementsRef.current;
+        if (wasOpenRef.current) return;
+
+        wasOpenRef.current = true;
+        const ann = announcementsRef.current;
+        setDragSource(null);
+        setSearchQuery('');
+        setCityFilter('');
+        setUndoStack([]);
+        setSyncLabel('در حال بارگذاری چیدمان مشترک...');
+        let cancelled = false;
+        (async () => {
+            const shared = await fetchDairyArrangementState();
+            if (cancelled || !wasOpenRef.current) return;
             const persisted = loadPersistedArrangement(userId, ann);
-            const initial =
-                persisted && persisted.length > 0 ? persisted : buildInitialRoutes(ann);
+            let initial: DairyArrangementRoute[] = [];
+            if (shared?.routes?.length) {
+                initial = reconcileRoutesWithAnnouncements(shared.routes, ann);
+                setSharedVersion(shared.version);
+                setLocks(shared.locks || {});
+                setSyncLabel(
+                    `همگام · نسخه ${shared.version}${
+                        shared.updatedByUserName ? ` · آخرین: ${shared.updatedByUserName}` : ''
+                    }`
+                );
+            } else if (persisted && persisted.length > 0) {
+                initial = persisted;
+                setSharedVersion(shared?.version ?? null);
+                setLocks(shared?.locks || {});
+                setSyncLabel('چیدمان محلی — در حال انتشار به سرور...');
+            } else {
+                initial = buildInitialRoutes(ann);
+                setSharedVersion(shared?.version ?? null);
+                setLocks(shared?.locks || {});
+                setSyncLabel('چیدمان اولیه — در حال انتشار به سرور...');
+            }
             logArrangementRoutes('INIT', initial);
-            logArrangementSync('INIT announcements', dairyAnnouncementIdsKey, ann);
             setRoutes(initial);
+            syncedIdsRef.current = buildDairyAnnouncementIdsKey(announcementsRef.current);
             if (initial.length > 0) {
                 savePersistedArrangement(userId, initial);
+                const saved = await saveDairyArrangementState(initial, shared?.version ?? null);
+                if (cancelled || !wasOpenRef.current) return;
+                if (saved.ok === true) {
+                    setSharedVersion(saved.state.version);
+                    setLocks(saved.state.locks || {});
+                    setSyncLabel(`همگام · نسخه ${saved.state.version}`);
+                } else if (saved.conflict === true && saved.state) {
+                    const remote = reconcileRoutesWithAnnouncements(
+                        saved.state.routes || [],
+                        announcementsRef.current
+                    );
+                    setRoutes(remote);
+                    setSharedVersion(saved.state.version);
+                    setLocks(saved.state.locks || {});
+                    setSyncLabel(`همگام · نسخه ${saved.state.version} (تعارض برطرف شد)`);
+                    setRemoteNotice('چیدمان از سرور جایگزین شد چون نسخه جدیدتری وجود داشت.');
+                }
             }
-            syncedIdsRef.current = dairyAnnouncementIdsKey;
-            setDragSource(null);
-            setSearchQuery('');
-            setCityFilter('');
-            setUndoStack([]);
-            wasOpenRef.current = true;
-            return;
-        }
-        if (isApplying) return;
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, userId]);
+
+    useEffect(() => {
+        if (!isOpen || !wasOpenRef.current || isApplying) return;
 
         const ann = announcementsRef.current;
         const prevIds = syncedIdsRef.current;
-        if (dairyAnnouncementIdsKey === prevIds) {
+        if (!prevIds || dairyAnnouncementIdsKey === prevIds) {
+            if (!prevIds) syncedIdsRef.current = dairyAnnouncementIdsKey;
             return;
         }
 
-        const prevIdSet = new Set(prevIds ? prevIds.split('|') : []);
+        const prevIdSet = new Set(prevIds.split('|').filter(Boolean));
         const newIdSet = new Set(dairyAnnouncementIdsKey ? dairyAnnouncementIdsKey.split('|') : []);
         const removed = [...prevIdSet].filter((id) => !newIdSet.has(id));
         const added = [...newIdSet].filter((id) => !prevIdSet.has(id));
 
         if (added.length > 0) {
             logArrangement('MERGE new announcements', { added, removed });
-            setRoutes((prev) => applyNewAnnouncementRowsToRoutes(prev, ann, added));
+            setRoutes((prev) =>
+                applyNewAnnouncementRowsToRoutes(prev, ann, added as string[])
+            );
         } else if (removed.length > 0) {
             logArrangement('PRUNE removed announcements', { removed });
             setRoutes((prev) => {
@@ -697,12 +809,194 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         }
 
         syncedIdsRef.current = dairyAnnouncementIdsKey;
-    }, [isOpen, dairyAnnouncementIdsKey, userId, isApplying]);
+    }, [isOpen, dairyAnnouncementIdsKey, isApplying]);
+
+    const pushSharedLayout = useCallback(
+        async (nextRoutes: DairyArrangementRoute[]) => {
+            if (applyingRemoteRef.current) return;
+            const result = await saveDairyArrangementState(nextRoutes, sharedVersionRef.current);
+            if (result.ok === true) {
+                setSharedVersion(result.state.version);
+                setLocks(result.state.locks || {});
+                setSyncLabel(`همگام · نسخه ${result.state.version}`);
+                savePersistedArrangement(userId, nextRoutes);
+                return;
+            }
+            if (result.conflict === true && result.state) {
+                applyingRemoteRef.current = true;
+                const remote = reconcileRoutesWithAnnouncements(
+                    result.state.routes || [],
+                    announcementsRef.current
+                );
+                setRoutes(remote);
+                setSharedVersion(result.state.version);
+                setLocks(result.state.locks || {});
+                setSyncLabel(`همگام · نسخه ${result.state.version}`);
+                setRemoteNotice(
+                    result.message ||
+                        `چیدمان توسط «${result.state.updatedByUserName || 'کاربر دیگر'}» تغییر کرد و جایگزین شد.`
+                );
+                savePersistedArrangement(userId, remote);
+                applyingRemoteRef.current = false;
+            }
+        },
+        [userId]
+    );
 
     useEffect(() => {
         if (!isOpen || routes.length === 0) return;
         savePersistedArrangement(userId, routes);
-    }, [isOpen, routes, userId]);
+        if (applyingRemoteRef.current) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            void pushSharedLayout(routesRef.current);
+        }, 450);
+        return () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        };
+    }, [isOpen, routes, userId, pushSharedLayout]);
+
+    useRealtimeUpdates({
+        enabled: isOpen,
+        onMessage: (message) => {
+            if (!isOpen) return;
+            if (message.type === 'general_update') {
+                if (message.updateType === 'dairy_arrangement_layout') {
+                    const data = message.data || {};
+                    if (data.updatedByUserId && String(data.updatedByUserId) === String(userId)) return;
+                    applyingRemoteRef.current = true;
+                    const remote = reconcileRoutesWithAnnouncements(
+                        Array.isArray(data.routes) ? data.routes : [],
+                        announcementsRef.current
+                    );
+                    setRoutes(remote);
+                    if (data.version != null) setSharedVersion(Number(data.version));
+                    if (data.locks) setLocks(data.locks);
+                    setSyncLabel(`همگام · نسخه ${data.version ?? '—'}`);
+                    setRemoteNotice(
+                        `به‌روزرسانی زنده از «${data.updatedByUserName || 'کاربر دیگر'}»`
+                    );
+                    savePersistedArrangement(userId, remote);
+                    applyingRemoteRef.current = false;
+                    return;
+                }
+                if (message.updateType === 'dairy_arrangement_locks') {
+                    const data = message.data || {};
+                    if (data.actorUserId && String(data.actorUserId) === String(userId)) return;
+                    if (data.locks) setLocks(data.locks);
+                    return;
+                }
+                if (message.updateType === 'dairy_arrangement_data_changed') {
+                    onRefresh?.();
+                    setRemoteNotice('داده اعلام‌بار تغییر کرد — در حال بروزرسانی...');
+                }
+            }
+            if (message.type === 'announcement_update') {
+                const t = message.updateType || '';
+                if (
+                    t === 'updated' ||
+                    t === 'created' ||
+                    t === 'cancelled' ||
+                    t === 'assigned' ||
+                    t === 'returned_to_creator'
+                ) {
+                    onRefresh?.();
+                }
+            }
+        },
+    });
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const timer = setInterval(() => {
+            void (async () => {
+                const shared = await fetchDairyArrangementState();
+                if (!shared) return;
+                if (
+                    sharedVersionRef.current != null &&
+                    shared.version > sharedVersionRef.current &&
+                    !applyingRemoteRef.current
+                ) {
+                    applyingRemoteRef.current = true;
+                    const remote = reconcileRoutesWithAnnouncements(
+                        shared.routes || [],
+                        announcementsRef.current
+                    );
+                    setRoutes(remote);
+                    setSharedVersion(shared.version);
+                    setLocks(shared.locks || {});
+                    setRemoteNotice(
+                        `همگام‌سازی خودکار · نسخه ${shared.version}${
+                            shared.updatedByUserName ? ` · ${shared.updatedByUserName}` : ''
+                        }`
+                    );
+                    setSyncLabel(`همگام · نسخه ${shared.version}`);
+                    savePersistedArrangement(userId, remote);
+                    applyingRemoteRef.current = false;
+                } else if (shared.locks) {
+                    setLocks(shared.locks);
+                }
+            })();
+        }, 12000);
+        return () => clearInterval(timer);
+    }, [isOpen, userId]);
+
+    useEffect(() => {
+        if (!remoteNotice) return;
+        const t = setTimeout(() => setRemoteNotice(null), 5000);
+        return () => clearTimeout(t);
+    }, [remoteNotice]);
+
+    const acquireRouteLock = useCallback(async (routeId: string): Promise<boolean> => {
+        const existing = locksRef.current[routeId];
+        if (existing && String(existing.userId) !== String(userId)) {
+            alert(`این ردیف توسط «${existing.userName}» در حال ویرایش است.`);
+            return false;
+        }
+        const result = await updateDairyArrangementLockApi(routeId, 'acquire');
+        if (!result.ok) {
+            if (result.locks) setLocks(result.locks);
+            alert(result.message || 'قفل ردیف ممکن نیست.');
+            return false;
+        }
+        if (result.locks) setLocks(result.locks);
+        heldLockRouteIdRef.current = routeId;
+        return true;
+    }, [userId]);
+
+    const releaseRouteLock = useCallback(async (routeId?: string | null) => {
+        const id = routeId || heldLockRouteIdRef.current;
+        if (!id) return;
+        const result = await updateDairyArrangementLockApi(id, 'release');
+        if (result.locks) setLocks(result.locks);
+        if (heldLockRouteIdRef.current === id) heldLockRouteIdRef.current = null;
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const onDragEnd = (e: Event) => {
+            const routeId = (e as CustomEvent<{ routeId?: string }>).detail?.routeId;
+            setDragSource(null);
+            // drop موفق خودش قفل را آزاد می‌کند
+            if (dropInProgressRef.current || isApplying) return;
+            if (routeId) void releaseRouteLock(routeId);
+        };
+        window.addEventListener('dairy-arrangement-drag-end', onDragEnd as EventListener);
+        return () => window.removeEventListener('dairy-arrangement-drag-end', onDragEnd as EventListener);
+    }, [isOpen, isApplying, releaseRouteLock]);
+
+    useEffect(() => {
+        if (!isOpen || !heldLockRouteIdRef.current) return;
+        const timer = setInterval(() => {
+            const id = heldLockRouteIdRef.current;
+            if (!id) return;
+            void updateDairyArrangementLockApi(id, 'heartbeat').then((r) => {
+                if (r.locks) setLocks(r.locks);
+                if (!r.ok) heldLockRouteIdRef.current = null;
+            });
+        }, 30000);
+        return () => clearInterval(timer);
+    }, [isOpen, dragSource]);
 
     useEffect(() => {
         const onMove = (e: MouseEvent) => {
@@ -731,7 +1025,10 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     };
 
     const cityOptions = useMemo(() => {
-        const cities = new Set(routes.map((r) => r.anchorCity).filter(Boolean));
+        const cities = new Set<string>();
+        routes.forEach((r) => {
+            if (r.anchorCity) cities.add(r.anchorCity);
+        });
         return Array.from(cities).sort((a, b) => a.localeCompare(b, 'fa'));
     }, [routes]);
 
@@ -814,6 +1111,15 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         [onTransferDestination, userId, pushUndo, runTransferOps, onRefresh]
     );
 
+    const isRouteLockedByOther = useCallback(
+        (routeId: string): ArrangementLock | null => {
+            const lock = locksRef.current[routeId];
+            if (lock && lock.userId && String(lock.userId) !== String(userId)) return lock;
+            return null;
+        },
+        [userId]
+    );
+
     const handleDropOnRoute = useCallback(
         async (
             targetRouteId: string,
@@ -834,10 +1140,20 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 return;
             }
 
+            const sourceLock = isRouteLockedByOther(source.sourceRouteId);
+            const targetLock = isRouteLockedByOther(targetRouteId);
+            if (sourceLock || targetLock) {
+                const who = (sourceLock || targetLock)?.userName || 'کاربر دیگر';
+                alert(`این ردیف توسط «${who}» در حال ویرایش است.`);
+                setDragSource(null);
+                void releaseRouteLock(source.sourceRouteId);
+                return;
+            }
+
             const currentRoutes = routesRef.current;
             const sourceRoute = currentRoutes.find((r) => r.id === source.sourceRouteId);
             const targetRouteBefore = currentRoutes.find((r) => r.id === targetRouteId);
-            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            const annMap = buildAnnouncementMap(announcementsRef.current);
             if (
                 !targetRouteBefore ||
                 targetRouteBefore.approved ||
@@ -851,6 +1167,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                           : 'target route assignment-locked',
                     targetRouteId,
                 });
+                void releaseRouteLock(source.sourceRouteId);
+                setDragSource(null);
                 return;
             }
             if (
@@ -866,12 +1184,16 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                           : 'source route assignment-locked',
                     sourceRouteId: source.sourceRouteId,
                 });
+                void releaseRouteLock(source.sourceRouteId);
+                setDragSource(null);
                 return;
             }
 
             const movingBlocks = getMovingBlocksForDrag(currentRoutes, source.dragKey);
             if (movingBlocks.length === 0) {
                 logArrangement('DROP blocked', { reason: 'no moving blocks', dragKey: source.dragKey });
+                void releaseRouteLock(source.sourceRouteId);
+                setDragSource(null);
                 return;
             }
 
@@ -918,34 +1240,64 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
             if (!layoutChanged) {
                 logArrangement('DROP failed', { reason: 'moveBlockBetweenRoutes returned unchanged layout' });
+                void releaseRouteLock(source.sourceRouteId);
                 return;
+            }
+
+            dropInProgressRef.current = true;
+            // قفل مقصد هم هنگام جابجایی
+            if (source.sourceRouteId !== targetRouteId) {
+                const okTarget = await acquireRouteLock(targetRouteId);
+                if (!okTarget) {
+                    dropInProgressRef.current = false;
+                    void releaseRouteLock(source.sourceRouteId);
+                    return;
+                }
             }
 
             const undoEntry: UndoEntry = {
                 routes: prevRoutes,
                 reverseOps: ops.length > 0 ? buildReverseTransferOps(prevRoutes, ops) : undefined,
             };
-            await applyTransferOps(prevRoutes, nextRoutes, ops, undoEntry);
+            try {
+                await applyTransferOps(prevRoutes, nextRoutes, ops, undoEntry);
+            } finally {
+                dropInProgressRef.current = false;
+                void releaseRouteLock(source.sourceRouteId);
+                if (source.sourceRouteId !== targetRouteId) {
+                    void releaseRouteLock(targetRouteId);
+                }
+            }
         },
-        [dragSource, isApplying, applyTransferOps]
+        [dragSource, isApplying, applyTransferOps, isRouteLockedByOther, acquireRouteLock, releaseRouteLock]
     );
 
     const handleSplitStop = useCallback(
-        (routeId: string, stopKey: string) => {
+        async (routeId: string, stopKey: string) => {
             const route = routesRef.current.find((r) => r.id === routeId);
-            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            const annMap = buildAnnouncementMap(announcementsRef.current);
             if (!route || route.approved || isRouteAssignmentLocked(route, annMap)) return;
-            pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
-            setRoutes((prev) => splitStopInRoute(prev, routeId, stopKey));
+            if (isRouteLockedByOther(routeId)) {
+                alert(`این ردیف توسط «${isRouteLockedByOther(routeId)?.userName}» در حال ویرایش است.`);
+                return;
+            }
+            const ok = await acquireRouteLock(routeId);
+            if (!ok) return;
+            try {
+                pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
+                setRoutes((prev) => splitStopInRoute(prev, routeId, stopKey));
+            } finally {
+                void releaseRouteLock(routeId);
+            }
         },
-        [pushUndo]
+        [pushUndo, isRouteLockedByOther, acquireRouteLock, releaseRouteLock]
     );
 
     const handleVehicleChange = useCallback(
         async (routeId: string, vehicleType: string) => {
             const currentRoutes = routesRef.current;
             const route = currentRoutes.find((r) => r.id === routeId);
-            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            const annMap = buildAnnouncementMap(announcementsRef.current);
             if (
                 !route ||
                 route.approved ||
@@ -954,9 +1306,18 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             ) {
                 return;
             }
+            if (isRouteLockedByOther(routeId)) {
+                alert(`این ردیف توسط «${isRouteLockedByOther(routeId)?.userName}» در حال ویرایش است.`);
+                return;
+            }
+            const lockOk = await acquireRouteLock(routeId);
+            if (!lockOk) return;
 
             const annId = resolveTargetAnnouncementId(route);
-            if (!annId) return;
+            if (!annId) {
+                void releaseRouteLock(routeId);
+                return;
+            }
 
             const prevRoutes = cloneArrangementRoutes(currentRoutes);
             const optimistic = setRouteVehicleType(currentRoutes, routeId, vehicleType);
@@ -965,6 +1326,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             if (!onChangeVehicleType) {
                 pushUndo({ routes: prevRoutes });
                 savePersistedArrangement(userId, optimistic);
+                void releaseRouteLock(routeId);
                 return;
             }
 
@@ -980,15 +1342,16 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 onRefresh?.();
             } finally {
                 setIsApplying(false);
+                void releaseRouteLock(routeId);
             }
         },
-        [onChangeVehicleType, onRefresh, pushUndo, userId]
+        [onChangeVehicleType, onRefresh, pushUndo, userId, isRouteLockedByOther, acquireRouteLock, releaseRouteLock]
     );
 
     const handleApprove = useCallback(
         (routeId: string) => {
             const route = routesRef.current.find((r) => r.id === routeId);
-            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            const annMap = buildAnnouncementMap(announcementsRef.current);
             if (!route || isRouteAssignmentLocked(route, annMap)) return;
             pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
             setRoutes((prev) => {
@@ -1003,7 +1366,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const handleUnapprove = useCallback(
         (routeId: string) => {
             const route = routesRef.current.find((r) => r.id === routeId);
-            const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            const annMap = buildAnnouncementMap(announcementsRef.current);
             if (!route || isRouteAssignmentLocked(route, annMap)) return;
             pushUndo({ routes: cloneArrangementRoutes(routesRef.current) });
             setRoutes((prev) => {
@@ -1045,14 +1408,21 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     }, [isApplying, undoStack, runTransferOps, userId, onRefresh]);
 
     const handleClearSavedLayout = useCallback(() => {
-        if (!window.confirm('چیدمان ذخیره‌شده در مرورگر پاک شود و از اول ساخته شود؟')) return;
+        if (
+            !window.confirm(
+                'چیدمان مشترک پاک شود و از اول ساخته شود؟ این تغییر برای همه کاربران اعمال می‌شود.'
+            )
+        ) {
+            return;
+        }
         clearPersistedArrangement(userId);
         const ann = announcementsRef.current;
         const fresh = buildInitialRoutes(ann);
         setRoutes(fresh);
         setUndoStack([]);
         syncedIdsRef.current = buildDairyAnnouncementIdsKey(ann);
-    }, [userId]);
+        void pushSharedLayout(fresh);
+    }, [userId, pushSharedLayout]);
 
     const suggestRoute = useMemo(
         () => (suggestRouteId ? routes.find((r) => r.id === suggestRouteId) || null : null),
@@ -1071,7 +1441,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     const handleOpenSuggest = useCallback((routeId: string) => {
         const route = routesRef.current.find((r) => r.id === routeId);
-        const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+        const annMap = buildAnnouncementMap(announcementsRef.current);
         if (!route || route.approved || isRouteAssignmentLocked(route, annMap)) return;
         setSuggestRouteId(routeId);
     }, []);
@@ -1081,7 +1451,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             if (!suggestRouteId) return;
             const currentRoutes = routesRef.current;
             const target = currentRoutes.find((r) => r.id === suggestRouteId);
-            const annMapForLock = new Map(announcementsRef.current.map((a) => [a.id, a]));
+            const annMapForLock = buildAnnouncementMap(announcementsRef.current);
             if (!target || target.approved || isRouteAssignmentLocked(target, annMapForLock)) return;
 
             const removeIds = new Set((suggestion.removeStops || []).map((s) => s.destinationId));
@@ -1118,7 +1488,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             try {
                 // اول outlierها را به اعلام‌بار کاملاً جدید جدا کن
                 if (toRemove.length > 0) {
-                    const annMapLive = new Map(announcementsRef.current.map((a) => [a.id, a]));
+                    const annMapLive = buildAnnouncementMap(announcementsRef.current);
                     for (const stop of toRemove) {
                         const ownerId = resolveOwnerAnnouncementIdForDestination(
                             stop.destinationId,
@@ -1217,7 +1587,17 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     );
 
     const handlers = {
-        onDragStart: (dragKey: string, routeId: string) => setDragSource({ dragKey, routeId }),
+        onDragStart: (dragKey: string, routeId: string) => {
+            const other = isRouteLockedByOther(routeId);
+            if (other) {
+                alert(`این ردیف توسط «${other.userName}» در حال ویرایش است.`);
+                return;
+            }
+            setDragSource({ dragKey, routeId });
+            void acquireRouteLock(routeId).then((ok) => {
+                if (!ok) setDragSource(null);
+            });
+        },
         onDropOnRoute: handleDropOnRoute,
         onSplitStop: handleSplitStop,
         onVehicleChange: handleVehicleChange,
@@ -1228,7 +1608,12 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             ? (routeId: string, stopKey: string) => {
                   const route = routesRef.current.find((r) => r.id === routeId);
                   if (!route) return;
-                  const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+                  const other = isRouteLockedByOther(routeId);
+                  if (other) {
+                      alert(`این ردیف توسط «${other.userName}» در حال ویرایش است.`);
+                      return;
+                  }
+                  const annMap = buildAnnouncementMap(announcementsRef.current);
                   if (isRouteAssignmentLocked(route, annMap)) {
                       alert('این ردیف تخصیص خودرو و راننده شده و قابل تغییر نیست.');
                       return;
@@ -1272,7 +1657,12 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             ? async (routeId: string, stopKey: string) => {
                   const route = routesRef.current.find((r) => r.id === routeId);
                   if (!route) return;
-                  const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+                  const other = isRouteLockedByOther(routeId);
+                  if (other) {
+                      alert(`این ردیف توسط «${other.userName}» در حال ویرایش است.`);
+                      return;
+                  }
+                  const annMap = buildAnnouncementMap(announcementsRef.current);
                   if (isRouteAssignmentLocked(route, annMap)) {
                       alert('این ردیف تخصیص خودرو و راننده شده و قابل تغییر نیست.');
                       return;
@@ -1395,7 +1785,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         }
         const route = routesRef.current.find((r) => r.id === returnTarget.routeId);
         if (!route) return;
-        const annMap = new Map(announcementsRef.current.map((a) => [a.id, a]));
+        const annMap = buildAnnouncementMap(announcementsRef.current);
         if (isRouteAssignmentLocked(route, annMap)) {
             alert('این ردیف تخصیص خودرو و راننده شده و قابل تغییر نیست.');
             return;
@@ -1477,6 +1867,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 density={density}
                 announcementById={announcementById}
                 dragSource={dragSource}
+                locks={locks}
+                currentUserId={userId}
                 {...handlers}
             />
         ));
@@ -1488,9 +1880,18 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                     <div className="min-w-0">
                         <h2 className="text-lg font-black text-black">چیدمان مسیر — پاستوریزه</h2>
                         <p className="text-xs text-black font-semibold">
-                            جابجایی مقصد بلافاصله در سیستم ثبت می‌شود · «تأیید» = قفل ردیف در دیالوگ
+                            چیدمان مشترک آنلاین · جابجایی بلافاصله ثبت می‌شود · «تأیید» = قفل ردیف
                             {isApplying ? ' · در حال ثبت...' : ''}
                         </p>
+                        <p className="text-[11px] text-stone-700 font-bold mt-0.5" title="وضعیت همگام‌سازی سرور">
+                            {syncLabel}
+                            {userName ? ` · شما: ${userName}` : ''}
+                        </p>
+                        {remoteNotice && (
+                            <p className="text-[11px] text-amber-800 font-black mt-0.5 bg-amber-50 border border-amber-400 rounded px-1.5 py-0.5 inline-block">
+                                {remoteNotice}
+                            </p>
+                        )}
                     </div>
                     <div className="flex items-center gap-1.5 mr-auto flex-wrap">
                         <input
@@ -1531,9 +1932,9 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                             type="button"
                             onClick={handleClearSavedLayout}
                             className="px-2 py-1 text-xs font-black rounded-md border-2 border-red-600 text-red-700 hover:bg-red-50"
-                            title="پاک کردن چیدمان ذخیره‌شده در مرورگر"
+                            title="بازنشانی چیدمان مشترک برای همه"
                         >
-                            پاک کردن حافظه
+                            بازنشانی چیدمان
                         </button>
                         <button
                             type="button"

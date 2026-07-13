@@ -251,7 +251,19 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           representativeName: a.representative_name,
           cartonCount: a.carton_count,
           priority: a.priority,
-          products: a.products ? (Array.isArray(a.products) ? a.products : JSON.parse(a.products)) : [],
+          products: Array.isArray(a.products)
+            ? a.products
+            : typeof a.products === 'string'
+              ? (() => {
+                  try {
+                    return JSON.parse(a.products);
+                  } catch {
+                    return [];
+                  }
+                })()
+              : a.products && typeof a.products === 'object'
+                ? a.products
+                : [],
           platformArrivalTime: a.platform_arrival_time,
           destinations: (a.destinations || []).map((d: any) => ({
             id: d.id,
@@ -259,7 +271,20 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
             representativeName: d.representative_name || '',
             tonnage: d.tonnage ? Number(d.tonnage) : 0,
             freightCost: d.freight_cost ? Number(d.freight_cost) : 0,
-            unloadTime: d.unload_time || ''
+            unloadTime: d.unload_time || '',
+            products: Array.isArray(d.products)
+              ? d.products
+              : typeof d.products === 'string'
+                ? (() => {
+                    try {
+                      return JSON.parse(d.products);
+                    } catch {
+                      return [];
+                    }
+                  })()
+                : d.products && typeof d.products === 'object'
+                  ? d.products
+                  : [],
           })),
           createdBy: a.created_by || a.createdBy || a.user_id,
           createdByName: a.created_by_name || a.createdByName || a.user_name || a.created_by_user_name

@@ -270,6 +270,11 @@ addDestinationOriginalCreator().catch(err => {
   console.error('❌ [Server] خطا در اضافه کردن original_created_by_user_id به مقاصد:', err);
 });
 
+const createDairyArrangementStateTable = require('./migrations/create_dairy_arrangement_state');
+createDairyArrangementStateTable().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جدول dairy_arrangement_state:', err);
+});
+
 const baleSessionEngine = require('./services/bale/baleSessionEngine');
 const { startBalePolling } = require('./services/bale/balePolling');
 if (process.env.BALE_BOT_TOKEN) {

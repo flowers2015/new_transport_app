@@ -48,6 +48,11 @@ const {
   carrierCompleteHandoff,
 } = require('../controllers/carrierHandoffController');
 const { getDairyRouteSuggestions } = require('../controllers/dairyRouteSuggestionController');
+const {
+  getDairyArrangement,
+  saveDairyArrangement,
+  updateDairyArrangementLock,
+} = require('../controllers/dairyArrangementController');
 
 const { getPerformanceIndex, getPersonalPerformanceIndex } = require('../controllers/performanceIndexController');
 
@@ -108,6 +113,34 @@ router.post(
   authenticateToken,
   authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
   getDairyRouteSuggestions
+);
+
+const DAIRY_ARRANGEMENT_ROLES = [
+  'transport_user',
+  'personal_transport_user',
+  'planner',
+  'planner_manager',
+  'sales_expert',
+  'admin',
+];
+
+router.get(
+  '/dairy-arrangement',
+  authenticateToken,
+  authorizeRole(DAIRY_ARRANGEMENT_ROLES),
+  getDairyArrangement
+);
+router.put(
+  '/dairy-arrangement',
+  authenticateToken,
+  authorizeRole(DAIRY_ARRANGEMENT_ROLES),
+  saveDairyArrangement
+);
+router.post(
+  '/dairy-arrangement/locks',
+  authenticateToken,
+  authorizeRole(DAIRY_ARRANGEMENT_ROLES),
+  updateDairyArrangementLock
 );
 
 // Get city statistics (for transport dashboard)
