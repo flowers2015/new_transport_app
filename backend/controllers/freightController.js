@@ -9,6 +9,11 @@ const {
 } = require('../services/freightHistoryService');
 const { formatJalali, parseJalaliDateString, jalaliToGregorian, timestampToJalaliDate } = require('../utils/jalali');
 const { logAdminAction } = require('./userManagementController');
+const {
+  assertIntakeUnlockedForTransport,
+  isEnteringTransportIntake,
+  INTAKE_LOCK_MESSAGE,
+} = require('../services/freightIntakeLockService');
 
 const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
 const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
@@ -838,6 +843,30 @@ async function updateFreightAnnouncement(req, res) {
         effectiveStatus = queue.status;
         effectiveAssignmentType = queue.assignmentType;
       }
+
+      if (
+        effectiveStatus &&
+        isEnteringTransportIntake(oldRecord.status, effectiveStatus)
+      ) {
+        try {
+          await assertIntakeUnlockedForTransport({
+            lineType: lineType || oldRecord.line_type,
+            announcementId: id,
+            userId: resolveActingUserId(req.user),
+            userName: resolveActingUserName(req.user),
+            oldStatus: oldRecord.status,
+            ipAddress: req.ip,
+            client,
+          });
+        } catch (lockErr) {
+          // تاریخچه INTAKE_BLOCKED داخل همین تراکنش نوشته شده — باید commit شود
+          await client.query('COMMIT');
+          return res.status(lockErr.statusCode || 403).json({
+            message: lockErr.message || INTAKE_LOCK_MESSAGE,
+            code: lockErr.code || 'FREIGHT_INTAKE_LOCKED',
+          });
+        }
+      }
       
       // گرفتن مقاصد قبلی
       const oldDestQuery = await client.query(
@@ -1251,6 +1280,21 @@ async function createFreightAnnouncement(req, res) {
       salesQueueMeta = resolveAssignmentQueueFromLineType(lineType);
       status = salesQueueMeta.status;
       createAssignmentType = salesQueueMeta.assignmentType;
+      try {
+        await assertIntakeUnlockedForTransport({
+          lineType,
+          announcementId: null,
+          userId,
+          userName: resolveActingUserName(req.user),
+          oldStatus: null,
+          ipAddress: req.ip,
+        });
+      } catch (lockErr) {
+        return res.status(lockErr.statusCode || 403).json({
+          message: lockErr.message || INTAKE_LOCK_MESSAGE,
+          code: lockErr.code || 'FREIGHT_INTAKE_LOCKED',
+        });
+      }
     }
 
     // Calculate total freight cost if provided in destinations
@@ -1599,6 +1643,24 @@ async function approveAnnouncement(req, res) {
     const queue = resolveAssignmentQueueFromLineType(lineType);
     newStatus = queue.status;
     assignmentType = queue.assignmentType;
+
+    try {
+      await assertIntakeUnlockedForTransport({
+        lineType,
+        announcementId,
+        userId,
+        userName,
+        oldStatus,
+        ipAddress: req.ip,
+        client,
+      });
+    } catch (lockErr) {
+      await client.query('COMMIT'); // تاریخچهٔ مسدودی نباید rollback شود
+      return res.status(lockErr.statusCode || 403).json({
+        message: lockErr.message || INTAKE_LOCK_MESSAGE,
+        code: lockErr.code || 'FREIGHT_INTAKE_LOCKED',
+      });
+    }
 
     const description = `بار به مقصد ${destinationLabel} توسط ${userName} تایید شد و به صف ${assignmentType === 'company' ? 'شرکتی' : 'شخصی'} ارجاع شد`;
 

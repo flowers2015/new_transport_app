@@ -214,6 +214,9 @@ interface TransportLiveProps {
     }) => void;
     onFinalize: (announcementIds: string[], lineTypeForBackend?: string) => void | Promise<void>;
     finalizePermissions?: Record<string, boolean>;
+    intakeLocks?: Record<string, boolean>;
+    intakeLockBusy?: boolean;
+    onToggleIntakeLock?: (lineType: FreightLineType) => void | Promise<void>;
     onTransferDestination: (
         sourceAnnouncementId: string,
         destinationId: string,
@@ -351,7 +354,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 const VEHICLE_TYPES = ['تریلی', 'مینی تریلی', 'ده چرخ', 'تک', 'مینی تک', 'خاور'];
 
 const TransportLive: React.FC<TransportLiveProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onSplitDestinationToNew, onReturnToCreator, onReturnDestinationToCreator, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {} } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, onUpdateAssignment, onFinalize, currentUser, onCancel, onForward, onReferToCarrier, onReferToCarrierBulk, onCancelCarrierRefer, onCarrierReturn, onCarrierComplete, onCarrierCompleteBulk, carriers = [], onTransferDestination, onSplitDestinationToNew, onReturnToCreator, onReturnDestinationToCreator, onChangeRequest, onChangeVehicleType, onOpenHistory, onOpenAssignmentDialog, onRefresh, activeLine, setActiveLine, pendingSubLine, setPendingSubLine, pendingDayOffset, setPendingDayOffset, finalizePermissions = {}, intakeLocks = {}, intakeLockBusy = false, onToggleIntakeLock } = props;
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -1967,9 +1970,42 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                     className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${activeLine === lt ? 'bg-sky-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
                                 >
                                     {lt} ({tabCounts.byLine[lt].toLocaleString('fa-IR')})
+                                    {Boolean(intakeLocks[lt]) && (
+                                        <span className="mr-1 text-[10px] font-black">·قفل</span>
+                                    )}
                                 </button>
                             ))}
                         </div>
+                        {isTransportUser &&
+                            !isCarrierUser &&
+                            !isPendingBillOfLadingTab(activeLine) &&
+                            onToggleIntakeLock && (
+                            <button
+                                type="button"
+                                disabled={intakeLockBusy}
+                                onClick={() => onToggleIntakeLock(activeLine as FreightLineType)}
+                                className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-black border transition-colors whitespace-nowrap disabled:opacity-50 ${
+                                    Boolean(intakeLocks[activeLine as FreightLineType])
+                                        ? 'bg-red-50 text-red-700 border-red-500 hover:bg-red-100'
+                                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                                }`}
+                                title={
+                                    Boolean(intakeLocks[activeLine as FreightLineType])
+                                        ? 'پذیرش اعلام‌بار جدید برای این تب بسته است'
+                                        : 'پذیرش اعلام‌بار جدید برای این تب باز است'
+                                }
+                            >
+                                {Boolean(intakeLocks[activeLine as FreightLineType])
+                                    ? 'باز کردن اعلام‌بار جدید'
+                                    : 'قفل اعلام‌بار جدید'}
+                            </button>
+                        )}
+                        {Boolean(intakeLocks[activeLine as FreightLineType]) &&
+                            !isPendingBillOfLadingTab(activeLine) && (
+                            <span className="shrink-0 text-[11px] font-bold text-red-700 bg-red-50 border border-red-300 rounded px-2 py-1">
+                                پذیرش اعلام‌بار جدید این تب بسته است
+                            </span>
+                        )}
                         {isPendingBillOfLadingTab(activeLine) && (
                             <div className="flex flex-col gap-2 w-full mt-2">
                                 <div className="flex items-center p-1 bg-amber-50 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0 border border-amber-200">

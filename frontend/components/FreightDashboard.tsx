@@ -841,7 +841,16 @@ const columnsConfig = (props: {
             if (currentUser?.role === UserRole.PlanningManager && ann.status === FreightAnnouncementStatus.PendingManagerApproval) {
                 return (
                     <div className="flex justify-center gap-1">
-                        <button onClick={() => onApprove?.(ann.id)} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600">تایید</button>
+                        <button
+                            onClick={() => {
+                                void Promise.resolve(onApprove?.(ann.id)).catch(() => {
+                                    /* پیام داخل handleApprove نشان داده شده */
+                                });
+                            }}
+                            className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600"
+                        >
+                            تایید
+                        </button>
                         <button onClick={() => onReject?.(ann.id)} className="px-3 py-1 bg-red-500 text-white rounded-md text-xs hover:bg-red-600">رد</button>
                     </div>
                 );

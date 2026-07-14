@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import FreightDashboard from './FreightDashboard';
-import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User } from '../types';
+import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User, UserRole } from '../types';
 import { useCallback } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
+import { parseFreightApiErrorMessage, isFreightIntakeLockedError, fetchFreightIntakeLocks, lineTypeToIntakeLockKey, FREIGHT_INTAKE_LOCK_MESSAGE } from '../utils/freightIntakeLock';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem } from '../utils/freightDisplay';
@@ -15,6 +16,32 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
     }), []);
+
+    const isSalesExpertUser = useMemo(() => {
+        const role = currentUser?.role;
+        return (
+            role === UserRole.SalesExpert ||
+            role === 'sales_expert' ||
+            role === 'SalesExpert' ||
+            role === 'کارشناس فروش'
+        );
+    }, [currentUser?.role]);
+
+    /** اگر لاین قفل باشد پیام می‌دهد و false برمی‌گرداند — بدون زدن API */
+    const ensureIntakeOpenForLine = useCallback(async (lineType?: string | null): Promise<boolean> => {
+        if (!lineType) return true;
+        try {
+            const locks = await fetchFreightIntakeLocks();
+            const key = lineTypeToIntakeLockKey(lineType);
+            if (locks[lineType] || locks[key]) {
+                alert(FREIGHT_INTAKE_LOCK_MESSAGE);
+                return false;
+            }
+        } catch {
+            // اگر چک وضعیت قفل شکست خورد، بگذار سرور تصمیم بگیرد
+        }
+        return true;
+    }, []);
 
     const fetchAnnouncements = useCallback(async (silent: boolean = false) => {
         try {
@@ -323,6 +350,11 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 alert('تاریخ بارگیری، نوع خودرو و نوع لاین الزامی است.');
                 return;
             }
+            // کارشناس فروش غیرپیش‌نویس = ورود مستقیم به ترابری
+            if (!isDraft && isSalesExpertUser) {
+                const open = await ensureIntakeOpenForLine(announcement.lineType);
+                if (!open) return;
+            }
             const res = await fetch(getApiUrl('freight-announcements'), {
                 method: 'POST',
                 headers,
@@ -330,14 +362,15 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             });
             if (!res.ok) {
                 const txt = await res.text();
-                throw new Error(`Create failed: ${res.status} ${txt}`);
+                throw new Error(txt || `Create failed: ${res.status}`);
             }
             const created = await res.json();
             console.log('✅ [FreightPlanning] Created announcement response:', created);
             await fetchAnnouncements();
         } catch (err) {
+            alert(parseFreightApiErrorMessage(err, 'خطا در ایجاد اعلام بار'));
+            if (isFreightIntakeLockedError(err)) return;
             console.error('[FreightPlanning] Create announcement failed', err);
-            console.error('❌ [FreightPlanning] Create announcement failed');
         }
     };
 
@@ -407,23 +440,44 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             if (!res.ok) throw new Error(await res.text());
             await fetchAnnouncements();
         } catch (e) {
+            alert(parseFreightApiErrorMessage(e, 'خطا در ویرایش اعلام بار'));
+            if (isFreightIntakeLockedError(e)) return;
             console.error('❌ [FreightPlanning] Update failed:', e);
-            console.error('❌ [FreightPlanning] Update failed');
         }
     };
 
     const handleApprove = async (id: string) => {
         try {
             console.log('✅ [FreightPlanning] Approve request:', id);
+            const ann = announcements.find((a) => a.id === id);
+            const open = await ensureIntakeOpenForLine(ann?.lineType);
+            if (!open) {
+                // برای bulk به‌عنوان ناموفق (بدون درخواست ۴۰۳)
+                throw new Error(FREIGHT_INTAKE_LOCK_MESSAGE);
+            }
             const res = await fetch(getApiUrl(`freight-announcements/${id}/approve`), {
                 method: 'POST',
                 headers,
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt || 'خطا در تایید');
+            }
             await fetchAnnouncements();
         } catch (e) {
+            // اگر از چک محلی آمده، قبلاً alert شده
+            if (
+                e instanceof Error &&
+                e.message === FREIGHT_INTAKE_LOCK_MESSAGE
+            ) {
+                throw e;
+            }
+            alert(parseFreightApiErrorMessage(e, 'خطا در تایید اعلام بار'));
+            if (isFreightIntakeLockedError(e)) {
+                throw new Error(parseFreightApiErrorMessage(e));
+            }
             console.error('❌ [FreightPlanning] Approve failed:', e);
-            console.error('❌ [FreightPlanning] Approve failed');
+            throw e;
         }
     };
 
@@ -485,6 +539,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 return;
             }
 
+            // کارشناس فروش: اعلام مجدد مستقیم به ترابری
+            if (isSalesExpertUser) {
+                const open = await ensureIntakeOpenForLine(announcement.lineType);
+                if (!open) return;
+            }
+
             // اعلام مجدد: باید اول به مدیر برنامه‌ریزی برود برای تایید مجدد
             // سپس مدیر می‌تواند تایید کند و بعد بر اساس lineType به ترابری مناسب ارسال شود
             const res = await fetch(getApiUrl(`freight-announcements/${id}`), {
@@ -518,7 +578,8 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
             // Real-time update will handle the UI update
         } catch (e: any) {
-            console.error('❌ [FreightPlanning] Re-announce failed:', e);
+            alert(parseFreightApiErrorMessage(e, 'خطا در اعلام مجدد'));
+            if (isFreightIntakeLockedError(e)) return;
             console.error('❌ [FreightPlanning] Re-announce failed:', e);
         }
     };
@@ -526,6 +587,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
     const handleSendForApproval = async (announcement: FreightAnnouncement, showNotification: boolean = true) => {
         try {
             console.log('📤 [FreightPlanning] Send for approval:', announcement.id);
+            if (isSalesExpertUser) {
+                const open = await ensureIntakeOpenForLine(announcement.lineType);
+                if (!open) {
+                    throw new Error(FREIGHT_INTAKE_LOCK_MESSAGE);
+                }
+            }
             const res = await fetch(getApiUrl(`freight-announcements/${announcement.id}`), {
                 method: 'PUT',
                 headers,
@@ -557,9 +624,13 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             await fetchAnnouncements();
             // Real-time update will handle the UI update
         } catch (e: any) {
+            if (e instanceof Error && e.message === FREIGHT_INTAKE_LOCK_MESSAGE) {
+                throw e;
+            }
+            alert(parseFreightApiErrorMessage(e, 'خطا در ارجاع اعلام بار'));
+            if (isFreightIntakeLockedError(e)) return;
             console.error('❌ [FreightPlanning] Send for approval failed:', e);
-            console.error('❌ [FreightPlanning] Send for approval failed:', e);
-            throw e; // پرتاب خطا برای مدیریت در bulk operation
+            throw e;
         }
     };
 

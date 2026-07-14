@@ -7,6 +7,10 @@ import { cachedFetch } from '../utils/apiCache';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { OptimisticUpdateManager, applyOptimisticUpdate, applyDestinationTransferToAnnouncements, applySplitDestinationToAnnouncements, TransferDestinationResult, SplitDestinationResult } from '../utils/optimisticUpdates';
 import {
+    fetchFreightIntakeLocks,
+    setFreightIntakeLock,
+} from '../utils/freightIntakeLock';
+import {
     pickAssignmentFieldsFromApi,
     mergeAssignmentDisplayFields,
     clearAssignmentFromAnnouncement,
@@ -68,6 +72,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     const prevActiveLineRef = useRef<TransportLiveTab | null>(null);
     const [carriers, setCarriers] = useState<Array<{ id: string; name: string; active: boolean; hasLoginUser?: boolean }>>([]);
     const [finalizePermissions, setFinalizePermissions] = useState<Record<string, boolean>>({});
+    const [intakeLocks, setIntakeLocks] = useState<Record<string, boolean>>({});
+    const [intakeLockBusy, setIntakeLockBusy] = useState(false);
     const [sseConnected, setSseConnected] = useState(false);
 
     // بررسی دسترسی اتمام تخصیص (با Cache برای جلوگیری از درخواست‌های تکراری)
@@ -505,8 +511,49 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         
         if (currentUser) {
             checkAllPermissions();
+            void fetchFreightIntakeLocks().then(setIntakeLocks).catch(() => {});
         }
     }, [checkFinalizePermission, currentUser]);
+
+    const onToggleIntakeLock = useCallback(
+        async (lineType: FreightLineType) => {
+            if (intakeLockBusy) return;
+            const currentlyLocked = Boolean(intakeLocks[lineType] || intakeLocks[lineTypeToBackend(lineType)]);
+            const nextLocked = !currentlyLocked;
+            const label = nextLocked ? 'قفل کردن اعلام‌بار جدید' : 'باز کردن اعلام‌بار جدید';
+            if (!window.confirm(`${label} برای تب «${lineType}»؟`)) return;
+
+            setIntakeLockBusy(true);
+            // optimistic
+            setIntakeLocks((prev) => ({
+                ...prev,
+                [lineType]: nextLocked,
+                [lineTypeToBackend(lineType)]: nextLocked,
+            }));
+            try {
+                const result = await setFreightIntakeLock(lineType, nextLocked);
+                if (!result.ok) {
+                    setIntakeLocks((prev) => ({
+                        ...prev,
+                        [lineType]: currentlyLocked,
+                        [lineTypeToBackend(lineType)]: currentlyLocked,
+                    }));
+                    alert(result.message || 'خطا در تغییر قفل اعلام‌بار');
+                    return;
+                }
+            } catch (e: any) {
+                setIntakeLocks((prev) => ({
+                    ...prev,
+                    [lineType]: currentlyLocked,
+                    [lineTypeToBackend(lineType)]: currentlyLocked,
+                }));
+                alert(e?.message || 'خطا در تغییر قفل اعلام‌بار');
+            } finally {
+                setIntakeLockBusy(false);
+            }
+        },
+        [intakeLockBusy, intakeLocks]
+    );
 
     useEffect(() => {
         const prev = prevActiveLineRef.current;
@@ -536,6 +583,20 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     // اتصال به Real-Time Updates (SSE)
     useRealtimeUpdates({
         onMessage: (message) => {
+            if (message.type === 'general_update' && message.updateType === 'freight_intake_lock_changed') {
+                const data = message.data || {};
+                const lineType = data.lineType as string | undefined;
+                if (!lineType) return;
+                const locked = Boolean(data.isLocked);
+                setIntakeLocks((prev) => {
+                    const next = { ...prev, [lineType]: locked };
+                    if (lineType === 'IceCream') next[FreightLineType.IceCream] = locked;
+                    if (lineType === 'Dairy') next[FreightLineType.Dairy] = locked;
+                    if (lineType === 'Ambient') next[FreightLineType.Ambient] = locked;
+                    return next;
+                });
+                return;
+            }
             if (message.type === 'announcement_update') {
                 // به‌روزرسانی اعلام بار
                 const { announcementId, updateType, data } = message;
@@ -1860,6 +1921,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 pendingDayOffset={pendingDayOffset}
                 setPendingDayOffset={setPendingDayOffset}
                 finalizePermissions={finalizePermissions}
+                intakeLocks={intakeLocks}
+                intakeLockBusy={intakeLockBusy}
+                onToggleIntakeLock={onToggleIntakeLock}
             />
             {historyDialog && (
                 <FreightHistoryDialog

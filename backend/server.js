@@ -167,6 +167,7 @@ app.use('/api/v1/carriers', require('./routes/carrierRoutes'));
 app.use('/api/v1/vehicle-specs', vehicleSpecsRoutes);
 app.use('/api/v1/financial', financialPeriodRoutes);
 app.use('/api/v1/finalize-permissions', finalizePermissionRoutes);
+app.use('/api/v1/freight-intake-locks', require('./routes/freightIntakeLockRoutes'));
 app.use('/api/v1/planning-manager-approval-permissions', planningManagerApprovalPermissionRoutes);
 app.use('/api/v1/realtime', realtimeRoutes);
 app.use('/api/v1/cities', cityRoutes);
@@ -273,6 +274,11 @@ addDestinationOriginalCreator().catch(err => {
 const createDairyArrangementStateTable = require('./migrations/create_dairy_arrangement_state');
 createDairyArrangementStateTable().catch(err => {
   console.error('❌ [Server] خطا در ایجاد جدول dairy_arrangement_state:', err);
+});
+
+const createFreightIntakeLocksTable = require('./migrations/create_freight_intake_locks');
+createFreightIntakeLocksTable().catch(err => {
+  console.error('❌ [Server] خطا در ایجاد جدول freight_intake_locks:', err);
 });
 
 const baleSessionEngine = require('./services/bale/baleSessionEngine');
