@@ -466,7 +466,7 @@ const RouteRow: React.FC<{
                                 onClick={() => onUnapprove(route.id)}
                                 className="text-xs px-2 py-0.5 rounded border-2 border-black font-bold hover:bg-red-50"
                             >
-                                باز
+                                باز کن
                             </button>
                         ) : (
                             <button
@@ -476,7 +476,7 @@ const RouteRow: React.FC<{
                                 title="قفل ردیف در دیالوگ"
                                 className="text-xs px-2 py-0.5 rounded border-2 border-black bg-black text-white font-bold hover:bg-red-700 disabled:opacity-40"
                             >
-                                تأیید
+                                قفل کن
                             </button>
                         )}
                     </div>
@@ -537,7 +537,7 @@ const RouteRow: React.FC<{
                 </p>
             ) : route.approved ? (
                 <p className={`text-red-700 mt-0.5 font-black ${mini ? 'text-[8px]' : 'text-xs'}`}>
-                    تأیید شده — جابجایی غیرفعال
+                    قفل شده — جابجایی غیرفعال
                 </p>
             ) : null}
         </div>
@@ -649,7 +649,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const routesRef = useRef<DairyArrangementRoute[]>([]);
     const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
     const [dragSource, setDragSource] = useState<DragSource | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [detailSearchQuery, setDetailSearchQuery] = useState('');
+    const [compactSearchQuery, setCompactSearchQuery] = useState('');
     const [cityFilter, setCityFilter] = useState('');
     const [isApplying, setIsApplying] = useState(false);
     const [detailPanelPercent, setDetailPanelPercent] = useState(67);
@@ -724,7 +725,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         wasOpenRef.current = true;
         const ann = announcementsRef.current;
         setDragSource(null);
-        setSearchQuery('');
+        setDetailSearchQuery('');
+        setCompactSearchQuery('');
         setCityFilter('');
         setUndoStack([]);
         setSyncLabel('در حال بارگذاری چیدمان مشترک...');
@@ -1124,16 +1126,35 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         return Array.from(cities).sort((a, b) => a.localeCompare(b, 'fa'));
     }, [routes]);
 
-    const filteredRoutes = useMemo(() => {
-        let list = routes;
-        if (cityFilter) list = list.filter((r) => r.anchorCity === cityFilter);
-        if (searchQuery.trim()) {
-            list = list.filter((r) => routeMatchesSearch(r, searchQuery, announcementById));
-        }
-        return list;
-    }, [routes, cityFilter, searchQuery, announcementById]);
+    const filterRoutesForPanel = useCallback(
+        (searchQuery: string) => {
+            let list = routes;
+            if (cityFilter) list = list.filter((r) => r.anchorCity === cityFilter);
+            if (searchQuery.trim()) {
+                list = list.filter((r) => routeMatchesSearch(r, searchQuery, announcementById));
+            }
+            return list;
+        },
+        [routes, cityFilter, announcementById]
+    );
 
-    const citySections = useMemo(() => groupRoutesByCity(filteredRoutes), [filteredRoutes]);
+    const detailFilteredRoutes = useMemo(
+        () => filterRoutesForPanel(detailSearchQuery),
+        [filterRoutesForPanel, detailSearchQuery]
+    );
+    const compactFilteredRoutes = useMemo(
+        () => filterRoutesForPanel(compactSearchQuery),
+        [filterRoutesForPanel, compactSearchQuery]
+    );
+
+    const detailCitySections = useMemo(
+        () => groupRoutesByCity(detailFilteredRoutes),
+        [detailFilteredRoutes]
+    );
+    const compactCitySections = useMemo(
+        () => groupRoutesByCity(compactFilteredRoutes),
+        [compactFilteredRoutes]
+    );
     const pendingRoutes = useMemo(() => collectPendingRoutes(routes), [routes]);
     const approvedRoutes = useMemo(() => collectApprovedRoutes(routes), [routes]);
 
@@ -1834,7 +1855,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                       return;
                   }
                   if (route.approved) {
-                      alert('برای برگشت، ابتدا ردیف را با دکمه «باز» از حالت تأیید خارج کنید.');
+                      alert('برای برگشت، ابتدا ردیف را با دکمه «باز کن» از حالت قفل خارج کنید.');
                       return;
                   }
                   const stop =
@@ -1883,7 +1904,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                       return;
                   }
                   if (route.approved) {
-                      alert('برای جداسازی، ابتدا ردیف را با دکمه «باز» از حالت تأیید خارج کنید.');
+                      alert('برای جداسازی، ابتدا ردیف را با دکمه «باز کن» از حالت قفل خارج کنید.');
                       return;
                   }
                   const stop =
@@ -2073,8 +2094,11 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     if (!isOpen) return null;
 
-    const renderCitySections = (density: PanelDensity) =>
-        citySections.map((section) => (
+    const renderCitySections = (
+        density: PanelDensity,
+        sections: ReturnType<typeof groupRoutesByCity>
+    ) =>
+        sections.map((section) => (
             <CitySection
                 key={`${density}-${section.city}`}
                 city={section.city}
@@ -2088,6 +2112,17 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             />
         ));
 
+    const renderPanelEmpty = (hasAnyRoutes: boolean, filteredCount: number) => {
+        if (filteredCount > 0) return null;
+        return (
+            <div className="flex-1 flex items-center justify-center text-black font-bold text-sm p-4 text-center">
+                {!hasAnyRoutes
+                    ? 'اعلام بار پاستوریزه‌ای برای چیدمان یافت نشد.'
+                    : 'با این جستجو ردیفی یافت نشد.'}
+            </div>
+        );
+    };
+
     return (
         <div className="fixed inset-0 z-[80] flex flex-col bg-black/60" dir="rtl">
             <div className={`flex flex-col h-full w-full ${PAGE_BG} shadow-2xl`}>
@@ -2095,7 +2130,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                     <div className="min-w-0">
                         <h2 className="text-lg font-black text-black">چیدمان مسیر — پاستوریزه</h2>
                         <p className="text-xs text-black font-semibold">
-                            چیدمان مشترک آنلاین · جابجایی بلافاصله ثبت می‌شود · «تأیید» = قفل ردیف
+                            چیدمان مشترک آنلاین · جابجایی بلافاصله ثبت می‌شود · «قفل کن» ردیف را ثابت می‌کند
                             {isApplying ? ' · در حال ثبت...' : ''}
                         </p>
                         <p className="text-[11px] text-stone-700 font-bold mt-0.5" title="وضعیت همگام‌سازی سرور">
@@ -2109,13 +2144,6 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                         )}
                     </div>
                     <div className="flex items-center gap-1.5 mr-auto flex-wrap">
-                        <input
-                            type="search"
-                            placeholder="جستجو..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="text-xs border-2 border-black rounded-md px-2 py-1 w-32 font-semibold"
-                        />
                         <select
                             value={cityFilter}
                             onChange={(e) => setCityFilter(e.target.value)}
@@ -2132,7 +2160,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                             {pendingRoutes.length.toLocaleString('fa-IR')} باز
                         </span>
                         <span className={`text-xs text-red-700 font-black border-2 border-red-600 px-1.5 py-0.5 rounded ${SURFACE_BG}`}>
-                            {approvedRoutes.length.toLocaleString('fa-IR')} تأیید
+                            {approvedRoutes.length.toLocaleString('fa-IR')} قفل
                         </span>
                         <button
                             type="button"
@@ -2162,11 +2190,9 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 </header>
 
                 <div ref={panelContainerRef} className={`flex-1 min-h-0 flex p-2 gap-0 ${PAGE_BG}`}>
-                    {filteredRoutes.length === 0 ? (
+                    {routes.length === 0 ? (
                         <div className="flex-1 flex items-center justify-center text-black font-bold text-sm">
-                            {routes.length === 0
-                                ? 'اعلام بار پاستوریزه‌ای برای چیدمان یافت نشد.'
-                                : 'با این فیلتر ردیفی یافت نشد.'}
+                            اعلام بار پاستوریزه‌ای برای چیدمان یافت نشد.
                         </div>
                     ) : (
                         <>
@@ -2174,8 +2200,15 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                                 className={`min-w-0 flex flex-col rounded border-2 border-black ${SURFACE_BG} overflow-hidden`}
                                 style={{ width: `${detailPanelPercent}%` }}
                             >
-                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black flex items-center gap-2`}>
-                                    <span>پنل جزئیات — {filteredRoutes.length.toLocaleString('fa-IR')} ردیف</span>
+                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black flex items-center gap-2 flex-wrap`}>
+                                    <span>پنل جزئیات — {detailFilteredRoutes.length.toLocaleString('fa-IR')} ردیف</span>
+                                    <input
+                                        type="search"
+                                        placeholder="جستجو در جزئیات..."
+                                        value={detailSearchQuery}
+                                        onChange={(e) => setDetailSearchQuery(e.target.value)}
+                                        className="text-xs border-2 border-black rounded-md px-2 py-0.5 w-36 font-semibold"
+                                    />
                                     <div className={`mr-auto flex items-center gap-0.5 border-2 border-black rounded ${SURFACE_BG}`}>
                                         <button
                                             type="button"
@@ -2200,16 +2233,20 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                                         </button>
                                     </div>
                                 </div>
-                                <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 ${PAGE_BG}`}>
-                                    <div
-                                        style={{
-                                            zoom: detailZoomScale,
-                                            transformOrigin: 'top right',
-                                        }}
-                                    >
-                                        {renderCitySections('detail')}
+                                {detailFilteredRoutes.length === 0 ? (
+                                    renderPanelEmpty(routes.length > 0, detailFilteredRoutes.length)
+                                ) : (
+                                    <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 ${PAGE_BG}`}>
+                                        <div
+                                            style={{
+                                                zoom: detailZoomScale,
+                                                transformOrigin: 'top right',
+                                            }}
+                                        >
+                                            {renderCitySections('detail', detailCitySections)}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                             <div
@@ -2224,8 +2261,15 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                             </div>
 
                             <div className={`flex-1 min-w-0 flex flex-col rounded border-2 border-black ${SURFACE_BG} overflow-hidden`}>
-                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black flex items-center gap-2`}>
-                                    <span>نمای فشرده</span>
+                                <div className={`shrink-0 px-2 py-1 ${PAGE_BG} border-b-2 border-black text-xs font-black text-black flex items-center gap-2 flex-wrap`}>
+                                    <span>نمای فشرده — {compactFilteredRoutes.length.toLocaleString('fa-IR')} ردیف</span>
+                                    <input
+                                        type="search"
+                                        placeholder="جستجو در فشرده..."
+                                        value={compactSearchQuery}
+                                        onChange={(e) => setCompactSearchQuery(e.target.value)}
+                                        className="text-xs border-2 border-black rounded-md px-2 py-0.5 w-36 font-semibold"
+                                    />
                                     <div className={`mr-auto flex items-center gap-0.5 border-2 border-black rounded ${SURFACE_BG}`}>
                                         <button
                                             type="button"
@@ -2258,20 +2302,24 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                                         </button>
                                     </div>
                                 </div>
-                                <div
-                                    ref={compactScrollRef}
-                                    className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-1 ${PAGE_BG}`}
-                                >
+                                {compactFilteredRoutes.length === 0 ? (
+                                    renderPanelEmpty(routes.length > 0, compactFilteredRoutes.length)
+                                ) : (
                                     <div
-                                        ref={compactContentRef}
-                                        style={{
-                                            zoom: compactZoomScale,
-                                            transformOrigin: 'top right',
-                                        }}
+                                        ref={compactScrollRef}
+                                        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-1 ${PAGE_BG}`}
                                     >
-                                        {renderCitySections('compact')}
+                                        <div
+                                            ref={compactContentRef}
+                                            style={{
+                                                zoom: compactZoomScale,
+                                                transformOrigin: 'top right',
+                                            }}
+                                        >
+                                            {renderCitySections('compact', compactCitySections)}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </>
                     )}
