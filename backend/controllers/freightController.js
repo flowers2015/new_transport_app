@@ -14,6 +14,7 @@ const {
   isEnteringTransportIntake,
   INTAKE_LOCK_MESSAGE,
 } = require('../services/freightIntakeLockService');
+const { ensureJalaliDateColumns } = require('../services/ensureJalaliDateColumns');
 
 const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
 const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
@@ -848,6 +849,8 @@ async function updateFreightAnnouncement(req, res) {
   const { id } = req.params;
   const userId = req.user?.id || req.user?.userId; // استخراج userId در ابتدای تابع
   try {
+    await ensureJalaliDateColumns();
+
     const {
       loadingDate,
       deliveryDate, // تاریخ تحویل بار (برای بستنی)
@@ -1293,6 +1296,8 @@ async function updateFreightAnnouncement(req, res) {
  */
 async function createFreightAnnouncement(req, res) {
   try {
+    await ensureJalaliDateColumns();
+
     const {
       loadingDate,
       deliveryDate, // تاریخ تحویل بار (برای بستنی)

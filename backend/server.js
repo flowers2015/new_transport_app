@@ -218,16 +218,22 @@ async function runStartupMigrations() {
   }
 }
 
-void runStartupMigrations();
-
-const baleSessionEngine = require('./services/bale/baleSessionEngine');
-const { startBalePolling } = require('./services/bale/balePolling');
-if (process.env.BALE_BOT_TOKEN) {
-  baleSessionEngine.ensureTickTimer();
-  startBalePolling();
-}
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+
+(async () => {
+  await runStartupMigrations();
+
+  const baleSessionEngine = require('./services/bale/baleSessionEngine');
+  const { startBalePolling } = require('./services/bale/balePolling');
+  if (process.env.BALE_BOT_TOKEN) {
+    baleSessionEngine.ensureTickTimer();
+    startBalePolling();
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+})().catch((err) => {
+  console.error('❌ [Server] startup failed:', err?.message || err);
+  process.exit(1);
 });
