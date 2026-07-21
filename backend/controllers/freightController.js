@@ -109,7 +109,31 @@ async function assertCreateLinePermission(userId, lineType) {
 
 const DESTINATION_INSERT_COLUMNS = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, original_created_by_user_id, created_at`;
 
-function buildDestinationInsertParams(announcementId, d, destId = crypto.randomUUID(), originalCreatedByUserId = null) {
+const DESTINATION_INSERT_COLUMNS_LEGACY = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, created_at`;
+
+let destinationOriginalCreatorColumnCache = null;
+
+async function hasDestinationOriginalCreatorColumn(db) {
+  if (destinationOriginalCreatorColumnCache != null) {
+    return destinationOriginalCreatorColumnCache;
+  }
+  try {
+    const client = db || pool;
+    const colCheck = await client.query(`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = 'freight_destinations'
+        AND column_name = 'original_created_by_user_id'
+      LIMIT 1
+    `);
+    destinationOriginalCreatorColumnCache = (colCheck.rowCount || 0) > 0;
+  } catch (_) {
+    destinationOriginalCreatorColumnCache = false;
+  }
+  return destinationOriginalCreatorColumnCache;
+}
+
+function buildDestinationInsertParams(announcementId, d, destId = crypto.randomUUID(), originalCreatedByUserId = null, includeOriginalCreator = true) {
   const products = d.products;
   let productsJson = '[]';
   if (Array.isArray(products)) {
@@ -122,7 +146,7 @@ function buildDestinationInsertParams(announcementId, d, destId = crypto.randomU
     }
   }
 
-  return [
+  const base = [
     destId,
     announcementId,
     d.city || null,
@@ -138,28 +162,52 @@ function buildDestinationInsertParams(announcementId, d, destId = crypto.randomU
     d.brand || null,
     d.brand2 || null,
     productsJson,
+  ];
+
+  if (!includeOriginalCreator) {
+    return base;
+  }
+
+  return [
+    ...base,
     originalCreatedByUserId || d.originalCreatedByUserId || d.original_created_by_user_id || null,
   ];
 }
 
 async function insertFreightDestinations(clientOrPool, announcementId, destinations, originalCreatedByUserId = null) {
   const db = clientOrPool;
-  const insertDestQuery = `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())`;
+  const includeOriginalCreator = await hasDestinationOriginalCreatorColumn(db);
+  const insertDestQuery = includeOriginalCreator
+    ? `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())`
+    : `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS_LEGACY}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())`;
+
   for (const d of destinations) {
-    await db.query(insertDestQuery, buildDestinationInsertParams(announcementId, d, crypto.randomUUID(), originalCreatedByUserId));
+    await db.query(
+      insertDestQuery,
+      buildDestinationInsertParams(
+        announcementId,
+        d,
+        crypto.randomUUID(),
+        originalCreatedByUserId,
+        includeOriginalCreator
+      )
+    );
   }
-  await db.query(
-    `
-    UPDATE freight_destinations d
-    SET original_created_by_user_id = fa.created_by_user_id
-    FROM freight_announcements fa
-    WHERE d.freight_announcement_id = fa.id
-      AND d.freight_announcement_id = $1
-      AND d.original_created_by_user_id IS NULL
-      AND fa.created_by_user_id IS NOT NULL
-    `,
-    [announcementId]
-  );
+
+  if (includeOriginalCreator) {
+    await db.query(
+      `
+      UPDATE freight_destinations d
+      SET original_created_by_user_id = fa.created_by_user_id
+      FROM freight_announcements fa
+      WHERE d.freight_announcement_id = fa.id
+        AND d.freight_announcement_id = $1
+        AND d.original_created_by_user_id IS NULL
+        AND fa.created_by_user_id IS NOT NULL
+      `,
+      [announcementId]
+    );
+  }
 }
 
 async function updateAnnouncementStatusWithFallback(client, announcementId, candidates) {
@@ -1556,7 +1604,12 @@ async function createFreightAnnouncement(req, res) {
 
     return res.status(201).json(created);
   } catch (error) {
-    console.error('Failed to create freight announcement:', error);
+    console.error('Failed to create freight announcement:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack,
+    });
     return res.status(500).json({ message: 'Internal server error while creating freight announcement.' });
   }
 }
