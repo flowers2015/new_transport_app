@@ -983,8 +983,76 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
         ];
 
-        // تب «در انتظار بارنامه»: همه خطوط — ستون‌های فشرده + خط
+        // تب «در انتظار بارنامه»: ستون‌ها مطابق همان تب در پیگیری زنده (+ ستون‌های تخصیص)
         if (isPendingBillOfLadingTab(activeLine)) {
+            if (pendingSubLine === FreightLineType.IceCream) {
+                const base = [
+                    { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                    { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
+                    { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => ann.vehicleType },
+                    { header: 'نوع نماینده', render: (ann: FreightAnnouncement) => formatRepresentativeType(ann.representativeType) },
+                    { header: 'مقصد', render: (ann: FreightAnnouncement) =>
+                        withReannounceBadge(
+                            ann,
+                            <span className="text-blue-600 font-semibold">{getDestinationCitiesLabel(ann)}</span>
+                        ) },
+                    { header: 'نام نماینده', render: (ann: FreightAnnouncement) => getAnnouncementRepDisplayLabel(ann) },
+                    { header: 'مبدا', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                    { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
+                    { header: 'محصولات', render: (ann: FreightAnnouncement) => ann.products?.join(', ') || '-' },
+                    { header: 'کارتن', render: (ann: FreightAnnouncement) => ann.cartonCount ?? '-' },
+                    { header: 'پالت', render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
+                    { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                    { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
+                    { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
+                    { header: 'تاریخ تحویل بار', render: (ann: FreightAnnouncement) => <span className="text-green-600">{(ann as any).deliveryDate || '-'}</span> },
+                ];
+                return [...base, ...extraCols];
+            }
+
+            if (pendingSubLine === FreightLineType.Dairy) {
+                const base = [
+                    { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                    { header: 'کارمند اعلام‌کننده', render: (ann: any) =>
+                        renderDairyCompactText((getAnnouncementCreatorLabel(ann))) },
+                    { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
+                    { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) =>
+                        renderDairyCompactText(ann.originCity || '-') },
+                    { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
+                    { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
+                        withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
+                    { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                    { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                    { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
+                ];
+                return [...base, ...extraCols];
+            }
+
+            if (pendingSubLine === FreightLineType.Ambient) {
+                const base = [
+                    { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
+                    { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
+                    {
+                        header: 'محصولات',
+                        render: (ann: FreightAnnouncement) => (
+                            <span className="text-xs text-slate-700 whitespace-normal">
+                                {formatAnnouncementDestinationProductsLabel(ann)}
+                            </span>
+                        ),
+                    },
+                    { header: 'نوع خودرو', render: (ann: FreightAnnouncement) => renderVehicleTypeCell(ann) },
+                    { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
+                    { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
+                    { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
+                    { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
+                        withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
+                    { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
+                    { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                    { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
+                ];
+                return [...base, ...extraCols];
+            }
+
             const pendingBase = [
                 { header: 'ردیف', render: (_: any, idx: number) => idx + 1 },
                 { header: 'کارمند اعلام‌کننده', render: (ann: any) => <span className="text-slate-700">{(getAnnouncementCreatorLabel(ann))}</span> },
@@ -1004,6 +1072,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         </div>
                     ),
                 },
+                { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => <span>{formatJalali(ann.loadingDate)}</span> },
             ];
             return [...pendingBase, ...extraCols];
@@ -1127,7 +1196,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         const colsAll = columnsConfig(columnMode);
         const cols = colsAll.filter(c => c.display(lineForColumns)).filter(c => c.header !== 'کد اعلام بار');
         return [...cols, ...extraCols];
-    }, [activeLine, columnsConfig, renderVehicleTypeCell, personalTariffColumns, props]);
+    }, [activeLine, pendingSubLine, columnsConfig, renderVehicleTypeCell, personalTariffColumns, props]);
 
     const allColumns = useMemo(() => buildVisibleColumns(viewMode), [buildVisibleColumns, viewMode]);
 
