@@ -593,6 +593,15 @@ async function getFreightAnnouncements(req, res) {
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
         COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) as assignment_finalized_at,
+        COALESCE(
+          (
+            SELECT MIN(fah.created_at)
+            FROM freight_announcement_history fah
+            WHERE fah.freight_announcement_id = fa.id
+              AND fah.action IN ('ASSIGNED', 'REASSIGNED')
+          ),
+          da_dispatch.created_at
+        ) as assigned_at,
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
         CASE 
           WHEN pd.id IS NOT NULL THEN 'personal'
@@ -614,6 +623,12 @@ async function getFreightAnnouncements(req, res) {
         ORDER BY created_at DESC
         LIMIT 1
       ) da ON true
+      LEFT JOIN LATERAL (
+        SELECT MIN(created_at) as created_at
+        FROM dispatch_assignments
+        WHERE freight_announcement_id = fa.id
+          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+      ) da_dispatch ON true
       ${whereClause}${userFilter}${branchCityFilter}${financeExceptionFilter}
       ORDER BY fa.id, fa.created_at DESC
     `);

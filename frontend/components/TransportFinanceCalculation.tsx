@@ -149,6 +149,7 @@ interface DriverTourDetailWithCalculation extends DriverTourDetail {
     billOfLadingDate?: Date | string; // تاریخ صدور بارنامه
     calculationDate?: string; // تاریخ محاسبه (شمسی YYYY/MM/DD)
     announcementDate?: Date; // تاریخ اعلام بار
+    assignmentDate?: string; // تاریخ تخصیص راننده/خودرو (شمسی)
     approvedKilometers?: number;
     excessKilometers?: number;
     approvedMissionDays?: number;
@@ -230,6 +231,14 @@ function readTourStringField(tour: any, camel: string, snake: string): string {
     return raw == null ? '' : String(raw).trim();
 }
 
+function resolveAssignmentDateFromAnnouncement(ann: any): string {
+    if (!ann) return '';
+    const raw = ann.assigned_at ?? ann.assignedAt;
+    if (!raw) return '';
+    const formatted = formatBillOfLadingDateDisplay(raw);
+    return formatted === '-' ? '' : formatted;
+}
+
 type TourDetailSortField =
     | 'announcementCode'
     | 'vehicleType'
@@ -238,6 +247,7 @@ type TourDetailSortField =
     | 'destinations'
     | 'billOfLadingNumber'
     | 'billOfLadingDate'
+    | 'assignmentDate'
     | 'calculationDate'
     | 'totalMileage'
     | 'totalMission'
@@ -292,6 +302,8 @@ function getTourDetailSortValue(tour: DriverTourDetailWithCalculation, field: To
             return tour.billOfLadingNumber || '';
         case 'billOfLadingDate':
             return toBillOfLadingDateString(tour.billOfLadingDate) || '';
+        case 'assignmentDate':
+            return tour.assignmentDate || '';
         case 'calculationDate':
             return tour.calculationDate || '';
         case 'totalMileage':
@@ -1209,6 +1221,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingNumber: ann.bill_of_lading_number || '',
                 billOfLadingDate: toBillOfLadingDateString(ann.bill_of_lading_date),
                 announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
+                assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
             };
 
             if (existing) {
@@ -1380,6 +1393,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 billOfLadingNumber: ann.bill_of_lading_number || '',
                                 billOfLadingDate: toBillOfLadingDateString(ann.bill_of_lading_date),
                                 announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
+                                assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
                             };
                             
                             if (existing) {
@@ -1446,6 +1460,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 billOfLadingNumber: saved.bill_of_lading_number || '',
                                 billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
                                 announcementDate: ann?.created_at ? new Date(ann.created_at) : undefined,
+                                assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
                             };
                             
                             if (existing) {
@@ -1515,6 +1530,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             roundTripKm: Number(ann.route?.round_trip_km) || 0,
                             lineType: ann.line_type || '',
                             vehicleType: ann.vehicle_type || '',
+                            assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
                         };
                     };
                     
@@ -1534,6 +1550,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                           roundTripKm: freshAnn.roundTripKm,
                                           lineType: freshAnn.lineType || tour.lineType,
                                           vehicleType: freshAnn.vehicleType || tour.vehicleType,
+                                          assignmentDate: freshAnn.assignmentDate || tour.assignmentDate,
                                       }
                                     : tour;
                                 
@@ -1667,6 +1684,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         // پیدا کردن یا ساختن راننده
                         const driver = drivers.find(d => d.id === saved.driver_id);
                         if (!driver) return;
+
+                        const ann = announcements.find((a: any) => a.id === saved.announcement_id);
                         
                         // ساختن tour از savedData
                         const tourFromSaved: DriverTourDetailWithCalculation = {
@@ -1680,6 +1699,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             destinations: saved.destinations ? (typeof saved.destinations === 'string' ? [saved.destinations] : saved.destinations) : [],
                             billOfLadingNumber: saved.bill_of_lading_number || '',
                             billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
+                            assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
                             calculationDate: saved.calculation_date || '',
                             approvedKilometers: saved.approved_kilometers || 0,
                             excessKilometers: saved.excess_kilometers || 0,
@@ -2311,6 +2331,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         (Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')) || '',
                         tour.billOfLadingNumber || '',
                         billDateStr,
+                        tour.assignmentDate || '',
                         tour.approvedKilometers || 0,
                         tour.excessKilometers || 0,
                         tour.approvedMissionDays || 0,
@@ -2339,6 +2360,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     'مقاصد',
                     'شماره بارنامه',
                     'تاریخ صدور بارنامه',
+                    'تاریخ تخصیص',
                     'پیمایش مصوب (کیلومتر)',
                     'پیمایش مازاد (کیلومتر)',
                     'ماموریت مصوب (روز)',
@@ -2408,6 +2430,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                     billOfLadingNumber: saved.bill_of_lading_number || '',
                                     billOfLadingDate: toBillOfLadingDateString(saved.bill_of_lading_date),
                                     announcementDate: ann?.created_at ? new Date(ann.created_at) : undefined,
+                                    assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
                                     calculationDate: saved.calculation_date || '',
                                     approvedKilometers: saved.approved_kilometers || 0,
                                     excessKilometers: saved.excess_kilometers || 0,
@@ -6142,6 +6165,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             </th>
                                             <th
                                                 className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
+                                                onClick={() => handleTourDetailSort('assignmentDate')}
+                                            >
+                                                تاریخ تخصیص{tourDetailSortField === 'assignmentDate' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                                            </th>
+                                            <th
+                                                className="p-3 text-right border-l border-slate-600 cursor-pointer hover:bg-slate-600 select-none"
                                                 onClick={() => handleTourDetailSort('calculationDate')}
                                             >
                                                 تاریخ محاسبه{tourDetailSortField === 'calculationDate' && (tourDetailSortDirection === 'asc' ? ' ↑' : ' ↓')}
@@ -6328,6 +6357,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         </td>
                                                         <td className="p-3 border-l border-slate-200 text-xs">
                                                             {tour.billOfLadingDate ? formatBillOfLadingDateDisplay(tour.billOfLadingDate) : '-'}
+                                                        </td>
+                                                        <td className="p-3 border-l border-slate-200 text-xs">
+                                                            {tour.assignmentDate || '-'}
                                                         </td>
                                                         <td className="p-3 border-l border-slate-200 text-xs">
                                                             {tour.calculationDate || '-'}
