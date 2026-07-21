@@ -185,101 +185,40 @@ app.get('/', (req, res) => {
   res.send('Backend is running');
 });
 
-// ایجاد جداول مورد نیاز در startup
-const { createAdminActionsTable } = require('./migrations/create_admin_actions_table');
-createAdminActionsTable().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جدول admin_actions:', err);
-});
+// ایجاد جداول مورد نیاز در startup — پشت‌سرهم (جلوگیری از deadlock)
+async function runStartupMigrations() {
+  const steps = [
+    { name: 'admin_actions', fn: require('./migrations/create_admin_actions_table').createAdminActionsTable },
+    { name: 'fix_loading_date', fn: require('./migrations/fix_loading_date_column') },
+    { name: 'driver_vehicle_columns', fn: require('./migrations/add_driver_vehicle_columns_to_freight') },
+    { name: 'vehicle_specifications', fn: require('./migrations/create_vehicle_specifications_table') },
+    { name: 'delivery_date_columns', fn: require('./migrations/add_delivery_date_columns') },
+    { name: 'created_by_user_id', fn: require('./migrations/add_created_by_user_id') },
+    { name: 'regulation_id_mileage', fn: require('./migrations/add_regulation_id_to_mileage') },
+    { name: 'must_change_password', fn: require('./migrations/add_must_change_password').runMigration },
+    { name: 'bale_tables', fn: require('./migrations/create_bale_tables') },
+    { name: 'bale_report_recipients', fn: require('./migrations/add_bale_report_recipients') },
+    { name: 'carrier_name', fn: require('./migrations/add_carrier_name_column') },
+    { name: 'carrier_handoff', fn: require('./migrations/add_carrier_handoff') },
+    { name: 'tariff_freight_cost', fn: require('./migrations/add_tariff_freight_cost') },
+    { name: 'bale_ambient_notify_seq', fn: require('./migrations/add_bale_ambient_notify_seq') },
+    { name: 'vehicle_code', fn: require('./migrations/add_vehicle_code_column') },
+    { name: 'support_tickets', fn: require('./migrations/create_support_tickets_table') },
+    { name: 'destination_original_creator', fn: require('./migrations/add_destination_original_creator') },
+    { name: 'dairy_arrangement_state', fn: require('./migrations/create_dairy_arrangement_state') },
+    { name: 'freight_intake_locks', fn: require('./migrations/create_freight_intake_locks') },
+  ];
 
-// اضافه کردن ستون‌های راننده/خودرو به جدول freight_announcements
-const addDriverVehicleColumnsToFreight = require('./migrations/add_driver_vehicle_columns_to_freight');
-addDriverVehicleColumnsToFreight().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون‌های راننده/خودرو:', err);
-});
+  for (const step of steps) {
+    try {
+      await step.fn();
+    } catch (err) {
+      console.error(`❌ [Server] migration failed (${step.name}):`, err?.message || err);
+    }
+  }
+}
 
-// ایجاد جدول مشخصات خودرو
-const createVehicleSpecificationsTable = require('./migrations/create_vehicle_specifications_table');
-createVehicleSpecificationsTable().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جدول مشخصات خودرو:', err);
-});
-
-// اضافه کردن ستون‌های تاریخ تحویل و نوع نماینده
-const addDeliveryDateColumns = require('./migrations/add_delivery_date_columns');
-addDeliveryDateColumns().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون‌های تاریخ تحویل:', err);
-});
-
-// اضافه کردن ستون created_by_user_id به freight_announcements
-const addCreatedByUserId = require('./migrations/add_created_by_user_id');
-addCreatedByUserId().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون created_by_user_id:', err);
-});
-
-// اضافه کردن ستون regulation_id به جدول allowance_regulations_mileage
-const addRegulationIdToMileage = require('./migrations/add_regulation_id_to_mileage');
-addRegulationIdToMileage().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون regulation_id:', err);
-});
-
-const { runMigration: addMustChangePassword } = require('./migrations/add_must_change_password');
-addMustChangePassword().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون must_change_password:', err);
-});
-
-const createBaleTables = require('./migrations/create_bale_tables');
-createBaleTables().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جداول بله:', err);
-});
-
-const addBaleReportRecipients = require('./migrations/add_bale_report_recipients');
-addBaleReportRecipients().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جدول bale_report_recipients:', err);
-});
-
-const addCarrierNameColumn = require('./migrations/add_carrier_name_column');
-addCarrierNameColumn().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون carrier_name:', err);
-});
-
-const addCarrierHandoff = require('./migrations/add_carrier_handoff');
-addCarrierHandoff().catch(err => {
-  console.error('❌ [Server] خطا در راه‌اندازی schema باربری:', err);
-});
-
-const addTariffFreightCost = require('./migrations/add_tariff_freight_cost');
-addTariffFreightCost().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون tariff_freight_cost:', err);
-});
-
-const addBaleAmbientNotifySeq = require('./migrations/add_bale_ambient_notify_seq');
-addBaleAmbientNotifySeq().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون bale_ambient_notify_seq:', err);
-});
-
-const addVehicleCodeColumn = require('./migrations/add_vehicle_code_column');
-addVehicleCodeColumn().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن ستون vehicle_code:', err);
-});
-
-const createSupportTicketsTable = require('./migrations/create_support_tickets_table');
-createSupportTicketsTable().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جدول support_tickets:', err);
-});
-
-const addDestinationOriginalCreator = require('./migrations/add_destination_original_creator');
-addDestinationOriginalCreator().catch(err => {
-  console.error('❌ [Server] خطا در اضافه کردن original_created_by_user_id به مقاصد:', err);
-});
-
-const createDairyArrangementStateTable = require('./migrations/create_dairy_arrangement_state');
-createDairyArrangementStateTable().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جدول dairy_arrangement_state:', err);
-});
-
-const createFreightIntakeLocksTable = require('./migrations/create_freight_intake_locks');
-createFreightIntakeLocksTable().catch(err => {
-  console.error('❌ [Server] خطا در ایجاد جدول freight_intake_locks:', err);
-});
+void runStartupMigrations();
 
 const baleSessionEngine = require('./services/bale/baleSessionEngine');
 const { startBalePolling } = require('./services/bale/balePolling');

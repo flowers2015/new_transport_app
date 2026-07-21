@@ -7,7 +7,7 @@ const {
   calculateTotalFreightCost,
   generateChangeDescription
 } = require('../services/freightHistoryService');
-const { formatJalali, parseJalaliDateString, jalaliToGregorian, timestampToJalaliDate } = require('../utils/jalali');
+const { formatJalali, parseJalaliDateString, jalaliToGregorian, timestampToJalaliDate, validateJalaliDateString } = require('../utils/jalali');
 const { logAdminAction } = require('./userManagementController');
 const {
   assertIntakeUnlockedForTransport,
@@ -283,12 +283,24 @@ function ensureJalaliDateFormat(dateStr) {
     return dateStr;
   }
   const original = dateStr;
-  // تبدیل `-` به `/` برای اطمینان از فرمت یکسان
   const result = dateStr.replace(/-/g, '/');
   if (original !== result) {
     console.log(`📅 [ensureJalaliDateFormat] Converted: "${original}" → "${result}"`);
   }
   return result;
+}
+
+/** اعتبارسنجی تاریخ شمسی قبل از ذخیره — خطای واضح به‌جای 500 */
+function assertValidJalaliDateField(value, fieldLabel) {
+  if (value == null || value === '') return null;
+  const str = ensureJalaliDateFormat(String(value));
+  const check = validateJalaliDateString(str);
+  if (!check.ok) {
+    const err = new Error(`${fieldLabel}: ${check.message}`);
+    err.statusCode = 400;
+    throw err;
+  }
+  return check.normalized;
 }
 
 function jalaliDateToDate(jy, jm, jd) {
@@ -1306,6 +1318,17 @@ async function createFreightAnnouncement(req, res) {
       return res.status(400).json({ message: 'loadingDate, lineType and vehicleType are required.' });
     }
 
+    let normalizedLoadingDate;
+    let normalizedDeliveryDate = null;
+    try {
+      normalizedLoadingDate = assertValidJalaliDateField(loadingDate, 'تاریخ بارگیری');
+      if (deliveryDate) {
+        normalizedDeliveryDate = assertValidJalaliDateField(deliveryDate, 'تاریخ تحویل بار');
+      }
+    } catch (dateErr) {
+      return res.status(dateErr.statusCode || 400).json({ message: dateErr.message });
+    }
+
     // بررسی مجوز ایجاد اعلام بار برای کارمندان برنامه‌ریزی و کارشناس فروش
     const userId = req.user?.id || req.user?.userId;
     const role = req.user?.role;
@@ -1371,7 +1394,6 @@ async function createFreightAnnouncement(req, res) {
       loadingDate,
       type: typeof loadingDate
     });
-    const normalizedLoadingDate = ensureJalaliDateFormat(loadingDate);
     console.log(`📅 [createFreightAnnouncement] Normalized for DB:`, {
       normalizedLoadingDate,
       willSave: normalizedLoadingDate
@@ -1381,7 +1403,7 @@ async function createFreightAnnouncement(req, res) {
       id,
       announcementCode,
       normalizedLoadingDate,
-      deliveryDate || null, // تاریخ تحویل بار
+      normalizedDeliveryDate,
       lineType,
       status,
       cargoValue || 0,
@@ -1604,6 +1626,9 @@ async function createFreightAnnouncement(req, res) {
 
     return res.status(201).json(created);
   } catch (error) {
+    if (error?.statusCode === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error('Failed to create freight announcement:', {
       message: error?.message,
       code: error?.code,
