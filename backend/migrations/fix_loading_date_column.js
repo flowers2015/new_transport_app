@@ -1,8 +1,9 @@
+/**
+ * یک‌بار دستی روی سرور (اختیاری — معمولاً با restart خودکار اجرا می‌شود):
+ *   cd ~/project/backend && node migrations/fix_loading_date_column.js
+ */
 const { ensureJalaliDateColumns } = require('../services/ensureJalaliDateColumns');
 
-/**
- * loading_date باید VARCHAR باشد تا تاریخ شمسی (مثلاً 1405/04/31) ذخیره شود.
- */
 async function fixLoadingDateColumn() {
   await ensureJalaliDateColumns();
 }
