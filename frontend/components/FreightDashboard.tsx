@@ -1498,6 +1498,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 )},
                 { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => getAnnouncementCreatorLabel(ann), width: '150px', render: (ann: any) => <span className="text-slate-700">{getAnnouncementCreatorLabel(ann)}</span> },
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
@@ -1574,6 +1575,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
                 { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => getAnnouncementCreatorLabel(ann), width: '150px', render: (ann: any) => <span className="text-slate-700">{getAnnouncementCreatorLabel(ann)}</span> },
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
@@ -1722,10 +1724,43 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             });
         });
 
-        const sorted =
-            activeTab === FreightLineType.IceCream
-                ? sortByIceCreamDisplayOrder(data)
-                : data.sort(compareByCreatedAtDesc);
+        const isOwnDairyAnnouncement = (ann: FreightAnnouncement): boolean => {
+            const uid = String(currentUser?.id || '');
+            if (!uid) return false;
+            const creatorId = String(
+                (ann as any).creator_user_id ||
+                    (ann as any).createdByUserId ||
+                    (ann as any).created_by_user_id ||
+                    ''
+            );
+            if (creatorId && creatorId === uid) return true;
+            return (ann.destinations || []).some((d: any) => {
+                const ownerId = String(
+                    d.originalCreatedByUserId ||
+                        d.original_created_by_user_id ||
+                        d.original_creator_user_id ||
+                        ''
+                );
+                return ownerId === uid;
+            });
+        };
+
+        let sorted: FreightAnnouncement[];
+        if (activeTab === FreightLineType.IceCream) {
+            sorted = sortByIceCreamDisplayOrder(data);
+        } else if (
+            activeTab === FreightLineType.Dairy &&
+            isFreightCreateRole(currentUser)
+        ) {
+            // پاستوریزه: بارهای خود کاربر (سازنده یا صاحب مقصد) بالاتر از بقیه
+            const mine = data.filter(isOwnDairyAnnouncement);
+            const others = data.filter((a) => !isOwnDairyAnnouncement(a));
+            mine.sort(compareByCreatedAtDesc);
+            others.sort(compareByCreatedAtDesc);
+            sorted = [...mine, ...others];
+        } else {
+            sorted = data.sort(compareByCreatedAtDesc);
+        }
         return sorted;
     }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, allowedLineTypes, currentUser, linePermissionsReady]);
 
@@ -2677,7 +2712,8 @@ const AnnouncementPanel: React.FC<{
         });
     };
     const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
-        if (isDestinationLocked(id)) return;
+        // در پاستوریزه مقصد همکار قفل است، به‌جز کد LIS که همه می‌توانند پر کنند
+        if (isDestinationLocked(id) && field !== 'lisCode') return;
         setDestinations(
             destinations.map((d) => {
                 if (d.id !== id) return d;
@@ -3815,13 +3851,12 @@ const AnnouncementPanel: React.FC<{
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs">کد LIS</label>
+                                                        <label className="text-xs">کد LIS{destLocked ? ' (قابل ویرایش)' : ''}</label>
                                                         <input
                                                             value={dest.lisCode || ''}
                                                             onChange={(e) => handleDestinationChange(dest.id!, 'lisCode', e.target.value)}
-                                                            className={`input-style${destLocked ? ` ${lockedFieldClass}` : ''}`}
-                                                            disabled={destLocked}
-                                                            readOnly={destLocked}
+                                                            className="input-style"
+                                                            title={destLocked ? 'کد LIS روی مقصد همکار قابل ویرایش است' : undefined}
                                                         />
                                                     </div>
                                                     <div>
