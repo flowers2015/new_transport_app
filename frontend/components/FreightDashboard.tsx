@@ -132,14 +132,29 @@ const isCompleteDestinationRow = (d: Partial<Destination>, lineType: FreightLine
 
 const prepareDestinationForSubmit = (
     d: Partial<Destination>,
-    lineType: FreightLineType
-): Partial<Destination> => ({
-    ...d,
-    deliveryDate: normalizeDestinationDeliveryDate(d.deliveryDate),
-    brandType: lineType === FreightLineType.Dairy ? (d.brandType || 'single') : d.brandType,
-    brand: lineType === FreightLineType.Dairy ? d.brand || 'میهن' : d.brand,
-    cargoValue: lineType === FreightLineType.Dairy ? Number(d.cargoValue) || 0 : d.cargoValue,
-});
+    lineType: FreightLineType,
+    fallbackOwnerUserId?: string | null
+): Partial<Destination> => {
+    const rawTonnage = d.tonnage;
+    let tonnage: number | undefined;
+    if (rawTonnage !== null && rawTonnage !== undefined && rawTonnage !== '') {
+        const n = Number(rawTonnage);
+        tonnage = Number.isFinite(n) ? Math.round(n * 100) / 100 : undefined;
+    }
+    return {
+        ...d,
+        tonnage,
+        deliveryDate: normalizeDestinationDeliveryDate(d.deliveryDate),
+        brandType: lineType === FreightLineType.Dairy ? (d.brandType || 'single') : d.brandType,
+        brand: lineType === FreightLineType.Dairy ? d.brand || 'میهن' : d.brand,
+        cargoValue: lineType === FreightLineType.Dairy ? Number(d.cargoValue) || 0 : d.cargoValue,
+        originalCreatedByUserId:
+            (d as any).originalCreatedByUserId ||
+            (d as any).original_created_by_user_id ||
+            fallbackOwnerUserId ||
+            null,
+    };
+};
 
 const isPlanningPlannerRole = (user?: User): boolean => {
     if (!user) return false;
@@ -173,7 +188,31 @@ const isSalesExpertUser = (user?: User): boolean => {
     return (
         user.role === UserRole.SalesExpert ||
         user.role === 'sales_expert' ||
+        user.role === 'SalesExpert' ||
         user.role === 'کارشناس فروش'
+    );
+};
+
+const isPlanningManagerUser = (user?: User): boolean => {
+    if (!user) return false;
+    return (
+        user.role === UserRole.PlanningManager ||
+        user.role === UserRole.Admin ||
+        user.role === 'planner_manager' ||
+        user.role === 'planning_manager' ||
+        user.role === 'PlanningManager' ||
+        user.role === 'مدیر برنامه‌ریزی' ||
+        user.role === 'admin' ||
+        user.role === 'ادمین'
+    );
+};
+
+const isPendingManagerApprovalStatus = (ann: FreightAnnouncement): boolean => {
+    const statusStr = String(ann.status);
+    return (
+        ann.status === FreightAnnouncementStatus.PendingManagerApproval ||
+        statusStr === 'در انتظار تایید مدیر' ||
+        statusStr === 'PendingManagerApproval'
     );
 };
 
@@ -603,7 +642,8 @@ const columnsConfig = (props: {
             const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
             const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
             const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
-            const isSelectable = isDraft || isRejected || isLeftover || isReturned || isPendingApproval;
+            const canSelectPending = isPlanningManagerUser(props?.currentUser);
+            const isSelectable = isDraft || isRejected || isLeftover || isReturned || (isPendingApproval && canSelectPending);
             return (
                 <input
                     type="checkbox"
@@ -941,7 +981,8 @@ const columnsConfig = (props: {
                 }
             }
             
-            // ویرایش/حذف — فقط صاحب اعلام‌بار و وضعیت‌های قابل اصلاح
+            // ویرایش/حذف — صاحب اعلام‌بار: ویرایش + ارجاع + حذف
+            // پاستوریزه برای همکار: فقط ویرایش (افزودن/ویرایش مقصد خودش) بدون حذف کل ردیف
             const canEditStatus =
                 [FreightAnnouncementStatus.Draft, FreightAnnouncementStatus.Rejected, FreightAnnouncementStatus.ReturnedToCreator].includes(ann.status) ||
                 ['Draft', 'Rejected', 'ReturnedToCreator', 'پیش‌نویس', 'رد شده', 'برگشت به اعلام‌کننده'].includes(statusStr);
@@ -951,6 +992,13 @@ const columnsConfig = (props: {
                 ownerId === String(currentUser?.id || '') ||
                 currentUser?.role === UserRole.PlanningManager ||
                 currentUser?.role === UserRole.Admin;
+            const isDairyLine = ann.lineType === FreightLineType.Dairy;
+            const isDairyCollaborator =
+                isDairyLine &&
+                canEditStatus &&
+                !isOwner &&
+                (currentUser?.role === UserRole.PlanningEmployee ||
+                    currentUser?.role === UserRole.SalesExpert);
             if (
                 (currentUser?.role === UserRole.PlanningEmployee ||
                     currentUser?.role === UserRole.SalesExpert ||
@@ -965,6 +1013,19 @@ const columnsConfig = (props: {
                         <button type="button" onClick={() => { try { console.log('🗑️ [FreightDashboard] Delete click:', ann.id); } catch {} try { onDelete && onDelete(ann.id); } catch (e) { console.error('❌ [FreightDashboard] Delete failed:', e); } }} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs">حذف</button>
                     </div>
                  );
+            }
+            if (isDairyCollaborator) {
+                return (
+                    <div className="flex justify-center gap-1">
+                        <button
+                            onClick={() => onEdit?.(ann)}
+                            className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs"
+                            title="افزودن یا ویرایش مقصد خودتان روی این مسیر"
+                        >
+                            افزودن مقصد
+                        </button>
+                    </div>
+                );
             }
             
             // برای Archived: ویرایش و ارجاع (برای بازگرداندن به چرخه)
@@ -1215,13 +1276,13 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             }
 
             // تقسیم بارها به دو دسته:
-            // 1. بارهای PendingManagerApproval: باید تایید شوند (onApprove) تا به ترابری ارجاع شوند
-            // 2. بارهای Draft/Rejected/Leftover: باید ارجاع شوند (onSendForApproval) تا به مدیر ارجاع شوند
-            const announcementsToApprove = selectedAnnouncements.filter(ann => {
-                const statusStr = String(ann.status);
-                return ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
-            });
-            
+            // 1. بارهای PendingManagerApproval: فقط مدیر می‌تواند تایید کند (ارجاع به ترابری)
+            // 2. بارهای Draft/Rejected/Leftover: کارمند/کارشناس ارجاع به مدیر
+            const canApprove = isPlanningManagerUser(currentUser);
+            const announcementsToApprove = canApprove
+                ? selectedAnnouncements.filter(isPendingManagerApprovalStatus)
+                : [];
+
             const announcementsToSend = selectedAnnouncements.filter(ann => {
                 const statusStr = String(ann.status);
                 const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
@@ -1230,10 +1291,18 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
                 return isDraft || isRejected || isLeftover || isReturned;
             });
+
+            const skippedPendingCount = canApprove
+                ? 0
+                : selectedAnnouncements.filter(isPendingManagerApprovalStatus).length;
             
             // اگر هیچ باری برای ارجاع یا تایید وجود ندارد
             if (announcementsToApprove.length === 0 && announcementsToSend.length === 0) {
-                alert('هیچ اعلام باری برای ارجاع یافت نشد.');
+                if (skippedPendingCount > 0) {
+                    alert('این بارها قبلاً برای تایید مدیر ارسال شده‌اند و در انتظار تایید هستند.');
+                } else {
+                    alert('هیچ اعلام باری برای ارجاع یافت نشد.');
+                }
                 setSelectedIds([]);
                 return;
             }
@@ -1288,6 +1357,11 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 } else if (sendCount > 0) {
                     message = `${sendCount} اعلام بار با موفقیت ارجاع شد`;
                 }
+                if (skippedPendingCount > 0) {
+                    message = message
+                        ? `${message} (${skippedPendingCount} مورد قبلاً در انتظار تایید مدیر بود و نادیده گرفته شد)`
+                        : `${skippedPendingCount} مورد قبلاً در انتظار تایید مدیر بود`;
+                }
                 alert(message);
             } else if (successCount > 0) {
                 if (approveCount > 0 && sendCount > 0) {
@@ -1313,7 +1387,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         return allowedRoles.includes(currentUser.role);
     };
 
-    const isManager = currentUser.role === UserRole.PlanningManager;
+    const isManager = isPlanningManagerUser(currentUser);
     const canCreate = hasAccess([UserRole.PlanningEmployee, UserRole.SalesExpert]);
 
     const handleColumnFilterChange = (header: string, value: string) => {
@@ -1781,9 +1855,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
         const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
         const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
-        const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
-        return isDraft || isRejected || isLeftover || isReturned || isPendingApproval;
-    }, []);
+        const isPendingApproval = isPendingManagerApprovalStatus(ann);
+        const canSelectPending = isPlanningManagerUser(currentUser);
+        return isDraft || isRejected || isLeftover || isReturned || (isPendingApproval && canSelectPending);
+    }, [currentUser]);
 
     const handleSelectAll = useCallback(() => {
         console.log('[handleSelectAll] Total filteredAnnouncements:', filteredAnnouncements.length);
@@ -2219,6 +2294,32 @@ const AnnouncementPanel: React.FC<{
     const [iceCreamOriginCityValid, setIceCreamOriginCityValid] = useState<[boolean, boolean]>([false, false]);
     const [originCity1Valid, setOriginCity1Valid] = useState(false);
     const [originCity2Valid, setOriginCity2Valid] = useState(false);
+    /** در ویرایش پاستوریزه (کارمند/کارشناس): فقط مقصد دیگران قفل؛ مقصد خود کاربر قابل ویرایش */
+    const [lockedDestinationIds, setLockedDestinationIds] = useState<Set<string>>(new Set());
+    const isDairyCollaboratorEditor =
+        currentUser?.role === UserRole.PlanningEmployee ||
+        currentUser?.role === UserRole.SalesExpert;
+    const isDairyNextDestEdit =
+        isEditMode && data?.lineType === FreightLineType.Dairy && isDairyCollaboratorEditor;
+    const isDestinationLocked = (id?: string) =>
+        Boolean(isDairyNextDestEdit && id && lockedDestinationIds.has(id));
+    const lockedFieldClass = 'bg-slate-100 text-slate-600 cursor-not-allowed';
+    const currentUserId = String(currentUser?.id || '');
+    const resolveDestinationOwnerId = (dest: Partial<Destination>, announcement?: FreightAnnouncement | null) => {
+        const fromDest = String(
+            (dest as any).originalCreatedByUserId ||
+                (dest as any).original_created_by_user_id ||
+                (dest as any).original_creator_user_id ||
+                ''
+        );
+        if (fromDest) return fromDest;
+        return String(
+            (announcement as any)?.creator_user_id ||
+                (announcement as any)?.createdByUserId ||
+                (announcement as any)?.created_by_user_id ||
+                ''
+        );
+    };
 
     useEffect(() => {
         if (lineType !== FreightLineType.Dairy) return;
@@ -2231,6 +2332,7 @@ const AnnouncementPanel: React.FC<{
         // Don't reset lineType to allow multiple entries of the same type
         // Don't reset loadingDate to preserve the selected date
         // Don't reset platformArrivalTime to preserve the selected time
+        setLockedDestinationIds(new Set());
         setCommonState(prev => ({ ...initialCommonState, loadingDate: prev.loadingDate }));
         setIceCreamState(initialIceCreamState);
         setIceCreamRouteType('single');
@@ -2400,6 +2502,7 @@ const AnnouncementPanel: React.FC<{
                 setBrandState(brandData);
                 
                 if (data.lineType === FreightLineType.IceCream) {
+                    setLockedDestinationIds(new Set());
                     const iceForm = populateIceCreamFormFromAnnouncement(data as any);
                     setLoadingLocationState(iceForm.loadingLocationState);
                     setBrandState(iceForm.brandState);
@@ -2421,6 +2524,10 @@ const AnnouncementPanel: React.FC<{
                         data.destinations.length > 0
                             ? data.destinations.map((d, index) => ({
                                   ...d,
+                                  tonnage:
+                                      d.tonnage === null || d.tonnage === undefined || d.tonnage === ''
+                                          ? d.tonnage
+                                          : Math.round(Number(d.tonnage) * 100) / 100,
                                   representativeType: d.representativeType || ('agent' as const),
                                   brandType: d.brandType || (data.lineType === FreightLineType.Dairy ? 'single' : undefined),
                                   brand: d.brand || (data.lineType === FreightLineType.Dairy && index === 0 ? data.brand || 'میهن' : d.brand),
@@ -2447,8 +2554,23 @@ const AnnouncementPanel: React.FC<{
                         if (d.id) cityValidity[d.id] = !!d.city?.trim();
                     });
                     setDestCityValid(cityValidity);
+                    if (data.lineType === FreightLineType.Dairy && isDairyCollaboratorEditor) {
+                        // فقط مقصدهایی که مال کاربر دیگری است قفل می‌شوند
+                        const locked = new Set<string>();
+                        finalDests.forEach((d) => {
+                            if (!d.id) return;
+                            const ownerId = resolveDestinationOwnerId(d, data);
+                            if (ownerId && ownerId !== currentUserId) {
+                                locked.add(d.id);
+                            }
+                        });
+                        setLockedDestinationIds(locked);
+                    } else {
+                        setLockedDestinationIds(new Set());
+                    }
                 }
             } else { // Create mode: ensure form is clear
+                setLockedDestinationIds(new Set());
                 const openLineType = initialLineType ?? lineType;
                 if (initialLineType && initialLineType !== lineType) {
                     setLineType(initialLineType);
@@ -2538,8 +2660,24 @@ const AnnouncementPanel: React.FC<{
             setDestCityValid((prev) => ({ ...prev, [id]: false }));
         }
     };
-    const removeDestination = (id: string) => setDestinations(destinations.filter(d => d.id !== id));
+    const removeDestination = (id: string) => {
+        if (isDestinationLocked(id)) return;
+        setDestinations(destinations.filter((d) => d.id !== id));
+    };
+    const moveDestination = (id: string, direction: -1 | 1) => {
+        // در ویرایش مشارکتی پاستوریزه فقط مقصد خود کاربر جابه‌جا می‌شود
+        if (isDairyNextDestEdit && isDestinationLocked(id)) return;
+        setDestinations((prev) => {
+            const idx = prev.findIndex((d) => d.id === id);
+            const newIdx = idx + direction;
+            if (idx < 0 || newIdx < 0 || newIdx >= prev.length) return prev;
+            const next = [...prev];
+            [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+            return next;
+        });
+    };
     const handleDestinationChange = (id: string, field: keyof Destination, value: any) => {
+        if (isDestinationLocked(id)) return;
         setDestinations(
             destinations.map((d) => {
                 if (d.id !== id) return d;
@@ -2549,6 +2687,7 @@ const AnnouncementPanel: React.FC<{
     };
 
     const handleDestinationCitySelect = (id: string, city: string) => {
+        if (isDestinationLocked(id)) return;
         onRouteQueryChange(city);
         setDestinations(destinations.map((d) => (d.id === id ? { ...d, city } : d)));
         setDestCityValid((prev) => ({ ...prev, [id]: true }));
@@ -2560,6 +2699,7 @@ const AnnouncementPanel: React.FC<{
         }));
 
     const handleDestinationProductChange = (id: string, product: string, checked: boolean) => {
+        if (isDestinationLocked(id)) return;
         setDestinations(
             destinations.map((d) => {
                 if (d.id !== id) return d;
@@ -2663,7 +2803,23 @@ const AnnouncementPanel: React.FC<{
         // برای Dairy و Ambient: فقط مقاصد فعال (پر شده) اعتبارسنجی می‌شوند
         const preparedDestinations =
             lineType !== FreightLineType.IceCream
-                ? destinations.map((d) => prepareDestinationForSubmit(d, lineType))
+                ? destinations.map((d) => {
+                      const hasOwner = !!(
+                          (d as any).originalCreatedByUserId ||
+                          (d as any).original_created_by_user_id
+                      );
+                      let fallbackOwner: string | null = null;
+                      if (!hasOwner) {
+                          if (d.id && lockedDestinationIds.has(d.id)) {
+                              // مقصد قفل‌شده همکار بدون مالک صریح → مالک اعلام‌بار
+                              fallbackOwner = resolveDestinationOwnerId(d, data) || null;
+                          } else {
+                              // مقصد خود کاربر / مقصد جدید
+                              fallbackOwner = currentUserId || null;
+                          }
+                      }
+                      return prepareDestinationForSubmit(d, lineType, fallbackOwner);
+                  })
                 : [];
 
         const activeDestinations =
@@ -2860,10 +3016,22 @@ const AnnouncementPanel: React.FC<{
             {isOpen && <div className="fixed inset-0 bg-black bg-opacity-30 z-40 transition-opacity" onClick={onClose} />}
             <aside className={`fixed top-0 right-0 h-full w-full sm:w-[44rem] bg-slate-50 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 <div className="p-4 border-b bg-white flex justify-between items-center">
-                    <h3 className="text-lg font-bold">{isEditMode ? `ویرایش اعلام بار #${data?.announcementCode}` : 'ثبت اعلام بار جدید'}</h3>
+                    <h3 className="text-lg font-bold">
+                        {isDairyNextDestEdit
+                            ? `افزودن مقصد بعدی #${data?.announcementCode}`
+                            : isEditMode
+                              ? `ویرایش اعلام بار #${data?.announcementCode}`
+                              : 'ثبت اعلام بار جدید'}
+                    </h3>
                     <button onClick={onClose} className="text-2xl text-slate-500 hover:text-slate-800">&times;</button>
                 </div>
                 <form id="freight-form" onSubmit={(e) => handleSubmit(e, false)} className="flex-grow overflow-y-auto p-4 space-y-4">
+                    {isDairyNextDestEdit && (
+                        <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                            در ویرایش پاستوریزه می‌توانید مقصد خودتان را ویرایش کنید یا مقصد بعدی اضافه کنید.
+                            مقصد همکاران و مشخصات مشترک مسیر قفل است.
+                        </div>
+                    )}
                      <div>
                         <label className="font-semibold text-sm">۱. انتخاب نوع لاین</label>
                         <div className="flex flex-wrap gap-2 mt-1">
@@ -2888,7 +3056,7 @@ const AnnouncementPanel: React.FC<{
                                                      allowedLineTypes.length === 3 ||
                                                      allowedLineTypes.includes(lt as any);
                                     const isEmployee = isFreightCreateRole(currentUser);
-                                    const isDisabled = isEmployee && !isAllowed;
+                                    const isDisabled = isDairyNextDestEdit || (isEmployee && !isAllowed);
                                     
                                     return (
                                         <button 
@@ -2905,7 +3073,13 @@ const AnnouncementPanel: React.FC<{
                                                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                                         : 'bg-slate-200 hover:bg-slate-300'
                                             }`}
-                                            title={isDisabled ? 'شما مجوز ایجاد اعلام بار برای این لاین را ندارید' : ''}
+                                            title={
+                                                isDairyNextDestEdit
+                                                    ? 'در ویرایش پاستوریزه نوع لاین قابل تغییر نیست'
+                                                    : isDisabled
+                                                      ? 'شما مجوز ایجاد اعلام بار برای این لاین را ندارید'
+                                                      : ''
+                                            }
                                         >
                                             {lt}
                                         </button>
@@ -2927,7 +3101,9 @@ const AnnouncementPanel: React.FC<{
                                     type="text" 
                                     placeholder="1404/09/18" 
                                     value={commonState.loadingDate} 
+                                    disabled={isDairyNextDestEdit}
                                     onChange={e => {
+                                        if (isDairyNextDestEdit) return;
                                         let value = e.target.value.replace(/[^\d\/]/g, '');
                                         // اعمال خودکار فرمت YYYY/MM/DD
                                         if (value.length > 4 && !value.includes('/')) {
@@ -2945,6 +3121,7 @@ const AnnouncementPanel: React.FC<{
                                         }
                                     }} 
                                     onBlur={e => {
+                                        if (isDairyNextDestEdit) return;
                                         // هنگام blur، فرمت را کامل کن (اضافه کردن صفرهای ابتدایی)
                                         const value = e.target.value;
                                         const parts = value.split('/');
@@ -2957,7 +3134,7 @@ const AnnouncementPanel: React.FC<{
                                             }
                                         }
                                     }}
-                                    className="input-style mt-1" 
+                                    className={`input-style mt-1${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
                                     pattern="\d{4}\/\d{2}\/\d{2}"
                                     title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)"
                                     required
@@ -3010,7 +3187,16 @@ const AnnouncementPanel: React.FC<{
                                 </div>
                             )}
                             <RequiredField label="نوع خودرو*">
-                                <select value={commonState.vehicleType} onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))} className="input-style mt-1 w-full" required><option value="">-- انتخاب کنید --</option>{VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}</select>
+                                <select
+                                    value={commonState.vehicleType}
+                                    onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))}
+                                    className={`input-style mt-1 w-full${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
+                                    required
+                                    disabled={isDairyNextDestEdit}
+                                >
+                                    <option value="">-- انتخاب کنید --</option>
+                                    {VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}
+                                </select>
                             </RequiredField>
                                 <RequiredField label={lineType === FreightLineType.Dairy ? 'ارزش کل بار (مجموع مقاصد)*' : 'ارزش بار*'}>
                                     <CargoValueInput
@@ -3346,13 +3532,15 @@ const AnnouncementPanel: React.FC<{
                             <div className="mb-3">
                                 <label className="text-xs font-semibold mb-2 block">نوع بارگیری</label>
                                 <div className="flex gap-4">
-                                    <label className="flex items-center gap-2 cursor-pointer">
+                                    <label className={`flex items-center gap-2 ${isDairyNextDestEdit ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                         <input
                                             type="radio"
                                             name="loadingType"
                                             value="single"
                                             checked={loadingLocationState.loadingType === 'single'}
+                                            disabled={isDairyNextDestEdit}
                                             onChange={() => {
+                                                if (isDairyNextDestEdit) return;
                                                 setLoadingLocationState(s => ({
                                                     ...s,
                                                     loadingType: 'single' as 'single' | 'double',
@@ -3364,13 +3552,17 @@ const AnnouncementPanel: React.FC<{
                                         />
                                         <span className="text-xs">تک مبدا</span>
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
+                                    <label className={`flex items-center gap-2 ${isDairyNextDestEdit ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                         <input
                                             type="radio"
                                             name="loadingType"
                                             value="double"
                                             checked={loadingLocationState.loadingType === 'double'}
-                                            onChange={(e) => setLoadingLocationState(s => ({ ...s, loadingType: 'double' as 'single' | 'double' }))}
+                                            disabled={isDairyNextDestEdit}
+                                            onChange={(e) => {
+                                                if (isDairyNextDestEdit) return;
+                                                setLoadingLocationState(s => ({ ...s, loadingType: 'double' as 'single' | 'double' }));
+                                            }}
                                             className="cursor-pointer"
                                         />
                                         <span className="text-xs">دو مبدا بارگیری</span>
@@ -3384,9 +3576,11 @@ const AnnouncementPanel: React.FC<{
                                             cityOnlyLabels
                                             value={loadingLocationState.originCity1}
                                             onChange={(city) => {
+                                                if (isDairyNextDestEdit) return;
                                                 onRouteQueryChange(city);
                                                 setLoadingLocationState(s => ({ ...s, originCity1: city }));
                                             }}
+                                            disabled={isDairyNextDestEdit}
                                             placeholder="جستجوی مبدا..."
                                             className="input-style mt-1 w-full"
                                             required
@@ -3399,9 +3593,11 @@ const AnnouncementPanel: React.FC<{
                                                 cityOnlyLabels
                                                 value={loadingLocationState.originCity1}
                                                 onChange={(city) => {
+                                                    if (isDairyNextDestEdit) return;
                                                     onRouteQueryChange(city);
                                                     setLoadingLocationState(s => ({ ...s, originCity1: city }));
                                                 }}
+                                                disabled={isDairyNextDestEdit}
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
@@ -3412,11 +3608,13 @@ const AnnouncementPanel: React.FC<{
                                                 cityOnlyLabels
                                                 value={loadingLocationState.originCity2}
                                                 onChange={(city) => {
+                                                    if (isDairyNextDestEdit) return;
                                                     onRouteQueryChange(city);
                                                     setLoadingLocationState(s => ({ ...s, originCity2: city }));
                                                 }}
                                                 onValidityChange={setOriginCity2Valid}
                                                 requireSelection
+                                                disabled={isDairyNextDestEdit}
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
@@ -3426,7 +3624,12 @@ const AnnouncementPanel: React.FC<{
                                 )}
                             </div>
                             <div><label className="text-xs">ساعت حضور در سکو</label>
-                                <select value={multiDestState.platformArrivalTime} onChange={e=>setMultiDestState(s=>({...s, platformArrivalTime: e.target.value}))} className="input-style mt-1">
+                                <select
+                                    value={multiDestState.platformArrivalTime}
+                                    onChange={e=>setMultiDestState(s=>({...s, platformArrivalTime: e.target.value}))}
+                                    className={`input-style mt-1${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
+                                    disabled={isDairyNextDestEdit}
+                                >
                                     <option value="">-- انتخاب کنید --</option>
                                     {Array.from({ length: 24 }, (_, i) => (
                                         <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}:00</option>
@@ -3510,31 +3713,67 @@ const AnnouncementPanel: React.FC<{
                         <fieldset className="p-3 border rounded-lg bg-white">
                             <legend className="font-semibold px-1 text-sm">مقاصد</legend>
                             <div className="space-y-2">
-                                {destinations.map((dest, index) => (
-                                    <div key={dest.id} className="p-2 bg-slate-100 rounded space-y-2 relative">
+                                {destinations.map((dest, index) => {
+                                    const destLocked = isDestinationLocked(dest.id);
+                                    const canReorderDest =
+                                        destinations.length > 1 &&
+                                        (!isDairyNextDestEdit || !destLocked);
+                                    return (
+                                    <div key={dest.id} className={`p-2 rounded space-y-2 relative ${destLocked ? 'bg-slate-200/80' : 'bg-slate-100'}`}>
                                         <span className="absolute top-2 left-2 bg-slate-300 text-slate-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{index + 1}</span>
-                                        {destinations.length > 1 && <button type="button" onClick={() => removeDestination(dest.id!)} className="absolute top-2 right-2 text-red-500 text-xs">حذف</button>}
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                                            {canReorderDest && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => moveDestination(dest.id!, -1)}
+                                                        disabled={index === 0}
+                                                        className="px-1.5 py-0.5 text-xs rounded border border-slate-300 bg-white text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        title="بردن به مقصد بالاتر"
+                                                    >
+                                                        ▲
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => moveDestination(dest.id!, 1)}
+                                                        disabled={index === destinations.length - 1}
+                                                        className="px-1.5 py-0.5 text-xs rounded border border-slate-300 bg-white text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        title="بردن به مقصد پایین‌تر"
+                                                    >
+                                                        ▼
+                                                    </button>
+                                                </>
+                                            )}
+                                            {destLocked && (
+                                                <span className="text-[10px] text-slate-500 mr-1">مقصد همکار (قفل)</span>
+                                            )}
+                                            {!destLocked && destinations.length > 1 && (
+                                                <button type="button" onClick={() => removeDestination(dest.id!)} className="text-red-500 text-xs mr-1">حذف</button>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 pt-6">
                                             {lineType === FreightLineType.Dairy && (
                                                 <>
                                                     <div className="col-span-2">
                                                         <label className="text-xs font-semibold mb-2 block">نوع برند*</label>
                                                         <div className="flex gap-4 mb-2">
-                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                            <label className={`flex items-center gap-2 ${destLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                                                 <input
                                                                     type="radio"
                                                                     name={`dairyBrandType-${dest.id}`}
                                                                     checked={(dest.brandType || 'single') === 'single'}
+                                                                    disabled={destLocked}
                                                                     onChange={() => handleDestinationChange(dest.id!, 'brandType', 'single')}
                                                                     className="cursor-pointer"
                                                                 />
                                                                 <span className="text-xs">تک برند</span>
                                                             </label>
-                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                            <label className={`flex items-center gap-2 ${destLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                                                 <input
                                                                     type="radio"
                                                                     name={`dairyBrandType-${dest.id}`}
                                                                     checked={dest.brandType === 'double'}
+                                                                    disabled={destLocked}
                                                                     onChange={() => handleDestinationChange(dest.id!, 'brandType', 'double')}
                                                                     className="cursor-pointer"
                                                                 />
@@ -3547,8 +3786,9 @@ const AnnouncementPanel: React.FC<{
                                                                 <select
                                                                     value={dest.brand || 'میهن'}
                                                                     onChange={(e) => handleDestinationChange(dest.id!, 'brand', e.target.value)}
-                                                                    className="input-style mt-1"
+                                                                    className={`input-style mt-1${destLocked ? ` ${lockedFieldClass}` : ''}`}
                                                                     required
+                                                                    disabled={destLocked}
                                                                 >
                                                                     {BRANDS.map((b) => (
                                                                         <option key={b} value={b}>{b}</option>
@@ -3561,8 +3801,9 @@ const AnnouncementPanel: React.FC<{
                                                                     <select
                                                                         value={dest.brand2 || ''}
                                                                         onChange={(e) => handleDestinationChange(dest.id!, 'brand2', e.target.value)}
-                                                                        className="input-style mt-1"
+                                                                        className={`input-style mt-1${destLocked ? ` ${lockedFieldClass}` : ''}`}
                                                                         required
+                                                                        disabled={destLocked}
                                                                     >
                                                                         <option value="">-- انتخاب کنید --</option>
                                                                         {BRANDS.map((b) => (
@@ -3578,17 +3819,20 @@ const AnnouncementPanel: React.FC<{
                                                         <input
                                                             value={dest.lisCode || ''}
                                                             onChange={(e) => handleDestinationChange(dest.id!, 'lisCode', e.target.value)}
-                                                            className="input-style"
+                                                            className={`input-style${destLocked ? ` ${lockedFieldClass}` : ''}`}
+                                                            disabled={destLocked}
+                                                            readOnly={destLocked}
                                                         />
                                                     </div>
                                                     <div>
                                                         <label className="text-xs">محصولات</label>
                                                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                                                             {DAIRY_DESTINATION_PRODUCT_OPTIONS.map((product) => (
-                                                                <label key={product} className="flex items-center gap-1 text-xs">
+                                                                <label key={product} className={`flex items-center gap-1 text-xs ${destLocked ? 'opacity-70' : ''}`}>
                                                                     <input
                                                                         type="checkbox"
                                                                         checked={(dest.products || []).includes(product)}
+                                                                        disabled={destLocked}
                                                                         onChange={(e) =>
                                                                             handleDestinationProductChange(dest.id!, product, e.target.checked)
                                                                         }
@@ -3608,7 +3852,7 @@ const AnnouncementPanel: React.FC<{
                                                         dest.id && handleDestinationCitySelect(dest.id, city)
                                                     }
                                                     onValidityChange={(valid) => {
-                                                        if (dest.id) {
+                                                        if (dest.id && !destLocked) {
                                                             setDestCityValid((prev) => ({
                                                                 ...prev,
                                                                 [dest.id!]: valid,
@@ -3616,12 +3860,19 @@ const AnnouncementPanel: React.FC<{
                                                         }
                                                     }}
                                                     requireSelection
+                                                    disabled={destLocked}
                                                     className="input-style"
                                                     required
                                                 />
                                             </RequiredField>
                                             <RequiredField label="نوع نماینده*">
-                                                <select value={dest.representativeType || 'agent'} onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)} className="input-style w-full" required>
+                                                <select
+                                                    value={dest.representativeType || 'agent'}
+                                                    onChange={e => handleDestinationChange(dest.id!, 'representativeType', e.target.value)}
+                                                    className={`input-style w-full${destLocked ? ` ${lockedFieldClass}` : ''}`}
+                                                    required
+                                                    disabled={destLocked}
+                                                >
                                                     <option value="agent">نماینده</option>
                                                     <option value="distributor">پخش</option>
                                                     {lineType === FreightLineType.Dairy && (
@@ -3636,7 +3887,9 @@ const AnnouncementPanel: React.FC<{
                                                     onChange={(e) =>
                                                         handleDestinationChange(dest.id!, 'representativeName', e.target.value)
                                                     }
-                                                    className="input-style"
+                                                    className={`input-style${destLocked ? ` ${lockedFieldClass}` : ''}`}
+                                                    disabled={destLocked}
+                                                    readOnly={destLocked}
                                                 />
                                             </div>
                                             {lineType === FreightLineType.Ambient && (
@@ -3663,7 +3916,34 @@ const AnnouncementPanel: React.FC<{
                                                 </div>
                                             )}
                                             <RequiredField label="تناژ (کیلوگرم)*">
-                                                <input type="number" value={dest.tonnage || ''} onChange={e => handleDestinationChange(dest.id!, 'tonnage', Number(e.target.value))} className="input-style w-full" required min="0" step="0.01"/>
+                                                <input
+                                                    type="number"
+                                                    value={
+                                                        dest.tonnage === null || dest.tonnage === undefined || dest.tonnage === ''
+                                                            ? ''
+                                                            : String(Math.round(Number(dest.tonnage) * 100) / 100)
+                                                    }
+                                                    onChange={e => {
+                                                        const cleaned = e.target.value.replace(/[^\d.]/g, '');
+                                                        if (cleaned === '' || cleaned === '.') {
+                                                            handleDestinationChange(dest.id!, 'tonnage', '' as any);
+                                                            return;
+                                                        }
+                                                        const n = Number(cleaned);
+                                                        if (!Number.isFinite(n)) return;
+                                                        handleDestinationChange(
+                                                            dest.id!,
+                                                            'tonnage',
+                                                            Math.round(n * 100) / 100
+                                                        );
+                                                    }}
+                                                    className={`input-style w-full${destLocked ? ` ${lockedFieldClass}` : ''}`}
+                                                    required
+                                                    min="0"
+                                                    step="1"
+                                                    disabled={destLocked}
+                                                    readOnly={destLocked}
+                                                />
                                             </RequiredField>
                                             {lineType === FreightLineType.Dairy && (
                                                 <RequiredField label="ارزش بار*">
@@ -3674,12 +3954,14 @@ const AnnouncementPanel: React.FC<{
                                                         }
                                                         resetKey={`${data?.id ?? 'new'}-${dest.id}`}
                                                         required
+                                                        disabled={destLocked}
                                                         inputClassName="input-style"
                                                         selectClassName="input-style min-w-[140px]"
                                                     />
                                                 </RequiredField>
                                             )}
-                                            <div><label className="text-xs">تاریخ تحویل*</label><input type="text" value={dest.deliveryDate || ''} onChange={e => {
+                                            <div><label className="text-xs">تاریخ تحویل*</label><input type="text" value={dest.deliveryDate || ''} disabled={destLocked} onChange={e => {
+                                                if (destLocked) return;
                                                 let value = e.target.value.replace(/[^\d\/]/g, '');
                                                 // اعمال خودکار فرمت YYYY/MM/DD
                                                 if (value.length > 4 && !value.includes('/')) {
@@ -3696,6 +3978,7 @@ const AnnouncementPanel: React.FC<{
                                                     handleDestinationChange(dest.id!, 'deliveryDate', value);
                                                 }
                                             }} onBlur={e => {
+                                                if (destLocked) return;
                                                 // هنگام blur، فرمت را کامل کن (اضافه کردن صفرهای ابتدایی)
                                                 const value = e.target.value;
                                                 const parts = value.split('/');
@@ -3707,9 +3990,14 @@ const AnnouncementPanel: React.FC<{
                                                         handleDestinationChange(dest.id!, 'deliveryDate', `${year}/${month}/${day}`);
                                                     }
                                                 }
-                                            }} className="input-style" placeholder="1404/09/18" dir="ltr" pattern="\d{4}\/\d{2}\/\d{2}" title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)" required maxLength={10}/></div>
+                                            }} className={`input-style${destLocked ? ` ${lockedFieldClass}` : ''}`} placeholder="1404/09/18" dir="ltr" pattern="\d{4}\/\d{2}\/\d{2}" title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)" required maxLength={10}/></div>
                                             <div><label className="text-xs">ساعت تخلیه</label>
-                                                <select value={dest.unloadTime || ''} onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)} className="input-style">
+                                                <select
+                                                    value={dest.unloadTime || ''}
+                                                    onChange={e => handleDestinationChange(dest.id!, 'unloadTime', e.target.value)}
+                                                    className={`input-style${destLocked ? ` ${lockedFieldClass}` : ''}`}
+                                                    disabled={destLocked}
+                                                >
                                                     <option value="">-- انتخاب کنید --</option>
                                                     {Array.from({ length: 24 }, (_, i) => (
                                                         <option key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}:00</option>
@@ -3718,8 +4006,13 @@ const AnnouncementPanel: React.FC<{
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                                {destinations.length < 4 && <button type="button" onClick={addDestination} className="text-sm text-sky-600 hover:underline mt-2">+ افزودن مقصد</button>}
+                                    );
+                                })}
+                                {destinations.length < 4 && (
+                                    <button type="button" onClick={addDestination} className="text-sm text-sky-600 hover:underline mt-2">
+                                        {isDairyNextDestEdit ? '+ افزودن مقصد بعدی' : '+ افزودن مقصد'}
+                                    </button>
+                                )}
                             </div>
                         </fieldset>
                         </>
@@ -3727,13 +4020,27 @@ const AnnouncementPanel: React.FC<{
 
                     <fieldset className="p-3 border rounded-lg bg-white">
                         <legend className="font-semibold px-1 text-sm">یادداشت</legend>
-                        <textarea value={commonState.notes} onChange={e => setCommonState(s=>({...s, notes: e.target.value}))} placeholder="..." className="input-style w-full" rows={2}/>
+                        <textarea
+                            value={commonState.notes}
+                            onChange={e => setCommonState(s=>({...s, notes: e.target.value}))}
+                            placeholder="..."
+                            className={`input-style w-full${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
+                            rows={2}
+                            disabled={isDairyNextDestEdit}
+                            readOnly={isDairyNextDestEdit}
+                        />
                     </fieldset>
                 </form>
                  <div className="p-4 bg-white border-t flex justify-end gap-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     {!isEditMode && <button type="button" onClick={(e) => handleSubmit(e, true)} className="px-4 py-2 bg-slate-600 text-white rounded-md text-sm">ذخیره پیش‌نویس</button>}
-                    <button type="submit" form="freight-form" className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">{isEditMode ? 'ذخیره تغییرات' : (isSalesExpertUser(currentUser) ? 'ثبت و ارسال به ترابری' : 'ثبت و ارجاع')}</button>
+                    <button type="submit" form="freight-form" className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">
+                        {isDairyNextDestEdit
+                            ? 'ذخیره مقصد'
+                            : isEditMode
+                              ? 'ذخیره تغییرات'
+                              : (isSalesExpertUser(currentUser) ? 'ثبت و ارسال به ترابری' : 'ثبت و ارجاع')}
+                    </button>
                 </div>
                 <datalist id="cities">
                     {routeOptions.map(route => (

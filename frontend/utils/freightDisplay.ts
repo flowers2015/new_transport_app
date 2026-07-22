@@ -277,30 +277,40 @@ export function getDestinationCitiesLabel(
 
 /** نام کارمند(ان) اعلام‌کننده — در صورت ادغام مقاصد کارشناسان مختلف، همه را نشان می‌دهد */
 export function getAnnouncementCreatorLabel(ann: any): string {
-    const fromDests: string[] = [];
+    const names: string[] = [];
     const seen = new Set<string>();
+
+    const addCreator = (label: string | null | undefined, key: string | null | undefined) => {
+        const trimmed = String(label || '').trim();
+        const id = key != null && String(key).trim() !== '' ? String(key) : trimmed;
+        if (trimmed && id && !seen.has(id)) {
+            seen.add(id);
+            names.push(trimmed);
+        }
+    };
+
+    addCreator(
+        ann?.creator_full_name || ann?.creatorFullName || ann?.creator_username || ann?.creatorUsername,
+        ann?.creator_user_id || ann?.creatorUserId || ann?.created_by_user_id || ann?.createdByUserId
+    );
+
     for (const d of ann?.destinations || []) {
-        const label = (
+        addCreator(
             d.originalCreatorFullName ||
-            d.original_creator_full_name ||
-            d.originalCreatorUsername ||
-            d.original_creator_username ||
-            ''
-        ).trim();
-        const key = String(
+                d.original_creator_full_name ||
+                d.originalCreatorUsername ||
+                d.original_creator_username,
             d.originalCreatedByUserId ||
                 d.original_created_by_user_id ||
-                d.original_creator_user_id ||
-                label
+                d.original_creator_user_id
         );
-        if (label && !seen.has(key)) {
-            seen.add(key);
-            fromDests.push(label);
-        }
     }
-    if (fromDests.length > 0) return fromDests.join('، ');
+
+    if (names.length > 0) return names.join('، ');
+
     const aggregated = String(ann?.destination_creator_names || ann?.destinationCreatorNames || '').trim();
     if (aggregated) return aggregated;
+
     return ann?.creator_full_name || ann?.creator_username || '-';
 }
 

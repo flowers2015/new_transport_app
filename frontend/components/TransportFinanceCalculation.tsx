@@ -239,6 +239,17 @@ function resolveAssignmentDateFromAnnouncement(ann: any): string {
     return formatted === '-' ? '' : formatted;
 }
 
+/** پیش‌فرض: تعداد مقاصد - 1؛ اگر قبلاً ذخیره شده باشد همان مقدار */
+function resolveInitialMultiUnloadCount(tour: any): number {
+    const saved = tour?.multiUnloadCount ?? tour?.multi_unload_count;
+    if (saved !== undefined && saved !== null && String(saved).trim() !== '') {
+        const n = Number(saved);
+        if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+    }
+    const destinationsCount = Array.isArray(tour?.destinations) ? tour.destinations.length : 0;
+    return Math.max(0, destinationsCount - 1);
+}
+
 type TourDetailSortField =
     | 'announcementCode'
     | 'vehicleType'
@@ -2574,8 +2585,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             });
             const initialFuelCost = computedFuelCost > 0 ? computedFuelCost : (Number(tour.fuelCost) || 0);
             
-            // محاسبه تعداد چندجا تخلیه
-            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            // تعداد چندجا تخلیه: خودکار (مقاصد-1) یا مقدار ذخیره‌شده قبلی؛ کاربر می‌تواند ویرایش کند
+            const multiUnloadCount = resolveInitialMultiUnloadCount(tour);
             
             // تعیین نوع محاسبه اجرت - از تور ذخیره شده یا پیش‌فرض
             const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';
@@ -2667,7 +2678,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 ? formatBillOfLadingDateDisplay(tour.billOfLadingDate)
                 : '';
             
-            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            const multiUnloadCount = resolveInitialMultiUnloadCount(tour);
             
             // تعیین نوع محاسبه اجرت - پیش‌فرض پورسانت
             const tourQueueType = (tour as any).queueType || (tour as any).queue_type || calc.queueType || 'porsant';
@@ -3652,8 +3663,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 }
             }
             
-            // محاسبه تعداد چندجا تخلیه
-            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            // تعداد چندجا تخلیه: خودکار (مقاصد-1) یا مقدار ذخیره‌شده قبلی؛ کاربر می‌تواند ویرایش کند
+            const multiUnloadCount = resolveInitialMultiUnloadCount(tour);
             
             setInputDialogData({
                 tourId: tour.announcementId,
@@ -3743,8 +3754,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 fuelConsumptionRegulations,
             });
             
-            // محاسبه تعداد چندجا تخلیه
-            const multiUnloadCount = Math.max(0, (tour.destinations?.length || 0) - 1);
+            // تعداد چندجا تخلیه: خودکار (مقاصد-1) یا مقدار ذخیره‌شده قبلی؛ کاربر می‌تواند ویرایش کند
+            const multiUnloadCount = resolveInitialMultiUnloadCount(tour);
             
             // در صورت خطا، از مقادیر موجود در tour استفاده کن
             setInputDialogData({
@@ -3928,9 +3939,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         const excessMissionDays = Number(savedInputDialogData.excessMissionDays) || 0;
         const calculatedExcessMissionCost = Math.round(excessMissionDays * (Number(excessMissionCostPerDay) || 0)) || 0;
         
-        // 3. هزینه چندجا تخلیه = (تعداد مقاصد - 1) × بخشنامه چندجا تخلیه
-        const destinationsCount = tour.destinations?.length || 0;
-        const multiUnloadUnits = Math.max(0, destinationsCount - 1);
+        // 3. هزینه چندجا تخلیه = تعداد چندجا تخلیه (خودکار یا ویرایش‌شده توسط کاربر) × بخشنامه
+        const multiUnloadUnits = Math.max(0, Number(savedInputDialogData.multiUnloadCount) || 0);
         const calculatedMultiUnloadCost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
         
         // 4. اجرت راننده کمکی = بخشنامه اجرت راننده کمکی × (کیلومتر مصوب + کیلومتر مازاد راننده کمکی)
@@ -5105,33 +5115,43 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         <tr className="border-b border-slate-200 hover:bg-slate-50">
                                             <td className="p-2 border-l border-slate-200 font-medium">
                                         تعداد چندجا تخلیه
-                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار: تعداد</p>
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">پیش‌فرض خودکار؛ قابل ویرایش</p>
                                             </td>
                                             <td className="p-2 border-l border-slate-200">
                                     <input
                                         type="text"
                                         inputMode="numeric"
-                                        value={inputDialogData.multiUnloadCount ? String(inputDialogData.multiUnloadCount) : ''}
-                                        readOnly
-                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed text-left"
+                                        value={
+                                            inputDialogData.multiUnloadCount !== undefined &&
+                                            inputDialogData.multiUnloadCount !== null
+                                                ? String(inputDialogData.multiUnloadCount)
+                                                : ''
+                                        }
+                                        onChange={(e) => {
+                                            const cleaned = e.target.value.replace(/[^\d]/g, '');
+                                            const numValue = cleaned ? Number(cleaned) : 0;
+                                            const cost =
+                                                Math.round(numValue * (Number(multiUnloadCostPerUnit) || 0)) || 0;
+                                            setInputDialogData({
+                                                ...inputDialogData,
+                                                multiUnloadCount: numValue,
+                                                multiUnloadCost: cost,
+                                            });
+                                        }}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-left"
                                     />
                                             </td>
                                             <td className="p-2 border-l border-slate-200 font-medium">
                                         هزینه چند جا تخلیه (ریال)
-                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار</p>
+                                                <p className="text-xs text-slate-500 mt-1 font-normal">محاسبه خودکار از تعداد</p>
                                             </td>
                                             <td className="p-2">
                                     <input
                                         type="text"
                                         inputMode="numeric"
                                         value={(() => {
-                                            const calc = calculations.find(c => c.driverId === inputDialogData.driverId);
-                                            if (!calc) return '0';
-                                            const tour = calc.tours.find(t => t.announcementId === inputDialogData.tourId);
-                                            if (!tour) return '0';
-                                            const destinationsCount = tour.destinations?.length || 0;
-                                            const multiUnloadUnits = Math.max(0, destinationsCount - 1);
-                                            const cost = Math.round(multiUnloadUnits * (Number(multiUnloadCostPerUnit) || 0)) || 0;
+                                            const units = Math.max(0, Number(inputDialogData.multiUnloadCount) || 0);
+                                            const cost = Math.round(units * (Number(multiUnloadCostPerUnit) || 0)) || 0;
                                             return cost.toLocaleString('fa-IR');
                                         })()}
                                         readOnly
@@ -6044,7 +6064,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         <li><strong>اجرت (پورسانتی):</strong> بر اساس بخشنامه اجرت و پیمایش کل</li>
                                         <li><strong>اجرت (ثابت):</strong> پیمایش کل × اجرت ثابت بخشنامه</li>
                                         <li><strong>حق ماموریت:</strong> ماموریت مازاد (روز) × هزینه ماموریت مازاد طبق بخشنامه</li>
-                                        <li><strong>هزینه چندجا تخلیه:</strong> (تعداد مقاصد - 1) × هزینه واحد چندجا تخلیه</li>
+                                        <li><strong>هزینه چندجا تخلیه:</strong> تعداد چندجا تخلیه (پیش‌فرض: مقاصد − ۱، قابل ویرایش) × هزینه واحد چندجا تخلیه</li>
                                     </ul>
                                 </div>
                                 

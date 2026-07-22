@@ -48,12 +48,38 @@ const SALES_EXPERT_ROLES = new Set([
   'SalesExpert',
 ]);
 
+const PLANNING_EMPLOYEE_ROLES = new Set([
+  'planner',
+  'کارمند برنامه‌ریزی',
+  'PlanningEmployee',
+  'planning_employee',
+]);
+
+const DAIRY_LINE_TYPES_SQL = "('پاستوریزه', 'Dairy')";
+
 function isCreatePermissionRole(role) {
   return CREATE_PERMISSION_ROLES.has(role);
 }
 
 function isSalesExpertRole(role) {
   return SALES_EXPERT_ROLES.has(role);
+}
+
+function isPlanningEmployeeRole(role) {
+  return PLANNING_EMPLOYEE_ROLES.has(role);
+}
+
+const PLANNING_MANAGER_ROLES = new Set([
+  'planner_manager',
+  'planning_manager',
+  'PlanningManager',
+  'مدیر برنامه‌ریزی',
+  'admin',
+  'ادمین',
+]);
+
+function isPlanningManagerRole(role) {
+  return PLANNING_MANAGER_ROLES.has(role);
 }
 
 function normalizeFreightLineTypeKey(lineType) {
@@ -108,10 +134,6 @@ async function assertCreateLinePermission(userId, lineType) {
   }
 }
 
-const DESTINATION_INSERT_COLUMNS = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, original_created_by_user_id, created_at`;
-
-const DESTINATION_INSERT_COLUMNS_LEGACY = `id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value, unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products, created_at`;
-
 let destinationOriginalCreatorColumnCache = null;
 
 async function hasDestinationOriginalCreatorColumn(db) {
@@ -134,7 +156,54 @@ async function hasDestinationOriginalCreatorColumn(db) {
   return destinationOriginalCreatorColumnCache;
 }
 
-function buildDestinationInsertParams(announcementId, d, destId = crypto.randomUUID(), originalCreatedByUserId = null, includeOriginalCreator = true) {
+async function hasDestinationSortOrderColumn(db) {
+  try {
+    const client = db || pool;
+    const colCheck = await client.query(`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'freight_destinations'
+        AND column_name = 'sort_order'
+      LIMIT 1
+    `);
+    return (colCheck.rowCount || 0) > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+/** DDL را روی pool (خارج از تراکنش) اجرا کن تا با ROLLBACK از بین نرود */
+async function ensureDestinationSortOrderColumn() {
+  try {
+    if (await hasDestinationSortOrderColumn(pool)) return true;
+    await pool.query(`
+      ALTER TABLE freight_destinations
+      ADD COLUMN IF NOT EXISTS sort_order INTEGER
+    `);
+    return await hasDestinationSortOrderColumn(pool);
+  } catch (err) {
+    console.warn('⚠️ [freight] could not ensure sort_order column:', err.message);
+    return false;
+  }
+}
+
+/** تناژ را به ۲ رقم اعشار پایدار می‌کند تا float مثل 2999.98 نشود */
+function normalizeTonnageKg(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function buildDestinationInsertParams(
+  announcementId,
+  d,
+  destId = crypto.randomUUID(),
+  originalCreatedByUserId = null,
+  includeOriginalCreator = true,
+  sortOrder = null
+) {
   const products = d.products;
   let productsJson = '[]';
   if (Array.isArray(products)) {
@@ -151,8 +220,8 @@ function buildDestinationInsertParams(announcementId, d, destId = crypto.randomU
     destId,
     announcementId,
     d.city || null,
-    d.representativeName || null,
-    d.tonnage || null,
+    d.representativeName || d.representative_name || null,
+    normalizeTonnageKg(d.tonnage),
     d.freightCost ?? d.freight_cost ?? null,
     d.cargoValue ?? d.cargo_value ?? null,
     d.unloadTime || d.unload_time || null,
@@ -165,32 +234,65 @@ function buildDestinationInsertParams(announcementId, d, destId = crypto.randomU
     productsJson,
   ];
 
-  if (!includeOriginalCreator) {
-    return base;
+  if (includeOriginalCreator) {
+    base.push(
+      originalCreatedByUserId || d.originalCreatedByUserId || d.original_created_by_user_id || null
+    );
   }
-
-  return [
-    ...base,
-    originalCreatedByUserId || d.originalCreatedByUserId || d.original_created_by_user_id || null,
-  ];
+  if (sortOrder !== null && sortOrder !== undefined) {
+    base.push(sortOrder);
+  }
+  return base;
 }
 
 async function insertFreightDestinations(clientOrPool, announcementId, destinations, originalCreatedByUserId = null) {
   const db = clientOrPool;
   const includeOriginalCreator = await hasDestinationOriginalCreatorColumn(db);
-  const insertDestQuery = includeOriginalCreator
-    ? `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())`
-    : `INSERT INTO freight_destinations (${DESTINATION_INSERT_COLUMNS_LEGACY}) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())`;
+  // DDL خارج از تراکنش فعلی (اگر db همان client تراکنش باشد)
+  const hasSortOrder = await ensureDestinationSortOrderColumn();
 
-  for (const d of destinations) {
+  let insertDestQuery;
+  if (includeOriginalCreator && hasSortOrder) {
+    insertDestQuery = `INSERT INTO freight_destinations (
+        id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value,
+        unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products,
+        original_created_by_user_id, sort_order, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, NOW())`;
+  } else if (includeOriginalCreator) {
+    insertDestQuery = `INSERT INTO freight_destinations (
+        id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value,
+        unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products,
+        original_created_by_user_id, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, NOW())`;
+  } else if (hasSortOrder) {
+    insertDestQuery = `INSERT INTO freight_destinations (
+        id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value,
+        unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products,
+        sort_order, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, NOW())`;
+  } else {
+    insertDestQuery = `INSERT INTO freight_destinations (
+        id, freight_announcement_id, city, representative_name, tonnage, freight_cost, cargo_value,
+        unload_time, delivery_date, representative_type, lis_code, brand_type, brand, brand2, products,
+        created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, NOW())`;
+  }
+
+  for (let index = 0; index < destinations.length; index++) {
+    const d = destinations[index];
+    const destId = d.id || d.destinationId || crypto.randomUUID();
+    // اگر id تکراری از DELETE+INSERT در همان تراکنش مشکلی ندارد؛ id نامعتبر را نو کن
+    const safeId =
+      typeof destId === 'string' && /^[0-9a-f-]{36}$/i.test(destId) ? destId : crypto.randomUUID();
     await db.query(
       insertDestQuery,
       buildDestinationInsertParams(
         announcementId,
         d,
-        crypto.randomUUID(),
+        safeId,
         originalCreatedByUserId,
-        includeOriginalCreator
+        includeOriginalCreator,
+        hasSortOrder ? index : null
       )
     );
   }
@@ -455,7 +557,7 @@ async function getFreightAnnouncements(req, res) {
     // Get user role and ID for filtering
     const userRole = req.user?.role || req.user?.userRole;
     const userId = req.user?.id || req.user?.userId;
-    const isPlanningEmployee = userRole === 'planner' || userRole === 'کارمند برنامه‌ریزی';
+    const isPlanningEmployee = isPlanningEmployeeRole(userRole);
     const isSalesExpert = isSalesExpertRole(userRole);
     const isPlanningManager = userRole === 'planner_manager' || userRole === 'مدیر برنامه‌ریزی';
     const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
@@ -476,11 +578,15 @@ async function getFreightAnnouncements(req, res) {
       hasOriginalCreatorCol = false;
     }
 
+    // کارمند/کارشناس:
+    // - پاستوریزه: همه ردیف‌های پاستوریزه را می‌بینند (مسیر مشترک)
+    // - بستنی / لبنیات-فروتلند: فقط اعلام‌بار خودشان (+ مقصدهای منتقل‌شده به ردیف دیگر)
     if ((isPlanningEmployee || isSalesExpert) && userId) {
       const safeUserId = String(userId).replace(/'/g, "''");
       if (hasOriginalCreatorCol) {
         userFilter = ` AND (
-          fa.created_by_user_id = '${safeUserId}'
+          fa.line_type IN ${DAIRY_LINE_TYPES_SQL}
+          OR fa.created_by_user_id = '${safeUserId}'
           OR EXISTS (
             SELECT 1
             FROM freight_destinations d_own
@@ -489,7 +595,10 @@ async function getFreightAnnouncements(req, res) {
           )
         )`;
       } else {
-        userFilter = ` AND fa.created_by_user_id = '${safeUserId}'`;
+        userFilter = ` AND (
+          fa.line_type IN ${DAIRY_LINE_TYPES_SQL}
+          OR fa.created_by_user_id = '${safeUserId}'
+        )`;
       }
     }
     
@@ -593,14 +702,25 @@ async function getFreightAnnouncements(req, res) {
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
         COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) as assignment_finalized_at,
-        COALESCE(
-          (
-            SELECT MIN(fah.created_at)
+        -- فقط خواندن: آخرین تخصیص موفق از هر دو مسیر (زنده + ثبت نوبت) — بدون تغییر منطق ذخیره
+        (
+          SELECT MAX(src.ts)
+          FROM (
+            SELECT fah.created_at AS ts
             FROM freight_announcement_history fah
             WHERE fah.freight_announcement_id = fa.id
-              AND fah.action IN ('ASSIGNED', 'REASSIGNED')
-          ),
-          da_dispatch.created_at
+              AND fah.action IN (
+                'ASSIGNED',
+                'REASSIGNED',
+                'ASSIGNED_STAGE1',
+                'ASSIGNED_STAGE2'
+              )
+            UNION ALL
+            SELECT da_src.created_at AS ts
+            FROM dispatch_assignments da_src
+            WHERE da_src.freight_announcement_id = fa.id
+              AND (da_src.is_cancelled IS NULL OR da_src.is_cancelled = FALSE)
+          ) src
         ) as assigned_at,
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
         CASE 
@@ -623,12 +743,6 @@ async function getFreightAnnouncements(req, res) {
         ORDER BY created_at DESC
         LIMIT 1
       ) da ON true
-      LEFT JOIN LATERAL (
-        SELECT MIN(created_at) as created_at
-        FROM dispatch_assignments
-        WHERE freight_announcement_id = fa.id
-          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
-      ) da_dispatch ON true
       ${whereClause}${userFilter}${branchCityFilter}${financeExceptionFilter}
       ORDER BY fa.id, fa.created_at DESC
     `);
@@ -649,6 +763,8 @@ async function getFreightAnnouncements(req, res) {
     });
     
     // Fetch destinations for each announcement and convert dates
+    await ensureDestinationSortOrderColumn();
+    const destOrderSql = 'ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC';
     const allDestinationsStats = {
       total: 0,
       pakhsh: 0,
@@ -669,21 +785,31 @@ async function getFreightAnnouncements(req, res) {
            FROM freight_destinations d
            LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
            WHERE d.freight_announcement_id = $1
-           ORDER BY d.created_at ASC`,
+           ${destOrderSql}`,
           [announcement.id]
         );
       } else {
         destRows = await pool.query(
           `SELECT * FROM freight_destinations
            WHERE freight_announcement_id = $1
-           ORDER BY created_at ASC`,
+           ${destOrderSql}`,
           [announcement.id]
         );
       }
-      announcement.destinations = destRows.rows;
+      announcement.destinations = destRows.rows.map((dest) => ({
+        ...dest,
+        tonnage: normalizeTonnageKg(dest.tonnage),
+      }));
       const creatorNames = [];
       const seenCreators = new Set();
-      for (const dest of destRows.rows) {
+      const annCreatorLabel = announcement.creator_full_name || announcement.creator_username;
+      const annCreatorKey =
+        announcement.created_by_user_id || announcement.creator_user_id || annCreatorLabel;
+      if (annCreatorLabel && annCreatorKey && !seenCreators.has(String(annCreatorKey))) {
+        seenCreators.add(String(annCreatorKey));
+        creatorNames.push(annCreatorLabel);
+      }
+      for (const dest of announcement.destinations) {
         const label = dest.original_creator_full_name || dest.original_creator_username;
         const key = dest.original_created_by_user_id || dest.original_creator_user_id || label;
         if (label && key && !seenCreators.has(String(key))) {
@@ -842,8 +968,9 @@ async function getFreightAnnouncementById(req, res) {
     }
     
     // دریافت تمام مقاصد
+    await ensureDestinationSortOrderColumn();
     const allDestRows = await pool.query(
-      'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+      'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC',
       [id]
     );
     announcement.destinations = allDestRows.rows;
@@ -898,6 +1025,9 @@ async function updateFreightAnnouncement(req, res) {
       assignmentType,
     } = req.body || {};
 
+    // ستون ترتیب مقصد را قبل از تراکنش بساز (تا با ROLLBACK حذف نشود)
+    await ensureDestinationSortOrderColumn();
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -948,7 +1078,7 @@ async function updateFreightAnnouncement(req, res) {
       
       // گرفتن مقاصد قبلی
       const oldDestQuery = await client.query(
-        'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+        'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC',
         [id]
       );
       const oldDestinations = oldDestQuery.rows;
@@ -1300,8 +1430,17 @@ async function updateFreightAnnouncement(req, res) {
       client.release();
     }
   } catch (error) {
-    console.error('Failed to update freight announcement:', error);
-    return res.status(500).json({ message: 'Internal server error while updating freight announcement.' });
+    console.error('Failed to update freight announcement:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      hint: error?.hint,
+      stack: error?.stack,
+    });
+    return res.status(500).json({
+      message: 'Internal server error while updating freight announcement.',
+      detail: process.env.NODE_ENV === 'development' ? error?.message : undefined,
+    });
   }
 }
 
@@ -1687,9 +1826,24 @@ async function approveAnnouncement(req, res) {
     }
     
     const { line_type: lineType, status: oldStatus, announcement_code: code } = rows[0];
+
+    if (!isPlanningManagerRole(role)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        message: 'فقط مدیر برنامه‌ریزی می‌تواند اعلام بار را تایید کند.',
+      });
+    }
+
+    const approvableStatuses = new Set(['PendingManagerApproval', 'در انتظار تایید مدیر']);
+    if (!approvableStatuses.has(oldStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'فقط اعلام بار در انتظار تایید مدیر قابل تایید است.',
+      });
+    }
     
     // بررسی مجوز تاییدیه برای مدیران برنامه‌ریزی (غیر از admin)
-    if (role === 'planner_manager' || role === 'مدیر برنامه‌ریزی' || role === 'PlanningManager' || role === 'planning_manager') {
+    if (isPlanningManagerRole(role) && role !== 'admin' && role !== 'ادمین') {
       // تبدیل lineType به فرمت استاندارد
       let normalizedLineType = lineType;
       if (lineType === 'بستنی' || lineType === 'IceCream') {
@@ -1815,7 +1969,7 @@ async function approveAnnouncement(req, res) {
       if (fullAnnouncement) {
         // دریافت destinations
         const destResult = await pool.query(
-          'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC',
           [announcementId]
         );
         
@@ -3854,7 +4008,7 @@ async function setAssignmentQueue(req, res) {
       if (fullAnnouncement) {
         // دریافت destinations
         const destResult = await pool.query(
-          'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
+          'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC',
           [announcementId]
         );
         

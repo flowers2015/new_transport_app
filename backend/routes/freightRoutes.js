@@ -225,12 +225,20 @@ router.put(
   updateFreightAnnouncement
 );
 
-// Route to approve a freight announcement
-// Accessible by planner, planner_manager, and admin
+const MANAGER_APPROVE_ROLES = [
+  'planner_manager',
+  'planning_manager',
+  'PlanningManager',
+  'مدیر برنامه‌ریزی',
+  'admin',
+  'ادمین',
+];
+
+// Route to approve a freight announcement — فقط مدیر برنامه‌ریزی
 router.post(
   '/:id/approve',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'admin']),
+  authorizeRole(MANAGER_APPROVE_ROLES),
   approveAnnouncement
 );
 

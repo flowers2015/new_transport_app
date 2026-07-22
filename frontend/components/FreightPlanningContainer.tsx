@@ -127,7 +127,10 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     id: d.id,
                     city: d.city,
                     representativeName: d.representative_name || d.representativeName,
-                    tonnage: d.tonnage,
+                    tonnage:
+                        d.tonnage === null || d.tonnage === undefined || d.tonnage === ''
+                            ? d.tonnage
+                            : Math.round(Number(d.tonnage) * 100) / 100,
                     unloadTime: d.unload_time || d.unloadTime,
                     freightCost: d.freight_cost ?? d.freightCost,
                     cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
