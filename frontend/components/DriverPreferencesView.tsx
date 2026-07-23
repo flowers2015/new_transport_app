@@ -95,12 +95,18 @@ function buildDayTable(
     for (const peer of data.peerAssignments || []) {
         if (peer.driverId === targetDriverId) continue;
         if (peer.certainty !== 'finalized') continue;
+        const peerName = (peer.driverName || '').trim();
+        if (!peerName) continue;
+        const destination = (peer.destinationCity || '').trim();
+        const vehicleCode = (peer.vehicleCode || '').trim();
+        // ردیف‌های بی‌معنا مثل «— · — · راننده» را نشان نده
+        if (!destination && !vehicleCode) continue;
         const queueType = peer.queueType || (peer.stage === 'stage1' ? 'far' : 'near');
         pushFinalized(peer.assignedAt, peer.assignedAtJalali, queueType, {
             queuePosition: peer.queuePosition ?? null,
-            vehicleCode: peer.vehicleCode || null,
-            driverName: peer.driverName || 'راننده',
-            destination: peer.destinationCity || '',
+            vehicleCode: vehicleCode || null,
+            driverName: peerName,
+            destination,
             tripKm: peer.roundTripKm ?? null,
             isVeryFar: Boolean(peer.isVeryFar),
             isTarget: false,
@@ -387,6 +393,13 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
             )}
 
             <StatsBar stats={stats} />
+
+            {stats.finalizedCount === 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                    این راننده در بازهٔ انتخاب‌شده <strong>تخصیص نهایی</strong> ندارد — خلاصه دوره صفر است.
+                    جدول پایین فقط نوبت‌های نهایی سایر رانندگان همان دسته را برای مقایسه نشان می‌دهد.
+                </div>
+            )}
 
             <CycleSummarySection summary={cycleSummary} />
 

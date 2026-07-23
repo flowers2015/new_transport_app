@@ -1939,15 +1939,22 @@ async function getDriverPreferences(req, res) {
             fa.line_type,
             fa.status AS freight_status,
             COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at,
-            fd.city AS destination_city,
-            fd.created_at AS destination_created_at,
+            COALESCE(fd.city, fd_fallback.city) AS destination_city,
+            COALESCE(fd.created_at, fd_fallback.created_at) AS destination_created_at,
             v.vehicle_code,
             prev.origin_city AS previous_origin_city
           FROM dispatch_assignments da
-          LEFT JOIN drivers d ON d.id = da.driver_id
+          INNER JOIN drivers d ON d.id = da.driver_id
           LEFT JOIN vehicles v ON v.id = da.vehicle_id
-          LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
+          INNER JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
           LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
+          LEFT JOIN LATERAL (
+            SELECT fd2.city, fd2.created_at
+            FROM freight_destinations fd2
+            WHERE fd2.freight_announcement_id = fa.id
+            ORDER BY fd2.created_at ASC
+            LIMIT 1
+          ) fd_fallback ON TRUE
           LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
           LEFT JOIN LATERAL (
             SELECT fa2.origin_city
@@ -1955,14 +1962,21 @@ async function getDriverPreferences(req, res) {
             LEFT JOIN freight_announcements fa2 ON fa2.id = da_prev.freight_announcement_id
             WHERE da_prev.driver_id = da.driver_id
               AND da_prev.created_at < da.created_at
+              AND (da_prev.is_cancelled IS NULL OR da_prev.is_cancelled = FALSE)
             ORDER BY da_prev.created_at DESC
             LIMIT 1
           ) prev ON TRUE
           WHERE da.created_at BETWEEN $1 AND $2
-            AND (fa.status IS NULL OR fa.status NOT IN ('Cancelled') OR da.is_cancelled = TRUE)
+            AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
+            AND fa.status IN ('Assigned', 'InTransit', 'Finalized')
+            AND (
+              COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
+              OR fa.status IN ('Finalized', 'InTransit')
+            )
+            AND NULLIF(TRIM(d.name), '') IS NOT NULL
             ${categoryClause}
-          ORDER BY da.created_at DESC, fd.created_at ASC
-          LIMIT 150
+          ORDER BY da.created_at DESC, COALESCE(fd.created_at, fd_fallback.created_at) ASC
+          LIMIT 500
         `,
         peerValues
       );
@@ -1994,28 +2008,41 @@ async function getDriverPreferences(req, res) {
           certaintyLabel: certaintyInfo.certaintyLabel,
         };
       });
-      return groupAssignmentsByTrip(peerMapped).map(item => ({
-        id: item.id,
-        announcementId: item.announcementId,
-        driverId: item.driverId,
-        driverName: item.driverName,
-        employeeId: item.employeeId,
-        stage: item.stage,
-        queuePosition: item.queuePosition ?? null,
-        queueType: item.queueType,
-        lineType: item.lineType,
-        destinationCity: item.destinationCity,
-        roundTripKm: item.roundTripKm,
-        vehicleCode: item.vehicleCode,
-        isVeryFar: item.isVeryFar,
-        assignedAt: item.assignedAt,
-        assignedAtJalali: item.assignedAtJalali,
-        previousOriginCity: item.previousOriginCity,
-        announcementCode: item.announcementCode,
-        isCancelled: item.isCancelled,
-        certainty: item.certainty,
-        certaintyLabel: item.certaintyLabel,
-      }));
+      return groupAssignmentsByTrip(peerMapped, {
+        tripKeyFn: (item) =>
+          item.announcementId && item.driverId
+            ? `${item.driverId}:${item.announcementId}`
+            : null,
+      })
+        .filter((item) => item.certainty === 'finalized')
+        .filter((item) => Boolean((item.driverName || '').trim()))
+        .filter(
+          (item) =>
+            Boolean((item.destinationCity || '').trim()) ||
+            Boolean((item.vehicleCode || '').trim())
+        )
+        .map(item => ({
+          id: item.id,
+          announcementId: item.announcementId,
+          driverId: item.driverId,
+          driverName: item.driverName,
+          employeeId: item.employeeId,
+          stage: item.stage,
+          queuePosition: item.queuePosition ?? null,
+          queueType: item.queueType,
+          lineType: item.lineType,
+          destinationCity: item.destinationCity,
+          roundTripKm: item.roundTripKm,
+          vehicleCode: item.vehicleCode,
+          isVeryFar: item.isVeryFar,
+          assignedAt: item.assignedAt,
+          assignedAtJalali: item.assignedAtJalali,
+          previousOriginCity: item.previousOriginCity,
+          announcementCode: item.announcementCode,
+          isCancelled: item.isCancelled,
+          certainty: item.certainty,
+          certaintyLabel: item.certaintyLabel,
+        }));
     })();
 
     res.json({

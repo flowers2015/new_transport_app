@@ -46,13 +46,18 @@ function pickPrimaryRouteFromList(destinations, routes) {
   return { route, primaryDestination };
 }
 
-function groupAssignmentsByTrip(assignments) {
+function groupAssignmentsByTrip(assignments, options = {}) {
   if (!assignments?.length) return [];
+
+  const tripKeyFn =
+    typeof options.tripKeyFn === 'function'
+      ? options.tripKeyFn
+      : (item) => item.announcementId;
 
   const groups = new Map();
 
   for (const item of assignments) {
-    const tripKey = item.announcementId;
+    const tripKey = tripKeyFn(item);
     if (!tripKey) {
       groups.set(`singleton-${item.id}`, [item]);
       continue;
@@ -93,10 +98,14 @@ function groupAssignmentsByTrip(assignments) {
       }
     }
 
-    const primary = sorted[0];
+    // برای چندمقصدی: ردیفی که نام راننده/کد خودرو دارد را به‌عنوان پایه ترجیح بده
+    const primary =
+      sorted.find((p) => (p.driverName || '').trim() && (p.vehicleCode || p.driverId)) ||
+      sorted.find((p) => (p.driverName || '').trim()) ||
+      sorted[0];
     result.push({
       ...primary,
-      destinationCity: cities.join('، '),
+      destinationCity: cities.join('، ') || primary.destinationCity || null,
       destinationCities: cities,
       roundTripKm: maxPart.roundTripKm ?? primary.roundTripKm,
       isVeryFar: maxPart.isVeryFar,
