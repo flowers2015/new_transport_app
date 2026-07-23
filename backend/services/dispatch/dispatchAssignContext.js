@@ -746,7 +746,10 @@ async function getQueueAssignHints(vehicleCategory, userId = null, assignMode = 
       rowStatus,
       canAssign,
       eligibleLoadCount: freeMode ? categoryLoadCount : eligibleCount,
-      hasVeryFarHistory: driverHasVeryFarHistory(enriched),
+        hasVeryFarHistory: driverHasVeryFarHistory(enriched),
+      veryFarHistoryCount: Array.isArray(enriched.longRouteHistory)
+        ? enriched.longRouteHistory.length
+        : 0,
       isDeferred: entryCtx.isDeferredThisPhase,
       entryPhase,
     };

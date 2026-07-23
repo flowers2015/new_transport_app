@@ -263,6 +263,15 @@ async function getQueue(req, res) {
     const { fetchDriversFinalizedKm } = require('../services/dispatch/driverPreferences');
     const driverIds = [...new Set(rows.map(r => r.driver_id).filter(Boolean))];
     const finalizedKmMap = await fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd);
+    const veryFarCountMap = new Map();
+    if (driverIds.length > 0) {
+      await Promise.all(
+        driverIds.map(async (driverId) => {
+          const history = await getDriverLongRouteHistory(driverId, cycleStart, cycleEnd);
+          veryFarCountMap.set(driverId, history.length);
+        })
+      );
+    }
     
     const grouped = {};
     const categoryRepairs = [];
@@ -317,7 +326,10 @@ async function getQueue(req, res) {
           mobile: row.driver_mobile,
           employeeId: row.employee_id,
           periodFinalizedKm: finalizedKmMap.get(row.driver_id) || 0,
+          periodVeryFarCount: veryFarCountMap.get(row.driver_id) || 0,
         },
+        hasVeryFarHistory: (veryFarCountMap.get(row.driver_id) || 0) > 0,
+        periodVeryFarCount: veryFarCountMap.get(row.driver_id) || 0,
       };
 
       switch (row.queue_type) {
@@ -1764,14 +1776,14 @@ async function getDriverPreferences(req, res) {
     let toDate = defaultToDate;
 
     if (typeof from === 'string' && from.trim()) {
-      const parsed = parseJalaliDateString(from.trim().replace(/\\/g, '/'));
+      const parsed = parseJalaliDateString(from.trim().replace(/\\/g, '/').replace(/-/g, '/'));
       if (!parsed || Number.isNaN(parsed.getTime())) {
         return res.status(400).json({ message: 'تاریخ شروع نامعتبر است.' });
       }
       fromDate = parsed;
     }
     if (typeof to === 'string' && to.trim()) {
-      const parsed = parseJalaliDateString(to.trim().replace(/\\/g, '/'));
+      const parsed = parseJalaliDateString(to.trim().replace(/\\/g, '/').replace(/-/g, '/'));
       if (!parsed || Number.isNaN(parsed.getTime())) {
         return res.status(400).json({ message: 'تاریخ پایان نامعتبر است.' });
       }
@@ -1913,8 +1925,6 @@ async function getDriverPreferences(req, res) {
           AND (
             v.vehicle_category = $${categoryIndex}
             OR fa.vehicle_type = $${categoryIndex}
-            OR ($${categoryIndex} = 'تریلی' AND fa.vehicle_type IN ('تریلی', 'مینی تریلی'))
-            OR ($${categoryIndex} = 'مینی تریلی' AND fa.vehicle_type IN ('تریلی', 'مینی تریلی'))
           )
         `;
       }

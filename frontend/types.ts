@@ -764,6 +764,8 @@ export interface DispatchQueueDriver {
     mobile?: string;
     employeeId?: string;
     periodFinalizedKm?: number;
+    /** تعداد خیلی‌دور نهایی فقط در دوره جاری نوبت */
+    periodVeryFarCount?: number;
 }
 
 export interface DispatchQueueVehicle {
@@ -801,6 +803,7 @@ export interface DispatchQueueEntry {
     longRouteHistory?: DispatchAssignmentHistory[];
     lastVeryFarAtJalali?: string | null;
     hasVeryFarHistory?: boolean;
+    periodVeryFarCount?: number;
     blockedStage1?: boolean;
 }
 

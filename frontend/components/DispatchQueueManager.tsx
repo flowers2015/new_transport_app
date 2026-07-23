@@ -89,6 +89,7 @@ type QueueAssignHints = {
         canAssign?: boolean;
         eligibleLoadCount: number;
         hasVeryFarHistory: boolean;
+        veryFarHistoryCount?: number;
         isDeferred: boolean;
         entryPhase?: DispatchPhase | null;
     }>;
@@ -891,6 +892,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const [preferencesPanelOpen, setPreferencesPanelOpen] = useState(false);
     const [selectedDriver, setSelectedDriver] = useState<DispatchDriverSearchResult | null>(null);
     const [preferencesRange, setPreferencesRange] = useState(getDefaultJalaliCycleRange);
+    /** خالی = همه دسته‌ها — جستجوی مستقل نباید دستهٔ تب نوبت را اجبار کند */
+    const [preferencesCategoryFilter, setPreferencesCategoryFilter] = useState<string>('');
     const [showRulesDialog, setShowRulesDialog] = useState(false);
     const searchTimers = useRef<Record<string, { vehicle?: ReturnType<typeof setTimeout>; driver?: ReturnType<typeof setTimeout> }>>({});
 
@@ -987,6 +990,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const openPreferencesPanel = () => {
         setPreferencesPanelOpen(true);
         setPreferencesRange(getDefaultJalaliCycleRange());
+        setPreferencesCategoryFilter('');
         setSelectedDriver(null);
         driverSearch.clear();
     };
@@ -1034,7 +1038,10 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 mobile: selectedDriver.mobile,
             },
             queueEntry: null,
-            categoryLabel: activeCategoryLabel,
+            categoryLabel: preferencesCategoryFilter
+                ? presetCategories.find(c => c.key === preferencesCategoryFilter)?.label ||
+                  preferencesCategoryFilter
+                : 'همه دسته‌ها',
             dateFrom: from,
             dateTo: to,
             loading: true,
@@ -1042,10 +1049,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             error: null,
         });
         setPreferencesPanelOpen(false);
-        const categoryKey =
-            resolveCategoryKey(activeCategoryLabel) || activeCategoryLabel || undefined;
         loadDriverPreferences(selectedDriver.id, from, to, {
-            category: categoryKey,
+            category: preferencesCategoryFilter || undefined,
         });
     };
 
@@ -1686,7 +1691,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     : statusStyle.badgeLabel
                 : null;
         const hasVeryFarBefore =
-            Boolean(hint?.hasVeryFarHistory) || rowStatus === 'very_far_history';
+            Boolean(hint?.hasVeryFarHistory) ||
+            rowStatus === 'very_far_history' ||
+            (entry.periodVeryFarCount ?? entry.driver?.periodVeryFarCount ?? 0) > 0;
+        const veryFarCount =
+            hint?.veryFarHistoryCount ??
+            entry.periodVeryFarCount ??
+            entry.driver?.periodVeryFarCount ??
+            0;
 
         return (
             <tr
@@ -1741,9 +1753,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         {hasVeryFarBefore && (
                             <div
                                 className="truncate text-[9px] text-red-700 font-semibold mt-0.5"
-                                title="در دوره جاری قبل از این نوبت، بار خیلی‌دور گرفته است"
+                                title="تعداد بار خیلی‌دور نهایی‌شده فقط در دوره جاری نوبت (۲۶ تا ۲۵)"
                             >
                                 خیلی‌دور قبلاً رفته بوده
+                                {veryFarCount > 0
+                                    ? ` (${veryFarCount.toLocaleString('fa-IR')})`
+                                    : ''}
                             </div>
                         )}
                         {statusNote && (
@@ -2308,6 +2323,21 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                         className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-sky-500 focus:ring-0"
                                     />
                                 </div>
+                                <div className="flex flex-col">
+                                    <label className="mb-1 font-medium text-slate-600">دسته خودرو</label>
+                                    <select
+                                        value={preferencesCategoryFilter}
+                                        onChange={e => setPreferencesCategoryFilter(e.target.value)}
+                                        className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-sky-500 focus:ring-0 min-w-[9rem]"
+                                    >
+                                        <option value="">همه دسته‌ها</option>
+                                        {presetCategories.map(c => (
+                                            <option key={c.key} value={c.key}>
+                                                {c.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <button
                                     onClick={handlePreferencesPanelLoad}
                                     className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-700 disabled:opacity-60"
@@ -2317,7 +2347,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 </button>
                             </div>
                             <p className="text-[10px] text-slate-400">
-                                بازه پیش‌فرض: ۲۶ ماه قبل تا ۲۵ ماه جاری (شمسی). فرمت تاریخ: YYYY-MM-DD.
+                                بازه پیش‌فرض: ۲۶ ماه قبل تا ۲۵ ماه جاری (شمسی). پیش‌فرض دسته: همه — مثل «ترجیح» داخل نوبت، فقط اگر دسته را عوض کنید فیلتر می‌شود.
                             </p>
                         </div>
                     </div>
