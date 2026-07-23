@@ -38,6 +38,17 @@ function dayKey(value: string) {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
+/** کلید روز بر اساس شمسی — پایدارتر از تبدیل timezone روی ISO */
+function dayKeyFromJalali(jalali?: string | null): string | null {
+    if (!jalali) return null;
+    const m = String(jalali)
+        .trim()
+        .replace(/-/g, '/')
+        .match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+    if (!m) return null;
+    return `${m[1]}-${pad2(Number(m[2]))}-${pad2(Number(m[3]))}`;
+}
+
 function buildDayTable(
     data: DriverPreferencesResponse,
     targetDriverId: string,
@@ -46,18 +57,24 @@ function buildDayTable(
     const dayMap = new Map<string, DayRow>();
 
     const ensureDay = (isoLike: string, jalaliFallback?: string | null) => {
-        const key = dayKey(isoLike);
+        const key = dayKeyFromJalali(jalaliFallback) || dayKey(isoLike);
         if (!key) return null;
         if (!dayMap.has(key)) {
-            const date = new Date(isoLike);
-            const [jy, jm, jd] = gregorianToJalali(
-                date.getFullYear(),
-                date.getMonth() + 1,
-                date.getDate()
-            );
+            let jalaliLabel = jalaliFallback || '';
+            if (!jalaliLabel) {
+                const date = new Date(isoLike);
+                const [jy, jm, jd] = gregorianToJalali(
+                    date.getFullYear(),
+                    date.getMonth() + 1,
+                    date.getDate()
+                );
+                jalaliLabel = `${jy}/${pad2(jm)}/${pad2(jd)}`;
+            } else {
+                jalaliLabel = jalaliLabel.replace(/-/g, '/');
+            }
             dayMap.set(key, {
                 key,
-                jalaliLabel: jalaliFallback || `${jy}/${pad2(jm)}/${pad2(jd)}`,
+                jalaliLabel,
                 far: [],
                 near: [],
             });
@@ -99,7 +116,6 @@ function buildDayTable(
         if (!peerName) continue;
         const destination = (peer.destinationCity || '').trim();
         const vehicleCode = (peer.vehicleCode || '').trim();
-        // ردیف‌های بی‌معنا مثل «— · — · راننده» را نشان نده
         if (!destination && !vehicleCode) continue;
         const queueType = peer.queueType || (peer.stage === 'stage1' ? 'far' : 'near');
         pushFinalized(peer.assignedAt, peer.assignedAtJalali, queueType, {
@@ -138,7 +154,11 @@ function buildDayTable(
             far: sortEntries(dedupeBucket(day.far)),
             near: sortEntries(dedupeBucket(day.near)),
         }))
-        .filter(day => day.far.length > 0 || day.near.length > 0)
+        // فقط روزهایی که خود این راننده در آن‌ها تخصیص نهایی داشته
+        .filter(
+            day =>
+                day.far.some(entry => entry.isTarget) || day.near.some(entry => entry.isTarget)
+        )
         .sort((a, b) => a.key.localeCompare(b.key));
 }
 
@@ -249,7 +269,7 @@ function DayQueueTable({ days }: { days: DayRow[] }) {
     if (days.length === 0) {
         return (
             <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
-                تخصیص نهایی‌شده‌ای در این بازه ثبت نشده است.
+                در این بازه روزی با تخصیص نهایی برای این راننده ثبت نشده است.
             </div>
         );
     }
@@ -397,7 +417,6 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
             {stats.finalizedCount === 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
                     این راننده در بازهٔ انتخاب‌شده <strong>تخصیص نهایی</strong> ندارد — خلاصه دوره صفر است.
-                    جدول پایین فقط نوبت‌های نهایی سایر رانندگان همان دسته را برای مقایسه نشان می‌دهد.
                 </div>
             )}
 
@@ -405,7 +424,7 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
 
             <section className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-slate-700">نوبت‌های روزانه (فقط نهایی)</h3>
+                    <h3 className="text-sm font-semibold text-slate-700">نوبت‌های روزانه (فقط روزهای تخصیص این راننده)</h3>
                     <div className="text-[10px] text-slate-500">
                         نوبت · کد خودرو · نام · مقصد — ردیف زرد = راننده جاری
                     </div>

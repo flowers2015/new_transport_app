@@ -1042,8 +1042,10 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             error: null,
         });
         setPreferencesPanelOpen(false);
+        const categoryKey =
+            resolveCategoryKey(activeCategoryLabel) || activeCategoryLabel || undefined;
         loadDriverPreferences(selectedDriver.id, from, to, {
-            category: activeCategoryLabel || undefined,
+            category: categoryKey,
         });
     };
 
@@ -1682,9 +1684,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 ? hint?.lockReason
                     ? lockReasonLabels[hint.lockReason] || hint.lockReason
                     : statusStyle.badgeLabel
-                : rowStatus === 'very_far_history'
-                  ? statusStyle.badgeLabel
-                  : null;
+                : null;
+        const hasVeryFarBefore =
+            Boolean(hint?.hasVeryFarHistory) || rowStatus === 'very_far_history';
 
         return (
             <tr
@@ -1736,6 +1738,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         >
                             {mobile}
                         </div>
+                        {hasVeryFarBefore && (
+                            <div
+                                className="truncate text-[9px] text-red-700 font-semibold mt-0.5"
+                                title="در دوره جاری قبل از این نوبت، بار خیلی‌دور گرفته است"
+                            >
+                                خیلی‌دور قبلاً رفته بوده
+                            </div>
+                        )}
                         {statusNote && (
                             <div className="truncate text-[9px] text-slate-500 mt-0.5" title={statusNote}>
                                 {statusNote}
